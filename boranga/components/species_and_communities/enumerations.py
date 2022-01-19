@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # from django.db import models
 #
 #
@@ -28,3 +29,14 @@ from django.db import models
 #
 #     (FLORA, "Flora"),
 #     (FAUNA, "Fauna"),)
+
+# from django.db import models
+#
+#
+# class GroupTypes(models.TextChoices):
+#     """
+#
+#     """
+#     FLORA = 'flora', 'Flora'
+#     FAUNA = 'fauna', 'Fauna'
+#     COMMUNITIES = 'communities', 'Communities'
