@@ -1,8 +1,6 @@
 from django.db import models
 from django.db.models.deletion import CASCADE
 
-from boranga.components.species_and_communities.enumerations import GroupTypes
-
 
 class GroupType(models.Model):
     """
@@ -16,15 +14,25 @@ class GroupType(models.Model):
     Is:
     - Enumeration (GroupTypes)
     """
-    id = models.IntegerField(default=-1)
     name = models.CharField(max_length=4,
-                            choices=GroupTypes.choices,
-                            default=GroupTypes.FAUNA,)
+                            choices=[('flora', 'Flora'), ('fauna', 'Fauna'), ('community', 'Community')],
+                            default='1',)
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.name)
 
 
 class ConservationList(models.Model):
     """
-    Description TBC
+
+    NB: Can have multiple lists per species
+    WA BC Act,
+    Commonwealth EPBC Act,
+    WA Priority List,
+    NB: more to come
 
     Has a:
     - N/A
@@ -33,14 +41,21 @@ class ConservationList(models.Model):
     Is:
     - TBD
     """
-    id = models.IntegerField(default=-1)
     name = models.CharField(max_length=128,
                             default="None")
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.name)
 
 
 class ConservationCategory(models.Model):
     """
-    Description TBC
+    1. Threatened
+
+    2. Endangered
 
     Has a:
     - N/A
@@ -49,15 +64,21 @@ class ConservationCategory(models.Model):
     Is:
     - TBD
     """
-    id = models.IntegerField(default=-1)
     name = models.CharField(max_length=128,
                             default="None")
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.name)
 
 
 class ConservationCriteria(models.Model):
     """
-    Description TBC
+    Justification for listing as threatened (IUCN-how everything is defined)
 
+    NB: may have multiple of these per species
     Has a:
     - N/A
     Used by:
@@ -65,15 +86,22 @@ class ConservationCriteria(models.Model):
     Is:
     - TBD
     """
-    id = models.IntegerField(default=-1)
     name = models.CharField(max_length=128,
                             default="None")
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.name)
 
 
 class ConservationStatus(models.Model):
     """
-    Description TBC
+    Several lists with different attributes
 
+    NB: Different lists has different different entries
+    mainly interest in wa but must accomodte comm as well
     Has a:
     - ConservationList
     - ConservationCategory
@@ -90,10 +118,17 @@ class ConservationStatus(models.Model):
     conservation_category = models.ForeignKey(ConservationCategory, on_delete=CASCADE)
     conservation_criteria = models.ForeignKey(ConservationCriteria, on_delete=CASCADE)
 
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.conservation_list)  # TODO: is the most appropriate?
+
 
 class Taxonomy(models.Model):
     """
-    Description TBC
+    Description from wacensus, to get the main name then fill in everything else
+
 
     Has a:
     - ConservationList
@@ -105,9 +140,10 @@ class Taxonomy(models.Model):
     Is:
     - Table
     """
-    id = models.IntegerField(default=-1)
-    taxon_id = models.IntegerField(default=-1)
-    species_id = models.IntegerField(default=-1)
+    taxon = models.CharField(max_length=512,
+                             default="None")  # flora and fauna, name
+    taxon_id = models.IntegerField()  # flora and fauna, name
+
     previous_name = models.CharField(max_length=512,
                                      default="None")
     family = models.CharField(max_length=512,
@@ -118,10 +154,17 @@ class Taxonomy(models.Model):
                                           default="None")
     name_authority = models.CharField(max_length=512,
                                       default="None")
-    community_id = models.IntegerField(default=-1)
-    community_number = models.IntegerField(default=-1)
+    community_id = models.CharField(max_length=512,
+                                    default="None")  # on a map, same as common name
+    community_number = models.IntegerField(default=-1)  # same as taxon id
     community_description = models.CharField(max_length=512,
                                              default="None")
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.taxon)  # TODO: is the most appropriate?
 
 
 class Species(models.Model):
@@ -156,8 +199,8 @@ class Species(models.Model):
                                                on_delete=models.CASCADE,
                                                primary_key=True,)
     # community many to many
-    region = models.IntegerField(default=-1)            #TODO: reuse DBCA
-    district = models.IntegerField(default=-1)          #TODO: reuse DBCA
+    region = models.IntegerField(default=-1)  # TODO: reuse DBCA
+    district = models.IntegerField(default=-1)  # TODO: reuse DBCA
     image = models.CharField(max_length=512,
                              default="None")
     processing_status = models.CharField(max_length=512,
@@ -168,6 +211,12 @@ class Species(models.Model):
     taxonomy = models.OneToOneField(Taxonomy, on_delete=models.CASCADE,)
     # distribution one to one
     # conservation_attributes one to one
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.taxonomy.taxon)  # TODO: is the most appropriate?
 
 
 class Community(models.Model):
@@ -182,19 +231,22 @@ class Community(models.Model):
     Is:
     - Table
     """
-    id = models.IntegerField(default=-1)
     community_name = models.CharField(max_length=128,
                                       default="None")
     community_id = models.IntegerField(default=-1)
     community_status = models.CharField(max_length=128,
                                         default="None")
-    region_id = models.IntegerField(default=-1)
-    district_id = models.IntegerField(default=-1)
+    region = models.IntegerField(default=-1)  # TODO: reuse DBCA
+    district = models.IntegerField(default=-1)  # TODO: reuse DBCA
 
     species = models.ManyToManyField(Species, blank=False)
     conservation_status = models.ForeignKey(to=ConservationStatus, on_delete=CASCADE)
 
-    community = models.ManyToManyField(Species, blank=False)
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str("{}: {}".format(self.community_id, self.community_name))
 
 
 class SpeciesDocument(models.Model):
@@ -213,7 +265,7 @@ class SpeciesDocument(models.Model):
     category_id = models.IntegerField(default=-1)
     status = models.CharField(max_length=512,
                               default="None")
-    document = models.CharField(max_length=512,
+    document = models.CharField(max_length=512,                 # document file name without path
                                 default="None")
     document_description = models.CharField(max_length=1024,
                                             default="None")
@@ -221,10 +273,17 @@ class SpeciesDocument(models.Model):
 
     species = models.ManyToManyField(Species, blank=False)
 
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.document)
+
 
 class DocumentCategory(models.Model):
     """
-    Description TBC
+    This is particularly useful for organisation of documents e.g. preventing inappropriate documents being added
+    to certain tables.
 
     Has a:
     - ConservationList
@@ -236,16 +295,23 @@ class DocumentCategory(models.Model):
     Is:
     - Table
     """
-    id = models.IntegerField(default=-1)
     name = models.CharField(max_length=128,
                             default="None")
 
     species_document = models.ForeignKey(to=SpeciesDocument, on_delete=CASCADE)
 
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.name)
+
 
 class ConservationThreat(models.Model):
     """
-    Description TBC
+    Threat for a species in a particular location.
+
+    NB: Maybe make many to many
 
     Has a:
     - N/A
@@ -254,8 +320,6 @@ class ConservationThreat(models.Model):
     Is:
     - Table
     """
-    id = models.IntegerField(default=-1)
-    species_id = models.IntegerField(default=-1)
     threat_category_id = models.IntegerField(default=-1)
     threat_description = models.CharField(max_length=512,
                                           default="None")
@@ -268,10 +332,16 @@ class ConservationThreat(models.Model):
 
     species = models.ForeignKey(Species, on_delete=CASCADE)
 
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.threat_category_id)  # TODO: is the most appropriate?
+
 
 class ConservationPlan(models.Model):
     """
-    Description TBC
+    Each occurrence of each species can have one or more plan to protect it.
 
     Has a:
     - N/A
@@ -280,8 +350,6 @@ class ConservationPlan(models.Model):
     Is:
     - Table
     """
-    id = models.IntegerField(default=-1)
-    species_id = models.IntegerField(default=-1)
     threat_category_id = models.IntegerField(default=-1)
     region_id = models.IntegerField(default=-1)
     district_id = models.IntegerField(default=-1)
@@ -294,10 +362,16 @@ class ConservationPlan(models.Model):
 
     species = models.ManyToManyField(Species, blank=False)
 
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.threat_category_id)  # TODO: is the most appropriate?
+
 
 class ConservationAttributes(models.Model):
     """
-    Description TBC
+    Additional meta-data particularly of use to administration.
 
     Has a:
     - ConservationList
@@ -309,8 +383,6 @@ class ConservationAttributes(models.Model):
     Is:
     - Table
     """
-    id = models.IntegerField(default=-1)
-    species_id = models.IntegerField(default=-1)
     general_management_advice = models.CharField(max_length=512,
                                                  default="None")
     ecological_attributes = models.CharField(max_length=512,
@@ -323,11 +395,19 @@ class ConservationAttributes(models.Model):
     species = models.OneToOneField(Species,
                                    on_delete=models.CASCADE,
                                    primary_key=True,)
+    comments = models.CharField(max_length=2048,
+                                default="None")
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.species.taxonomy.taxon)  # TODO: is the most appropriate?
 
 
 class Distribution(models.Model):
     """
-    Description TBC
+    All the different locations where this species can be found.
 
     Has a:
     - ConservationList
@@ -339,7 +419,8 @@ class Distribution(models.Model):
     Is:
     - Table
     """
-    department_file_numbers = models.IntegerField(default=-1)
+    department_file_numbers = models.CharField(max_length=512,
+                                               default="None")  # objective, legacy, list of things
     community_original_area = models.IntegerField(default=-1)
     community_original_area_accuracy = models.IntegerField(default=-1)
     number_of_occurrences = models.IntegerField(default=-1)
@@ -352,3 +433,8 @@ class Distribution(models.Model):
                                    on_delete=models.CASCADE,
                                    primary_key=True,)
 
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.community_original_area_reference)  # TODO: is the most appropriate?
