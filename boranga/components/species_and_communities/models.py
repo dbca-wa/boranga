@@ -475,6 +475,27 @@ class Species(models.Model):
         return str(self.taxonomy.taxon)  # TODO: is the most appropriate?
 
 
+class SpeciesAttributes(models.Model):
+    """
+    Do no know what this is but is required for SpeciesDocuments
+    """
+    name_reference = models.CharField(max_length=64,
+                                      default="None")
+    genetic = models.CharField(max_length=64,
+                               default="None")
+    biology = models.CharField(max_length=64,
+                               default="None")
+    ecology = models.CharField(max_length=64,
+                               default="None")
+    fire = models.CharField(max_length=64,
+                            default="None")
+    disease = models.CharField(max_length=64,
+                               default="None")
+
+    species = models.ForeignKey(Species, blank=False, 
+                                on_delete=models.CASCADE)
+
+                                
 class Source(models.Model):
     """
 
@@ -522,6 +543,31 @@ class Community(models.Model):
         return str("{}: {}".format(self.community_id, self.community_name))
 
 
+class DocumentCategory(models.Model):
+    """
+    This is particularly useful for organisation of documents e.g. preventing inappropriate documents being added
+    to certain tables.
+
+    Has a:
+    - ConservationList
+    - ConservationCategory
+    - ConservationCriteria
+    Used by:
+    - Species
+    - Communities
+    Is:
+    - Table
+    """
+    name = models.CharField(max_length=128,
+                            default="None")
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.name)
+
+
 class SpeciesDocument(models.Model):
     """
     Meta-data associated with a document relevant to a Species.
@@ -539,6 +585,10 @@ class SpeciesDocument(models.Model):
     document_description = models.CharField(max_length=1024,
                                             default="None")
     date_time = models.DateField(default=datetime.date.today)
+
+
+    document_category = models.ForeignKey(DocumentCategory, 
+                                          on_delete=models.CASCADE)
 
     species = models.ManyToManyField(Species, blank=False)
 
