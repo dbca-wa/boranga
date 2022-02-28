@@ -477,7 +477,7 @@ class Species(models.Model):
 
 class SpeciesAttributes(models.Model):
     """
-    Do not know what this is but is required for SpeciesDocuments
+    Do no know what this is but is required for SpeciesDocuments
     """
     name_reference = models.CharField(max_length=64,
                                       default="None")
@@ -492,7 +492,7 @@ class SpeciesAttributes(models.Model):
     disease = models.CharField(max_length=64,
                                default="None")
 
-    species = models.ForeignKey(Species, 
+    species = models.ForeignKey(Species, blank=False, 
                                 on_delete=models.CASCADE)
 
     class Meta:
@@ -501,7 +501,7 @@ class SpeciesAttributes(models.Model):
     def __str__(self):
         return str(self.name_reference)  # TODO: is the most appropriate?
 
-                                
+
 class Source(models.Model):
     """
 
@@ -571,8 +571,8 @@ class DocumentCategory(models.Model):
         app_label = 'boranga'
 
     def __str__(self):
-        return str(self.name)
-
+        return str(self.document)
+                                    
 
 class SpeciesDocument(models.Model):
     """
@@ -592,40 +592,16 @@ class SpeciesDocument(models.Model):
                                             default="None")
     date_time = models.DateField(default=datetime.date.today)
 
-    species = models.ManyToManyField(Species, blank=False)
+
+    document_category = models.ForeignKey(DocumentCategory, 
+                                          on_delete=models.CASCADE)
+    species = models.ForeignKey(Species, blank=False)
 
     class Meta:
         app_label = 'boranga'
 
     def __str__(self):
         return str(self.document)
-
-
-class DocumentCategory(models.Model):
-    """
-    This is particularly useful for organisation of documents e.g. preventing inappropriate documents being added
-    to certain tables.
-
-    Has a:
-    - ConservationList
-    - ConservationCategory
-    - ConservationCriteria
-    Used by:
-    - Species
-    - Communities
-    Is:
-    - Table
-    """
-    name = models.CharField(max_length=128,
-                            default="None")
-    species_document = models.ForeignKey(to=SpeciesDocument, 
-                                         on_delete=models.CASCADE)
-
-    class Meta:
-        app_label = 'boranga'
-
-    def __str__(self):
-        return str(self.name)
 
 
 class ThreatCategory(models.Model):
