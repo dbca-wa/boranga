@@ -104,15 +104,7 @@ from rest_framework.filters import BaseFilterBackend
 
 import logging
 logger = logging.getLogger(__name__)
-<<<<<<< Updated upstream
 # create_test_data()
-=======
-<<<<<<< Updated upstream
-
-=======
-create_test_data()
->>>>>>> Stashed changes
->>>>>>> Stashed changes
 
 class GetProposalType(views.APIView):
     renderer_classes = [JSONRenderer, ]

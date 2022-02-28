@@ -477,7 +477,7 @@ class Species(models.Model):
 
 class SpeciesAttributes(models.Model):
     """
-    Do no know what this is but is required for SpeciesDocuments
+    Do not know what this is but is required for SpeciesDocuments
     """
     name_reference = models.CharField(max_length=64,
                                       default="None")
@@ -492,8 +492,14 @@ class SpeciesAttributes(models.Model):
     disease = models.CharField(max_length=64,
                                default="None")
 
-    species = models.ForeignKey(Species, blank=False, 
+    species = models.ForeignKey(Species, 
                                 on_delete=models.CASCADE)
+
+    class Meta:
+        app_label = 'boranga'
+
+    def __str__(self):
+        return str(self.name_reference)  # TODO: is the most appropriate?
 
                                 
 class Source(models.Model):
@@ -585,10 +591,6 @@ class SpeciesDocument(models.Model):
     document_description = models.CharField(max_length=1024,
                                             default="None")
     date_time = models.DateField(default=datetime.date.today)
-
-
-    document_category = models.ForeignKey(DocumentCategory, 
-                                          on_delete=models.CASCADE)
 
     species = models.ManyToManyField(Species, blank=False)
 

@@ -20,7 +20,7 @@ def create_test_data():
     # create_species_fauna()
     # create_species_flora()
     # create_community()
-    create_species_attributes()
+    # create_species_attributes()
 
 def create_region_district():
     try:
@@ -61,6 +61,7 @@ def create_region_name_authority():
 def create_species_attributes():
     try:
         for species in Species.objects.all():
+            print(species.common_name)
             name_reference = "{}_attribute_name_reference".format(species.common_name)
             genetic = "{}_attribute_genetic".format(species.common_name)
             biology = "{}_attribute_biology".format(species.common_name)
@@ -77,7 +78,7 @@ def create_species_attributes():
                                                                          species=species)
 
             if save_to_database:
-                species_attributes.save()
+                species_attributes[0].save()
     except Exception as e:
         print("create_species_attributes falied: ", e)
         print("-----")
