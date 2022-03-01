@@ -595,7 +595,9 @@ class SpeciesDocument(models.Model):
 
     document_category = models.ForeignKey(DocumentCategory, 
                                           on_delete=models.CASCADE)
-    species = models.ForeignKey(Species, blank=False)
+    species = models.ForeignKey(Species, 
+                                blank=False,
+                                on_delete=models.CASCADE)
 
     class Meta:
         app_label = 'boranga'
