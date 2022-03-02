@@ -69,6 +69,7 @@ REGION_CHOICES = (
 class Region(models.Model):
     name = models.CharField(choices=REGION_CHOICES, 
                             unique=True,
+                            default=None,
                             max_length=64)
 
     class Meta:
@@ -454,8 +455,10 @@ class Species(models.Model):
                                                on_delete=models.CASCADE)
     # community many to many
     region = models.ForeignKey(Region, 
+                               default=None,
                                on_delete=models.CASCADE)
     district = models.ForeignKey(District, 
+                                 default=None,
                                  on_delete=models.CASCADE)
     image = models.CharField(max_length=512,
                              default="None")
@@ -536,8 +539,10 @@ class Community(models.Model):
     community_status = models.CharField(max_length=128,
                                         default="None")
     region = models.ForeignKey(Region, 
+                               default=None,
                                on_delete=models.CASCADE)
     district = models.ForeignKey(District, 
+                                 default=None,
                                  on_delete=models.CASCADE)
 
     species = models.ManyToManyField(Species, blank=False)
@@ -592,11 +597,12 @@ class SpeciesDocument(models.Model):
                                             default="None")
     date_time = models.DateField(default=datetime.date.today)
 
-
     document_category = models.ForeignKey(DocumentCategory, 
+                                          default="None",
                                           on_delete=models.CASCADE)
     species = models.ForeignKey(Species, 
                                 blank=False,
+                                default=None,
                                 on_delete=models.CASCADE)
 
     class Meta:
@@ -663,8 +669,10 @@ class ConservationPlan(models.Model):
     - Table
     """
     region = models.ForeignKey(Region, 
+                               default=None,
                                on_delete=models.CASCADE)
     district = models.ForeignKey(District, 
+                                 default=None,
                                  on_delete=models.CASCADE)
     type = models.CharField(max_length=512,
                             default="None")

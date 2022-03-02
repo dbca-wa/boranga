@@ -104,7 +104,7 @@ from rest_framework.filters import BaseFilterBackend
 
 import logging
 logger = logging.getLogger(__name__)
-create_test_data()
+# create_test_data()
 
 class GetProposalType(views.APIView):
     renderer_classes = [JSONRenderer, ]
