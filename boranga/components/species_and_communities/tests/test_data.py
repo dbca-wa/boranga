@@ -27,7 +27,6 @@ def create_test_data():
     print('--------------ADDING TEST DATA----------------------')
     print('----------------------------------------------------')
     create_change_codes()
-    
 
 def create_committee_meetings():
     print('--------------Starting {}'.format('create_committee_meetings'))
@@ -76,7 +75,6 @@ def create_change_codes():
     except Exception as e:
         print("FAILED create_change_codes failed: ", e)
 
-
 def create_region_district():
     print('--------------Starting {}'.format('create_region_district'))
     try:
@@ -121,6 +119,12 @@ def create_name_authority():
 
 def create_species_attributes():
     print('--------------Starting {}'.format('create_species_attributes'))
+        create_species_fauna()
+    except Exception as e:
+        logger.debug("FAILED create_region_name_authority failed: ", e)
+
+def create_species_attributes():
+    print('--------------Starting {}'.format('create_species_attributes'))
     try:
         for species in Species.objects.all():
             name_reference = "{}_attribute_name_reference".format(species.common_name)
@@ -140,10 +144,22 @@ def create_species_attributes():
 
             if save_to_database:
                 species_attributes[0].save()
-        print('--------------     Completed {}'.format('create_species_attributes'))
-        create_committee_meetings()
+        print('--------------     Completed {}'.format(create_species_attributes))
     except Exception as e:
-        print("FAILED create_species_attributes failed: ", e)
+        logger.debug("FAILED create_species_attributes failed: ", e)
+
+def create_region_name_authority():
+    print('--------------Starting {}'.format(create_region_name_authority))
+    try:
+        name_authority = NameAuthority.objects.get_or_create(name="WA Museum")[0]
+
+        if save_to_database:
+            name_authority.save()
+        print('--------------Completed {}'.format(create_group_types))
+        create_species_fauna()
+    except Exception as e:
+        print("create_region_name_authority failed: ", e)
+        print("-----")
 
 def create_community():
     """

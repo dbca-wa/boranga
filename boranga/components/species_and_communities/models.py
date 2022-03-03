@@ -661,7 +661,7 @@ class SpeciesDocument(models.Model):
     document_category = models.ForeignKey(DocumentCategory, 
                                           default="None",
                                           on_delete=models.CASCADE)
-    species = models.ForeignKey(Species,
+    species = models.ForeignKey(Species, 
                                 blank=False,
                                 default=None,
                                 on_delete=models.CASCADE)
