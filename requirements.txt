@@ -62,4 +62,4 @@ django-multiselectfield==0.1.12
 # Needed for shell_plus crash issue
 jedi==0.17.2
 parso==0.7.1
-import-export==0.2
+django-import-export==2.7.1
