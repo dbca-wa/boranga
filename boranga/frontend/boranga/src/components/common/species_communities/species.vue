@@ -1,15 +1,167 @@
 <template lang="html">
+<!-- <div class="row" id="userInfo">
+    <div class="col-sm-12">
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h3 class="panel-title">Distribution <small></small>
+                <a class="panelClicker" :href="'#'+distributionBody" data-toggle="collapse"  data-parent="#userInfo" expanded="true" :aria-controls="distributionBody">
+                <span class="glyphicon glyphicon-chevron-up pull-right "></span>
+                </a>
+                </h3>
+            </div>
+            <div class="panel-body collapse in" :id="distributionBody">
+                <div class="" >
+                    <div class="form-horizontal col-sm-12 borderDecoration">
+                        <div class="form-group">
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="Name">Some Species data</label>
+                                </div>
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" name="Some species data" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>    
+        </div>
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h3 class="panel-title">Taxonomy<small></small>
+                <a class="panelClicker" :href="'#'+taxonomyBody" data-toggle="collapse"  data-parent="#userInfo" expanded="true" :aria-controls="taxonomyBody">
+                <span class="glyphicon glyphicon-chevron-up pull-right "></span>
+                </a>
+                </h3>
+            </div>
+            <div class="panel-body collapse in" :id="taxonomyBody">
+                <div class="" >               
+                    <div class="form-horizontal col-sm-12 borderDecoration">
+                        <div class="form-group">
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="previous_name">Previous Name:</label>
+                                </div>
+                                <div class="col-sm-6" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" id="previous_name" name="previous_name" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="common_name">Common Name:</label>
+                                </div>
+                                <div class="col-sm-6" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" id="common_name" name="common_name" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="family">Family:</label>
+                                </div>
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" id="family" name="family" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="genus">Genus:</label>
+                                </div>
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" id="genus" name="genus" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="phylogenetic_group">Phylogenetic Group:</label>
+                                </div>
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" id="phylogenetic_group" name="phylogenetic_group" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="name_authority">Name Authority:</label>
+                                </div>
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" id="name_authority" name="name_authority" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="community_description">Community Description:</label>
+                                </div>
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="textarea" class="form-control" id="community_description" name="community_description" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>    
+        </div>
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h3 class="panel-title">Conservation Attributes <small></small>
+                <a class="panelClicker" :href="'#'+conservationAttributesBody" data-toggle="collapse"  data-parent="#userInfo" expanded="true" :aria-controls="conservationAttributesBody">
+                <span class="glyphicon glyphicon-chevron-up pull-right "></span>
+                </a>
+                </h3>
+            </div>
+            <div class="panel-body collapse in" :id="conservationAttributesBody">
+                <div class="" >
+                    <div class="form-horizontal col-sm-12 borderDecoration">
+                        <div class="form-group">
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="Name">Some Species data</label>
+                                </div>
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" name="Some species data" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>    
+        </div>
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h3 class="panel-title">Conservation Status <small></small>
+                <a class="panelClicker" :href="'#'+conservationStatusBody" data-toggle="collapse"  data-parent="#userInfo" expanded="true" :aria-controls="conservationStatusBody">
+                <span class="glyphicon glyphicon-chevron-up pull-right "></span>
+                </a>
+                </h3>
+            </div>
+            <div class="panel-body collapse in" :id="conservationStatusBody">
+                <div class="" >
+                    <div class="form-horizontal col-sm-12 borderDecoration">
+                        <div class="form-group">
+                            <div class="row">
+                                <div class="col-sm-3">
+                                    <label class="control-label pull-left"  for="Name">Some Species data</label>
+                                </div>
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                    <input type="text" class="form-control" name="Some species data" placeholder="" :disabled="proposal.readonly" v-model="some_species_data">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>    
+        </div>
+    </div>
+
+</div> -->
     <div id="species">
         <FormSection label="Distribution" Index="distribution">
-            <!-- <div class="row form-group">
+            <div class="row form-group">
                 <label for="" class="col-sm-3 control-label">Department File Numbers:</label>
                 <div class="col-sm-9">
                     <input :disabled="proposal.readonly" type="text" class="form-control" id="department_file_numbers" placeholder="" v-model="some_species_data"/>
                 </div>
-            </div> -->
+            </div>
         </FormSection>
         <FormSection label="Taxonomy" Index="taxonomy">
-            <!-- <div class="row form-group">
+            <div class="row form-group">
                 <label for="" class="col-sm-3 control-label">Taxon Id:</label>
                 <div class="col-sm-9">
                     <input :disabled="proposal.readonly" type="text" class="form-control" id="taxon_id" placeholder="" v-model="some_species_data"/>
@@ -68,13 +220,13 @@
                 <div class="col-sm-9">
                     <input :disabled="proposal.readonly" type="textarea" style="width: 70%;" class="form-control" id="community_description" placeholder="" v-model="some_species_data"/>
                 </div>
-            </div> -->
+            </div>
         </FormSection>
         <FormSection label="Conservation Attributes" Index="conservation_attributes">
             <div class="row form-group">
                 <label for="" class="col-sm-3 control-label">General Management Advice:</label>
                 <div class="col-sm-9">
-                    <!-- <input :disabled="proposal.readonly" type="text" class="form-control" id="general_management_advice" placeholder="" v-model="some_species_data"/> -->
+                    <input :disabled="proposal.readonly" type="text" class="form-control" id="general_management_advice" placeholder="" v-model="some_species_data"/>
                 </div>
             </div>
         </FormSection>
@@ -122,7 +274,7 @@ export default {
                 useCurrent:false,
                 keepInvalid:true,
                 allowInputToggle:true,
-                // some_species_data: null,
+                some_species_data: null,
             },
             }
         },
