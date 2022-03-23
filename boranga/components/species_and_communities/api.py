@@ -319,6 +319,7 @@ class CommunitiesPaginatedViewSet(viewsets.ModelViewSet):
 
         return qs
 
+    @list_route(methods=['GET',], detail=False)
     def communities_internal(self, request, *args, **kwargs):
         qs = self.get_queryset()
         qs = self.filter_queryset(qs)

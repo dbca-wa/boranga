@@ -18,9 +18,9 @@
                                 <div class="col-sm-3">
                                     <label class="control-label pull-left"  for="Name">Some mgt plan data</label>
                                 </div>
-                                <!-- <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
+                                <div class="col-sm-9" style="margin-bottom: 5px; width:53% !important">
                                     <input type="text" class="form-control" name="Some species data" placeholder="" :disabled="proposal.readonly" v-model="some_mgtplan_data">
-                                </div> -->
+                                </div>
                             </div>
                         </div> 
                     </div>
@@ -70,7 +70,7 @@ export default {
                 useCurrent:false,
                 keepInvalid:true,
                 allowInputToggle:true,
-                // some_mgtplan_data: null,
+                some_mgtplan_data: null,
             },
             }
         },

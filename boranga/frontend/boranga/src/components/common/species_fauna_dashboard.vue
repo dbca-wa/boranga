@@ -7,7 +7,7 @@
                         <label for="">Scientific Name:</label>
                         <select class="form-control" v-model="filterFaunaScientificName">
                             <option value="all">All</option>
-                            <option v-for="species in species_data_list" :value="species.scientific_name" v-bind:key="species.id">{{species.scientific_name}}</option>
+                            <option v-for="species in species_data_list" :value="species.scientific_name">{{species.scientific_name}}</option>
                         </select>
                     </div>
                 </div>
@@ -16,7 +16,7 @@
                         <label for="">Common Name:</label>
                         <select class="form-control" v-model="filterFaunaCommonName">
                             <option value="all">All</option>
-                            <option v-for="species in species_data_list" :value="species.common_name" v-bind:key="species.id">{{species.common_name}}</option>
+                            <option v-for="species in species_data_list" :value="species.common_name">{{species.common_name}}</option>
                         </select>
                     </div>
                 </div>
@@ -25,7 +25,7 @@
                         <label for="">Phylo Group:</label>
                         <select class="form-control" v-model="filterFaunaPhylogeneticGroup">
                             <option value="all">All</option>
-                            <option v-for="species in species_data_list" :value="species.phylogenetic_group" v-bind:key="species.id">
+                            <option v-for="species in species_data_list" :value="species.phylogenetic_group">
                                 {{species.phylogenetic_group}}</option>
                         </select>
                     </div>
@@ -35,7 +35,7 @@
                         <label for="">Family:</label>
                         <select class="form-control" v-model="filterFaunaFamily">
                             <option value="all">All</option>
-                            <option v-for="species in species_data_list" :value="species.family" v-bind:key="species.id">{{species.family}}</option>
+                            <option v-for="species in species_data_list" :value="species.family">{{species.family}}</option>
                         </select>
                     </div>
                 </div>
@@ -44,7 +44,7 @@
                         <label for="">Genera:</label>
                         <select class="form-control" v-model="filterFaunaGenus">
                             <option value="all">All</option>
-                            <option v-for="species in species_data_list" :value="species.genus" v-bind:key="species.id">{{species.genus}}</option>
+                            <option v-for="species in species_data_list" :value="species.genus">{{species.genus}}</option>
                         </select>
                     </div>
                 </div>
@@ -53,7 +53,7 @@
                         <label for="">Conservation List:</label>
                         <select class="form-control" v-model="filterFaunaConservationList">
                             <option value="all">All</option>
-                            <option v-for="list in conservation_list_dict" :value="list.id" v-bind:key="list.id">{{list.code}}</option>
+                            <option v-for="list in conservation_list_dict" :value="list.id">{{list.code}}</option>
                         </select>
                     </div>
                 </div>
@@ -62,7 +62,7 @@
                         <label for="">Conservation Category:</label>
                         <select class="form-control" v-model="filterFaunaConservationCategory">
                             <option value="all">All</option>
-                            <option v-for="list in conservation_category_list" :value="list.id" v-bind:key="list.id">{{list.code}}</option>
+                            <option v-for="list in conservation_category_list" :value="list.id">{{list.code}}</option>
                         </select>
                     </div>
                 </div>
@@ -79,7 +79,7 @@
                         <label for="">Region:</label>
                         <select class="form-control" v-model="filterFaunaRegion">
                             <option value="all">All</option>
-                            <option v-for="region in region_list" :value="region.id" v-bind:key="region.id">{{region.name}}</option>
+                            <option v-for="region in region_list" :value="region.id">{{region.name}}</option>
                         </select>
                     </div>
                 </div>
@@ -88,14 +88,14 @@
                         <label for="">District:</label>
                         <select class="form-control" v-model="filterFaunaDistrict">
                             <option value="all">All</option>
-                            <option v-for="district in district_list" :value="district.id" v-bind:key="district.id">{{district.name}}</option>
+                            <option v-for="district in district_list" :value="district.id">{{district.name}}</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- <div v-if="is_external" class="col-md-6">
+                <div v-if="is_external" class="col-md-6">
                     <router-link  style="margin-top:25px;" class="btn btn-primary pull-right" :to="{ name: 'apply_proposal' }">New Application</router-link>
-                </div> -->
+                </div>
             </div>
         </CollapsibleFilters>
 
@@ -191,12 +191,13 @@ export default {
     data() {
         let vm = this;
         return {
-            datatable_fauna_id: 'species_fauna-datatable-' + vm._uid,
+            datatable_fauna_id: 'species_fauna-datatable-'+vm._uid,
      
-            // Profile to check if user has access
+            //Profile to check if user has access to process Proposal
             profile: {},
+            is_payment_admin: false,
             
-            // pelected values for filtering
+            // selected values for filtering
             filterFaunaScientificName: sessionStorage.getItem(this.filterFaunaScientificName_cache) ? 
                                         sessionStorage.getItem(this.filterFaunaScientificName_cache) : 'all',
 
@@ -257,7 +258,7 @@ export default {
                 {value: 'awaiting_payment', name: 'Awaiting Payment'},
             ],
             
-            // proposal_status: [],
+            proposal_status: [],
 
         }
     },
@@ -579,7 +580,7 @@ export default {
             return {
                 data: "region",
                 orderable: true,
-                searchable: false,
+                searchable: false, // handles by filter_queryset override method - class ProposalFilterBackend
                 visible: true,
                 'render': function(data, type, full){
                     if (full.region){
@@ -595,7 +596,7 @@ export default {
             return {
                 data: "district",
                 orderable: true,
-                searchable: false,
+                searchable: false, // handles by filter_queryset override method - class ProposalFilterBackend
                 visible: true,
                 'render': function(data, type, full){
                     if (full.district){
@@ -607,17 +608,18 @@ export default {
                 name: "district",
             }
         },
-        column_action: function() {
+        column_action: function(){
             let vm = this
             return {
                 data: "id",
                 orderable: false,
                 searchable: false,
                 visible: true,
-                'render': function(data, type, full) {
+                'render': function(data, type, full){
                     let links = "";
                     if (!vm.is_external){
-                        if(full.assessor_process){
+                        /*if(vm.check_assessor(full) && full.can_officer_process)*/
+                        if(full.assessor_process){   
                                 links +=  `<a href='/internal/species_communities/${full.id}'>Process</a><br/>`;    
                         }
                         else{
@@ -634,13 +636,13 @@ export default {
                         }
                     }
 
-                    links +=  `<a href='/internal/species_communities/${full.scientific_name}'>Edit</a><br/>`; // Dummy addition for Boranaga demo
+                    links +=  `<a href='/internal/species_communities/${full.id}'>Edit</a><br/>`; // Dummy addition for Boranaga demo
 
                     return links;
                 }
             }
         },
-        datatable_options: function() {
+        datatable_options: function(){
             let vm = this
 
             let columns = []
@@ -763,78 +765,89 @@ export default {
                 console.log(error);
             })
         },
-        // discardProposal:function (proposal_id) {
-        //     let vm = this;
-        //     swal({
-        //         title: "Discard Application",
-        //         text: "Are you sure you want to discard this proposal?",
-        //         type: "warning",
-        //         showCancelButton: true,
-        //         confirmButtonText: 'Discard Application',
-        //         confirmButtonColor:'#d9534f'
-        //     }).then(() => {
-        //         vm.$http.delete(api_endpoints.discard_proposal(proposal_id))
-        //         .then((response) => {
-        //             swal(
-        //                 'Discarded',
-        //                 'Your proposal has been discarded',
-        //                 'success'
-        //             )
-        //             vm.$refs.fauna_datatable.vmDataTable.ajax.reload();
-        //         }, (error) => {
-        //             console.log(error);
-        //         });
-        //     },(error) => {
 
-        //     });
-        // },
+        discardProposal:function (proposal_id) {
+            let vm = this;
+            swal({
+                title: "Discard Application",
+                text: "Are you sure you want to discard this proposal?",
+                type: "warning",
+                showCancelButton: true,
+                confirmButtonText: 'Discard Application',
+                confirmButtonColor:'#d9534f'
+            }).then(() => {
+                vm.$http.delete(api_endpoints.discard_proposal(proposal_id))
+                .then((response) => {
+                    swal(
+                        'Discarded',
+                        'Your proposal has been discarded',
+                        'success'
+                    )
+                    vm.$refs.fauna_datatable.vmDataTable.ajax.reload();
+                }, (error) => {
+                    console.log(error);
+                });
+            },(error) => {
+
+            });
+        },
         addEventListeners: function(){
             let vm = this;
             // External Discard listener
-            // vm.$refs.fauna_datatable.vmDataTable.on('click', 'a[data-discard-proposal]', function(e) {
-            //     e.preventDefault();
-            //     var id = $(this).attr('data-discard-proposal');
-            //     vm.discardProposal(id);
-            // });
+            vm.$refs.fauna_datatable.vmDataTable.on('click', 'a[data-discard-proposal]', function(e) {
+                e.preventDefault();
+                var id = $(this).attr('data-discard-proposal');
+                vm.discardProposal(id);
+            });
         },
         initialiseSearch:function(){
             this.submitterSearch();
         },
-        // submitterSearch:function(){
-        //     let vm = this;
-        //     vm.$refs.fauna_datatable.table.dataTableExt.afnFiltering.push(
-        //         function(settings,data,dataIndex,original){
-        //             let filtered_submitter = vm.filterProposalSubmitter;
-        //             if (filtered_submitter == 'All'){ return true; } 
-        //             return filtered_submitter == original.submitter.email;
-        //         }
-        //     );
-        // },
+        submitterSearch:function(){
+            let vm = this;
+            vm.$refs.fauna_datatable.table.dataTableExt.afnFiltering.push(
+                function(settings,data,dataIndex,original){
+                    let filtered_submitter = vm.filterProposalSubmitter;
+                    if (filtered_submitter == 'All'){ return true; } 
+                    return filtered_submitter == original.submitter.email;
+                }
+            );
+        },
         fetchProfile: function(){
             let vm = this;
-
-        },
-        // check_assessor: function(proposal){
-        //     let vm = this;
-        //     if (proposal.assigned_officer)
-        //         {
-        //             { if(proposal.assigned_officer== vm.profile.full_name)
-        //                 return true;
-        //             else
-        //                 return false;
-        //         }
-        //     }
-        //     else{
-        //          var assessor = proposal.allowed_assessors.filter(function(elem){
-        //             return(elem.id=vm.profile.id)
-        //         });
+            /*Vue.http.get(api_endpoints.profile).then((response) => {
+                vm.profile = response.body;
+                vm.is_payment_admin=response.body.is_payment_admin;
+                              
+            },(error) => {
+                console.log(error);
                 
-        //         if (assessor.length > 0)
-        //             return true;
-        //         else
-        //             return false;
-        //     }
-        // },
+            })*/
+        },
+
+        check_assessor: function(proposal){
+            let vm = this;
+            if (proposal.assigned_officer)
+                {
+                    { if(proposal.assigned_officer== vm.profile.full_name)
+                        return true;
+                    else
+                        return false;
+                }
+            }
+            else{
+                 var assessor = proposal.allowed_assessors.filter(function(elem){
+                    return(elem.id=vm.profile.id)
+                });
+                
+                if (assessor.length > 0)
+                    return true;
+                else
+                    return false;
+              
+            }
+            
+        },
     },
 
 

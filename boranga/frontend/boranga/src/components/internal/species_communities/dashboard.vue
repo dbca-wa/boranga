@@ -119,7 +119,7 @@ export default {
     },
     created: function () {
         this.$http.get(api_endpoints.group_types_dict).then((response) => {
-                this.group_types = response.body;
+                this.group_types= response.body;
                 },(error) => {
                 console.log(error);
             });

@@ -22,8 +22,6 @@ from boranga.components.approvals import api as approval_api
 from boranga.components.compliances import api as compliances_api
 from boranga.components.species_and_communities import api as species_communities_api
 from ledger_api_client.urls import urlpatterns as ledger_patterns
-from boranga.components.species_and_communities.docs_urls import urlpatterns as docs_url_patterns
-from boranga.components.species_and_communities.docs_urls import api_patterns as docs_api_patterns
 
 # API patterns
 router = routers.DefaultRouter()
@@ -76,7 +74,7 @@ api_patterns = [
 
 
     #url(r'^api/reports/booking_settlements$', main_api.BookingSettlementReportView.as_view(),name='booking-settlements-report'),
-] + docs_api_patterns
+]
 
 # URL Patterns
 urlpatterns = [
@@ -120,7 +118,7 @@ urlpatterns = [
     #url(r'^history/organisation/(?P<pk>\d+)/$', organisation_views.OrganisationHistoryCompareView.as_view(), name='organisation_history'),
 
 
-] + ledger_patterns + docs_url_patterns
+] + ledger_patterns
 
 if settings.EMAIL_INSTANCE != 'PROD':
     urlpatterns.append(path('accounts/', include('django.contrib.auth.urls')))

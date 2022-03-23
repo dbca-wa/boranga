@@ -380,12 +380,12 @@ class ProposalPaginatedViewSet(viewsets.ModelViewSet):
         serializer = ListProposalSerializer(result_page, context={'request':request}, many=True)
         return self.paginator.get_paginated_response(serializer.data)
 
-    # @list_route(methods=['GET',], detail=False)
-    # def species_communities_internal(self, request, *args, **kwargs):
+    @list_route(methods=['GET',], detail=False)
+    def species_communities_internal(self, request, *args, **kwargs):
 
-    #     d = {"recordsTotal":1169,"recordsFiltered":1,"data":[{"id":1634,"application_type":"Commercial operations","proposal_type":"Renewal","activity":None,"title":None,"region":None,"customer_status":"Under Review","processing_status":"With Assessor","applicant":"My Org Ltd","submitter":{"id":102473,"email":"info@my_org_name.com","first_name":"AAA","last_name":"BBB","title":None,"organisation":None},"assigned_officer":None,"lodgement_date":"2021-12-06T00:30:46.613243Z","can_user_edit":False,"can_user_view":True,"reference":"A001634-0","lodgement_number":"A001634","can_officer_process":True,"assessor_process":True,"allowed_assessors":[{"id":102712,"email":"any.other@dbca.wa.gov.au","first_name":"Any","last_name":"Other","title":"Licensing Officer","organisation":None}],"fee_invoice_url":"/cols/payments/invoice-pdf/05575281113","fee_invoice_reference":"05575281113","fee_paid":True, "migrated":False ,"status":"With Assessor"}],"draw":5}
+        d = {"recordsTotal":1169,"recordsFiltered":1,"data":[{"id":1634,"application_type":"Commercial operations","proposal_type":"Renewal","activity":None,"title":None,"region":None,"customer_status":"Under Review","processing_status":"With Assessor","applicant":"My Org Ltd","submitter":{"id":102473,"email":"info@my_org_name.com","first_name":"AAA","last_name":"BBB","title":None,"organisation":None},"assigned_officer":None,"lodgement_date":"2021-12-06T00:30:46.613243Z","can_user_edit":False,"can_user_view":True,"reference":"A001634-0","lodgement_number":"A001634","can_officer_process":True,"assessor_process":True,"allowed_assessors":[{"id":102712,"email":"any.other@dbca.wa.gov.au","first_name":"Any","last_name":"Other","title":"Licensing Officer","organisation":None}],"fee_invoice_url":"/cols/payments/invoice-pdf/05575281113","fee_invoice_reference":"05575281113","fee_paid":True, "migrated":False ,"status":"With Assessor"}],"draw":5}
 
-    #     return Response(d)
+        return Response(d)
 
 
 
