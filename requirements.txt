@@ -1,7 +1,7 @@
 git+https://github.com/xzzy/webtemplate.git#egg=webtemplate_dbca
 git+https://github.com/dbca-wa/dbca-utils@1.1.1#egg=dbca-utils
 psycopg2-binary==2.8.5
-Django==3.2.12
+Django==3.2.15
 django-extensions==1.9.8
 ipython==7.19.0
 git+https://github.com/dbca-wa/ledger_api_client.git#egg=ledger_api_client
