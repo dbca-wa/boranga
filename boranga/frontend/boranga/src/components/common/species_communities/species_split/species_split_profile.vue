@@ -212,21 +212,21 @@
                 <label for="" class="col-sm-3 control-label">{{ species_original.species_number }} Flowering Period:</label>
                 <div class="col-sm-8">
                     <select :disabled="true" class="form-select" 
-                        v-model="species_original.conservation_attributes.flowering_period_id">
+                        v-model="species_original.conservation_attributes.flowering_period">
                         <option v-for="option in flowering_period_list" :value="option.id" v-bind:key="option.id">
                             {{ option.name }}                            
                         </option>
                     </select>
                 </div>
                 <div class="col-sm-1">
-                    <input class="form-check-input" type="checkbox" :id="'flowering_prd_chk'+species_community.id" @change="checkConservationInput('flowering_prd_chk'+species_community.id,'flowering_period_id')" />
+                    <input class="form-check-input" type="checkbox" :id="'flowering_prd_chk'+species_community.id" @change="checkConservationInput('flowering_prd_chk'+species_community.id,'flowering_period')" />
                 </div>
             </div>
             <div class="row mb-3" v-show="!isFauna">
                 <label for="" class="col-sm-3 control-label">Flowering Period:</label>
                 <div class="col-sm-8">
                     <select :disabled="isReadOnly" class="form-select" 
-                        v-model="species_community.conservation_attributes.flowering_period_id">
+                        v-model="species_community.conservation_attributes.flowering_period">
                         <option v-for="option in flowering_period_list" :value="option.id" v-bind:key="option.id">
                             {{ option.name }}                            
                         </option>
@@ -238,14 +238,14 @@
                 <label for="" class="col-sm-3 control-label">{{ species_original.species_number }} Fruiting Period:</label>
                 <div class="col-sm-8">
                     <select :disabled="true" class="form-select" 
-                        v-model="species_original.conservation_attributes.fruiting_period_id">
+                        v-model="species_original.conservation_attributes.fruiting_period">
                         <option v-for="option in fruiting_period_list" :value="option.id" v-bind:key="option.id">
                             {{ option.name }}                            
                         </option>
                     </select>
                 </div>
                 <div class="col-sm-1">
-                    <input class="form-check-input" type="checkbox" :id="'fruiting_prd_chk'+species_community.id" @change="checkConservationInput('fruiting_prd_chk'+species_community.id,'fruiting_period_id')" />
+                    <input class="form-check-input" type="checkbox" :id="'fruiting_prd_chk'+species_community.id" @change="checkConservationInput('fruiting_prd_chk'+species_community.id,'fruiting_period')" />
                 </div>
                 
             </div>
@@ -253,7 +253,7 @@
                 <label for="" class="col-sm-3 control-label">Fruiting Period:</label>
                 <div class="col-sm-8">
                     <select :disabled="isReadOnly" class="form-select" 
-                        v-model="species_community.conservation_attributes.fruiting_period_id">
+                        v-model="species_community.conservation_attributes.fruiting_period">
                         <option v-for="option in fruiting_period_list" :value="option.id" v-bind:key="option.id">
                             {{ option.name }}                            
                         </option>

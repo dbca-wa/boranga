@@ -337,8 +337,10 @@ class SpeciesConservationAttributesSerializer(serializers.ModelSerializer):
 			'id',
 			'species_id',
 			#flora related attributes
-			'flowering_period_id',
-			'fruiting_period_id',
+			# 'flowering_period_id',
+			# 'fruiting_period_id',
+			'flowering_period',
+			'fruiting_period',
 			'flora_recruitment_type_id',
 			'flora_recruitment_notes',
 			'seed_viability_germination_info',
@@ -383,6 +385,8 @@ class SaveSpeciesConservationAttributesSerializer(serializers.ModelSerializer):
 			#flora related attributes
 			'flowering_period_id',
 			'fruiting_period_id',
+			'flowering_period', 
+			'fruiting_period', 
 			'flora_recruitment_type_id',
 			'flora_recruitment_notes',
 			'seed_viability_germination_info',

@@ -1867,11 +1867,26 @@ class FloweringPeriod(models.Model):
     - SpeciesConservationAttributes
 
     """
-    period = models.CharField(max_length=200, blank=False, unique=True)
+    PERIOD_CHOICES = (
+        ('January', 'January'),
+        ('February', 'February'),
+        ('March', 'March'),
+        ('April', 'April'),
+        ('May', 'May'),
+        ('June', 'June'),
+        ('July', 'July'),
+        ('August', 'August'),
+        ('September', 'September'),
+        ('October', 'October'),
+        ('November', 'November'),
+        ('December', 'December'),
+    )
+
+    period = models.CharField(max_length=200, blank=False, unique=True, choices=PERIOD_CHOICES)
 
     class Meta:
         app_label = 'boranga'
-        ordering = ['period']
+        # ordering = ['period']
 
     def __str__(self):
         return str(self.period)
@@ -1885,11 +1900,26 @@ class FruitingPeriod(models.Model):
     - SpeciesConservationAttributes
 
     """
-    period = models.CharField(max_length=200, blank=False, unique=True)
+    PERIOD_CHOICES = (
+        ('January', 'January'),
+        ('February', 'February'),
+        ('March', 'March'),
+        ('April', 'April'),
+        ('May', 'May'),
+        ('June', 'June'),
+        ('July', 'July'),
+        ('August', 'August'),
+        ('September', 'September'),
+        ('October', 'October'),
+        ('November', 'November'),
+        ('December', 'December'),
+    )
+
+    period = models.CharField(max_length=200, blank=False, unique=True, choices=PERIOD_CHOICES)
 
     class Meta:
         app_label = 'boranga'
-        ordering = ['period']
+        # ordering = ['period']
 
     def __str__(self):
         return str(self.period)
@@ -2035,8 +2065,8 @@ class SpeciesConservationAttributes(models.Model):
     species = models.ForeignKey(Species, on_delete=models.CASCADE, unique=True, null=True, related_name="species_conservation_attributes")
     
     # flora related attributes
-    flowering_period = models.ForeignKey(FloweringPeriod, on_delete=models.SET_NULL, null=True, blank=True)
-    fruiting_period = models.ForeignKey(FruitingPeriod, on_delete=models.SET_NULL, null=True, blank=True)
+    flowering_period = models.ManyToManyField(FloweringPeriod, blank=True, null=True, related_name="curr_flowering_period")
+    fruiting_period = models.ManyToManyField(FruitingPeriod, blank=True, null=True, related_name="curr_fruiting_period")
     flora_recruitment_type = models.ForeignKey(FloraRecruitmentType, on_delete=models.SET_NULL, null=True, blank=True)
     flora_recruitment_notes = models.CharField(max_length=1000,null=True, blank=True)
     seed_viability_germination_info = models.CharField(max_length=1000,null=True, blank=True)

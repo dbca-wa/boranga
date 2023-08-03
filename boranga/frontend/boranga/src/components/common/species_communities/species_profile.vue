@@ -208,10 +208,12 @@
             <div class="row mb-3" v-show="!isFauna">
                 <label for="" class="col-sm-3 control-label">Flowering Period:</label>
                 <div class="col-sm-9">
-                    <select :disabled="isReadOnly" class="form-select" 
-                        v-model="species_community.conservation_attributes.flowering_period_id">
-                        <option v-for="option in flowering_period_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
+                    <select :disabled="isReadOnly" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="flowering_period_select" 
+                        v-model="species_community.conservation_attributes.flowering_period" >
+                        <option v-for="option in flowering_period_list" :value="option.id" :key="option.id">
+                            {{option.name}}
                         </option>
                     </select>
                 </div>
@@ -219,10 +221,12 @@
             <div class="row mb-3" v-show="!isFauna">
                 <label for="" class="col-sm-3 control-label">Fruiting Period:</label>
                 <div class="col-sm-9">
-                    <select :disabled="isReadOnly" class="form-select" 
-                        v-model="species_community.conservation_attributes.fruiting_period_id">
-                        <option v-for="option in fruiting_period_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
+                    <select :disabled="isReadOnly" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="fruiting_period_select" 
+                        v-model="species_community.conservation_attributes.fruiting_period" >
+                        <option v-for="option in fruiting_period_list" :value="option.id" :key="option.id">
+                            {{option.name}}
                         </option>
                     </select>
                 </div>
@@ -714,6 +718,36 @@ export default {
                 }
             },
             eventListeners:function (){
+                let vm = this;
+                $(vm.$refs.flowering_period_select).select2({
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Flowering Period",
+                    multiple: true,
+                }).
+                on("select2:select",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.flowering_period = selected.val();
+                }).
+                on("select2:unselect",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.flowering_period = selected.val();
+                });
+
+                $(vm.$refs.fruiting_period_select).select2({
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Fruiting Period",
+                    multiple: true,
+                }).
+                on("select2:select",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.fruiting_period = selected.val();
+                }).
+                on("select2:unselect",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.fruiting_period = selected.val();
+                });
             },
         },
         created: async function() {
@@ -813,7 +847,7 @@ export default {
         },
         mounted: function(){
             let vm = this;
-            //vm.eventListeners();
+            vm.eventListeners();
             vm.initialiseScientificNameLookup();
             vm.loadTaxonomydetails();
         }
