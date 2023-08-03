@@ -107,6 +107,7 @@ from boranga.components.species_and_communities.serializers import (
     SaveSpeciesConservationAttributesSerializer,
     TaxonomySerializer,
     CommunityTaxonomySerializer,
+    SaveCommunityTaxonomySerializer,
     ListCommunitiesSerializer,
     InternalCommunitySerializer,
     CommunitySerializer,
@@ -303,7 +304,7 @@ class GetCommunityName(views.APIView):
     def get(self, request, format=None):
         search_term = request.GET.get('term', '')
         cs_referral = request.GET.get('cs_referral', '')
-        taxon_details = request.GET.get('taxon_details', '')
+        # taxon_details = request.GET.get('taxon_details', '')
         cs_community = request.GET.get('cs_community', '')
         if search_term:
             if cs_referral != '':
@@ -312,16 +313,11 @@ class GetCommunityName(views.APIView):
                 data_transform = [{'id': taxon['id'], 'text': taxon['community_name']} for taxon in data]
             elif cs_community != '':
                 exculde_status = ['draft']
-                data = Community.objects.filter(~Q(processing_status__in=exculde_status) & ~Q(taxonomy=None) & Q(taxonomy__community_name__icontains=search_term))[:10]
-                data_transform = [{'id': community.id, 'text': community.taxonomy.community_name} for community in data]
+                data = CommunityTaxonomy.objects.filter(~Q(community__processing_status__in=exculde_status) & Q(community_name__icontains=search_term))[:10]
+                data_transform = [{'id': community.community.id, 'text': community.community_name} for community in data]
             else:
-                if taxon_details != '':
-                    qs = CommunityTaxonomy.objects.filter(community_name__icontains=search_term)[:10]
-                    serializer = CommunityTaxonomySerializer(qs, context={'request': request}, many=True)
-                    data_transform = serializer.data
-                else:
-                    data = CommunityTaxonomy.objects.filter(community_name__icontains=search_term).values('id', 'community_name')[:10]
-                    data_transform = [{'id': taxon['id'], 'text': taxon['community_name']} for taxon in data]
+                data = CommunityTaxonomy.objects.filter(community_name__icontains=search_term).values('id', 'community_name')[:10]
+                data_transform = [{'id': taxon['id'], 'text': taxon['community_name']} for taxon in data]
             return Response({"results": data_transform})
         return Response()
 
@@ -442,16 +438,6 @@ class TaxonomyViewSet(viewsets.ModelViewSet):
         # qs = qs.filter(~Q(id__in=species))
         serializer = TaxonomySerializer(qs, context={'request': request}, many=True)
         return Response(serializer.data)
-    
-    # @list_route(methods=['GET',], detail=True)
-    # def get_taxon_species(self, request, *args, **kwargs):
-    #     instance = self.get_object()
-    #     species = None
-    #     try:
-    #         species = Species.objects.get(taxonomy=instance).id
-    #     except Species.DoesNotExist:
-    #         species = None
-    #     return Response(species)
 
 
 class GetSpeciesProfileDict(views.APIView):
@@ -1542,6 +1528,13 @@ class CommunityViewSet(viewsets.ModelViewSet):
                 #         species_instance = Species.objects.get(pk=species_id)
                 #         instance.species.add(species_instance)
 
+                if(request_data.get('taxonomy_details')):
+                    taxonomy_instance, created = CommunityTaxonomy.objects.get_or_create(community=instance)
+                    serializer = SaveCommunityTaxonomySerializer(taxonomy_instance, data = request_data.get('taxonomy_details'))
+                    serializer.is_valid(raise_exception=True)
+                    if serializer.is_valid():
+                        serializer.save()
+
                 if(request_data.get('distribution')):
                     distribution_instance, created = CommunityDistribution.objects.get_or_create(community=instance)
                     serializer = CommunityDistributionSerializer(distribution_instance, data = request_data.get('distribution'))
@@ -1610,6 +1603,11 @@ class CommunityViewSet(viewsets.ModelViewSet):
                     data={
                         'community_id': new_instance.id
                     }
+                    # create CommunityTaxonomy for new instance
+                    serializer=SaveCommunityTaxonomySerializer(data=data)
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save()
+
                     # create CommunityDistribution for new instance
                     serializer=SaveCommunityDistributionSerializer(data=data)
                     serializer.is_valid(raise_exception=True)

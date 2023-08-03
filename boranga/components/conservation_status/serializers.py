@@ -6,7 +6,8 @@ from boranga.components.species_and_communities.models import(
     GroupType,
     Species,
     Community,
-    Taxonomy
+    Taxonomy,
+    CommunityTaxonomy
     )
 from boranga.components.conservation_status.models import(
     ConservationStatus,
@@ -153,8 +154,11 @@ class ListConservationStatusSerializer(serializers.ModelSerializer):
 
     def get_community_name(self,obj):
         if obj.community:
-            if obj.community.taxonomy:
-                return obj.community.taxonomy.community_name
+            try:
+                taxonomy = CommunityTaxonomy.objects.get(community = obj.community)
+                return taxonomy.community_name
+            except CommunityTaxonomy.DoesNotExist:
+                return ''
         return ''
 
     def get_conservation_list(self,obj):
@@ -440,14 +444,20 @@ class ListCommunityConservationStatusSerializer(serializers.ModelSerializer):
 
     def get_community_migrated_id(self,obj):
         if obj.community:
-            if obj.community.taxonomy:
-                return obj.community.taxonomy.community_migrated_id
+            try:
+                taxonomy = CommunityTaxonomy.objects.get(community= obj.community)
+                return taxonomy.community_migrated_id
+            except CommunityTaxonomy.DoesNotExist:
+                return ''
         return ''
 
     def get_community_name(self,obj):
         if obj.community:
-            if obj.community.taxonomy:
-                return obj.community.taxonomy.community_name
+            try:
+                taxonomy = CommunityTaxonomy.objects.get(community= obj.community)
+                return taxonomy.community_name
+            except CommunityTaxonomy.DoesNotExist:
+                return ''
         return ''
 
     def get_conservation_list(self,obj):
@@ -1287,15 +1297,18 @@ class DTConservationStatusReferralSerializer(serializers.ModelSerializer):
         return ''
 
     def get_community_migrated_id(self,obj):
-        if obj.conservation_status.community:
-            if obj.conservation_status.community.taxonomy:
-                return obj.conservation_status.community.taxonomy.community_migrated_id
-        return ''
+        try:
+            taxonomy = CommunityTaxonomy.objects.get(community= obj.conservation_status.community)
+            return taxonomy.community_migrated_id
+        except CommunityTaxonomy.DoesNotExist:
+            return ''
 
     def get_community_name(self,obj):
-        if obj.conservation_status.community:
-            return obj.conservation_status.community.taxonomy.community_name
-        return ''
+        try:
+            taxonomy = CommunityTaxonomy.objects.get(community= obj.conservation_status.community)
+            return taxonomy.community_name
+        except CommunityTaxonomy.DoesNotExist:
+            return ''
 
     def get_conservation_list(self,obj):
         if obj.conservation_status.conservation_list:

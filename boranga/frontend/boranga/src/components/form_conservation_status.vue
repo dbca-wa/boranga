@@ -8,9 +8,9 @@
                     class="nav-link" 
                     id="pills-status-tab" 
                     data-bs-toggle="pill" 
-                    href="#pills-status" 
+                    :href="'#' + statusBody"
                     role="tab" 
-                    aria-controls="pills-status" 
+                    :aria-controls="statusBody" 
                     aria-selected="true">
                   Status
                 </a>
@@ -20,9 +20,9 @@
                     class="nav-link" 
                     id="pills-documents-tab" 
                     data-bs-toggle="pill" 
-                    href="#pills-documents" 
+                    :href="'#' + documentBody" 
                     role="tab" 
-                    aria-controls="pills-documents" 
+                    :aria-selected="documentBody" 
                     aria-selected="false"
                     @click="tabClicked()">
                   Documents
@@ -33,9 +33,9 @@
                   class="nav-link" 
                   id="pills-related-items-tab" 
                   data-bs-toggle="pill" 
-                  href="#pills-related-items" 
+                  :href="'#' + relatedItemBody" 
                   role="tab" 
-                  aria-controls="pills-related-items" 
+                  :aria-controls="relatedItemBody" 
                   aria-selected="false"
                   @click="tabClicked()">
                   Related Items
@@ -43,7 +43,7 @@
               </li>
             </ul>
             <div class="tab-content" id="pills-tabContent">
-              <div class="tab-pane fade show active" id="pills-status" role="tabpanel" aria-labelledby="pills-status-tab">
+              <div class="tab-pane fade show active" :id="statusBody" role="tabpanel" aria-labelledby="pills-status-tab">
                 <CommunityStatus
                     v-if="isCommunity"  
                     ref="community_conservation_status" 
@@ -63,7 +63,7 @@
                     :referral="referral">
                 </SpeciesStatus>
               </div>
-              <div class="tab-pane fade" id="pills-documents" role="tabpanel" aria-labelledby="pills-documents-tab">
+              <div class="tab-pane fade" :id="documentBody" role="tabpanel" aria-labelledby="pills-documents-tab">
                 <CSDocuments 
                     :key="reloadcount"
                     ref="cs_documents" 
@@ -72,7 +72,7 @@
                     :conservation_status_obj="conservation_status_obj">
                 </CSDocuments>
               </div>
-              <div class="tab-pane fade" id="pills-related-items" role="tabpanel" aria-labelledby="pills-related-items-tab">
+              <div class="tab-pane fade" :id="relatedItemBody" role="tabpanel" aria-labelledby="pills-related-items-tab">
                 <RelatedItems
                     :key="reloadcount" 
                     ref="cs_related_items" 
@@ -116,9 +116,13 @@
             },
         },
         data:function () {
+            let vm = this;
             return{
                 values:null,
                 reloadcount:0,
+                statusBody: 'statusBody' + vm._uid,
+                documentBody: 'documentBody' + vm._uid,
+                relatedItemBody: 'relatedItemBody' + vm._uid,
             }
         },
         components: {

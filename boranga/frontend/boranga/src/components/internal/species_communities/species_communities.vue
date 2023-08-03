@@ -488,7 +488,7 @@ export default {
                 }
             }
             else{
-                if (vm.species_community.taxonomy_id == null || vm.species_community.taxonomy_id == ''){
+                if (vm.species_community.taxonomy_details.community_name == null || vm.species_community.taxonomy_details.community_name == ''){
                     blank_fields.push(' Community Name is missing')
                 }
             }

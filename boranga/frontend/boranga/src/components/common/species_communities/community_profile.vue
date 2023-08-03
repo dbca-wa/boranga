@@ -9,15 +9,9 @@
                     </select>
                 </div>
             </div> -->
-            <div class="row mb-3">
+            <!-- <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Community Name:</label>
                 <div class="col-sm-9" :id="select_community_name">
-                    <!-- <select :disabled="isReadOnly" class="form-select"
-                        v-model="species_community.taxonomy_id" id="community_name" @change="loadTaxonomydetails()">
-                        <option v-for="option in taxon_names" :value="option.id" v-bind:key="option.id">
-                            {{ option.community_name }}
-                        </option>
-                    </select> -->
                     <select :disabled="isReadOnly"
                         :id="community_name_lookup"  
                         :name="community_name_lookup"  
@@ -31,47 +25,48 @@
                     <textarea disabled class="form-control" rows="3" id="community_name_display" 
                     v-model="community_name_display"/>
                 </div>
+            </div> -->
+            <div class="row mb-3">
+                <label for="" class="col-sm-3 control-label">Community Name:</label>
+                <div class="col-sm-9">
+                    <textarea :disabled="isReadOnly" class="form-control" rows="1" id="community_name" placeholder=""
+                    v-model="species_community.taxonomy_details.community_name"/>
+                </div>
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Community ID:</label>
                 <div class="col-sm-9">
-                    <input :disabled="true" type="text" class="form-control"
+                    <input :disabled="isReadOnly" type="text" class="form-control"
                     id="community_migrated_id" placeholder=""
-                    v-model="community_migrated_id"/>
+                    v-model="species_community.taxonomy_details.community_migrated_id"/>
                 </div>
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Community Description:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="true" class="form-control" rows="3" id="community_description" placeholder=""
-                    v-model="community_description"/>
+                    <textarea :disabled="isReadOnly" class="form-control" rows="2" id="community_description" placeholder=""
+                    v-model="species_community.taxonomy_details.community_description"/>
                 </div>
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Previous Name:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="true" class="form-control" id="community_previous_name" placeholder=""
-                    v-model="previous_name"/>
+                    <textarea :disabled="isReadOnly" class="form-control" id="community_previous_name" placeholder=""
+                    v-model="species_community.taxonomy_details.previous_name"/>
                 </div>
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Name Authority:</label>
                 <div class="col-sm-9">
-                    <!-- <select :disabled="true" class="form-select" id="community_name_authority"
-                        v-model="name_authority_id">
-                        <option v-for="option in name_authority_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
-                        </option>
-                    </select> -->
-                    <input :disabled="true" type="text" class="form-control" id="name_authority" placeholder="" 
-                    v-model="name_authority"/>
+                    <input :disabled="isReadOnly" type="text" class="form-control" id="name_authority" placeholder="" 
+                    v-model="species_community.taxonomy_details.name_authority"/>
                 </div>
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Name Comments:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="true" class="form-control" id="community_comment" placeholder=""
-                    v-model="name_comments"/>
+                    <textarea :disabled="isReadOnly" class="form-control" id="community_comment" placeholder=""
+                    v-model="species_community.taxonomy_details.name_comments"/>
                 </div>
             </div>
         </FormSection>
@@ -334,21 +329,21 @@ export default {
         data:function () {
             let vm = this;
             return{
-                community_name_lookup: 'community_name_lookup' + vm._uid,
-                select_community_name: "select_community_name"+ vm._uid,
+                // community_name_lookup: 'community_name_lookup' + vm._uid,
+                // select_community_name: "select_community_name"+ vm._uid,
                 species_list: [],
-                taxon_names: [],
+                // taxon_names: [],
                 community_profile_dict: {},
                 post_fire_habitatat_interactions_list: [],
                 region_list: [],
                 district_list: [],
                 filtered_district_list: [],
-                community_name_display:'',
-                community_migrated_id: null,
-                community_description: null,
-                previous_name:null,
-                name_authority: null,
-                name_comments: null,
+                // community_name_display:'',
+                // community_migrated_id: null,
+                // community_description: null,
+                // previous_name:null,
+                // name_authority: null,
+                // name_comments: null,
             }
         },
         components: {
@@ -437,74 +432,74 @@ export default {
                     vm.species_community.last_data_curration_date=null;
                 }
             },
-            initialiseCommunityNameLookup: function(){
-                let vm = this;
-                $(vm.$refs[vm.community_name_lookup]).select2({
-                    minimumInputLength: 2,
-                    dropdownParent: $("#"+vm.select_community_name),
-                    "theme": "bootstrap-5",
-                    allowClear: true,
-                    placeholder:"Select Community Name",
-                    ajax: {
-                        url: api_endpoints.community_name_lookup,
-                        dataType: 'json',
-                        data: function(params) {
-                            var query = {
-                                term: params.term,
-                                type: 'public',
-                                taxon_details: true,
-                            }
-                            return query;
-                        },
-                        // results: function (data, page) { // parse the results into the format expected by Select2.
-                        //     // since we are using custom formatting functions we do not need to alter remote JSON data
-                        //     return {results: data};
-                        // },
-                    },
-                }).
-                on("select2:select", function (e) {
-                    var selected = $(e.currentTarget);
-                    let data = e.params.data.id;
-                    vm.species_community.taxonomy_id = data
-                    vm.community_name_display = e.params.data.community_name;
-                    vm.community_migrated_id = e.params.data.community_migrated_id;
-                    vm.community_description = e.params.data.community_description;
-                    vm.previous_name = e.params.data.previous_name;
-                    vm.name_authority = e.params.data.name_authority;
-                    vm.name_comments = e.params.data.name_comments;
-                    // vm.filterFloraScientificName = data;
-                    // sessionStorage.setItem("filterFloraScientificNameText", e.params.data.text);
-                }).
-                on("select2:unselect",function (e) {
-                    var selected = $(e.currentTarget);
-                    vm.species_community.taxonomy_id = ''
-                    vm.community_name_display = '';
-                    vm.community_migrated_id = '';
-                    vm.community_description = '';
-                    vm.previous_name = '';
-                    vm.name_authority = '';
-                    vm.name_comments = '';
-                }).
-                on("select2:open",function (e) {
-                    const searchField = $('[aria-controls="select2-'+vm.community_name_lookup+'-results"]')
-                    // move focus to select2 field
-                    searchField[0].focus();
-                });
-            },
-            loadTaxonomydetails: function(){
-                let vm=this;
-                if(vm.species_community.taxonomy_details!=null){
-                    var newOption = new Option(vm.species_community.taxonomy_details.community_name, vm.species_community.taxonomy_id, false, true);
-                    // newOption.setAttribute('data-select2-id', '2');
-                    $('#'+ vm.community_name_lookup).append(newOption);
-                    vm.community_name_display = vm.species_community.taxonomy_details.community_name;
-                    vm.community_migrated_id = vm.species_community.taxonomy_details.community_migrated_id;
-                    vm.community_description = vm.species_community.taxonomy_details.community_description;
-                    vm.previous_name = vm.species_community.taxonomy_details.previous_name;
-                    vm.name_authority = vm.species_community.taxonomy_details.name_authority;
-                    vm.name_comments = vm.species_community.taxonomy_details.name_comments;
-                }
-            },
+            // initialiseCommunityNameLookup: function(){
+            //     let vm = this;
+            //     $(vm.$refs[vm.community_name_lookup]).select2({
+            //         minimumInputLength: 2,
+            //         dropdownParent: $("#"+vm.select_community_name),
+            //         "theme": "bootstrap-5",
+            //         allowClear: true,
+            //         placeholder:"Select Community Name",
+            //         ajax: {
+            //             url: api_endpoints.community_name_lookup,
+            //             dataType: 'json',
+            //             data: function(params) {
+            //                 var query = {
+            //                     term: params.term,
+            //                     type: 'public',
+            //                     taxon_details: true,
+            //                 }
+            //                 return query;
+            //             },
+            //             // results: function (data, page) { // parse the results into the format expected by Select2.
+            //             //     // since we are using custom formatting functions we do not need to alter remote JSON data
+            //             //     return {results: data};
+            //             // },
+            //         },
+            //     }).
+            //     on("select2:select", function (e) {
+            //         var selected = $(e.currentTarget);
+            //         let data = e.params.data.id;
+            //         vm.species_community.taxonomy_id = data
+            //         vm.community_name_display = e.params.data.community_name;
+            //         vm.community_migrated_id = e.params.data.community_migrated_id;
+            //         vm.community_description = e.params.data.community_description;
+            //         vm.previous_name = e.params.data.previous_name;
+            //         vm.name_authority = e.params.data.name_authority;
+            //         vm.name_comments = e.params.data.name_comments;
+            //         // vm.filterFloraScientificName = data;
+            //         // sessionStorage.setItem("filterFloraScientificNameText", e.params.data.text);
+            //     }).
+            //     on("select2:unselect",function (e) {
+            //         var selected = $(e.currentTarget);
+            //         vm.species_community.taxonomy_id = ''
+            //         vm.community_name_display = '';
+            //         vm.community_migrated_id = '';
+            //         vm.community_description = '';
+            //         vm.previous_name = '';
+            //         vm.name_authority = '';
+            //         vm.name_comments = '';
+            //     }).
+            //     on("select2:open",function (e) {
+            //         const searchField = $('[aria-controls="select2-'+vm.community_name_lookup+'-results"]')
+            //         // move focus to select2 field
+            //         searchField[0].focus();
+            //     });
+            // },
+            // loadTaxonomydetails: function(){
+            //     let vm=this;
+            //     if(vm.species_community.taxonomy_details!=null){
+            //         var newOption = new Option(vm.species_community.taxonomy_details.community_name, vm.species_community.taxonomy_id, false, true);
+            //         // newOption.setAttribute('data-select2-id', '2');
+            //         $('#'+ vm.community_name_lookup).append(newOption);
+            //         vm.community_name_display = vm.species_community.taxonomy_details.community_name;
+            //         vm.community_migrated_id = vm.species_community.taxonomy_details.community_migrated_id;
+            //         vm.community_description = vm.species_community.taxonomy_details.community_description;
+            //         vm.previous_name = vm.species_community.taxonomy_details.previous_name;
+            //         vm.name_authority = vm.species_community.taxonomy_details.name_authority;
+            //         vm.name_comments = vm.species_community.taxonomy_details.name_comments;
+            //     }
+            // },
             eventListeners:function (){
                 let vm=this;
 
@@ -557,8 +552,8 @@ export default {
         },
         mounted: function(){
             let vm = this;
-            vm.initialiseCommunityNameLookup();
-            vm.loadTaxonomydetails();
+            // vm.initialiseCommunityNameLookup();
+            // vm.loadTaxonomydetails();
             // Initialise select2 for Species
             // $(vm.$refs.species_select).select2({
             //     "theme": "bootstrap-5",

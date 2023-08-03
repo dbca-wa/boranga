@@ -1000,30 +1000,30 @@ class CommunityName(models.Model):
         return str(self.name)
 
 
-class CommunityTaxonomy(models.Model):
-    """
-    Description from wacensus, to get the main name then fill in everything else
+# class CommunityTaxonomy(models.Model):
+#     """
+#     Description from wacensus, to get the main name then fill in everything else
 
-    Has a:
-    Used by:
-    - Community
-    Is:
-    - Table
-    """
-    community_migrated_id = models.CharField(max_length=200, null=True, blank=True)
-    community_name = models.CharField(max_length=512,null=True, blank=True)
-    community_description = models.CharField(max_length=2048, null=True, blank=True)
-    name_currency = models.CharField(max_length=16, null=True, blank=True) # is it the is_current name? true or false
-    previous_name = models.CharField(max_length=512,null=True, blank=True)
-    name_authority = models.CharField(max_length=500,null=True, blank=True)
-    name_comments = models.CharField(max_length=500,null=True, blank=True)
+#     Has a:
+#     Used by:
+#     - Community
+#     Is:
+#     - Table
+#     """
+#     community_migrated_id = models.CharField(max_length=200, null=True, blank=True)
+#     community_name = models.CharField(max_length=512,null=True, blank=True)
+#     community_description = models.CharField(max_length=2048, null=True, blank=True)
+#     name_currency = models.CharField(max_length=16, null=True, blank=True) # is it the is_current name? true or false
+#     previous_name = models.CharField(max_length=512,null=True, blank=True)
+#     name_authority = models.CharField(max_length=500,null=True, blank=True)
+#     name_comments = models.CharField(max_length=500,null=True, blank=True)
 
-    class Meta:
-        app_label = 'boranga'
-        ordering = ['community_name']
+#     class Meta:
+#         app_label = 'boranga'
+#         ordering = ['community_name']
 
-    def __str__(self):
-        return str(self.community_name)  # TODO: is the most appropriate?
+#     def __str__(self):
+#         return str(self.community_name)  # TODO: is the most appropriate?
 
 
 class Community(models.Model):
@@ -1058,7 +1058,7 @@ class Community(models.Model):
     group_type = models.ForeignKey(GroupType,on_delete=models.CASCADE)
     # TODO the species is noy required as per the new requirements
     species = models.ManyToManyField(Species, null=True, blank=True)
-    taxonomy = models.ForeignKey(CommunityTaxonomy, on_delete=models.SET_NULL, unique=True, null=True, blank=True)
+    # taxonomy = models.ForeignKey(CommunityTaxonomy, on_delete=models.SET_NULL, unique=True, null=True, blank=True)
     region = models.ForeignKey(Region, 
                                default=None,
                                on_delete=models.CASCADE, null=True, blank=True)
@@ -1381,9 +1381,7 @@ class Community(models.Model):
 
     @property
     def related_item_descriptor(self):
-        if self.taxonomy:
-            return self.taxonomy.community_name
-        return ''
+        return  CommunityTaxonomy.objects.get(community=self).community_name
 
     @property
     def related_item_status(self):
@@ -1398,6 +1396,33 @@ class Community(models.Model):
             document.save()
             self.image_doc=document
             self.save()
+
+
+class CommunityTaxonomy(models.Model):
+    """
+    Description from wacensus, to get the main name then fill in everything else
+
+    Has a:
+    Used by:
+    - Community
+    Is:
+    - Table
+    """
+    community = models.ForeignKey(Community, on_delete=models.CASCADE, unique=True, null=True, related_name="taxonomy")
+    community_migrated_id = models.CharField(max_length=200, null=True, blank=True)
+    community_name = models.CharField(max_length=512,null=True, blank=True)
+    community_description = models.CharField(max_length=2048, null=True, blank=True)
+    name_currency = models.CharField(max_length=16, null=True, blank=True) # is it the is_current name? true or false
+    previous_name = models.CharField(max_length=512,null=True, blank=True)
+    name_authority = models.CharField(max_length=500,null=True, blank=True)
+    name_comments = models.CharField(max_length=500,null=True, blank=True)
+
+    class Meta:
+        app_label = 'boranga'
+        ordering = ['community_name']
+
+    def __str__(self):
+        return str(self.community_name)  # TODO: is the most appropriate?
 
 
 class CommunityLogDocument(Document):

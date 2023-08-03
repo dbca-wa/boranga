@@ -198,9 +198,10 @@ export default {
             external_status:[
                 {value: 'draft', name: 'Draft'},
                 {value: 'with_assessor', name: 'Under Review'},
+                {value: 'ready_for_agenda', name: 'In Meeting'},
                 {value: 'approved', name: 'Approved'},
                 {value: 'declined', name: 'Declined'},
-                {value: 'discarded', name: 'Discarded'},
+                {value: 'closed', name: 'Closed'},
             ],
             proposal_status: [],
         }

@@ -144,12 +144,12 @@ class GetCSProfileDict(views.APIView):
                         });
         community_list = []
         exculde_status = ['draft']
-        communities = Community.objects.filter(~Q(processing_status__in=exculde_status) & ~Q(taxonomy=None)) # TODO remove later as every community will have community name
+        communities = CommunityTaxonomy.objects.filter(~Q(community__processing_status__in=exculde_status)) # TODO remove later as every community will have community name
         if communities:
             for specimen in communities:
                 community_list.append({
-                    'id': specimen.id,
-                    'name':specimen.taxonomy.community_name,
+                    'id': specimen.community.id,
+                    'name':specimen.community_name,
                     });
         conservation_list_values = []
         list = []

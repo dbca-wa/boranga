@@ -257,7 +257,6 @@ export default {
                 {value: 'with_referral', name: 'With Referral'},
                 {value: 'approved', name: 'Approved'},
                 {value: 'declined', name: 'Declined'},
-                {value: 'discarded', name: 'Discarded'},
                 {value: 'closed', name: 'Closed'},
             ],
             
