@@ -342,9 +342,8 @@ class SpeciesConservationAttributesSerializer(serializers.ModelSerializer):
 			'id',
 			'species_id',
 			#flora related attributes
-			'flowering_period_id',
-			'flowering_prd',
-			'fruiting_period_id',
+			'flowering_period',
+			'fruiting_period',
 			'flora_recruitment_type_id',
 			'flora_recruitment_notes',
 			'seed_viability_germination_info',
@@ -353,7 +352,7 @@ class SpeciesConservationAttributesSerializer(serializers.ModelSerializer):
 			'hydrology',
 			'response_to_dieback',
 			# fauna related attributes
-			'breeding_period_id',
+			'breeding_period',
 			'fauna_breeding',
 			'fauna_reproductive_capacity',
 			'diet_and_food_source',
@@ -377,17 +376,16 @@ class SpeciesConservationAttributesSerializer(serializers.ModelSerializer):
 			PERIOD_CHOICES = []
 			for rs in SpeciesConservationAttributes.PERIOD_CHOICES:
 				PERIOD_CHOICES.append(([rs[0], rs[1]]))
-			self.fields['flowering_prd'] = serializers.MultipleChoiceField(choices=PERIOD_CHOICES, allow_blank=False)
+			self.fields['flowering_period', 'fruiting_period', 'breeding_period'] = serializers.MultipleChoiceField(choices=PERIOD_CHOICES, allow_blank=False)
 
 
 class SaveSpeciesConservationAttributesSerializer(serializers.ModelSerializer):
 	species_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
-	flowering_period_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
-	flowering_prd = serializers.MultipleChoiceField(choices=SpeciesConservationAttributes.PERIOD_CHOICES, allow_null=True, allow_blank=True, required=False)
-	fruiting_period_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
+	flowering_period = serializers.MultipleChoiceField(choices=SpeciesConservationAttributes.PERIOD_CHOICES, allow_null=True, allow_blank=True, required=False)
+	fruiting_period = serializers.MultipleChoiceField(choices=SpeciesConservationAttributes.PERIOD_CHOICES, allow_null=True, allow_blank=True, required=False)
 	flora_recruitment_type_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
 	root_morphology_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
-	breeding_period_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
+	breeding_period = serializers.MultipleChoiceField(choices=SpeciesConservationAttributes.PERIOD_CHOICES, allow_null=True, allow_blank=True, required=False)
 	post_fire_habitat_interaction_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
 	class Meta:
 		model = SpeciesConservationAttributes
@@ -395,9 +393,6 @@ class SaveSpeciesConservationAttributesSerializer(serializers.ModelSerializer):
 			'id',
 			'species_id',
 			#flora related attributes
-			'flowering_period_id',
-			'flowering_prd',
-			'fruiting_period_id',
 			'flowering_period', 
 			'fruiting_period', 
 			'flora_recruitment_type_id',
@@ -408,7 +403,7 @@ class SaveSpeciesConservationAttributesSerializer(serializers.ModelSerializer):
 			'hydrology',
 			'response_to_dieback',
 			# fauna related attributes
-			'breeding_period_id',
+			'breeding_period',
 			'fauna_breeding',
 			'fauna_reproductive_capacity',
 			'diet_and_food_source',

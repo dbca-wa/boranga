@@ -210,25 +210,29 @@
             
             <div class="row mb-3" v-show="!isFauna">
                 <label for="" class="col-sm-3 control-label">{{ species_original.species_number }} Flowering Period:</label>
-                <div class="col-sm-8">
-                    <select :disabled="true" class="form-select" 
-                        v-model="species_original.conservation_attributes.flowering_period">
-                        <option v-for="option in flowering_period_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
+                <div class="col-sm-8" :id="select_flowering_period_readonly">
+                    <select :disabled="true" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="flowering_period_select_readonly" 
+                        v-model="species_original.conservation_attributes.flowering_period" >
+                        <option v-for="option in period_list" :value="option.id" :key="option.name">
+                            {{option.name}}
                         </option>
                     </select>
                 </div>
                 <div class="col-sm-1">
-                    <input class="form-check-input" type="checkbox" :id="'flowering_prd_chk'+species_community.id" @change="checkConservationInput('flowering_prd_chk'+species_community.id,'flowering_period')" />
+                    <input class="form-check-input" type="checkbox" :id="'flowering_prd_chk'+species_community.id" @change="checkConservationInput('flowering_prd_chk'+species_community.id,'flowering_period','flowering_period_select')" />
                 </div>
             </div>
             <div class="row mb-3" v-show="!isFauna">
                 <label for="" class="col-sm-3 control-label">Flowering Period:</label>
-                <div class="col-sm-8">
-                    <select :disabled="isReadOnly" class="form-select" 
-                        v-model="species_community.conservation_attributes.flowering_period">
-                        <option v-for="option in flowering_period_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
+                <div class="col-sm-8" :id="select_flowering_period">
+                    <select :disabled="isReadOnly" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="flowering_period_select" 
+                        v-model="species_community.conservation_attributes.flowering_period" >
+                        <option v-for="option in period_list" :value="option.id" :key="option.name">
+                            {{option.name}}
                         </option>
                     </select>
                 </div>
@@ -236,26 +240,30 @@
 
             <div class="row mb-3" v-show="!isFauna">
                 <label for="" class="col-sm-3 control-label">{{ species_original.species_number }} Fruiting Period:</label>
-                <div class="col-sm-8">
-                    <select :disabled="true" class="form-select" 
-                        v-model="species_original.conservation_attributes.fruiting_period">
-                        <option v-for="option in fruiting_period_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
+                <div class="col-sm-8" :id="select_fruiting_period_readonly">
+                    <select :disabled="true" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="fruiting_period_select_readonly" 
+                        v-model="species_original.conservation_attributes.fruiting_period" >
+                        <option v-for="option in period_list" :value="option.id" :key="option.name">
+                            {{option.name}}
                         </option>
                     </select>
                 </div>
                 <div class="col-sm-1">
-                    <input class="form-check-input" type="checkbox" :id="'fruiting_prd_chk'+species_community.id" @change="checkConservationInput('fruiting_prd_chk'+species_community.id,'fruiting_period')" />
+                    <input class="form-check-input" type="checkbox" :id="'fruiting_prd_chk'+species_community.id" @change="checkConservationInput('fruiting_prd_chk'+species_community.id,'fruiting_period','fruiting_period_select')" />
                 </div>
                 
             </div>
             <div class="row mb-3" v-show="!isFauna">
                 <label for="" class="col-sm-3 control-label">Fruiting Period:</label>
-                <div class="col-sm-8">
-                    <select :disabled="isReadOnly" class="form-select" 
-                        v-model="species_community.conservation_attributes.fruiting_period">
-                        <option v-for="option in fruiting_period_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
+                <div class="col-sm-8" :id="select_fruiting_period">
+                    <select :disabled="isReadOnly" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="fruiting_period_select" 
+                        v-model="species_community.conservation_attributes.fruiting_period" >
+                        <option v-for="option in period_list" :value="option.id" :key="option.name">
+                            {{option.name}}
                         </option>
                     </select>
                 </div>
@@ -395,25 +403,29 @@
 
             <div class="row mb-3" v-show="isFauna">
                 <label for="" class="col-sm-3 control-label">{{ species_original.species_number }} Breeding Period:</label>
-                <div class="col-sm-8">
-                    <select :disabled="true" class="form-select" 
-                        v-model="species_original.conservation_attributes.breeding_period_id">
-                        <option v-for="option in breeding_period_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
+                <div class="col-sm-8" :id="select_breeding_period_readonly">
+                    <select :disabled="true" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="breeding_period_select_readonly" 
+                        v-model="species_original.conservation_attributes.breeding_period" >
+                        <option v-for="option in period_list" :value="option.id" :key="option.name">
+                            {{option.name}}
                         </option>
                     </select>
                 </div>
                 <div class="col-sm-1">
-                    <input class="form-check-input" type="checkbox" :id="'breeding_prd_chk'+species_community.id" @change="checkConservationInput('breeding_prd_chk'+species_community.id,'breeding_period_id')" />
+                    <input class="form-check-input" type="checkbox" :id="'breeding_prd_chk'+species_community.id" @change="checkConservationInput('breeding_prd_chk'+species_community.id,'breeding_period','breeding_period_select')" />
                 </div>
             </div>
             <div class="row mb-3" v-show="isFauna">
                 <label for="" class="col-sm-3 control-label">Breeding Period:</label>
-                <div class="col-sm-8">
-                    <select :disabled="isReadOnly" class="form-select" 
-                        v-model="species_community.conservation_attributes.breeding_period_id">
-                        <option v-for="option in breeding_period_list" :value="option.id" v-bind:key="option.id">
-                            {{ option.name }}                            
+                <div class="col-sm-8" :id="select_breeding_period">
+                    <select :disabled="isReadOnly" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="breeding_period_select" 
+                        v-model="species_community.conservation_attributes.breeding_period" >
+                        <option v-for="option in period_list" :value="option.id" :key="option.name">
+                            {{option.name}}
                         </option>
                     </select>
                 </div>
@@ -828,6 +840,12 @@ export default {
             return{
                 scientific_name_lookup: 'scientific_name_lookup' + vm.species_community.id,
                 select_scientific_name: "select_scientific_name"+ vm.species_community.id,
+                select_flowering_period: "select_flowering_period"+ vm.species_community.id,
+                select_flowering_period_readonly: "select_flowering_period_readonly"+ vm.species_community.id,
+                select_fruiting_period: "select_fruiting_period"+ vm.species_community.id,
+                select_fruiting_period_readonly: "select_fruiting_period_readonly"+ vm.species_community.id,
+                select_breeding_period: "select_breeding_period"+ vm.species_community.id,
+                select_breeding_period_readonly: "select_breeding_period_readonly"+ vm.species_community.id,
                 taxonBody: 'taxonBody' + vm._uid,
                 distributionBody: 'distributionBody' + vm._uid,
                 conservationBody: 'conservationBody' + vm._uid,
@@ -861,6 +879,19 @@ export default {
                 genus_id: null,
                 name_authority: null,
                 name_comments: null,
+                period_list: [{id: 1, name: 'January'},
+                {id: 2, name: 'February'},
+                {id: 3, name: 'March'},
+                {id: 4, name: 'April'},
+                {id: 5, name: 'May'},
+                {id: 6, name: 'June'},
+                {id: 7, name: 'July'},
+                {id: 8, name: 'August'},
+                {id: 9, name: 'September'},
+                {id: 10, name: 'October'},
+                {id: 11, name: 'November'},
+                {id: 12, name: 'December'},
+                ],
             }
         },
         components: {
@@ -1034,12 +1065,19 @@ export default {
                     this.species_community.conservation_attributes.habitat_growth_form=null;
                 }
             },
-            checkConservationInput: function(chkbox,obj_field){
+            checkConservationInput: function(chkbox,obj_field,select2_ref=""){
                 // if checkbox is checked copy value from original  species to new species
                 if($("#"+chkbox).is(':checked')== true){
                     this.species_community.conservation_attributes[obj_field] = this.species_original.conservation_attributes[obj_field];
+                    if(select2_ref != ""){
+                        $(this.$refs[select2_ref]).val(this.species_community.conservation_attributes[obj_field]).trigger("change");
+                    }
                 }else{
                     this.species_community.conservation_attributes[obj_field]=null;
+                    if(select2_ref != ""){
+                        $(this.$refs[select2_ref]).val("").trigger("change");
+                        this.species_community.conservation_attributes[obj_field]=[];
+                    }
                 }
             },
             checkDistributionInput: function(chkbox,obj_field){
@@ -1060,6 +1098,73 @@ export default {
             },
             //----------------------------------------------------------------
             eventListeners:function (){
+                let vm = this;
+                $(vm.$refs.flowering_period_select).select2({
+                    dropdownParent: $("#"+vm.select_flowering_period),
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Flowering Period",
+                    multiple: true,
+                }).
+                on("select2:select",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.flowering_period = selected.val();
+                }).
+                on("select2:unselect",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.flowering_period = selected.val();
+                });
+                $(vm.$refs.flowering_period_select_readonly).select2({
+                    dropdownParent: $("#"+vm.select_flowering_period_readonly),
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Flowering Period",
+                    multiple: true,
+                });
+                $(vm.$refs.fruiting_period_select).select2({
+                    dropdownParent: $("#"+vm.select_fruiting_period),
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Fruiting Period",
+                    multiple: true,
+                }).
+                on("select2:select",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.fruiting_period = selected.val();
+                }).
+                on("select2:unselect",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.fruiting_period = selected.val();
+                });
+                $(vm.$refs.fruiting_period_select_readonly).select2({
+                    dropdownParent: $("#"+vm.select_fruiting_period_readonly),
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Fruiting Period",
+                    multiple: true,
+                });
+                $(vm.$refs.breeding_period_select).select2({
+                    dropdownParent: $("#"+vm.select_breeding_period),
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Breeding Period",
+                    multiple: true,
+                }).
+                on("select2:select",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.breeding_period = selected.val();
+                }).
+                on("select2:unselect",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.breeding_period = selected.val();
+                });
+                $(vm.$refs.breeding_period_select_readonly).select2({
+                    dropdownParent: $("#"+vm.select_breeding_period_readonly),
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Breeding Period",
+                    multiple: true,
+                });
             },
         },
         created: async function() {
@@ -1159,7 +1264,7 @@ export default {
         },
         mounted: function(){
             let vm = this;
-            //vm.eventListeners();
+            vm.eventListeners();
             vm.initialiseScientificNameLookup();
             vm.loadTaxonomydetails();
         }
