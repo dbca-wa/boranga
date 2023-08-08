@@ -238,6 +238,25 @@
                 </div>
             </div>
             <div class="row mb-3" v-show="!isFauna">
+                <label for="" class="col-sm-3 control-label">Flowering Prd:</label>
+                <div class="col-sm-9" :id="select_flowering_period">
+                    <!-- <select :disabled="isReadOnly" class="form-select" multiple
+                        v-model="species_community.conservation_attributes.flowering_prd">
+                        <option v-for="option in flowering_prd_list" :value="option.value" v-bind:key="option.name">
+                            {{ option.name }}                            
+                        </option>
+                    </select> -->
+                    <select :disabled="isReadOnly" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="flowering_period" 
+                        v-model="species_community.conservation_attributes.flowering_prd" >
+                        <option v-for="option in period_list" :value="option.value" v-bind:key="option.name">
+                            {{ option.name }}
+                        </option>
+                    </select>
+                </div>
+            </div>
+            <div class="row mb-3" v-show="!isFauna">
                 <label for="" class="col-sm-3 control-label">Fruiting Period:</label>
                 <div class="col-sm-9">
                     <select :disabled="isReadOnly" 
@@ -751,6 +770,22 @@ export default {
                 }
             },
             eventListeners:function (){
+                let vm=this;
+                 // Initialise select2 for proposed Conservation Criteria
+                 $(vm.$refs.flowering_period).select2({
+                    "theme": "bootstrap-5",
+                    allowClear: true,
+                    placeholder:"Select Period",
+                    multiple: true,
+                }).
+                on("select2:select",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.flowering_prd = selected.val();
+                }).
+                on("select2:unselect",function (e) {
+                    var selected = $(e.currentTarget);
+                    vm.species_community.conservation_attributes.flowering_prd = selected.val();
+                });
             },
         },
         created: async function() {
