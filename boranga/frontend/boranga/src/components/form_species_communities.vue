@@ -11,7 +11,8 @@
                     :href="'#' + profileBody" 
                     role="tab" 
                     :aria-controls="profileBody" 
-                    aria-selected="true">
+                    aria-selected="true"
+                    @click="tabClicked()">
                   Profile
                 </a>
               </li>
@@ -59,6 +60,7 @@
               <div class="tab-pane fade show active" :id="profileBody" role="tabpanel" aria-labelledby="pills-profile-tab">
                 <Community
                     v-if="isCommunity"  
+                    :key="reloadcount"
                     ref="community_information" 
                     id="communityInformation" 
                     :is_internal="is_internal"
@@ -66,6 +68,7 @@
                 </Community>
                 <Species
                     v-else
+                    :key="reloadcount"
                     ref="species_information" 
                     id="speciesInformation" 
                     :is_internal="is_internal"
@@ -184,22 +187,22 @@
         },
         computed:{
             isCommunity: function(){
-                return this.species_community.group_type == "community"
+                return this.species_community.group_type == "community";
             },
             related_items_ajax_url: function(){
               if(this.isCommunity){
-                return '/api/community/' + this.species_community.id + '/get_related_items/'
+                return '/api/community/' + this.species_community.id + '/get_related_items/';
               }
               else{
-                return '/api/species/' + this.species_community.id + '/get_related_items/'
+                return '/api/species/' + this.species_community.id + '/get_related_items/';
               }
             },
             related_items_filter_list_url: function(){
               if(this.isCommunity){
-                return '/api/community/filter_list.json'
+                return '/api/community/filter_list.json';
               }
               else{
-                return '/api/species/filter_list.json'
+                return '/api/species/filter_list.json';
               }
             },
         },

@@ -26,6 +26,7 @@ from boranga.components.species_and_communities.models import (
     CurrentImpact,
     PotentialImpact,
     PotentialThreatOnset,
+    ThreatAgent,
     )
 
 
@@ -78,3 +79,4 @@ admin.site.register(BreedingPeriod)
 admin.site.register(CurrentImpact)
 admin.site.register(PotentialImpact)
 admin.site.register(PotentialThreatOnset)
+admin.site.register(ThreatAgent)

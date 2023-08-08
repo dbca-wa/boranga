@@ -12,7 +12,7 @@
                                       <label class="control-label pull-left">Category</label>
                                     </div>
                                     <div class="col-sm-9">
-                                      <select :disabled="isReadOnly" class="form-select" v-model="threatObj.threat_category">
+                                      <select :disabled="isReadOnly" class="form-select" v-model="threatObj.threat_category_id">
                                         <option  v-for="category in threat_category_list" :value="category.id" v-bind:key="category.id">
                                           {{ category.name }} 
                                         </option>
@@ -24,7 +24,11 @@
                                       <label class="control-label pull-left">Threat Agent</label>
                                     </div>
                                     <div class="col-sm-9">
-                                      <input :disabled="isReadOnly" type="text" class="form-control" v-model="threatObj.threat_agent"/>
+                                        <select :disabled="isReadOnly" class="form-select" v-model="threatObj.threat_agent_id">
+                                            <option  v-for="agent in threat_agent_list" :value="agent.id" v-bind:key="agent.id">
+                                                {{ agent.name }} 
+                                            </option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div class="row mb-3">
@@ -137,6 +141,7 @@ export default {
             threat_action: String,
             threatObj: Object,
             threat_category_list: [],
+            threat_agent_list: [],
             current_impact_list: [],
             potential_impact_list: [],
             potential_threat_onset_list: [],
@@ -230,26 +235,24 @@ export default {
         }
    },
    created: async function () {
-        // documentCategories
-        let category_res = await this.$http.get('/api/threat_categories/threat_category_choices/');
-        Object.assign(this.threat_category_list, category_res.body);
-        // blank entry allows user to clear selection
+        let res = await this.$http.get('/api/threat/threat_list_of_values/');
+        let threat_list_of_values_res={};
+        Object.assign(threat_list_of_values_res, res.body);
+        this.threat_category_list = threat_list_of_values_res.threat_category_lists;
         this.threat_category_list.splice(0, 0, 
             {
-              id: "", 
-              name: "",
+              id: null, 
+              name: null,
             });
-        //----fetch current_impact list
-        let current_impact_res = await this.$http.get('/api/current_impact/current_impact_choices/');
-        Object.assign(this.current_impact_list, current_impact_res.body);
-
-        //----fetch potential_impact list
-        let potential_impact_res = await this.$http.get('/api/potential_impact/potential_impact_choices/');
-        Object.assign(this.potential_impact_list, potential_impact_res.body);
-
-        //----fetch potential_threat_onset list
-        let potential_threat_onset_re = await this.$http.get('/api/potential_threat_onset/potential_threat_onset_choices/');
-        Object.assign(this.potential_threat_onset_list, potential_threat_onset_re.body);
+        this.current_impact_list = threat_list_of_values_res.current_impact_lists;
+        this.potential_impact_list = threat_list_of_values_res.potential_impact_lists;
+        this.potential_threat_onset_list = threat_list_of_values_res.potential_threat_onset_lists;
+        this.threat_agent_list = threat_list_of_values_res.threat_agent_lists;
+        this.threat_agent_list.splice(0, 0, 
+            {
+              id: null, 
+              name: null,
+            });
    },
    mounted:function () {
         let vm =this;

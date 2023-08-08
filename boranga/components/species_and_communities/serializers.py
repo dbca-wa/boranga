@@ -1191,7 +1191,8 @@ class SpeciesUserActionSerializer(serializers.ModelSerializer):
 
 
 class ConservationThreatSerializer(serializers.ModelSerializer):
-	threat_category_name = serializers.SerializerMethodField()
+	threat_category = serializers.SerializerMethodField()
+	threat_agent = serializers.SerializerMethodField()
 	current_impact_name = serializers.SerializerMethodField()
 	potential_impact_name = serializers.SerializerMethodField()
 	potential_threat_onset_name = serializers.SerializerMethodField()
@@ -1200,9 +1201,10 @@ class ConservationThreatSerializer(serializers.ModelSerializer):
 		fields = (
 			'id',
 			'threat_number',
+			'threat_category_id',
 			'threat_category',
-			'threat_category_name',
 			'threat_agent',
+			'threat_agent_id',
 			'current_impact',
 			'current_impact_name',
 			'potential_impact',
@@ -1218,9 +1220,13 @@ class ConservationThreatSerializer(serializers.ModelSerializer):
 		)
 		read_only_fields = ('id','threat_number',)
 
-	def get_threat_category_name(self,obj):
+	def get_threat_category(self,obj):
 		if obj.threat_category:
 			return obj.threat_category.name
+	
+	def get_threat_agent(self,obj):
+		if obj.threat_agent:
+			return obj.threat_agent.name
 
 	def get_current_impact_name(self,obj):
 		if obj.current_impact:
@@ -1236,14 +1242,16 @@ class ConservationThreatSerializer(serializers.ModelSerializer):
 
 
 class SaveConservationThreatSerializer(serializers.ModelSerializer):
+	threat_category_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
+	threat_agent_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
 	class Meta:
 		model = ConservationThreat
 		fields = (
 			'id',
 			'species',
 			'community',
-			'threat_category',
-			'threat_agent',
+			'threat_category_id',
+			'threat_agent_id',
 			'comment',
 			'current_impact',
 			'potential_impact',

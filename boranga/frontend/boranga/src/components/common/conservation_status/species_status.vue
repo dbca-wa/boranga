@@ -296,6 +296,7 @@ export default {
                                 type: 'public',
                                 group_type_id: vm.conservation_status_obj.group_type_id,
                                 cs_species: true,
+                                cs_species_status: vm.conservation_status_obj.processing_status,
                             }
                             return query;
                         },

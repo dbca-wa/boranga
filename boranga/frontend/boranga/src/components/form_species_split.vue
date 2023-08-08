@@ -11,7 +11,8 @@
                     :href="'#' + profileBody" 
                     role="tab" 
                     :aria-controls="profileBody" 
-                    aria-selected="true">
+                    aria-selected="true"
+                    @click="tabClicked()">
                   Profile
                 </a>
               </li>

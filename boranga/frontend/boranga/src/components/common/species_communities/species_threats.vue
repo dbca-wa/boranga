@@ -53,7 +53,7 @@ export default {
                 values:null,
                 threat_url: api_endpoints.threat,
                 threats_headers:['Number','Category', 'Threat Source', 'Date Observed', 'Threat Agent', 'Comments',
-                                'Current Impact?', 'Potential Impact?','Action'],
+                                'Current Impact', 'Potential Impact','Action'],
                 threats_options:{
                     autowidth: false,
                     language:{
@@ -108,15 +108,15 @@ export default {
 
                         },
                         {
-                            data: "threat_category_name",
+                            data: "threat_category",
                             orderable: true,
                             searchable: true,
                             mRender: function(data,type,full){
                                 if(full.visible){
-                                    return full.threat_category_name;
+                                    return full.threat_category;
                                 }
                                 else{
-                                    return '<s>'+ full.threat_category_name + '</s>'
+                                    return '<s>'+ full.threat_category + '</s>'
                                 }
                             },
 

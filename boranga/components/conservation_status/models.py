@@ -117,6 +117,8 @@ class ConservationList(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Conservation List"
+        verbose_name_plural = "Conservation Lists"
         ordering = ['code']
 
     def __str__(self):
@@ -187,6 +189,8 @@ class ConservationCriteria(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Conservation Criteria"
+        verbose_name_plural = "Conservation Criterias"
         ordering = ['code']
 
     def __str__(self):

@@ -158,6 +158,8 @@ class GroupType(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Group Type"
+        verbose_name_plural = "Group Types"
 
     def __str__(self):
         return self.get_name_display()
@@ -1795,6 +1797,8 @@ class CurrentImpact(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Current Impact"
+        verbose_name_plural = "Current Impacts"
 
     def __str__(self):
         return str(self.name)
@@ -1812,6 +1816,8 @@ class PotentialImpact(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Potential Impact"
+        verbose_name_plural = "Potential Impacts"
 
     def __str__(self):
         return str(self.name)
@@ -1829,6 +1835,25 @@ class PotentialThreatOnset(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Potential Threat Onset"
+        verbose_name_plural = "Potential Threat Onsets"
+
+    def __str__(self):
+        return str(self.name)
+
+
+class ThreatAgent(models.Model):
+    """
+    Used by:
+    - ConservationThreat
+
+    """
+    name = models.CharField(max_length=100, blank=False, unique=True)
+
+    class Meta:
+        app_label = 'boranga'
+        verbose_name = "Threat Agent"
+        verbose_name_plural = "Threat Agents"
 
     def __str__(self):
         return str(self.name)
@@ -1852,8 +1877,8 @@ class ConservationThreat(models.Model):
     species = models.ForeignKey(Species, on_delete=models.CASCADE, null=True, blank=True , related_name="species_threats")
     community = models.ForeignKey(Community, on_delete=models.CASCADE, null=True, blank=True, related_name="community_threats")
     threat_number = models.CharField(max_length=9, blank=True, default='')
-    threat_category = models.ForeignKey(ThreatCategory, on_delete=models.CASCADE)
-    threat_agent = models.CharField(max_length=512, blank=True, null=True)
+    threat_category = models.ForeignKey(ThreatCategory, on_delete=models.CASCADE, default=None, null=True, blank=True)
+    threat_agent = models.ForeignKey(ThreatAgent, on_delete=models.SET_NULL, default=None, null=True, blank=True)
     current_impact = models.ForeignKey(CurrentImpact, on_delete=models.SET_NULL, default=None, null=True, blank=True)
     potential_impact = models.ForeignKey(PotentialImpact, on_delete=models.SET_NULL, default=None, null=True, blank=True)
     potential_threat_onset = models.ForeignKey(PotentialThreatOnset, on_delete=models.SET_NULL, default=None, null=True, blank=True)
@@ -1912,7 +1937,9 @@ class FloweringPeriod(models.Model):
 
     class Meta:
         app_label = 'boranga'
-        # ordering = ['period']
+        verbose_name = "Flowering Period"
+        verbose_name_plural = "Flowering Periods"
+        ordering = ['period']
 
     def __str__(self):
         return str(self.period)
@@ -1931,7 +1958,9 @@ class FruitingPeriod(models.Model):
 
     class Meta:
         app_label = 'boranga'
-        # ordering = ['period']
+        verbose_name = "Fruiting Period"
+        verbose_name_plural = "Fruiting Periods"
+        ordering = ['period']
 
     def __str__(self):
         return str(self.period)
@@ -1949,6 +1978,8 @@ class FloraRecruitmentType(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Flora Recruitment Type"
+        verbose_name_plural = "Flora Recruitment Types"
         ordering = ['recruitment_type']
 
     def __str__(self):
@@ -2023,6 +2054,8 @@ class PostFireHabitatInteraction(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Post Fire Habitat Interaction"
+        verbose_name_plural = "Post Fire Habitat Interactions"
         ordering = ['name']
 
     def __str__(self):
@@ -2041,7 +2074,9 @@ class BreedingPeriod(models.Model):
 
     class Meta:
         app_label = 'boranga'
-        # ordering = ['period']
+        verbose_name = "Breeding Period"
+        verbose_name_plural = "Breeding Periods"
+        ordering = ['period']
 
     def __str__(self):
         return str(self.period)

@@ -55,6 +55,8 @@ class MeetingRoom(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Meeting Room"
+        verbose_name_plural = "Meeting Rooms"
         ordering = ['room_name']
 
     def __str__(self):
@@ -93,6 +95,8 @@ class CommitteeMembers(models.Model):
 
     class Meta:
         app_label = 'boranga'
+        verbose_name = "Committee"
+        verbose_name_plural = "Committee Members"
 
     def __str__(self):
         return str(self.email)

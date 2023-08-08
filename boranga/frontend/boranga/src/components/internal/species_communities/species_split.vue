@@ -208,19 +208,34 @@ export default {
             });
             return result;
         },
+        can_submit: function(){
+            let vm=this;
+            let blank_fields=[]
+            for (let index=0 ; index<vm.new_species_list.length; index++){
+                if (vm.new_species_list[index].taxonomy_id == null || vm.new_species_list[index].taxonomy_id == ''){
+                        blank_fields.push('Species '+vm.new_species_list[index].species_number+ ' Scientific Name is missing')
+                }
+            }
+            if(blank_fields.length==0){
+                return true;
+            }
+            else{
+                return blank_fields;
+            }
+        },
         sendData:async function(){
             let vm = this;
 
-            // var missing_data= vm.can_submit();
-            // if(missing_data!=true){
-            //     swal({
-            //         title: "Please fix following errors before submitting",
-            //         text: missing_data,
-            //         type:'error'
-            //     })
-            //     //vm.paySubmitting=false;
-            //     return false;
-            // }
+            var missing_data= vm.can_submit();
+            if(missing_data!=true){
+                swal({
+                    title: "Please fix following errors before submitting",
+                    text: missing_data,
+                    type:'error'
+                })
+                //vm.paySubmitting=false;
+                return false;
+            }
             
             vm.submitSpeciesSplit=true;
             swal({

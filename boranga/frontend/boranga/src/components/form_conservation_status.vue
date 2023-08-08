@@ -11,7 +11,8 @@
                     :href="'#' + statusBody"
                     role="tab" 
                     :aria-controls="statusBody" 
-                    aria-selected="true">
+                    aria-selected="true"
+                    @click="tabClicked()">
                   Status
                 </a>
               </li>
@@ -46,6 +47,7 @@
               <div class="tab-pane fade show active" :id="statusBody" role="tabpanel" aria-labelledby="pills-status-tab">
                 <CommunityStatus
                     v-if="isCommunity"  
+                    :key="reloadcount"
                     ref="community_conservation_status" 
                     id="communityStatus" 
                     :is_external="is_external"
@@ -55,6 +57,7 @@
                 </CommunityStatus>
                 <SpeciesStatus
                     v-else
+                    :key="reloadcount"
                     ref="species_conservation_status" 
                     id="speciesStatus" 
                     :is_external="is_external"

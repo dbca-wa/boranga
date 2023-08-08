@@ -83,6 +83,7 @@ from boranga.components.species_and_communities.models import (
     CurrentImpact,
     PotentialImpact,
     PotentialThreatOnset,
+    ThreatAgent,
     ConservationThreat,
     CommunityUserAction,
     SpeciesUserAction,
@@ -174,6 +175,7 @@ class GetScientificName(views.APIView):
         cs_referral = request.GET.get('cs_referral', '')
         # used for conservation status form
         cs_species = request.GET.get('cs_species', '')
+        cs_species_status = request.GET.get('cs_species_status', '')
         # used on combine select(+) species pop-up
         combine_species = request.GET.get('combine_species', '')
         # taxon_details is send from species profile form to get all the taxon details as well
@@ -188,9 +190,16 @@ class GetScientificName(views.APIView):
                 data_transform = [{'id': taxon['id'], 'text': taxon['scientific_name']} for taxon in data]
                 data_transform = sorted(data_transform, key=lambda x: x['text'])
             elif cs_species != '':
+                data=None
                 exculde_status = ['draft']
                 # TODO do we need to check the taxonomy is_current=True as well
-                data = Species.objects.filter(~Q(processing_status__in=exculde_status) & ~Q(taxonomy=None))
+                # for new cs species with draft and historical should not populate
+                if cs_species_status=="Draft":
+                    exculde_status = ['draft','historical']
+                    data = Species.objects.filter(~Q(processing_status__in=exculde_status) & ~Q(taxonomy=None))
+                else:
+                    exculde_status = ['draft']
+                    data = Species.objects.filter(~Q(processing_status__in=exculde_status) & ~Q(taxonomy=None))
                 data = data.filter(taxonomy__scientific_name__icontains=search_term, taxonomy__kingdom_fk__grouptype=group_type_id)[:10]
                 data_transform = [{'id': species.id, 'text': species.taxonomy.scientific_name, 'taxon_previous_name': species.taxonomy.taxon_previous_name} for species in data]
                 data_transform = sorted(data_transform, key=lambda x: x['text'])
@@ -1131,6 +1140,7 @@ class SpeciesViewSet(viewsets.ModelViewSet):
                  # change current active conservation status of the original species to inactive
                 try:
                     if species_instance.processing_status == 'historical':
+                        # TODO if the cs of species is in middle of workflow, then?
                         species_cons_status = ConservationStatus.objects.get(species=species_instance, processing_status='approved')
                         if species_cons_status:
                             species_cons_status.customer_status='closed'
@@ -2013,69 +2023,60 @@ class CommunityDocumentViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError(str(e))
 
 
-class ThreatCategoryViewSet(viewsets.ModelViewSet):
-    queryset = ThreatCategory.objects.all()
-
-    def get_queryset(self):
-        return ThreatCategory.objects.none()
-
-    @list_route(methods=['GET', ], detail = False)
-    def threat_category_choices(self, request, *args, **kwargs):
-        res_obj = []
-        for choice in ThreatCategory.objects.all():
-            res_obj.append({'id': choice.id, 'name': choice.name})
-        res_json = json.dumps(res_obj)
-        return HttpResponse(res_json, content_type='application/json')
-
-
-class CurrentImpactViewSet(viewsets.ModelViewSet):
-    queryset = CurrentImpact.objects.all()
-
-    def get_queryset(self):
-        return CurrentImpact.objects.none()
-
-    @list_route(methods=['GET', ], detail = False)
-    def current_impact_choices(self, request, *args, **kwargs):
-        res_obj = []
-        for choice in CurrentImpact.objects.all():
-            res_obj.append({'id': choice.id, 'name': choice.name})
-        res_json = json.dumps(res_obj)
-        return HttpResponse(res_json, content_type='application/json')
-
-
-class PotentialImpactViewSet(viewsets.ModelViewSet):
-    queryset = PotentialImpact.objects.all()
-
-    def get_queryset(self):
-        return PotentialImpact.objects.none()
-
-    @list_route(methods=['GET', ], detail = False)    
-    def potential_impact_choices(self, request, *args, **kwargs):
-        res_obj = [] 
-        for choice in PotentialImpact.objects.all():
-            res_obj.append({'id': choice.id, 'name': choice.name})
-        res_json = json.dumps(res_obj)
-        return HttpResponse(res_json, content_type='application/json')
-
-
-class PotentialThreatOnsetViewSet(viewsets.ModelViewSet):
-    queryset = PotentialThreatOnset.objects.all()
-
-    def get_queryset(self):
-        return PotentialThreatOnset.objects.none()
-
-    @list_route(methods=['GET', ], detail = False)
-    def potential_threat_onset_choices(self, request, *args, **kwargs):
-        res_obj = []
-        for choice in PotentialThreatOnset.objects.all():
-            res_obj.append({'id': choice.id, 'name': choice.name})
-        res_json = json.dumps(res_obj)
-        return HttpResponse(res_json, content_type='application/json')
-
-
 class ConservationThreatViewSet(viewsets.ModelViewSet):
     queryset = ConservationThreat.objects.all().order_by('id')
     serializer_class = ConservationThreatSerializer
+
+    #used for Threat Form dropdown lists 
+    @list_route(methods=['GET',], detail=False)
+    def threat_list_of_values(self, request, *args, **kwargs):
+        """ Used by the internal threat form """
+        threat_category_lists = []
+        threat_categories = ThreatCategory.objects.all()
+        if threat_categories:
+            for choice in threat_categories:
+                threat_category_lists.append({'id': choice.id,
+                    'name': choice.name,
+                    });
+
+        current_impact_lists = []
+        current_impacts = CurrentImpact.objects.all()
+        if current_impacts:
+            for choice in current_impacts:
+                current_impact_lists.append({'id': choice.id,
+                    'name': choice.name,
+                    });
+        potential_impact_lists = []
+        potential_impacts = PotentialImpact.objects.all()
+        if current_impacts:
+            for choice in potential_impacts:
+                potential_impact_lists.append({'id': choice.id,
+                    'name': choice.name,
+                    });
+        potential_threat_onset_lists = []
+        potential_threats = PotentialThreatOnset.objects.all()
+        if potential_threats:
+            for choice in potential_threats:
+                potential_threat_onset_lists.append({'id': choice.id,
+                    'name': choice.name,
+                    });
+        threat_agent_lists = []
+        threat_agents = ThreatAgent.objects.all()
+        if threat_agents:
+            for choice in threat_agents:
+                threat_agent_lists.append({'id': choice.id,
+                    'name': choice.name,
+                    });
+        res_json = {
+            "threat_category_lists":threat_category_lists,
+            "current_impact_lists":current_impact_lists,
+            "potential_impact_lists":potential_impact_lists,
+            "potential_threat_onset_lists": potential_threat_onset_lists,
+            "threat_agent_lists": threat_agent_lists,
+        }
+        res_json = json.dumps(res_json)
+        return HttpResponse(res_json, content_type='application/json')
+        return Response(data)
 
     @detail_route(methods=['GET',], detail=True)
     def discard(self, request, *args, **kwargs):
