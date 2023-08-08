@@ -14,9 +14,9 @@ class ConservationCategoryAdmin(admin.ModelAdmin):
 class ConservationCriteriaAdmin(admin.ModelAdmin):
     list_display = ['code','label','conservation_list']
 
-@admin.register(models.ConservationChangeCode)
-class ConservationChangeCodeAdmin(admin.ModelAdmin):
-    list_display = ['code','label']
+# @admin.register(models.ConservationChangeCode)
+# class ConservationChangeCodeAdmin(admin.ModelAdmin):
+#     list_display = ['code','label']
 
 @admin.register(models.ProposalAmendmentReason)
 class ProposalAmendmentReasonAdmin(admin.ModelAdmin):

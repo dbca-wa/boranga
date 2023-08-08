@@ -23,6 +23,9 @@ from boranga.components.species_and_communities.models import (
     PostFireHabitatInteraction,
     # FaunaBreeding,
     BreedingPeriod,
+    CurrentImpact,
+    PotentialImpact,
+    PotentialThreatOnset,
     )
 
 
@@ -55,13 +58,13 @@ class FruitingPeriodAdmin(admin.ModelAdmin):
 admin.site.register(GroupType)
 admin.site.register(Region)
 admin.site.register(District)
-admin.site.register(NameAuthority)
+# admin.site.register(NameAuthority)
 # admin.site.register(Source)
 admin.site.register(DocumentCategory)
 admin.site.register(ThreatCategory)
-admin.site.register(Family)
-admin.site.register(PhylogeneticGroup)
-admin.site.register(Genus)
+# admin.site.register(Family)
+# admin.site.register(PhylogeneticGroup)
+# admin.site.register(Genus)
 admin.site.register(Kingdom)
 # admin.site.register(FloweringPeriod)
 # admin.site.register(FruitingPeriod)
@@ -72,3 +75,6 @@ admin.site.register(RootMorphology)
 admin.site.register(PostFireHabitatInteraction)
 # admin.site.register(FaunaBreeding)
 admin.site.register(BreedingPeriod)
+admin.site.register(CurrentImpact)
+admin.site.register(PotentialImpact)
+admin.site.register(PotentialThreatOnset)

@@ -17,6 +17,7 @@ from boranga.components.main.related_item import RelatedItem
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 from boranga.ledger_api_utils import retrieve_email_user
 from ledger_api_client.managed_models import SystemGroup
+from multiselectfield import MultiSelectField
 from boranga.settings import (
     GROUP_NAME_ASSESSOR,
     GROUP_NAME_APPROVER,
@@ -2087,11 +2088,26 @@ class SpeciesConservationAttributes(models.Model):
     Is:
     - Table
     """
+    PERIOD_CHOICES = (('january', 'January'),
+                    ('february', 'February'),
+                    ('march', 'March'),
+                    ('april', 'April'),
+                    ('may', 'May'),
+                    ('june', 'June'),
+                    ('july', 'July'),
+                    ('august', 'August'),
+                    ('september', 'September'),
+                    ('october', 'October'),
+                    ('november', 'November'),
+                    ('december', 'December'),
+                    )
+
     species = models.ForeignKey(Species, on_delete=models.CASCADE, unique=True, null=True, related_name="species_conservation_attributes")
     
     # flora related attributes
-    flowering_period = models.ManyToManyField(FloweringPeriod, blank=True, null=True, related_name="curr_flowering_period")
-    fruiting_period = models.ManyToManyField(FruitingPeriod, blank=True, null=True, related_name="curr_fruiting_period")
+    flowering_period = models.ForeignKey(FloweringPeriod, on_delete=models.SET_NULL, null=True, blank=True)
+    flowering_prd = MultiSelectField(max_length=250, blank=True, choices=PERIOD_CHOICES, null=True)
+    fruiting_period = models.ForeignKey(FruitingPeriod, on_delete=models.SET_NULL, null=True, blank=True)
     flora_recruitment_type = models.ForeignKey(FloraRecruitmentType, on_delete=models.SET_NULL, null=True, blank=True)
     flora_recruitment_notes = models.CharField(max_length=1000,null=True, blank=True)
     seed_viability_germination_info = models.CharField(max_length=1000,null=True, blank=True)

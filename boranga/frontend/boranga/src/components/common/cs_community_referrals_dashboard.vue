@@ -450,11 +450,11 @@ export default {
                 vm.column_conservation_category,
                 // vm.column_region,
                 // vm.column_district,
-                vm.column_status,
-                vm.column_action,
                 vm.column_conservation_status,
                 vm.column_can_be_processed,
                 vm.column_can_user_process,
+                vm.column_status,
+                vm.column_action,
             ]
             let search = false
             let buttons = [

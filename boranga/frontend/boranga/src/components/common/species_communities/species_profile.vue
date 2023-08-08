@@ -152,6 +152,21 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Area of Occupancy (km2):</label>
                 <div class="col-sm-6">
+                    <input :disabled="isReadOnly" type="number" class="form-control" id="area_of_occupany" placeholder="" 
+                    v-model="species_community.distribution.area_of_occupancy"/>
+                </div>
+                <div class="col-sm-3">    
+                    <input :disabled="isReadOnly" type="radio" value="true" 
+                            class="aoo_auto form-check-input" name="aoo_auto" v-model="species_community.distribution.aoo_auto">
+                    <label>auto</label>
+                    <input :disabled="isReadOnly" type="radio" value="false" 
+                            class="aoo_auto form-check-input" name="aoo_auto" v-model="species_community.distribution.aoo_auto">
+                    <label>manual</label>
+                </div>
+            </div>
+            <div class="row mb-3">
+                <label for="" class="col-sm-3 control-label">Area of Occupancy Actual<br>(km2):</label>
+                <div class="col-sm-6">
                     <input :disabled="isReadOnly" type="number" class="form-control" id="area_of_occupancy_actual" placeholder="" 
                     v-model="species_community.distribution.area_of_occupancy_actual"/>
                 </div>
@@ -163,21 +178,6 @@
                     <input :disabled="isReadOnly" type="radio" value="false" 
                             class="aoo_actual_auto form-check-input" name="aoo_actual_auto" 
                             v-model="species_community.distribution.aoo_actual_auto">
-                    <label>manual</label>
-                </div>
-            </div>
-            <div class="row mb-3">
-                <label for="" class="col-sm-3 control-label">Area of Occupancy<br>(2km x 2km):</label>
-                <div class="col-sm-6">
-                    <input :disabled="isReadOnly" type="number" class="form-control" id="area_of_occupany" placeholder="" 
-                    v-model="species_community.distribution.area_of_occupancy"/>
-                </div>
-                <div class="col-sm-3">    
-                    <input :disabled="isReadOnly" type="radio" value="true" 
-                            class="aoo_auto form-check-input" name="aoo_auto" v-model="species_community.distribution.aoo_auto">
-                    <label>auto</label>
-                    <input :disabled="isReadOnly" type="radio" value="false" 
-                            class="aoo_auto form-check-input" name="aoo_auto" v-model="species_community.distribution.aoo_auto">
                     <label>manual</label>
                 </div>
             </div>
@@ -214,6 +214,25 @@
                         v-model="species_community.conservation_attributes.flowering_period" >
                         <option v-for="option in flowering_period_list" :value="option.id" :key="option.id">
                             {{option.name}}
+                        </option>
+                    </select>
+                </div>
+            </div>
+            <div class="row mb-3" v-show="!isFauna">
+                <label for="" class="col-sm-3 control-label">Flowering Prd:</label>
+                <div class="col-sm-9" :id="select_flowering_period">
+                    <!-- <select :disabled="isReadOnly" class="form-select" multiple
+                        v-model="species_community.conservation_attributes.flowering_prd">
+                        <option v-for="option in flowering_prd_list" :value="option.value" v-bind:key="option.name">
+                            {{ option.name }}                            
+                        </option>
+                    </select> -->
+                    <select :disabled="isReadOnly" 
+                        style="width:100%;" class="form-select input-sm" multiple 
+                        ref="flowering_period" 
+                        v-model="species_community.conservation_attributes.flowering_prd" >
+                        <option v-for="option in period_list" :value="option.value" v-bind:key="option.name">
+                            {{ option.name }}
                         </option>
                     </select>
                 </div>
@@ -507,6 +526,7 @@ export default {
                 },
                 scientific_name_lookup: 'scientific_name_lookup' + vm._uid,
                 select_scientific_name: "select_scientific_name"+ vm._uid,
+                select_flowering_period: "select_flowering_period"+ vm._uid,
                 taxonBody: 'taxonBody' + vm._uid,
                 distributionBody: 'distributionBody' + vm._uid,
                 conservationBody: 'conservationBody' + vm._uid,
@@ -541,6 +561,19 @@ export default {
                 genus_id: null,
                 name_authority: null,
                 name_comments: null,
+                period_list: [{value: 'january', name: 'January'},
+                {value: 'february', name: 'February'},
+                {value: 'march', name: 'March'},
+                {value: 'april', name: 'April'},
+                {value: 'may', name: 'May'},
+                {value: 'june', name: 'June'},
+                {value: 'july', name: 'July'},
+                {value: 'august', name: 'August'},
+                {value: 'september', name: 'September'},
+                {value: 'october', name: 'October'},
+                {value: 'november', name: 'November'},
+                {value: 'december', name: 'December'},
+                ],
             }
         },
         components: {
@@ -718,36 +751,6 @@ export default {
                 }
             },
             eventListeners:function (){
-                let vm = this;
-                $(vm.$refs.flowering_period_select).select2({
-                    "theme": "bootstrap-5",
-                    allowClear: true,
-                    placeholder:"Select Flowering Period",
-                    multiple: true,
-                }).
-                on("select2:select",function (e) {
-                    var selected = $(e.currentTarget);
-                    vm.species_community.conservation_attributes.flowering_period = selected.val();
-                }).
-                on("select2:unselect",function (e) {
-                    var selected = $(e.currentTarget);
-                    vm.species_community.conservation_attributes.flowering_period = selected.val();
-                });
-
-                $(vm.$refs.fruiting_period_select).select2({
-                    "theme": "bootstrap-5",
-                    allowClear: true,
-                    placeholder:"Select Fruiting Period",
-                    multiple: true,
-                }).
-                on("select2:select",function (e) {
-                    var selected = $(e.currentTarget);
-                    vm.species_community.conservation_attributes.fruiting_period = selected.val();
-                }).
-                on("select2:unselect",function (e) {
-                    var selected = $(e.currentTarget);
-                    vm.species_community.conservation_attributes.fruiting_period = selected.val();
-                });
             },
         },
         created: async function() {
