@@ -47,6 +47,14 @@ from boranga.components.species_and_communities.models import (
 class DocumentSubCategoryAdmin(admin.ModelAdmin):
     list_display = ['document_sub_category_name', 'document_category']
 
+@admin.register(FloweringPeriod)
+class FloweringPeriodAdmin(admin.ModelAdmin):
+    list_display = ['period']
+
+@admin.register(FruitingPeriod)
+class FruitingPeriodAdmin(admin.ModelAdmin):
+    list_display = ['period']
+
 # Each of the following models will be available to Django Admin.
 admin.site.register(GroupType)
 admin.site.register(Region)
@@ -59,8 +67,8 @@ admin.site.register(ThreatCategory)
 # admin.site.register(PhylogeneticGroup)
 # admin.site.register(Genus)
 admin.site.register(Kingdom)
-admin.site.register(FloweringPeriod)
-admin.site.register(FruitingPeriod)
+# admin.site.register(FloweringPeriod)
+# admin.site.register(FruitingPeriod)
 admin.site.register(FloraRecruitmentType)
 # admin.site.register(SeedViabilityGerminationInfo)
 admin.site.register(RootMorphology)

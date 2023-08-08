@@ -1918,7 +1918,22 @@ class FloweringPeriod(models.Model):
     - SpeciesConservationAttributes
 
     """
-    period = models.CharField(max_length=200, blank=False, unique=True)
+    PERIOD_CHOICES = (
+        ('January', 'January'),
+        ('February', 'February'),
+        ('March', 'March'),
+        ('April', 'April'),
+        ('May', 'May'),
+        ('June', 'June'),
+        ('July', 'July'),
+        ('August', 'August'),
+        ('September', 'September'),
+        ('October', 'October'),
+        ('November', 'November'),
+        ('December', 'December'),
+    )
+
+    period = models.CharField(max_length=200, blank=False, unique=True, choices=PERIOD_CHOICES)
 
     class Meta:
         app_label = 'boranga'
@@ -1938,7 +1953,8 @@ class FruitingPeriod(models.Model):
     - SpeciesConservationAttributes
 
     """
-    period = models.CharField(max_length=200, blank=False, unique=True)
+
+    period = models.CharField(max_length=200, blank=False, unique=True, choices=FloweringPeriod.PERIOD_CHOICES)
 
     class Meta:
         app_label = 'boranga'
@@ -2054,7 +2070,7 @@ class BreedingPeriod(models.Model):
     - SpeciesConservationAttributes
 
     """
-    period = models.CharField(max_length=200, blank=False, unique=True)
+    period = models.CharField(max_length=200, blank=False, unique=True, choices=FloweringPeriod.PERIOD_CHOICES)
 
     class Meta:
         app_label = 'boranga'
@@ -2093,26 +2109,25 @@ class SpeciesConservationAttributes(models.Model):
     Is:
     - Table
     """
-    PERIOD_CHOICES = (('january', 'January'),
-                    ('february', 'February'),
-                    ('march', 'March'),
-                    ('april', 'April'),
-                    ('may', 'May'),
-                    ('june', 'June'),
-                    ('july', 'July'),
-                    ('august', 'August'),
-                    ('september', 'September'),
-                    ('october', 'October'),
-                    ('november', 'November'),
-                    ('december', 'December'),
+    PERIOD_CHOICES = ((1, 'January'),
+                    (2, 'February'),
+                    (3, 'March'),
+                    (4, 'April'),
+                    (5, 'May'),
+                    (6, 'June'),
+                    (7, 'July'),
+                    (8, 'August'),
+                    (9, 'September'),
+                    (10, 'October'),
+                    (11, 'November'),
+                    (12, 'December'),
                     )
 
     species = models.ForeignKey(Species, on_delete=models.CASCADE, unique=True, null=True, related_name="species_conservation_attributes")
     
     # flora related attributes
-    flowering_period = models.ForeignKey(FloweringPeriod, on_delete=models.SET_NULL, null=True, blank=True)
-    flowering_prd = MultiSelectField(max_length=250, blank=True, choices=PERIOD_CHOICES, null=True)
-    fruiting_period = models.ForeignKey(FruitingPeriod, on_delete=models.SET_NULL, null=True, blank=True)
+    flowering_period = MultiSelectField(max_length=250, blank=True, choices=PERIOD_CHOICES, null=True)
+    fruiting_period = MultiSelectField(max_length=250, blank=True, choices=PERIOD_CHOICES, null=True)
     flora_recruitment_type = models.ForeignKey(FloraRecruitmentType, on_delete=models.SET_NULL, null=True, blank=True)
     flora_recruitment_notes = models.CharField(max_length=1000,null=True, blank=True)
     seed_viability_germination_info = models.CharField(max_length=1000,null=True, blank=True)
@@ -2121,7 +2136,7 @@ class SpeciesConservationAttributes(models.Model):
     response_to_dieback = models.CharField(max_length=1500, null=True, blank=True)
 
     # fauna related attributes
-    breeding_period = models.ForeignKey(BreedingPeriod, on_delete=models.SET_NULL, null=True, blank=True)
+    breeding_period = MultiSelectField(max_length=250, blank=True, choices=PERIOD_CHOICES, null=True)
     fauna_breeding = models.CharField(max_length=2000,null=True, blank=True)
     fauna_reproductive_capacity = models.CharField(max_length=200,null=True, blank=True)
     diet_and_food_source = models.CharField(max_length=500, null=True, blank=True)
