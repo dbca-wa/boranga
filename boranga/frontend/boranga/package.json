@@ -29,7 +29,7 @@
     "datatables.net-buttons": "^2.4.1",
     "datatables.net-buttons-bs5": "^2.4.1",
     "datatables.net-responsive-bs5": "^2.5.0",
-    "depcheck": "^1.4.5",
+    "depcheck": "^1.4.7",
     "jquery": "^3.7.0",
     "jquery-easing": "^0.0.1",
     "jquery-validation": "^1.19.5",
