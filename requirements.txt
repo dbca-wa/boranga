@@ -7,7 +7,7 @@ ipython==7.31.1
 git+https://github.com/dbca-wa/ledger_api_client.git#egg=ledger_api_client
 coverage==4.3.1
 coveralls==1.1
-reportlab==3.5.55
+reportlab==3.6.13
 django-braces>=1.8.1
 django-datatables-view==1.13.0
 django-reversion==3.0.0
