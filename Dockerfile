@@ -30,6 +30,7 @@ RUN chown -R oim.oim /app
 
 COPY nginx-default.conf /etc/nginx/sites-enabled/default
 # RUN service rsyslog start
+COPY cron /etc/cron.d/container
 RUN chmod 0644 /etc/cron.d/container
 RUN crontab /etc/cron.d/container
 RUN service cron start
@@ -41,7 +42,7 @@ USER oim
 # Install the project (ensure that frontend projects have been built prior to this step).
 
 RUN touch /app/.env
-COPY cron /etc/cron.d/container
+
 COPY startup.sh /
 COPY reporting_database_rebuild.sh /
 COPY open_reporting_db /
