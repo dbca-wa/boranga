@@ -16,7 +16,8 @@ echo "Dump Core Ledger Production Tables";
 PGPASSWORD="$PRODUCTION_LEDGER_PASSWORD" pg_dump -t 'accounts_*' --file /dbdumps/ledger_core_prod.sql --format=custom --host $PRODUCTION_LEDGER_HOST --dbname $PRODUCTION_LEDGER_DATABASE --username $PRODUCTION_LEDGER_USERNAME
 
 echo "Dump Core Boranga Production Tables";
-PGPASSWORD="$PRODUCTION_LEDGER_PASSWORD" pg_dump -t 'boranga_*' --file /dbdumps/boranga_core_prod.sql --format=custom --host $PRODUCTION_LEDGER_HOST --dbname $PRODUCTION_LEDGER_DATABASE --username $PRODUCTION_LEDGER_USERNAME
+PGPASSWORD="$PRODUCTION_BORANGA_PASSWORD" pg_dump -t 'boranga_*' -t 'ledger_api_client_*' --file /dbdumps/boranga_core_prod.sql --format=custom --host $PRODUCTION_BORANGA_HOST --dbname $PRODUCTION_BORANGA_DATABASE --username $PRODUCTION_BORANGA_USERNAME
+
 
 # DROP All TABLES IN DAILY DB
 for I in $(psql "host=$TEMPORARY_LEDGER_HOST port=5432 dbname=$TEMPORARY_LEDGER_DATABASE user=$TEMPORARY_LEDGER_USERNAME password=$TEMPORARY_LEDGER_PASSWORD sslmode=require" -c "SELECT tablename FROM pg_tables where tablename not like 'pg\_%' and tablename not like 'sql\_%';" -t);
