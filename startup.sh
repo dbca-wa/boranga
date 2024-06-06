@@ -39,4 +39,4 @@ if [ $status -ne 0 ]; then
   exit $status
 fi
 
-/bin/bash
+
