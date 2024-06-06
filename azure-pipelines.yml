@@ -32,15 +32,7 @@ stages:
               latest
               $(tagDate)
         containerRegistry: DockerHub
-        repository: dbcawa/boranga_reporting
-    - task: Docker@2
-      displayName: Dev Build image and Push
-      inputs:
-        command: buildAndPush
-        dockerfile: '$(Build.SourcesDirectory)/dockerdev/Dockerfile'
-        tags: | 
-              boranga_reporting_latest
-              boranga_reporting_$(tagDate)              
+        repository: dbcawa/boranga_reporting           
         containerRegistry: DockerHub
         repository: dbcawa/docker_app_dev
 

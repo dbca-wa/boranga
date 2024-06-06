@@ -16,8 +16,16 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN pip install --upgrade pip
 # Install Python libs from requirements.txt.
 
-WORKDIR /app
+# Create local user
+RUN groupadd -g 5000 oim
+RUN useradd -g 5000 -u 5000 oim -s /bin/bash -d /app
+RUN usermod -a -G sudo oim
+RUN echo "oim  ALL=(ALL)  NOPASSWD: /startup.sh" > /etc/sudoers.d/oim
+RUN mkdir /app
+RUN chown -R oim.oim /app
 
+WORKDIR /app
+USER oim
 # Install the project (ensure that frontend projects have been built prior to this step).
 COPY timezone /etc/timezone
 ENV TZ=Australia/Perth
