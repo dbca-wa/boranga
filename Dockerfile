@@ -39,7 +39,8 @@ RUN service cron start
 COPY startup.sh /
 RUN chmod 755 /startup.sh
 RUN mkdir /container-config/
-chown -R oim.oim /container-config/
+RUN chown -R oim.oim /container-config/
+
 WORKDIR /app
 USER oim
 # Install the project (ensure that frontend projects have been built prior to this step).
