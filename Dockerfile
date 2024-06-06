@@ -16,6 +16,10 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN pip install --upgrade pip
 # Install Python libs from requirements.txt.
 
+COPY timezone /etc/timezone
+ENV TZ=Australia/Perth
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 # Create local user
 RUN groupadd -g 5000 oim
 RUN useradd -g 5000 -u 5000 oim -s /bin/bash -d /app
@@ -24,17 +28,6 @@ RUN echo "oim  ALL=(ALL)  NOPASSWD: /startup.sh" > /etc/sudoers.d/oim
 RUN mkdir /app
 RUN chown -R oim.oim /app
 
-WORKDIR /app
-USER oim
-# Install the project (ensure that frontend projects have been built prior to this step).
-COPY timezone /etc/timezone
-ENV TZ=Australia/Perth
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-RUN touch /app/.env
-COPY cron /etc/cron.d/container
-COPY startup.sh /
-COPY reporting_database_rebuild.sh /
-COPY open_reporting_db /
 COPY nginx-default.conf /etc/nginx/sites-enabled/default
 # RUN service rsyslog start
 RUN chmod 0644 /etc/cron.d/container
@@ -42,6 +35,17 @@ RUN crontab /etc/cron.d/container
 RUN service cron start
 RUN touch /var/log/cron.log
 RUN service cron start
+
+WORKDIR /app
+USER oim
+# Install the project (ensure that frontend projects have been built prior to this step).
+
+RUN touch /app/.env
+COPY cron /etc/cron.d/container
+COPY startup.sh /
+COPY reporting_database_rebuild.sh /
+COPY open_reporting_db /
+
 RUN chmod 755 /open_reporting_db
 RUN chmod 755 /reporting_database_rebuild.sh
 RUN chmod 755 /startup.sh
