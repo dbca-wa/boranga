@@ -32,8 +32,7 @@ stages:
               latest
               $(tagDate)
         containerRegistry: DockerHub
-        repository: dbcawa/boranga_reporting           
-        containerRegistry: DockerHub
-        repository: dbcawa/docker_app_dev
+        repository: dbcawa/boranga_reporting
+
 
 
