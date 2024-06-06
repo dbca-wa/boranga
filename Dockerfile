@@ -36,8 +36,9 @@ RUN crontab /etc/cron.d/container
 RUN service cron start
 RUN touch /var/log/cron.log
 RUN service cron start
-COPY startup.sh /
+COPY pre_startup.sh startup.sh /
 RUN chmod 755 /startup.sh
+RUN chmod 755 /pre_startup.sh
 RUN mkdir /container-config/
 RUN chown -R oim.oim /container-config/
 
@@ -55,4 +56,4 @@ RUN chmod 755 /reporting_database_rebuild.sh
 
 EXPOSE 80
 HEALTHCHECK CMD service cron status | grep "cron is running" || exit 1
-CMD ["/startup.sh"]
+CMD ["/pre_startup.sh"]
