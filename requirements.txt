@@ -69,7 +69,7 @@ python-decouple~=3.8
 python-docx~=1.1.0
 reportlab~=4.1
 sentry-sdk~=2.19
-setuptools~=70.0
+setuptools~=78.1.1
 six>=1.16.0
 unicodecsv==0.14.1 # A Python 2.7 drop-in replacement from 2015
 wheel~=0.43
