@@ -1,7 +1,7 @@
 # syntax = docker/dockerfile:1.2
 
 # Prepare the base environment.
-FROM ubuntu:24.04 AS builder_base_boranga
+FROM ubuntu:24.10 AS builder_base_boranga
 
 LABEL maintainer="asi@dbca.wa.gov.au"
 LABEL org.opencontainers.image.source="https://github.com/dbca-wa/boranga"
