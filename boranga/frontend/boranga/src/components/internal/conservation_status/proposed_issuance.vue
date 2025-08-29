@@ -44,6 +44,11 @@
                                                 "
                                                 type="date"
                                                 class="form-control"
+                                                :max="
+                                                    new Date()
+                                                        .toISOString()
+                                                        .slice(0, 10)
+                                                "
                                             />
                                         </div>
                                         <small

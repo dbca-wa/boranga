@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from boranga.components.conservation_status.models import ConservationStatus
 from boranga.components.data_migration.adapters.schema_base import Schema
 from boranga.components.data_migration.mappings import build_legacy_map_transform
 from boranga.components.data_migration.registry import choices_transform
@@ -73,8 +74,12 @@ PROCESSING_STATUS_CHOICES = [
     "closed",
 ]
 
-CUSTOMER_STATUS_TRANSFORM = choices_transform(CUSTOMER_STATUS_CHOICES)
-PROCESSING_STATUS_TRANSFORM = choices_transform(PROCESSING_STATUS_CHOICES)
+CUSTOMER_STATUS = choices_transform(
+    [c[0] for c in ConservationStatus.CUSTOMER_STATUS_CHOICES]
+)
+PROCESSING_STATUS = choices_transform(
+    [c[0] for c in ConservationStatus.PROCESSING_STATUS_CHOICES]
+)
 
 # Column header → canonical key map (adjust headers to match CSV)
 COLUMN_MAP = {
@@ -125,8 +130,8 @@ PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     "conservation_status_number": ["strip", "blank_to_none"],
     # Statuses / choices
-    "customer_status": ["strip", "blank_to_none", CUSTOMER_STATUS_TRANSFORM],
-    "processing_status": ["strip", "required", PROCESSING_STATUS_TRANSFORM],
+    "customer_status": ["strip", "blank_to_none", CUSTOMER_STATUS],
+    "processing_status": ["strip", "required", PROCESSING_STATUS],
     "change_code": ["strip", "blank_to_none", CHANGE_CODE_TRANSFORM],
     # FK / lookup mappings
     "species_taxonomy": ["strip", "blank_to_none", SPECIES_TAXONOMY_TRANSFORM],

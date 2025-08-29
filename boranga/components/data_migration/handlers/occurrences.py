@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections import defaultdict
+from typing import Any
+
 from django.db import transaction
 
 from boranga.components.data_migration.adapters.occurrence import (  # shared canonical schema
@@ -75,7 +78,7 @@ class OccurrenceImporter(BaseSheetImporter):
                 r["_source"] = src
             all_rows.extend(result.rows)
 
-        # 2. Header / schema already normalised by adapters; apply transforms per column
+        # 2. Build pipelines / same as before
         pipelines = {}
         for col, names in schema.COLUMN_PIPELINES.items():
             from boranga.components.data_migration.registry import (
@@ -91,18 +94,13 @@ class OccurrenceImporter(BaseSheetImporter):
         skipped = 0
         warn_count = 0
 
-        # 3. Deduplicate (example simple key)
-        seen_keys = set()
-        deduped = []
-        for row in all_rows:
-            key = (row.get("legacy_id"), row.get("_source"))
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
-            deduped.append(row)
+        # 3. Transform every row into canonical form, collect per-key groups
+        groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(
+            list
+        )
+        # groups[legacy_id] -> list of (transformed_dict, source, issues_list)
 
-        # 4. Transform + persist
-        for row in deduped:
+        for row in all_rows:
             processed += 1
             tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
             issues = []
@@ -122,28 +120,76 @@ class OccurrenceImporter(BaseSheetImporter):
             if has_error:
                 skipped += 1
                 continue
-
-            # 5. Persist (pseudo-code; replace with real model logic)
-            if ctx.dry_run:
+            key = transformed.get("legacy_id")
+            if not key:
+                # missing key — cannot merge/persist
+                skipped += 1
+                errors += 1
                 continue
+            groups[key].append((transformed, row.get("_source"), issues))
+
+        # 4. Merge groups and persist one object per key
+        def merge_group(entries, source_priority):
+            """
+            entries: list of (transformed_dict, source, issues)
+            source_priority: list of source keys in preferred order
+            Merge rule: for each column pick first non-None/non-empty value
+            according to source_priority; combine issues.
+            """
+            # sort entries by source priority so earlier sources win
+            entries_sorted = sorted(
+                entries,
+                key=lambda e: (
+                    source_priority.index(e[1])
+                    if e[1] in source_priority
+                    else len(source_priority)
+                ),
+            )
+            merged = {}
+            combined_issues = []
+            for col in pipelines.keys():
+                val = None
+                for trans, src, _ in entries_sorted:
+                    v = trans.get(col)
+                    if v not in (None, ""):
+                        val = v
+                        break
+                merged[col] = val
+            for _, _, iss in entries_sorted:
+                combined_issues.extend(iss)
+            return merged, combined_issues
+
+        # Persist merged rows
+        for legacy_id, entries in groups.items():
+            merged, combined_issues = merge_group(entries, sources)
+            # if any error in combined_issues => skip
+            if any(i.level == "error" for _, i in combined_issues):
+                skipped += 1
+                continue
+
+            # build defaults/payload; set legacy_source as joined sources involved
+            involved_sources = sorted({src for _, src, _ in entries})
+            defaults = {
+                "species_code": merged.get("species_code"),
+                "observed_date": merged.get("observed_date"),
+                "count": merged.get("count"),
+                "location_name": merged.get("location_name"),
+                "observer_name": merged.get("observer_name"),
+                "notes": merged.get("notes"),
+                "legacy_source": ",".join(involved_sources),
+            }
+
+            if ctx.dry_run:
+                # don't persist, but update counters as if created/updated if desired
+                continue
+
             with transaction.atomic():
-                obj, created_flag = Occurrence.objects.get_or_create(
-                    legacy_source=row["_source"],
-                    legacy_id=transformed["legacy_id"],
-                    defaults={
-                        "species_code": transformed["species_code"],
-                        "observed_date": transformed["observed_date"],
-                        "count": transformed["count"],
-                        "location_name": transformed["location_name"],
-                        "observer_name": transformed["observer_name"],
-                        "notes": transformed["notes"],
-                    },
+                obj, created_flag = Occurrence.objects.update_or_create(
+                    legacy_id=legacy_id, defaults=defaults
                 )
-                created_flag = True  # placeholder
                 if created_flag:
                     created += 1
                 else:
-                    # update fields if needed
                     updated += 1
 
         stats.update(

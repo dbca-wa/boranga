@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from boranga.components.data_migration.adapters.schema_base import Schema
 from boranga.components.data_migration.mappings import build_legacy_map_transform
 from boranga.components.data_migration.registry import choices_transform
+from boranga.components.occurrence.models import Occurrence
 
 # Example community schema for migrating legacy Community data.
 LEGACY_SOURCE_KEY = "LEGACY_COMM"
@@ -23,9 +24,9 @@ GROUP_TYPE_TRANSFORM = build_legacy_map_transform(
     LEGACY_SOURCE_KEY, "group_type", return_type="id"
 )
 
-# Processing status choices (mirror Community.PROCESSING_STATUS_CHOICES)
-PROCESSING_STATUS_CHOICES = ["draft", "discarded", "active", "historical"]
-PROCESSING_STATUS_TRANSFORM = choices_transform(PROCESSING_STATUS_CHOICES)
+PROCESSING_STATUS = choices_transform(
+    [c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES]
+)
 
 COLUMN_MAP = {
     "Legacy Community ID": "migrated_from_id",
@@ -66,7 +67,7 @@ PIPELINES = {
         "validate_species_list",  # placeholder: resolve/validate each entry with SPECIES_TRANSFORM
     ],
     "submitter": ["strip", "blank_to_none"],
-    "processing_status": ["strip", "required", PROCESSING_STATUS_TRANSFORM],
+    "processing_status": ["strip", "required", PROCESSING_STATUS],
     "lodgement_date": ["strip", "blank_to_none", "date_iso"],
     "last_data_curation_date": ["strip", "blank_to_none", "date_iso"],
     "conservation_plan_exists": ["strip", "blank_to_none", "bool"],

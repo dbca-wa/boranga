@@ -1,3 +1,5 @@
+from boranga.components.occurrence.models import Occurrence
+
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 from . import schema
@@ -16,8 +18,13 @@ class OccurrenceTpflAdapter(SourceAdapter):
 
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
-            canonical["group_type"] = (
-                "flora"  # TODO: Add any other source dependent constants here
+            canonical["occurrence_name"] = (
+                f"{canonical.get('POP_NUMBER','').strip()} {canonical.get('SUBPOP_CODE','').strip()}".strip()
             )
+            canonical["group_type"] = "flora"
+            canonical["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
+            canonical["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
+            canonical["locked"] = True
+            # TODO: Add any other source dependent constants here
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)

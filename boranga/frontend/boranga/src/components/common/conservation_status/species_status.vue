@@ -328,6 +328,9 @@
                                         conservation_status_obj.effective_from
                                     "
                                     type="date"
+                                    :max="
+                                        new Date().toISOString().split('T')[0]
+                                    "
                                     placeholder="DD/MM/YYYY"
                                     class="form-control"
                                     :disabled="isReadOnly"
@@ -1660,10 +1663,8 @@ export default {
             );
         },
         show_effective_from: function () {
-            return (
-                constants.EFFECTIVE_FROM_STATUSES.includes(
-                    this.conservation_status_obj.processing_status
-                ) && !this.conservation_status_obj.locked
+            return constants.EFFECTIVE_FROM_STATUSES.includes(
+                this.conservation_status_obj.processing_status
             );
         },
         show_effective_to: function () {
