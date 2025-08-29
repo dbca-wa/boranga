@@ -291,7 +291,7 @@ def validate_multiselect(choice_transform_name: str):
     return name
 
 
-def normalize_delimited_list_factory(delimiter: str = ";"):
+def normalize_delimited_list_factory(delimiter: str = ";", suffix: str | None = None):
     """
     Register and return a transform name that normalises a delimited list:
     - splits on the exact delimiter,
@@ -301,14 +301,18 @@ def normalize_delimited_list_factory(delimiter: str = ";"):
     - if one item remains -> returns that item (string)
     - otherwise -> returns the items joined by the delimiter (string)
 
+    Optional suffix: appended after the delimiter when joining (e.g. suffix=" " will join as "; ").
     Usage:
-      NORM_SEMI_DELIMITED_LIST = normalize_delimited_list_factory(";")
-      pipeline = ["strip", "blank_to_none", NORM_SEMI_DELIMITED_LIST]
+      NORM_SEMI = normalize_delimited_list_factory(";", None)    # "a;b"
+      NORM_SEMI_SP = normalize_delimited_list_factory(";", " ")  # "a; b"
+      pipeline = ["strip", "blank_to_none", NORM_SEMI_SP]
     """
-    key = f"normalize_delimited_list:{delimiter}"
+    key = f"normalize_delimited_list:{delimiter}:{suffix or ''}"
     name = "normalize_" + hashlib.sha1(key.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
+
+    joiner = delimiter + (suffix or "")
 
     def _inner(value, ctx):
         # treat None/empty as None
@@ -324,7 +328,7 @@ def normalize_delimited_list_factory(delimiter: str = ";"):
             return _result(None)
         if len(items) == 1:
             return _result(items[0])
-        return _result(delimiter.join(items))
+        return _result(joiner.join(items))
 
     registry._fns[name] = _inner
     return name
