@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 
 from boranga.components.data_migration import utils
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.registry import choices_transform, fk_lookup
+from boranga.components.data_migration.registry import (
+    choices_transform,
+    fk_lookup,
+    normalize_delimited_list_factory,
+)
 from boranga.components.occurrence.models import Occurrence
 from boranga.components.species_and_communities.models import GroupType
 
@@ -51,6 +55,10 @@ COLUMN_MAP = {
     "Processing Status": "processing_status",
     "Review Due Date": "review_due_date",
     "Combined Into Occurrence ID": "combined_occurrence_legacy_id",
+    "OCRVegetationStructure vegetation_structure_layer_one": "vegetation_structure_layer_one",
+    "OCRVegetationStructure vegetation_structure_layer_two": "vegetation_structure_layer_two",
+    "OCRVegetationStructure vegetation_structure_layer_three": "vegetation_structure_layer_three",
+    "OCRVegetationStructure vegetation_structure_layer_four": "vegetation_structure_layer_four",
 }
 
 REQUIRED_COLUMNS = [
@@ -79,6 +87,27 @@ PIPELINES = {
     "processing_status": ["strip", "required", PROCESSING_STATUS],
     # Dates
     "review_due_date": ["strip", "blank_to_none", "date_iso"],
+    # Example of normalising semi colon delimited string
+    "vegetation_structure_layer_one": [
+        "strip",
+        "blank_to_none",
+        normalize_delimited_list_factory(),
+    ],
+    "vegetation_structure_layer_two": [
+        "strip",
+        "blank_to_none",
+        normalize_delimited_list_factory(),
+    ],
+    "vegetation_structure_layer_three": [
+        "strip",
+        "blank_to_none",
+        normalize_delimited_list_factory(),
+    ],
+    "vegetation_structure_layer_four": [
+        "strip",
+        "blank_to_none",
+        normalize_delimited_list_factory(),
+    ],
 }
 
 SCHEMA = Schema(
