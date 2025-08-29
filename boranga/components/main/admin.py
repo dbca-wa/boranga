@@ -14,6 +14,8 @@ from boranga.components.main.models import (
     Document,
     FileExtensionWhitelist,
     HelpTextEntry,
+    LegacyValueMap,
+    OccToOcrSectionMapping,
     UserSystemSettings,
 )
 
@@ -78,6 +80,31 @@ class HelpTextEntryAdmin(
         return fields
 
 
+class LegacyValueMapAdmin(admin.ModelAdmin):
+    list_display = [
+        "legacy_system",
+        "list_name",
+        "legacy_value",
+        "canonical_name",
+        "target_object",
+        "target_object_id",
+    ]
+    list_filter = ["legacy_system", "list_name"]
+    search_fields = ["legacy_value", "new_value"]
+
+
+class OccToOcrSectionMappingAdmin(admin.ModelAdmin):
+    list_display = [
+        "legacy_system",
+        "occ_migrated_from_id",
+        "ocr_migrated_from_id",
+    ]
+    list_filter = ["legacy_system", "processed"]
+    search_fields = ["legacy_system", "section"]
+
+
 admin.site.register(FileExtensionWhitelist, FileExtensionWhitelistAdmin)
 admin.site.register(UserSystemSettings, UserSystemSettingsAdmin)
 admin.site.register(HelpTextEntry, HelpTextEntryAdmin)
+admin.site.register(LegacyValueMap, LegacyValueMapAdmin)
+admin.site.register(OccToOcrSectionMapping, OccToOcrSectionMappingAdmin)
