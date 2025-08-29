@@ -12,6 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.files.storage import FileSystemStorage
 from django.db import models
+from django.utils import timezone
 from ordered_model.models import OrderedModel, OrderedModelManager
 from reversion.models import Version
 
@@ -445,6 +446,9 @@ class LockableModel(BaseModel):
         self.save()
 
 
+# ---------------- Models used for data migration only ----------------------------
+
+
 class LegacyValueMap(models.Model):
     """
     Maps a legacy enumerated value to a target Django object (any model) or a
@@ -490,3 +494,79 @@ class LegacyValueMap(models.Model):
     @property
     def key_tuple(self):
         return (self.legacy_system, self.list_name, self.legacy_value)
+
+
+class OccToOcrSectionMapping(models.Model):
+    """
+    Model to map the sections of an OCR that should be copied to a specific OCC.
+    To be populated during the migration of OCCs so that we can copy the relevant
+    section data when we are migrating in the ORFs without having to do an extra pass.
+    """
+
+    # source context
+    legacy_system = models.CharField(max_length=50, db_index=True)
+
+    # legacy identifiers from spreadsheets (fast to look up while importing)
+    occ_migrated_from_id = models.CharField(max_length=255, db_index=True)
+    ocr_migrated_from_id = models.CharField(max_length=255, db_index=True)
+
+    # canonical section name; use choices to avoid typos and to make code deterministic
+    SECTION_LOCATION = "location"
+    SECTION_HABITAT_COMPOSITION = "habitat_composition"
+    SECTION_HABITAT_CONDITION = "habitat_condition"
+    SECTION_VEGETATION_STRUCTURE = "vegetation_structure"
+    SECTION_FIRE_HISTORY = "fire_history"
+    SECTION_ASSOCIATED_SPECIES = "associated_species"
+    SECTION_OBSERVATION_DETAIL = "observation_detail"
+    SECTION_PLANT_COUNT = "plant_count"
+    SECTION_ANIMAL_OBSERVATION = "animal_observation"
+    SECTION_IDENTIFICATION = "identification"
+
+    SECTION_CHOICES = (
+        (SECTION_LOCATION, "Location"),
+        (SECTION_HABITAT_COMPOSITION, "Habitat Composition"),
+        (SECTION_HABITAT_CONDITION, "Habitat Condition"),
+        (SECTION_VEGETATION_STRUCTURE, "Vegetation Structure"),
+        (SECTION_FIRE_HISTORY, "Fire History"),
+        (SECTION_ASSOCIATED_SPECIES, "Associated Species"),
+        (SECTION_OBSERVATION_DETAIL, "Observation Detail"),
+        (SECTION_PLANT_COUNT, "Plant Count"),
+        (SECTION_ANIMAL_OBSERVATION, "Animal Observation"),
+        (SECTION_IDENTIFICATION, "Identification"),
+    )
+
+    section = models.CharField(max_length=64, choices=SECTION_CHOICES)
+
+    # resolution / processing state
+    processed = models.BooleanField(default=False, db_index=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+
+    # optional resolved FKs to speed processing once ORF/OCC objects exist
+    resolved_occ_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+    resolved_ocr_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "boranga"
+        indexes = [
+            models.Index(fields=["legacy_system", "occ_migrated_from_id"]),
+            models.Index(fields=["legacy_system", "ocr_migrated_from_id", "processed"]),
+            models.Index(fields=["resolved_occ_id"]),
+            models.Index(fields=["resolved_ocr_id"]),
+        ]
+        unique_together = (
+            (
+                "legacy_system",
+                "occ_migrated_from_id",
+                "ocr_migrated_from_id",
+                "section",
+            ),
+        )
+
+    def mark_done(self):
+        self.processed = True
+        self.processed_at = timezone.now()
+        self.error = ""
+        self.save(update_fields=["processed", "processed_at", "error"])
