@@ -10,6 +10,7 @@ from typing import Any
 from django.db import models
 from ledger_api_client.ledger_models import EmailUserRO
 
+from boranga.components.main.models import LegacyUsernameEmailuserMapping
 from boranga.components.species_and_communities.models import GroupType
 
 TransformFn = Callable[[Any, "TransformContext"], "TransformResult"]
@@ -242,6 +243,54 @@ def t_emailuser_by_email(value, ctx):
         return _result(
             value, TransformIssue("error", f"Multiple users with email='{value}'")
         )
+
+
+def emailuser_by_legacy_username_factory(legacy_system: str) -> str:
+    """
+    Return a registered transform name that resolves legacy username -> emailuser_id
+    bound to the provided legacy_system (must be specified).
+
+    Usage:
+      EMAILUSER_TPFL = emailuser_by_legacy_username_factory("TPFL")
+      PIPELINES["owner_id"] = [EMAILUSER_TPFL]
+    """
+    if not legacy_system:
+        raise ValueError("legacy_system must be provided to bind this transform")
+
+    key = f"emailuser_by_legacy_username:{legacy_system}"
+    name = "emailuser_by_legacy_username_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def inner(value, ctx):
+        if value in (None, ""):
+            return _result(None)
+        username = str(value).strip()
+        qs = LegacyUsernameEmailuserMapping.objects.filter(
+            legacy_system__iexact=str(legacy_system), legacy_username__iexact=username
+        )
+        try:
+            mapping = qs.get()
+            return _result(mapping.emailuser_id)
+        except LegacyUsernameEmailuserMapping.DoesNotExist:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"User with legacy username='{value}' not found for system='{legacy_system}'",
+                ),
+            )
+        except LegacyUsernameEmailuserMapping.MultipleObjectsReturned:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"Multiple users with legacy username='{value}' for system='{legacy_system}'",
+                ),
+            )
+
+    registry._fns[name] = inner
+    return name
 
 
 @registry.register("split_multiselect")
