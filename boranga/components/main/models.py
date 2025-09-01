@@ -579,6 +579,7 @@ class LegacyUsernameEmailuserMapping(models.Model):
 
     legacy_system = models.CharField(max_length=50, db_index=True)
     legacy_username = models.CharField(max_length=255, unique=True)
+    email = models.EmailField(max_length=255)
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
     emailuser_id = models.PositiveIntegerField()
