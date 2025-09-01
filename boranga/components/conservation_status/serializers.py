@@ -1,5 +1,6 @@
 import logging
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from boranga.components.conservation_status.models import (
@@ -1193,6 +1194,14 @@ class SaveConservationStatusValidationMixin:
         ):
             raise serializers.ValidationError(
                 {"Effective From": "An effective from date is required."}
+            )
+        # If the effective_from date is in the future raise a validation error
+        if (
+            attrs.get("effective_from")
+            and attrs.get("effective_from") > timezone.now().date()
+        ):
+            raise serializers.ValidationError(
+                {"Effective From": "The effective from date cannot be in the future."}
             )
         if (
             self.instance.processing_status

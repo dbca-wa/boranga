@@ -291,6 +291,49 @@ def validate_multiselect(choice_transform_name: str):
     return name
 
 
+def normalize_delimited_list_factory(delimiter: str = ";", suffix: str | None = None):
+    """
+    Register and return a transform name that normalises a delimited list:
+    - splits on the exact delimiter,
+    - trims each item,
+    - removes empty items,
+    - if no items remain -> returns None
+    - if one item remains -> returns that item (string)
+    - otherwise -> returns the items joined by the delimiter (string)
+
+    Optional suffix: appended after the delimiter when joining (e.g. suffix=" " will join as "; ").
+    Usage:
+      NORM_SEMI = normalize_delimited_list_factory(";", None)    # "a;b"
+      NORM_SEMI_SP = normalize_delimited_list_factory(";", " ")  # "a; b"
+      pipeline = ["strip", "blank_to_none", NORM_SEMI_SP]
+    """
+    key = f"normalize_delimited_list:{delimiter}:{suffix or ''}"
+    name = "normalize_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    joiner = delimiter + (suffix or "")
+
+    def _inner(value, ctx):
+        # treat None/empty as None
+        if value in (None, ""):
+            return _result(None)
+
+        s = str(value)
+        parts = [p.strip() for p in s.split(delimiter)]
+        # keep only non-empty items
+        items = [p for p in parts if p != ""]
+
+        if not items:
+            return _result(None)
+        if len(items) == 1:
+            return _result(items[0])
+        return _result(joiner.join(items))
+
+    registry._fns[name] = _inner
+    return name
+
+
 # ------------------------ End Common Transform Functions ------------------------
 
 
