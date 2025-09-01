@@ -96,6 +96,13 @@ def t_required(value, ctx):
     return _result(value)
 
 
+@registry.register("is_present")
+def t_is_present(value, ctx):
+    if value in (None, "", []):
+        return _result(False)
+    return _result(True)
+
+
 def choices_transform(choices: Iterable[str]):
     norm = [c.lower() for c in choices]
     choice_set = {c.lower(): c for c in choices}
