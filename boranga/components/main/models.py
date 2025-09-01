@@ -570,3 +570,21 @@ class OccToOcrSectionMapping(models.Model):
         self.processed_at = timezone.now()
         self.error = ""
         self.save(update_fields=["processed", "processed_at", "error"])
+
+
+class LegacyUsernameEmailuserMapping(models.Model):
+    """
+    Model to map legacy usernames to EmailUser instances.
+    """
+
+    legacy_system = models.CharField(max_length=50, db_index=True)
+    legacy_username = models.CharField(max_length=255, unique=True)
+    first_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
+    emailuser_id = models.PositiveIntegerField()
+
+    class Meta:
+        app_label = "boranga"
+
+    def __str__(self):
+        return f"{self.legacy_username} -> {self.emailuser_id}"
