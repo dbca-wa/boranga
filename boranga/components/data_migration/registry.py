@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from django.db import models
+from django.utils import timezone as dj_timezone
 from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.main.models import LegacyUsernameEmailuserMapping
@@ -104,6 +105,13 @@ def t_is_present(value, ctx):
     return _result(True)
 
 
+@registry.register("Y_to_active_else_draft")
+def t_Y_to_active_else_draft(value, ctx):
+    if value == "Y":
+        return _result("active")
+    return _result("draft")
+
+
 def choices_transform(choices: Iterable[str]):
     norm = [c.lower() for c in choices]
     choice_set = {c.lower(): c for c in choices}
@@ -158,6 +166,138 @@ def t_date_iso(value, ctx):
     return _result(
         value, TransformIssue("error", f"Unrecognized date format: {value!r}")
     )
+
+
+@registry.register("datetime_iso")
+def t_datetime_iso(value, ctx):
+    """
+    Parse datetimes (including ISO strings) and return a timezone-aware datetime
+    in UTC suitable for Django (USE_TZ=True).
+
+    If the incoming string contains an explicit UTC offset token (+0000 / +00:00 / Z)
+    we strip that token and treat the remainder as naive UTC (useful when source
+    emits +0000 style offsets that some parsers don't accept).
+    """
+    if not value:
+        return _result(None)
+
+    s = str(value).strip()
+    dt = None
+
+    # If the string ends with a timezone offset, capture it.
+    m = re.search(r"([+-]\d{2}:?\d{2}|Z)$", s)
+    if m:
+        tz_token = m.group(1)
+        # Treat explicit UTC tokens as no-offset (strip them and parse as UTC)
+        if tz_token in ("Z", "+0000", "+00:00", "+0000", "+00:00"):
+            # remove trailing offset (handles both +0000 and +00:00)
+            s = s[: m.start(1)].rstrip()
+        # else: leave non-UTC offsets intact so parser can handle/convert them
+
+    # try stdlib ISO parsing first (handles offsets like +00:00; note +0000 not accepted)
+    try:
+        # if string still uses trailing 'Z' (unlikely now) normalize for fromisoformat
+        iso = s[:-1] + "+00:00" if s.endswith("Z") else s
+        dt = datetime.fromisoformat(iso)
+    except Exception:
+        dt = None
+
+    # try python-dateutil if installed (very permissive)
+    if dt is None:
+        try:
+            from dateutil import parser
+
+            dt = parser.parse(s)
+        except Exception:
+            dt = None
+
+    # fallback to explicit legacy formats
+    if dt is None:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                break
+            except ValueError:
+                dt = None
+
+    if dt is None:
+        return _result(
+            value, TransformIssue("error", f"Unrecognized datetime format: {value!r}")
+        )
+
+    # Make timezone-aware in UTC for Django:
+    if dt.tzinfo is None:
+        # treat naive datetimes as UTC and make them aware
+        dt = dj_timezone.make_aware(dt, dj_timezone.utc)
+    else:
+        # convert any aware datetime to UTC
+        dt = dt.astimezone(dj_timezone.utc)
+
+    return _result(dt)
+
+
+@registry.register("date_from_datetime_iso")
+def t_date_from_datetime_iso(value, ctx):
+    """
+    Parse a datetime-like string (ISO, with offsets, or legacy formats) and
+    return a datetime.date suitable for Django DateField.
+
+    Behaviour:
+    - strips explicit UTC tokens (+0000 / +00:00 / Z) and treats remainder as UTC,
+    - parses aware datetimes and converts to UTC, then returns the UTC date,
+    - parses naive datetimes as UTC and returns the date.
+    - on parse failure returns the original value with a TransformIssue.
+    """
+    if not value:
+        return _result(None)
+
+    s = str(value).strip()
+    dt = None
+
+    # strip explicit UTC tokens (keep non-UTC offsets intact)
+    m = re.search(r"([+-]\d{2}:?\d{2}|Z)$", s)
+    if m:
+        tz_token = m.group(1)
+        if tz_token in ("Z", "+0000", "+00:00"):
+            s = s[: m.start(1)].rstrip()
+
+    # try stdlib ISO parsing
+    try:
+        iso = s[:-1] + "+00:00" if s.endswith("Z") else s
+        dt = datetime.fromisoformat(iso)
+    except Exception:
+        dt = None
+
+    # try dateutil if available
+    if dt is None:
+        try:
+            from dateutil import parser
+
+            dt = parser.parse(s)
+        except Exception:
+            dt = None
+
+    # fallback legacy formats
+    if dt is None:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                break
+            except ValueError:
+                dt = None
+
+    if dt is None:
+        return _result(
+            value, TransformIssue("error", f"Unrecognized datetime format: {value!r}")
+        )
+
+    # normalise to UTC date
+    if dt.tzinfo is None:
+        dt = dj_timezone.make_aware(dt, dj_timezone.utc)
+    else:
+        dt = dt.astimezone(dj_timezone.utc)
+
+    return _result(dt.date())
 
 
 def fk_lookup(model: type[models.Model], lookup_field: str = "id", create=False):
