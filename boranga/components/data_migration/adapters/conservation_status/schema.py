@@ -4,49 +4,7 @@ from dataclasses import dataclass
 
 from boranga.components.conservation_status.models import ConservationStatus
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.mappings import build_legacy_map_transform
 from boranga.components.data_migration.registry import choices_transform
-
-# NOTE: Example schema for migrating legacy ConservationStatus data.
-# Adjust legacy source key, column names and transforms to match the real legacy CSVs
-# and the registry transforms available in your project.
-
-LEGACY_SOURCE_KEY = "LEGACY_CS"  # replace with actual legacy system key if known
-
-# Legacy → target FK / lookup transforms (require LegacyValueMap data)
-SPECIES_TAXONOMY_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "species_taxonomy", return_type="id"
-)
-SPECIES_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "species", return_type="id"
-)
-COMMUNITY_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "community", return_type="id"
-)
-CHANGE_CODE_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "conservation_change_code", return_type="id"
-)
-WA_PRIORITY_LIST_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "wa_priority_list", return_type="id"
-)
-WA_PRIORITY_CATEGORY_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "wa_priority_category", return_type="id"
-)
-WA_LEGISLATIVE_LIST_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "wa_legislative_list", return_type="id"
-)
-WA_LEGISLATIVE_CATEGORY_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "wa_legislative_category", return_type="id"
-)
-IUCN_VERSION_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "iucn_version", return_type="id"
-)
-COMMONWEALTH_CATEGORY_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "commonwealth_conservation_category", return_type="id"
-)
-OTHER_ASSESSMENT_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "other_conservation_assessment", return_type="id"
-)
 
 # Choice enums based on model choices (examples mirror model constants)
 CUSTOMER_STATUS_CHOICES = [
@@ -132,30 +90,6 @@ PIPELINES = {
     # Statuses / choices
     "customer_status": ["strip", "blank_to_none", CUSTOMER_STATUS],
     "processing_status": ["strip", "required", PROCESSING_STATUS],
-    "change_code": ["strip", "blank_to_none", CHANGE_CODE_TRANSFORM],
-    # FK / lookup mappings
-    "species_taxonomy": ["strip", "blank_to_none", SPECIES_TAXONOMY_TRANSFORM],
-    "species": ["strip", "blank_to_none", SPECIES_TRANSFORM],
-    "community": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
-    "wa_priority_list": ["strip", "blank_to_none", WA_PRIORITY_LIST_TRANSFORM],
-    "wa_priority_category": ["strip", "blank_to_none", WA_PRIORITY_CATEGORY_TRANSFORM],
-    "wa_legislative_list": ["strip", "blank_to_none", WA_LEGISLATIVE_LIST_TRANSFORM],
-    "wa_legislative_category": [
-        "strip",
-        "blank_to_none",
-        WA_LEGISLATIVE_CATEGORY_TRANSFORM,
-    ],
-    "iucn_version": ["strip", "blank_to_none", IUCN_VERSION_TRANSFORM],
-    "commonwealth_conservation_category": [
-        "strip",
-        "blank_to_none",
-        COMMONWEALTH_CATEGORY_TRANSFORM,
-    ],
-    "other_conservation_assessment": [
-        "strip",
-        "blank_to_none",
-        OTHER_ASSESSMENT_TRANSFORM,
-    ],
     # Simple fields
     "conservation_criteria": ["strip", "blank_to_none"],
     "approval_level": ["strip", "blank_to_none"],

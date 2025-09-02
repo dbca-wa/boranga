@@ -3,26 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.mappings import build_legacy_map_transform
 from boranga.components.data_migration.registry import choices_transform
 from boranga.components.occurrence.models import Occurrence
-
-# Example community schema for migrating legacy Community data.
-LEGACY_SOURCE_KEY = "LEGACY_COMM"
-
-# Legacy → target FK / lookup transforms (require LegacyValueMap data)
-COMMUNITY_TAXONOMY_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "community_taxonomy", return_type="id"
-)
-COMMUNITY_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "community", return_type="id"
-)
-SPECIES_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "species", return_type="id"
-)
-GROUP_TYPE_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "group_type", return_type="id"
-)
 
 PROCESSING_STATUS = choices_transform(
     [c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES]
@@ -57,8 +39,6 @@ PIPELINES = {
     "community_number": ["strip", "blank_to_none"],
     "group_type": ["strip", "blank_to_none", "group_type_by_name", "required"],
     # taxonomy/community name -> create/lookup CommunityTaxonomy
-    "taxonomy": ["strip", "blank_to_none", COMMUNITY_TAXONOMY_TRANSFORM],
-    "taxonomy_id": ["strip", "blank_to_none", COMMUNITY_TAXONOMY_TRANSFORM],
     # species list: split multiselect and resolve to species ids (implement split/validate in registry)
     "species": [
         "strip",
