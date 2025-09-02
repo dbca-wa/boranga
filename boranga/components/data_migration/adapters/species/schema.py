@@ -1,81 +1,64 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.mappings import build_legacy_map_transform
-from boranga.components.data_migration.registry import choices_transform
-
-# Example species schema for migrating legacy Species data.
-# Adjust LEGACY_SOURCE_KEY, column headers and transforms to match your CSVs / registry.
-
-LEGACY_SOURCE_KEY = "LEGACY_SPP"
+from boranga.components.data_migration.registry import (
+    choices_transform,
+    emailuser_by_legacy_username_factory,
+    fk_lookup,
+)
+from boranga.components.species_and_communities.models import Species
 
 # Legacy → target FK / lookup transforms (require LegacyValueMap data)
-TAXONOMY_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "taxonomy", return_type="id"
-)
-FAUNA_GROUP_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "fauna_group", return_type="id"
-)
-FAUNA_SUBGROUP_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "fauna_sub_group", return_type="id"
-)
-GROUP_TYPE_TRANSFORM = build_legacy_map_transform(
-    LEGACY_SOURCE_KEY, "group_type", return_type="id"
+TAXONOMY_TRANSFORM = fk_lookup(
+    model="components.species_and_communities.Taxonomy",
+    lookup_field="scientific_name",
+    return_field="id",
 )
 
-# Processing status choices mirror Species.PROCESSING_STATUS_CHOICES
-PROCESSING_STATUS_CHOICES = ["draft", "discarded", "active", "historical"]
-PROCESSING_STATUS_TRANSFORM = choices_transform(PROCESSING_STATUS_CHOICES)
+SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
+
+PROCESSING_STATUS = choices_transform([c[0] for c in Species.PROCESSING_STATUS_CHOICES])
 
 COLUMN_MAP = {
-    "Legacy Species ID": "migrated_from_id",
-    "Species Number": "species_number",
-    "Group Type": "group_type",
-    "Taxonomy (scientific name)": "taxonomy",
-    "Taxonomy ID": "taxonomy_id",
-    "Submitter": "submitter",
-    "Processing Status": "processing_status",
-    "Lodgement Date": "lodgement_date",
-    "Last Data Curation Date": "last_data_curation_date",
-    "Conservation Plan Exists": "conservation_plan_exists",
-    "Conservation Plan Reference": "conservation_plan_reference",
-    "Fauna Group": "fauna_group",
-    "Fauna Sub Group": "fauna_sub_group",
-    "Comment": "comment",
-    "Department File Numbers": "department_file_numbers",
+    "TXN_LIST_ID": "migrated_from_id",
+    "NAME": "taxonomy_id",
+    "FILE_COMMENTS": "comment",
+    "R_PLAN": "conservation_plan_exists",
+    "FILE_NO": "department_file_numbers",
+    "FILE_LAST_UPDATED": "last_data_curation_date",
+    "CREATED_DATE": "lodgement_date",
+    "ACTIVE_IND": "processing_status",
+    "CREATED_BY": "submitter",
+    "DISTRIBUTION": "distribution",
 }
 
 # Minimal required canonical fields for migration
 REQUIRED_COLUMNS = [
     "migrated_from_id",  # legacy identifier used to relate back to source
-    "group_type",
+    "taxonomy_id",
     "processing_status",
 ]
 
 PIPELINES = {
-    # Identifiers / basics
     "migrated_from_id": ["strip", "required"],
-    "species_number": ["strip", "blank_to_none"],  # often generated server-side
-    "department_file_numbers": ["strip", "blank_to_none"],
+    "taxonomy_id": ["strip", "blank_to_none", "required", TAXONOMY_TRANSFORM],
     "comment": ["strip", "blank_to_none"],
-    # Group / taxonomy / FK mappings
-    # group_type_by_name is kept for compatibility with other schemas (implement in registry)
-    "group_type": ["strip", "blank_to_none", "group_type_by_name", "required"],
-    "taxonomy": ["strip", "blank_to_none", TAXONOMY_TRANSFORM],
-    "taxonomy_id": ["strip", "blank_to_none", TAXONOMY_TRANSFORM],
-    "fauna_group": ["strip", "blank_to_none", FAUNA_GROUP_TRANSFORM],
-    "fauna_sub_group": ["strip", "blank_to_none", FAUNA_SUBGROUP_TRANSFORM],
-    # User refs / submitter (ledger ids may be resolved later)
-    "submitter": ["strip", "blank_to_none"],
-    # Status / choices
-    "processing_status": ["strip", "required", PROCESSING_STATUS_TRANSFORM],
-    # Dates
-    "lodgement_date": ["strip", "blank_to_none", "date_iso"],
+    "conservation_plan_exists": ["strip", "blank_to_none", "is_present"],
+    "department_file_numbers": ["strip", "blank_to_none"],
     "last_data_curation_date": ["strip", "blank_to_none", "date_iso"],
-    # Booleans
-    "conservation_plan_exists": ["strip", "blank_to_none", "bool"],
+    "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
+    "processing_status": [
+        "strip",
+        "blank_to_none",
+        "required",
+        "Y_to_active_else_historical",
+        PROCESSING_STATUS,
+    ],
+    "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
+    "distribution": ["strip", "blank_to_none"],
 }
 
 SCHEMA = Schema(
@@ -98,21 +81,64 @@ COLUMN_PIPELINES = SCHEMA.effective_pipelines()
 class SpeciesRow:
     """
     Canonical (post-transform) species row used for persistence.
-    Types are examples; adjust to match pipeline outputs (ids resolved, booleans/dates normalized).
     """
 
     migrated_from_id: str
-    group_type: int  # FK id (GroupType) or canonical string depending on transform
-    processing_status: str
-    species_number: str | None = None
-    taxonomy: int | None = None  # FK id (Taxonomy) after transform
+    # adapter is expected to populate group_type_id (may be resolved id); keep optional
+    group_type_id: int | None = None
     taxonomy_id: int | None = None
-    submitter: int | None = None  # ledger EmailUser id (migrated / resolved later)
-    lodgement_date: object | None = None
-    last_data_curation_date: object | None = None
+    comment: str | None = None
     conservation_plan_exists: bool | None = None
     conservation_plan_reference: str | None = None
-    fauna_group: int | None = None
-    fauna_sub_group: int | None = None
-    comment: str | None = None
     department_file_numbers: str | None = None
+    processing_status: str
+    submitter: int | None = None
+    lodgement_date: date | None = None
+    last_data_curation_date: date | None = None
+    distribution: str | None = None
+
+
+def validate_species_row(row) -> list[tuple[str, str]]:
+    """
+    Validate cross-field rules for a canonical species row.
+
+    Returns a list of (field_name, message). Empty list = valid.
+    Rule implemented: if processing_status == 'active', submitter must be present.
+    Accepts either a dict (canonical row from map_raw_row) or a SpeciesRow instance.
+    """
+
+    # support both dict and dataclass-like access
+    def _get(k):
+        if row is None:
+            return None
+        if isinstance(row, dict):
+            return row.get(k)
+        return getattr(row, k, None)
+
+    errors: list[tuple[str, str]] = []
+
+    proc = _get("processing_status")
+    submitter = _get("submitter")
+    lodgement_date = _get("lodgement_date")
+
+    # Normalise comparison to canonical processing status value
+    if (
+        isinstance(proc, str)
+        and proc.strip().lower() == Species.PROCESSING_STATUS_ACTIVE
+    ):
+        if submitter in (None, "", []):
+            errors.append(
+                (
+                    "submitter",
+                    f"Submitter is required when processing_status is '{Species.PROCESSING_STATUS_ACTIVE}'",
+                )
+            )
+        if lodgement_date is None:
+            errors.append(
+                (
+                    "lodgement_date",
+                    f"Lodgement date is required when processing_status is '{Species.PROCESSING_STATUS_ACTIVE}'",
+                )
+            )
+
+    return errors
