@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 from boranga.components.data_migration.adapters.schema_base import Schema
 from boranga.components.data_migration.registry import (
@@ -93,7 +93,7 @@ class SpeciesRow:
     department_file_numbers: str | None = None
     processing_status: str
     submitter: int | None = None
-    lodgement_date: date | None = None
+    lodgement_date: datetime | None = None
     last_data_curation_date: date | None = None
     distribution: str | None = None
 
