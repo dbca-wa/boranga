@@ -8,6 +8,11 @@ from django.db import transaction
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.adapters.species import schema
 from boranga.components.data_migration.adapters.species.tpfl import SpeciesTpflAdapter
+from boranga.components.data_migration.mappings import (
+    load_legacy_to_pk_map,
+    load_species_to_district_links,
+    load_species_to_region_links,
+)
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -15,7 +20,10 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
-from boranga.components.species_and_communities.models import Species
+from boranga.components.species_and_communities.models import (
+    Species,
+    SpeciesDistribution,
+)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: SpeciesTpflAdapter(),
@@ -86,6 +94,16 @@ class SpeciesImporter(BaseSheetImporter):
         updated = 0
         skipped = 0
         warn_count = 0
+
+        species_to_region_keys = load_species_to_region_links(legacy_system="TPFL")
+        species_to_district_keys = load_species_to_district_links(legacy_system="TPFL")
+
+        # preload region mapping from the other source once (legacy_key -> Region.pk)
+        # implement load_legacy_to_pk_map to read LegacyValueMap or build from the other adapter
+        region_map = load_legacy_to_pk_map(legacy_system="TPFL", model_name="Region")
+        district_map = load_legacy_to_pk_map(
+            legacy_system="TPFL", model_name="District"
+        )
 
         # 3. Transform every row into canonical form, collect per-key groups
         groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(
@@ -185,19 +203,102 @@ class SpeciesImporter(BaseSheetImporter):
                 else:
                     updated += 1
 
-                # Create / update the 1:1 dependent object (SpeciesDistribution)
-                # Use species as the unique key for the OneToOne relation.
-                from boranga.components.species_and_communities.models import (
-                    SpeciesDistribution,
-                )
+                # --- create 1-to-1 related ---
 
-                dist_defaults = {
-                    "aoo_actual_auto": False,
-                    "distribution": merged.get("distribution"),
-                }
-                SpeciesDistribution.objects.update_or_create(
-                    species=obj, defaults=dist_defaults
-                )
+                distribution = merged.get("distribution")
+                if distribution not in (None, ""):
+                    # create or update related Distribution object
+                    species_distribution, _ = (
+                        SpeciesDistribution.objects.update_or_create(
+                            legacy_key=distribution,
+                            defaults={
+                                "aoo_actual_auto": False,
+                                "distribution": distribution,
+                            },
+                        )
+                    )
+                    obj.distribution = species_distribution
+                    obj.save()
+
+                # --- attach M2M regions ---
+                # merged may have e.g. merged['regions'] as a list or delimited string
+                if not merged.get("regions"):
+                    # prefer explicit regions from species row; fallback to links from separate file
+                    merged["regions"] = species_to_region_keys.get(migrated_from_id)
+
+                # now merged["regions"] may be a list or delimited string — same normalization as earlier
+                raw_regions = merged.get("regions")
+                if raw_regions:
+                    # normalize to list of legacy keys
+                    if isinstance(raw_regions, str):
+                        keys = [k.strip() for k in raw_regions.split(";") if k.strip()]
+                    elif isinstance(raw_regions, (list, tuple)):
+                        keys = [
+                            str(k).strip() for k in raw_regions if k not in (None, "")
+                        ]
+                    else:
+                        keys = [str(raw_regions)]
+
+                    region_ids = []
+                    missing = []
+                    for legacy_key in keys:
+                        pk = region_map.get(legacy_key)
+                        if pk:
+                            region_ids.append(pk)
+                        else:
+                            missing.append(legacy_key)
+
+                    if region_ids:
+                        # idempotent: replace existing relations with the resolved set
+                        obj.regions.set(region_ids)
+
+                    if missing:
+                        # record a warning (or TransformIssue earlier); keep lightweight here
+                        warn_count += 1
+                        warnings.append(
+                            f"{migrated_from_id}: unknown region keys {missing}"
+                        )
+
+                if not merged.get("districts"):
+                    # prefer explicit districts from species row; fallback to links from separate file
+                    merged["districts"] = species_to_district_keys.get(migrated_from_id)
+
+                # now merged["districts"] may be a list or delimited string — same normalization as earlier
+                raw_districts = merged.get("districts")
+                if raw_districts:
+                    # normalize to list of legacy keys
+                    if isinstance(raw_districts, str):
+                        keys = [
+                            k.strip() for k in raw_districts.split(";") if k.strip()
+                        ]
+                    elif isinstance(raw_districts, (list, tuple)):
+                        keys = [
+                            str(k).strip() for k in raw_districts if k not in (None, "")
+                        ]
+                    else:
+                        keys = [str(raw_districts)]
+
+                    district_ids = []
+                    missing = []
+                    for legacy_key in keys:
+                        pk = district_map.get(legacy_key)
+                        if pk:
+                            district_ids.append(pk)
+                        else:
+                            missing.append(legacy_key)
+
+                    if district_ids:
+                        # idempotent: replace existing relations with the resolved set
+                        obj.districts.set(district_ids)
+
+                    if missing:
+                        # record a warning (or TransformIssue earlier); keep lightweight here
+                        warn_count += 1
+                        warnings.append(
+                            f"{migrated_from_id}: unknown district keys {missing}"
+                        )
+
+                # --- end M2M attach ---
 
         stats.update(
             processed=processed,
