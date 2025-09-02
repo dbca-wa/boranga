@@ -23,6 +23,7 @@ from boranga.components.data_migration.registry import (
 from boranga.components.species_and_communities.models import (
     Species,
     SpeciesDistribution,
+    SpeciesPublishingStatus,
 )
 
 SOURCE_ADAPTERS = {
@@ -205,20 +206,28 @@ class SpeciesImporter(BaseSheetImporter):
 
                 # --- create 1-to-1 related ---
 
-                distribution = merged.get("distribution")
-                if distribution not in (None, ""):
-                    # create or update related Distribution object
-                    species_distribution, _ = (
-                        SpeciesDistribution.objects.update_or_create(
-                            legacy_key=distribution,
-                            defaults={
-                                "aoo_actual_auto": False,
-                                "distribution": distribution,
-                            },
-                        )
-                    )
-                    obj.distribution = species_distribution
-                    obj.save()
+                distribution = merged.get("distribution", None)
+
+                SpeciesDistribution.objects.update_or_create(
+                    species=obj,
+                    defaults={
+                        "aoo_actual_auto": False,
+                        "distribution": distribution,
+                    },
+                )
+
+                processing_status_is_active = (
+                    merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
+                )
+
+                SpeciesPublishingStatus.objects.update_or_create(
+                    species=obj,
+                    defaults={
+                        "conservation_status_public": processing_status_is_active,
+                        "distribution_public": processing_status_is_active,
+                        "species_public": processing_status_is_active,
+                    },
+                )
 
                 # --- attach M2M regions ---
                 # merged may have e.g. merged['regions'] as a list or delimited string
