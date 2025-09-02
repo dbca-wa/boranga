@@ -1,0 +1,210 @@
+from __future__ import annotations
+
+from collections import defaultdict
+from typing import Any
+
+from django.db import transaction
+
+from boranga.components.data_migration.adapters.sources import Source
+from boranga.components.data_migration.adapters.species import schema
+from boranga.components.data_migration.adapters.species.tpfl import SpeciesTpflAdapter
+from boranga.components.data_migration.registry import (
+    BaseSheetImporter,
+    ImportContext,
+    TransformContext,
+    register,
+    run_pipeline,
+)
+from boranga.components.species_and_communities.models import Species
+
+SOURCE_ADAPTERS = {
+    Source.TPFL.value: SpeciesTpflAdapter(),
+}
+
+
+@register
+class SpeciesImporter(BaseSheetImporter):
+    slug = "species_legacy"
+    description = "Import species data from legacy source (TPFL)"
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--sources",
+            nargs="+",
+            choices=list(SOURCE_ADAPTERS.keys()),
+            help="Subset of sources (default: all implemented)",
+        )
+        parser.add_argument(
+            "--path-map",
+            nargs="+",
+            metavar="SRC=PATH",
+            help="Per-source path overrides (e.g. TPFL=/tmp/tpfl.xlsx). If omitted, --path is reused.",
+        )
+
+    def _parse_path_map(self, pairs):
+        out = {}
+        if not pairs:
+            return out
+        for p in pairs:
+            if "=" not in p:
+                raise ValueError(f"Invalid path-map entry: {p}")
+            k, v = p.split("=", 1)
+            out[k] = v
+        return out
+
+    def run(self, path: str, ctx: ImportContext, **options):
+        sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
+        path_map = self._parse_path_map(options.get("path_map"))
+
+        stats = ctx.stats.setdefault(self.slug, self.new_stats())
+        all_rows: list[dict] = []
+        warnings = []
+
+        # 1. Extract from each source
+        for src in sources:
+            adapter = SOURCE_ADAPTERS[src]
+            src_path = path_map.get(src, path)
+            result = adapter.extract(src_path, **options)
+            for w in result.warnings:
+                warnings.append(f"{src}: {w.message}")
+            for r in result.rows:
+                r["_source"] = src
+            all_rows.extend(result.rows)
+
+        # 2. Build pipelines from schema
+        pipelines = {}
+        for col, names in schema.COLUMN_PIPELINES.items():
+            from boranga.components.data_migration.registry import (
+                registry as transform_registry,
+            )
+
+            pipelines[col] = transform_registry.build_pipeline(names)
+
+        processed = 0
+        errors = 0
+        created = 0
+        updated = 0
+        skipped = 0
+        warn_count = 0
+
+        # 3. Transform every row into canonical form, collect per-key groups
+        groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(
+            list
+        )
+        # groups[migrated_from_id] -> list of (transformed_dict, source, issues_list)
+
+        for row in all_rows:
+            processed += 1
+            tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
+            issues = []
+            transformed = {}
+            has_error = False
+            for col, pipeline in pipelines.items():
+                raw_val = row.get(col)
+                res = run_pipeline(pipeline, raw_val, tcx)
+                transformed[col] = res.value
+                for issue in res.issues:
+                    issues.append((col, issue))
+                    if issue.level == "error":
+                        has_error = True
+                        errors += 1
+                    else:
+                        warn_count += 1
+            if has_error:
+                skipped += 1
+                continue
+            key = transformed.get("migrated_from_id")
+            if not key:
+                skipped += 1
+                errors += 1
+                continue
+            groups[key].append((transformed, row.get("_source"), issues))
+
+        # 4. Merge groups and persist one object per migrated_from_id
+        def merge_group(entries, source_priority):
+            entries_sorted = sorted(
+                entries,
+                key=lambda e: (
+                    source_priority.index(e[1])
+                    if e[1] in source_priority
+                    else len(source_priority)
+                ),
+            )
+            merged = {}
+            combined_issues = []
+            for col in pipelines.keys():
+                val = None
+                for trans, src, _ in entries_sorted:
+                    v = trans.get(col)
+                    if v not in (None, ""):
+                        val = v
+                        break
+                merged[col] = val
+            for _, _, iss in entries_sorted:
+                combined_issues.extend(iss)
+            return merged, combined_issues
+
+        # Persist merged rows
+        for migrated_from_id, entries in groups.items():
+            merged, combined_issues = merge_group(entries, sources)
+            if any(i.level == "error" for _, i in combined_issues):
+                skipped += 1
+                continue
+
+            # validate cross-field rules using schema helper
+            valerrs = schema.validate_species_row(merged)
+            if valerrs:
+                errors += len(valerrs)
+                skipped += 1
+                continue
+
+            defaults = {
+                "group_type_id": merged.get("group_type_id"),
+                "taxonomy_id": merged.get("taxonomy_id"),
+                "comment": merged.get("comment"),
+                "conservation_plan_exists": merged.get("conservation_plan_exists"),
+                "conservation_plan_reference": merged.get(
+                    "conservation_plan_reference"
+                ),
+                "department_file_numbers": merged.get("department_file_numbers"),
+                "processing_status": merged.get("processing_status"),
+                "submitter": merged.get("submitter"),
+                "lodgement_date": merged.get("lodgement_date"),
+                "last_data_curation_date": merged.get("last_data_curation_date"),
+            }
+
+            if ctx.dry_run:
+                continue
+
+            with transaction.atomic():
+                obj, created_flag = Species.objects.update_or_create(
+                    migrated_from_id=migrated_from_id, defaults=defaults
+                )
+                if created_flag:
+                    created += 1
+                else:
+                    updated += 1
+
+                # Create / update the 1:1 dependent object (SpeciesDistribution)
+                # Use species as the unique key for the OneToOne relation.
+                from boranga.components.species_and_communities.models import (
+                    SpeciesDistribution,
+                )
+
+                dist_defaults = {
+                    "aoo_actual_auto": False,
+                    "distribution": merged.get("distribution"),
+                }
+                SpeciesDistribution.objects.update_or_create(
+                    species=obj, defaults=dist_defaults
+                )
+
+        stats.update(
+            processed=processed,
+            created=created,
+            updated=updated,
+            skipped=skipped,
+            errors=errors,
+            warnings=warn_count,
+        )
+        return stats
