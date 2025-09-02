@@ -105,11 +105,11 @@ def t_is_present(value, ctx):
     return _result(True)
 
 
-@registry.register("Y_to_active_else_draft")
-def t_Y_to_active_else_draft(value, ctx):
+@registry.register("Y_to_active_else_historical")
+def t_Y_to_active_else_historical(value, ctx):
     if value == "Y":
         return _result("active")
-    return _result("draft")
+    return _result("historical")
 
 
 def choices_transform(choices: Iterable[str]):
