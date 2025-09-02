@@ -22,7 +22,5 @@ class SpeciesTpflAdapter(SourceAdapter):
             RP_EXP_DATE = canonical.get("RP_EXP_DATE", "").strip()
             canonical["conservation_plan_reference"] = f"{RP_COMMENTS}{RP_EXP_DATE}"
             canonical["group_type_id"] = GroupType.objects.get(name="flora").id
-            canonical["locked"] = True
-            # TODO: Add any other source dependent constants here
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)
