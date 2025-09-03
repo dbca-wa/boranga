@@ -9,13 +9,12 @@ from boranga.components.data_migration.registry import (
     emailuser_by_legacy_username_factory,
     fk_lookup,
 )
-from boranga.components.species_and_communities.models import Species
+from boranga.components.species_and_communities.models import Species, Taxonomy
 
 # Legacy → target FK / lookup transforms (require LegacyValueMap data)
 TAXONOMY_TRANSFORM = fk_lookup(
-    model="components.species_and_communities.Taxonomy",
+    model=Taxonomy,
     lookup_field="scientific_name",
-    return_field="id",
 )
 
 SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
@@ -84,6 +83,7 @@ class SpeciesRow:
     """
 
     migrated_from_id: str
+    processing_status: str
     # adapter is expected to populate group_type_id (may be resolved id); keep optional
     group_type_id: int | None = None
     taxonomy_id: int | None = None
@@ -91,7 +91,6 @@ class SpeciesRow:
     conservation_plan_exists: bool | None = None
     conservation_plan_reference: str | None = None
     department_file_numbers: str | None = None
-    processing_status: str
     submitter: int | None = None
     lodgement_date: datetime | None = None
     last_data_curation_date: date | None = None
