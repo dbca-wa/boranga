@@ -9,8 +9,12 @@ from boranga.components.data_migration.registry import (
     fk_lookup,
     normalize_delimited_list_factory,
 )
-from boranga.components.occurrence.models import Occurrence
-from boranga.components.species_and_communities.models import GroupType
+from boranga.components.occurrence.models import Occurrence, WildStatus
+from boranga.components.species_and_communities.models import (
+    Community,
+    GroupType,
+    Species,
+)
 
 from ..sources import Source
 
@@ -18,18 +22,14 @@ from ..sources import Source
 # TODO: Replace with real data
 
 # Legacy → target FK / lookup transforms (require LegacyValueMap data)
-WILD_STATUS_TRANSFORM = fk_lookup(
-    model="components.occurrence.WildStatus", lookup_field="name", return_field="id"
-)
+WILD_STATUS_TRANSFORM = fk_lookup(model=WildStatus, lookup_field="name")
 SPECIES_NAME_TRANSFORM = fk_lookup(
-    model="components.species_and_communities.Species",
+    model=Species,
     lookup_field="taxonomy__scientific_name",
-    return_field="id",
 )
 COMMUNITY_NAME_TRANSFORM = fk_lookup(
-    model="components.species_and_communities.Community",
+    model=Community,
     lookup_field="taxonomy__community_name",
-    return_field="id",
 )
 
 REVIEW_STATUS = choices_transform([c[0] for c in Occurrence.REVIEW_STATUS_CHOICES])
