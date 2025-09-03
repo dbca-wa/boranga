@@ -9,7 +9,7 @@ from boranga.components.data_migration.adapters.occurrence import (  # shared ca
     schema,
 )
 from boranga.components.data_migration.adapters.occurrence.tpfl import (
-    OccurrenceTPFLAdapter,
+    OccurrenceTpflAdapter,
 )
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.registry import (
@@ -22,7 +22,7 @@ from boranga.components.data_migration.registry import (
 from boranga.components.occurrence.models import Occurrence
 
 SOURCE_ADAPTERS = {
-    Source.TPFL.value: OccurrenceTPFLAdapter(),
+    Source.TPFL.value: OccurrenceTpflAdapter(),
     # Add new adapters here as they are implemented:
     # Source.TEC.value: OccurrenceTECAdapter(),
     # Source.TFAUNA.value: OccurrenceTFAUNAAdapter(),
