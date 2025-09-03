@@ -5,6 +5,7 @@ import logging
 from typing import Any, Literal
 
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
 
 from boranga.components.data_migration.registry import (
     TransformContext,
@@ -227,3 +228,47 @@ def load_species_to_district_links(
     except Exception as exc:
         logger.exception("Error reading species->district CSV %s: %s", csv_path, exc)
         return mapping
+
+
+def load_legacy_to_pk_map(
+    legacy_system: str,
+    model_name: str,
+    app_label: str = "boranga",
+) -> dict[str, int]:
+    """
+    Return a mapping of legacy_value -> target model PK for entries registered
+    in LegacyValueMap for the given legacy_system and model.
+
+    Strategy:
+    - Prefer LegacyValueMap rows whose target_content_type matches the requested model.
+    - Fallback to LegacyValueMap rows where list_name == model_name (if any).
+    - Only active=True entries are considered.
+    """
+    mapping: dict[str, int] = {}
+
+    # resolve content type for the target model if possible
+    try:
+        ct = ContentType.objects.get(app_label=app_label, model=model_name.lower())
+    except ContentType.DoesNotExist:
+        ct = None
+
+    qs = LegacyValueMap.objects.filter(legacy_system__iexact=legacy_system, active=True)
+    if ct is not None:
+        qs = qs.filter(target_content_type=ct)
+    else:
+        qs = qs.filter(list_name__iexact=model_name)
+
+    for row in qs.select_related("target_content_type"):
+        if row.target_object_id:
+            key = str(row.legacy_value).strip()
+            if key:
+                # later entries may override earlier; keep last-seen
+                mapping[key] = int(row.target_object_id)
+
+    logger.debug(
+        "load_legacy_to_pk_map: loaded %d mappings for %s -> %s",
+        len(mapping),
+        legacy_system,
+        model_name,
+    )
+    return mapping
