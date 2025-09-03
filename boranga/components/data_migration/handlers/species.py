@@ -34,7 +34,7 @@ SOURCE_ADAPTERS = {
 @register
 class SpeciesImporter(BaseSheetImporter):
     slug = "species_legacy"
-    description = "Import species data from legacy source (TPFL)"
+    description = "Import species data from legacy TEC / TFAUNA / TPFL sources"
 
     def add_arguments(self, parser):
         parser.add_argument(
