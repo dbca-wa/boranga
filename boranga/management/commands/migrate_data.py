@@ -1,3 +1,5 @@
+import argparse
+
 from django.core.management.base import BaseCommand, CommandError
 
 from boranga.components.data_migration.registry import ImportContext, all_importers, get
@@ -25,8 +27,17 @@ class Command(BaseCommand):
         # Importer-specific options only relevant to run / runmany
         for imp_cls in all_importers():
             imp = imp_cls()
-            imp.add_arguments(p_run)
-            imp.add_arguments(p_multi)
+            # Some importers declare the same option names (e.g. --sources).
+            # Adding identical options to the same parser raises argparse.ArgumentError.
+            # Catch and ignore those conflicts so the CLI remains usable.
+            try:
+                imp.add_arguments(p_run)
+            except argparse.ArgumentError:
+                pass
+            try:
+                imp.add_arguments(p_multi)
+            except argparse.ArgumentError:
+                pass
 
     def handle(self, *args, **opts):
         action = opts["action"]
