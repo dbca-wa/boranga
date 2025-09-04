@@ -54,7 +54,8 @@ class Command(BaseCommand):
                 raise CommandError(str(e))
             ctx = ImportContext(dry_run=opts["dry_run"])
             self.stdout.write(f"== {imp_cls.slug} ==")
-            stats = imp_cls().run(opts["path"], ctx, **opts)
+            opts_no_path = {k: v for k, v in opts.items() if k != "path"}
+            stats = imp_cls().run(opts["path"], ctx, **opts_no_path)
             self.stdout.write(f"{imp_cls.slug} stats: {stats}")
             self.stdout.write(self.style.SUCCESS("Done."))
             return
@@ -70,7 +71,8 @@ class Command(BaseCommand):
             ctx = ImportContext(dry_run=opts["dry_run"])
             for imp_cls in importers:
                 self.stdout.write(f"== {imp_cls.slug} ==")
-                stats = imp_cls().run(opts["path"], ctx, **opts)
+                opts_no_path = {k: v for k, v in opts.items() if k != "path"}
+                stats = imp_cls().run(opts["path"], ctx, **opts_no_path)
                 self.stdout.write(f"{imp_cls.slug} stats: {stats}")
             self.stdout.write(self.style.SUCCESS(f"All done: {ctx.stats}"))
             return
