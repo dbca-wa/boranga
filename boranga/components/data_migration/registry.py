@@ -1,20 +1,25 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from datetime import timezone as stdlib_timezone
 from typing import Any
 
 from django.db import models
-from django.utils import timezone as dj_timezone
+from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.main.models import LegacyUsernameEmailuserMapping
 from boranga.components.species_and_communities.models import GroupType
 
 TransformFn = Callable[[Any, "TransformContext"], "TransformResult"]
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -228,10 +233,10 @@ def t_datetime_iso(value, ctx):
     # Make timezone-aware in UTC for Django:
     if dt.tzinfo is None:
         # treat naive datetimes as UTC and make them aware
-        dt = dj_timezone.make_aware(dt, dj_timezone.utc)
+        dt = timezone.make_aware(dt, stdlib_timezone.utc)
     else:
         # convert any aware datetime to UTC
-        dt = dt.astimezone(dj_timezone.utc)
+        dt = dt.astimezone(stdlib_timezone.utc)
 
     return _result(dt)
 
@@ -293,9 +298,9 @@ def t_date_from_datetime_iso(value, ctx):
 
     # normalise to UTC date
     if dt.tzinfo is None:
-        dt = dj_timezone.make_aware(dt, dj_timezone.utc)
+        dt = stdlib_timezone.utc.make_aware(dt, stdlib_timezone.utc)
     else:
-        dt = dt.astimezone(dj_timezone.utc)
+        dt = dt.astimezone(stdlib_timezone.utc)
 
     return _result(dt.date())
 
@@ -309,6 +314,7 @@ def fk_lookup(model: type[models.Model], lookup_field: str = "id", create=False)
             return _result(None)
         qs = model._default_manager
         try:
+            # logger.debug(f"Lookup field: {lookup_field}, value: {value}")
             obj = qs.get(**{lookup_field: value})
         except model.DoesNotExist:
             if create:
