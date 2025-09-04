@@ -298,7 +298,7 @@ def t_date_from_datetime_iso(value, ctx):
 
     # normalise to UTC date
     if dt.tzinfo is None:
-        dt = stdlib_timezone.utc.make_aware(dt, stdlib_timezone.utc)
+        dt = timezone.make_aware(dt, stdlib_timezone.utc)
     else:
         dt = dt.astimezone(stdlib_timezone.utc)
 
