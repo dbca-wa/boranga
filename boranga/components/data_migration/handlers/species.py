@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import csv
+import json
+import logging
+import os
 from collections import defaultdict
 from typing import Any
 
 from django.db import transaction
+from django.utils import timezone
 
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.adapters.species import schema
@@ -25,6 +30,8 @@ from boranga.components.species_and_communities.models import (
     SpeciesDistribution,
     SpeciesPublishingStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: SpeciesTpflAdapter(),
@@ -62,12 +69,22 @@ class SpeciesImporter(BaseSheetImporter):
         return out
 
     def run(self, path: str, ctx: ImportContext, **options):
+        start_time = timezone.now()
+        logger.info(
+            "SpeciesImporter (%s) started at %s (dry_run=%s)",
+            self.slug,
+            start_time.isoformat(),
+            ctx.dry_run,
+        )
+
         sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
         path_map = self._parse_path_map(options.get("path_map"))
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
         warnings = []
+        errors_details = []  # collect detailed error records
+        warnings_details = []  # collect detailed warning records
 
         # 1. Extract from each source
         for src in sources:
@@ -114,6 +131,12 @@ class SpeciesImporter(BaseSheetImporter):
 
         for row in all_rows:
             processed += 1
+            # progress output every 500 rows
+            if processed % 500 == 0:
+                logger.info(
+                    "SpeciesImporter %s: processed %d rows so far", self.slug, processed
+                )
+
             tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
             issues = []
             transformed = {}
@@ -124,11 +147,21 @@ class SpeciesImporter(BaseSheetImporter):
                 transformed[col] = res.value
                 for issue in res.issues:
                     issues.append((col, issue))
-                    if issue.level == "error":
+                    # collect detailed issue info for later reporting
+                    record = {
+                        "migrated_from_id": row.get("migrated_from_id"),
+                        "column": col,
+                        "level": getattr(issue, "level", "error"),
+                        "message": getattr(issue, "message", str(issue)),
+                        "raw_value": raw_val,
+                    }
+                    if getattr(issue, "level", "error") == "error":
                         has_error = True
                         errors += 1
+                        errors_details.append(record)
                     else:
                         warn_count += 1
+                        warnings_details.append(record)
             if has_error:
                 skipped += 1
                 continue
@@ -136,6 +169,9 @@ class SpeciesImporter(BaseSheetImporter):
             if not key:
                 skipped += 1
                 errors += 1
+                errors_details.append(
+                    {"reason": "missing_migrated_from_id", "row": transformed}
+                )
                 continue
             groups[key].append((transformed, row.get("_source"), issues))
 
@@ -164,7 +200,17 @@ class SpeciesImporter(BaseSheetImporter):
             return merged, combined_issues
 
         # Persist merged rows
+        persisted = 0
         for migrated_from_id, entries in groups.items():
+            persisted += 1
+            # progress every 500 persisted groups as well
+            if persisted % 500 == 0:
+                logger.info(
+                    "SpeciesImporter %s: persisted %d groups so far",
+                    self.slug,
+                    persisted,
+                )
+
             merged, combined_issues = merge_group(entries, sources)
             if any(i.level == "error" for _, i in combined_issues):
                 skipped += 1
@@ -175,6 +221,16 @@ class SpeciesImporter(BaseSheetImporter):
             if valerrs:
                 errors += len(valerrs)
                 skipped += 1
+                # record validation error details
+                for ve in valerrs:
+                    errors_details.append(
+                        {
+                            "migrated_from_id": merged.get("migrated_from_id"),
+                            "reason": "validation_error",
+                            "message": str(ve),
+                            "row": merged,
+                        }
+                    )
                 continue
 
             defaults = {
@@ -267,6 +323,12 @@ class SpeciesImporter(BaseSheetImporter):
                         warnings.append(
                             f"{migrated_from_id}: unknown region keys {missing}"
                         )
+                        warnings_details.append(
+                            {
+                                "migrated_from_id": migrated_from_id,
+                                "missing_regions": missing,
+                            }
+                        )
 
                 if not merged.get("districts"):
                     # prefer explicit districts from species row; fallback to links from separate file
@@ -306,6 +368,12 @@ class SpeciesImporter(BaseSheetImporter):
                         warnings.append(
                             f"{migrated_from_id}: unknown district keys {missing}"
                         )
+                        warnings_details.append(
+                            {
+                                "migrated_from_id": migrated_from_id,
+                                "missing_districts": missing,
+                            }
+                        )
 
                 # --- end M2M attach ---
 
@@ -317,4 +385,116 @@ class SpeciesImporter(BaseSheetImporter):
             errors=errors,
             warnings=warn_count,
         )
+        # do NOT attach the full error/warning lists (caller code often prints stats -> huge dumps)
+        # keep lightweight: counts, messages and CSV path (set below if written)
+        stats["error_count_details"] = len(errors_details)
+        stats["warning_count_details"] = len(warnings_details)
+        stats["warning_messages"] = warnings
+        stats["error_details_csv"] = None
+
+        elapsed = timezone.now() - start_time
+        stats["time_taken"] = str(elapsed)
+
+        # write detailed errors to CSV (if any) but only log a concise count summary
+        if errors_details:
+            # allow override via options, otherwise write to
+            # <cwd>/boranga/components/data_migration/handlers/handler_output with timestamp
+            get_opt = getattr(options, "get", None)
+            csv_path = get_opt("error_csv") if callable(get_opt) else None
+            if csv_path:
+                csv_path = os.path.abspath(csv_path)
+            else:
+                ts = timezone.now().strftime("%Y%m%d_%H%M%S")
+                csv_path = os.path.join(
+                    os.getcwd(),
+                    "boranga/components/data_migration/handlers/handler_output",
+                    f"{self.slug}_errors_{ts}.csv",
+                )
+
+            logger.info("Writing SpeciesImporter error CSV to %s", csv_path)
+
+            try:
+                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+                with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+                    fieldnames = [
+                        "migrated_from_id",
+                        "column",
+                        "level",
+                        "message",
+                        "raw_value",
+                        "reason",
+                        "row_json",
+                        "timestamp",
+                    ]
+                    writer = csv.DictWriter(fh, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for rec in errors_details:
+                        writer.writerow(
+                            {
+                                "migrated_from_id": rec.get("migrated_from_id"),
+                                "column": rec.get("column"),
+                                "level": rec.get("level"),
+                                "message": rec.get("message"),
+                                "raw_value": rec.get("raw_value"),
+                                "reason": rec.get("reason"),
+                                "row_json": json.dumps(rec.get("row", ""), default=str),
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                # record CSV location on stats (small and safe to print)
+                stats["error_details_csv"] = csv_path
+                logger.info(
+                    (
+                        "SpeciesImporter %s finished; processed=%d created=%d "
+                        "updated=%d skipped=%d errors=%d warnings=%d time_taken=%s (details -> %s)",
+                    ),
+                    self.slug,
+                    processed,
+                    created,
+                    updated,
+                    skipped,
+                    errors,
+                    warn_count,
+                    str(elapsed),
+                    csv_path,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to write error CSV for %s at %s: %s",
+                    self.slug,
+                    csv_path,
+                    e,
+                )
+                # still log concise summary
+                logger.info(
+                    (
+                        "SpeciesImporter %s finished; processed=%d created=%d "
+                        "updated=%d skipped=%d errors=%d warnings=%d time_taken=%s"
+                    ),
+                    self.slug,
+                    processed,
+                    created,
+                    updated,
+                    skipped,
+                    errors,
+                    warn_count,
+                    str(elapsed),
+                )
+        else:
+            # no detailed errors: concise summary only
+            logger.info(
+                (
+                    "SpeciesImporter %s finished; processed=%d created=%d updated=%d"
+                    " skipped=%d errors=%d warnings=%d time_taken=%s",
+                ),
+                self.slug,
+                processed,
+                created,
+                updated,
+                skipped,
+                errors,
+                warn_count,
+                str(elapsed),
+            )
+
         return stats
