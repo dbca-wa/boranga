@@ -47,7 +47,7 @@ PIPELINES = {
     "comment": ["strip", "blank_to_none"],
     "conservation_plan_exists": ["strip", "blank_to_none", "is_present"],
     "department_file_numbers": ["strip", "blank_to_none"],
-    "last_data_curation_date": ["strip", "blank_to_none", "date_iso"],
+    "last_data_curation_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
     "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
     "processing_status": [
         "strip",
