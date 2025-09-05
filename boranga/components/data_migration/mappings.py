@@ -18,6 +18,8 @@ from boranga.components.main.models import LegacyValueMap
 
 logger = logging.getLogger(__name__)
 
+# sentinel string used to mark intentional ignores (default: "__IGNORE__")
+IGNORE_SENTINEL = getattr(settings, "LEGACY_IGNORE_SENTINEL", "__IGNORE__")
 
 # Cache: (legacy_system, list_name) -> dict[norm_legacy_value] = mapping dict
 _CACHE: dict[tuple[str, str], dict[str, dict]] = {}
@@ -93,6 +95,21 @@ def build_legacy_map_transform(
             )
         entry = table[norm]
         canonical = entry["canonical"] or entry["raw"]
+
+        # treat sentinel canonical values as intentional ignore
+        canonical_norm = str(canonical).strip().casefold()
+        if canonical_norm in {IGNORE_SENTINEL.casefold(), "ignore"}:
+            ctx.stats.setdefault("ignored_legacy_values", []).append(
+                {"system": legacy_system, "list": list_name, "value": value}
+            )
+            return _result(
+                None,
+                TransformIssue(
+                    "info",
+                    f"Legacy {legacy_system}.{list_name} value '{value}' intentionally ignored",
+                ),
+            )
+
         if return_type == "id":
             return _result(entry["target_id"])
         if return_type == "canonical":
@@ -165,8 +182,6 @@ def load_species_to_region_links(
     except Exception as exc:
         logger.exception("Error reading species->region CSV %s: %s", csv_path, exc)
         return mapping
-
-    # ...existing code...
 
 
 def load_species_to_district_links(
