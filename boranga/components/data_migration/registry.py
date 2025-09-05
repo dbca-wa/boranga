@@ -9,12 +9,17 @@ from datetime import datetime
 from datetime import timezone as stdlib_timezone
 from typing import Any
 
+import nh3
 from django.db import models
 from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.main.models import LegacyUsernameEmailuserMapping
-from boranga.components.species_and_communities.models import GroupType
+from boranga.components.species_and_communities.models import (
+    GroupType,
+    Taxonomy,
+    TaxonPreviousName,
+)
 
 TransformFn = Callable[[Any, "TransformContext"], "TransformResult"]
 
@@ -305,29 +310,140 @@ def t_date_from_datetime_iso(value, ctx):
     return _result(dt.date())
 
 
-def fk_lookup(model: type[models.Model], lookup_field: str = "id", create=False):
-    key = f"fk_{model._meta.label_lower}_{lookup_field}_{int(create)}"
+def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
+    key = f"fk_{model._meta.label_lower}_{lookup_field}"
 
     @registry.register(key)
     def inner(value, ctx):
         if value in (None, ""):
             return _result(None)
         qs = model._default_manager
+
+        # Try lookup using the stored (cleaned) form first, then the raw value.
         try:
-            # logger.debug(f"Lookup field: {lookup_field}, value: {value}")
-            obj = qs.get(**{lookup_field: value})
-        except model.DoesNotExist:
-            if create:
-                obj = model._default_manager.create(**{lookup_field: value})
-            else:
+            cleaned = nh3.clean(str(value))
+        except Exception:
+            cleaned = None
+
+        candidates = []
+        if cleaned and cleaned != str(value):
+            candidates.append(cleaned)
+        candidates.append(value)
+
+        for candidate in candidates:
+            try:
+                obj = qs.get(**{lookup_field: candidate})
+                return _result(obj.pk)
+            except model.DoesNotExist:
+                continue
+            except model.MultipleObjectsReturned:
                 return _result(
                     value,
                     TransformIssue(
                         "error",
-                        f"{model.__name__} with {lookup_field}='{value}' not found",
+                        f"Multiple {model.__name__} with {lookup_field}='{value}' found",
                     ),
                 )
-        return _result(obj.pk)
+
+        return _result(
+            value,
+            TransformIssue(
+                "error",
+                f"{model.__name__} with {lookup_field}='{value}' not found",
+            ),
+        )
+
+    return key
+
+
+def taxonomy_lookup(lookup_field: str = "scientific_name", check_previous: bool = True):
+    """
+    Resolve a Taxonomy by lookup_field (e.g. 'scientific_name' or 'taxon_name_id').
+    Behaviour:
+      - tries cleaned (nh3.clean) then raw value against Taxonomy.{lookup_field}
+      - if not found and check_previous=True, looks for a TaxonPreviousName.previous_scientific_name
+        matching the value (case-insensitive) and returns that previous_name.taxonomy.pk
+    Returns a registered transform name.
+    """
+    key = f"taxonomy_lookup_{lookup_field}_{int(check_previous)}"
+
+    @registry.register(key)
+    def inner(value, ctx):
+        if value in (None, ""):
+            return _result(None)
+
+        # Prepare candidates: try cleaned first, then raw
+        try:
+            cleaned = nh3.clean(str(value))
+        except Exception:
+            cleaned = None
+
+        candidates = []
+        if cleaned and cleaned != str(value):
+            candidates.append(cleaned)
+        candidates.append(value)
+
+        qs = Taxonomy._default_manager
+
+        # Try direct Taxonomy lookup
+        for candidate in candidates:
+            try:
+                obj = qs.get(**{lookup_field: candidate})
+                return _result(obj.pk)
+            except Taxonomy.DoesNotExist:
+                continue
+            except Taxonomy.MultipleObjectsReturned:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error",
+                        f"Multiple Taxonomy with {lookup_field}='{value}' found",
+                    ),
+                )
+
+        # Try previous names (case-insensitive match on previous_scientific_name)
+        if check_previous:
+            for candidate in candidates:
+                # prefer case-insensitive match for textual previous names
+                if isinstance(candidate, str):
+                    prev_qs = TaxonPreviousName.objects.filter(
+                        previous_scientific_name__iexact=str(candidate).strip()
+                    )
+                else:
+                    # numeric id fallback (previous_name_id)
+                    prev_qs = TaxonPreviousName.objects.filter(
+                        previous_name_id=candidate
+                    )
+
+                if not prev_qs.exists():
+                    continue
+
+                if prev_qs.count() > 1:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple TaxonPreviousName entries for '{value}' found",
+                        ),
+                    )
+
+                prev = prev_qs.first()
+                if prev and prev.taxonomy_id:
+                    return _result(prev.taxonomy_id)
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error",
+                        f"TaxonPreviousName for '{value}' found but no linked Taxonomy",
+                    ),
+                )
+
+        return _result(
+            value,
+            TransformIssue(
+                "error", f"Taxonomy with {lookup_field}='{value}' not found"
+            ),
+        )
 
     return key
 
