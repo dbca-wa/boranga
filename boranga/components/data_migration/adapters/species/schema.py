@@ -7,13 +7,12 @@ from boranga.components.data_migration.adapters.schema_base import Schema
 from boranga.components.data_migration.registry import (
     choices_transform,
     emailuser_by_legacy_username_factory,
-    fk_lookup,
+    taxonomy_lookup,
 )
-from boranga.components.species_and_communities.models import Species, Taxonomy
+from boranga.components.species_and_communities.models import Species
 
 # Legacy → target FK / lookup transforms (require LegacyValueMap data)
-TAXONOMY_TRANSFORM = fk_lookup(
-    model=Taxonomy,
+TAXONOMY_TRANSFORM = taxonomy_lookup(
     lookup_field="scientific_name",
 )
 
