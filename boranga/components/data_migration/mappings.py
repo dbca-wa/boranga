@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from pathlib import Path
 from typing import Any, Literal
 
 from django.conf import settings
@@ -123,83 +124,33 @@ def build_legacy_map_transform(
     return transform_name
 
 
-def load_species_to_region_links(
-    legacy_system: str,
-    path: str | None = None,
-    key_column: str = "TXN_LST_ID",
-    region_column: str = "region_key",
-    delimiter: str = ";",
-) -> dict[str, list[str]]:
-    """
-    Build a mapping: migrated_from_id -> list of legacy region keys.
-
-    This version assumes a CSV source (path or settings.LEGACY_SPECIES_REGION_PATH)
-    and does not attempt any model-based fallback.
-    """
-    mapping: dict[str, list[str]] = {}
-
-    csv_path = path or getattr(settings, "LEGACY_SPECIES_REGION_PATH", None)
-    if not csv_path:
-        logger.warning(
-            "No CSV path provided for species->region links (legacy_system=%s)",
-            legacy_system,
-        )
-        return mapping
-
-    try:
-        with open(csv_path, newline="", encoding="utf-8") as fh:
-            reader = csv.DictReader(fh)
-            if (
-                not reader.fieldnames
-                or key_column not in reader.fieldnames
-                or region_column not in reader.fieldnames
-            ):
-                logger.warning(
-                    "CSV %s missing expected columns (%s, %s); found: %s",
-                    csv_path,
-                    key_column,
-                    region_column,
-                    reader.fieldnames,
-                )
-                return mapping
-            for row in reader:
-                key = (row.get(key_column) or "").strip()
-                if not key:
-                    continue
-                raw = (row.get(region_column) or "").strip()
-                if not raw:
-                    continue
-                if delimiter and delimiter in raw:
-                    parts = [p.strip() for p in raw.split(delimiter) if p.strip()]
-                else:
-                    parts = [raw] if raw else []
-                if parts:
-                    mapping.setdefault(key, []).extend(parts)
-        return mapping
-    except FileNotFoundError:
-        logger.warning("Species->region CSV path not found: %s", csv_path)
-        return mapping
-    except Exception as exc:
-        logger.exception("Error reading species->region CSV %s: %s", csv_path, exc)
-        return mapping
-
-
 def load_species_to_district_links(
     legacy_system: str,
     path: str | None = None,
     key_column: str = "TXN_LST_ID",
-    district_column: str = "district_key",
+    district_column: str = "DST_ID",
     delimiter: str = ";",
 ) -> dict[str, list[str]]:
     """
     Build a mapping: migrated_from_id -> list of legacy district keys.
 
-    This version assumes a CSV source (path or settings.LEGACY_SPECIES_DISTRICT_PATH)
+    This version assumes a CSV source (path or settings.LEGACY_SPECIES_DISTRICTS_PATH)
     and does not attempt any model-based fallback.
     """
     mapping: dict[str, list[str]] = {}
 
-    csv_path = path or getattr(settings, "LEGACY_SPECIES_DISTRICT_PATH", None)
+    # directory containing the current file
+    BASE_DIR = Path(__file__).resolve().parent
+
+    # default import file path
+    default_csv_path = BASE_DIR / "legacy_data/TPFL/DRF_TAXON_CONSV_LST_DISTRICTS.csv"
+
+    csv_path = (
+        path
+        or default_csv_path
+        or getattr(settings, "LEGACY_SPECIES_DISTRICTS_PATH", None)
+    )
+
     if not csv_path:
         logger.warning(
             "No CSV path provided for species->district links (legacy_system=%s)",
