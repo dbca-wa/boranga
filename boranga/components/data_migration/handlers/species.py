@@ -16,7 +16,6 @@ from boranga.components.data_migration.adapters.species.tpfl import SpeciesTpflA
 from boranga.components.data_migration.mappings import (
     load_legacy_to_pk_map,
     load_species_to_district_links,
-    load_species_to_region_links,
 )
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
@@ -113,12 +112,10 @@ class SpeciesImporter(BaseSheetImporter):
         skipped = 0
         warn_count = 0
 
-        species_to_region_keys = load_species_to_region_links(legacy_system="TPFL")
         species_to_district_keys = load_species_to_district_links(legacy_system="TPFL")
 
         # preload region mapping from the other source once (legacy_key -> Region.pk)
         # implement load_legacy_to_pk_map to read LegacyValueMap or build from the other adapter
-        region_map = load_legacy_to_pk_map(legacy_system="TPFL", model_name="Region")
         district_map = load_legacy_to_pk_map(
             legacy_system="TPFL", model_name="District"
         )
@@ -286,49 +283,6 @@ class SpeciesImporter(BaseSheetImporter):
                 )
 
                 # --- attach M2M regions ---
-                # merged may have e.g. merged['regions'] as a list or delimited string
-                if not merged.get("regions"):
-                    # prefer explicit regions from species row; fallback to links from separate file
-                    merged["regions"] = species_to_region_keys.get(migrated_from_id)
-
-                # now merged["regions"] may be a list or delimited string — same normalization as earlier
-                raw_regions = merged.get("regions")
-                if raw_regions:
-                    # normalize to list of legacy keys
-                    if isinstance(raw_regions, str):
-                        keys = [k.strip() for k in raw_regions.split(";") if k.strip()]
-                    elif isinstance(raw_regions, (list, tuple)):
-                        keys = [
-                            str(k).strip() for k in raw_regions if k not in (None, "")
-                        ]
-                    else:
-                        keys = [str(raw_regions)]
-
-                    region_ids = []
-                    missing = []
-                    for legacy_key in keys:
-                        pk = region_map.get(legacy_key)
-                        if pk:
-                            region_ids.append(pk)
-                        else:
-                            missing.append(legacy_key)
-
-                    if region_ids:
-                        # idempotent: replace existing relations with the resolved set
-                        obj.regions.set(region_ids)
-
-                    if missing:
-                        # record a warning (or TransformIssue earlier); keep lightweight here
-                        warn_count += 1
-                        warnings.append(
-                            f"{migrated_from_id}: unknown region keys {missing}"
-                        )
-                        warnings_details.append(
-                            {
-                                "migrated_from_id": migrated_from_id,
-                                "missing_regions": missing,
-                            }
-                        )
 
                 if not merged.get("districts"):
                     # prefer explicit districts from species row; fallback to links from separate file
@@ -361,6 +315,21 @@ class SpeciesImporter(BaseSheetImporter):
                     if district_ids:
                         # idempotent: replace existing relations with the resolved set
                         obj.districts.set(district_ids)
+
+                    # For each district, check if its region is already linked; if not, add it
+                    existing_region_ids = set(obj.regions.values_list("id", flat=True))
+                    districts = obj.districts.select_related("region").all()
+                    for district in districts:
+                        if (
+                            district.region_id
+                            and district.region_id not in existing_region_ids
+                        ):
+                            obj.regions.add(district.region_id)
+                            existing_region_ids.add(district.region_id)
+
+                    if existing_region_ids:
+                        # idempotent: replace existing relations with the resolved set
+                        obj.regions.set(existing_region_ids)
 
                     if missing:
                         # record a warning (or TransformIssue earlier); keep lightweight here
