@@ -379,9 +379,23 @@ def taxonomy_lookup(lookup_field: str = "scientific_name", check_previous: bool 
             cleaned = None
 
         candidates = []
-        if cleaned and cleaned != str(value):
+        # Database values will be stored in cleaned form, so prefer only the cleaned candidates.
+        # Also try variants: cleaned with trailing " PN" removed, and cleaned with a trailing
+        # varietal suffix like " var. ..." removed.
+        if cleaned:
             candidates.append(cleaned)
-        candidates.append(value)
+            # candidate with trailing " PN" removed
+            if isinstance(cleaned, str) and cleaned.endswith(" PN"):
+                candidates.append(cleaned[:-3].rstrip())
+            # TODO: Remove commented code once confirmed not needed
+            # candidate with " var. ..." (case-insensitive) stripped
+            # if isinstance(cleaned, str):
+            #     var_stripped = re.sub(r"\s*var\..*$", "", cleaned, flags=re.IGNORECASE).rstrip()
+            #     if var_stripped and var_stripped != cleaned:
+            #         candidates.append(var_stripped)
+        else:
+            # fallback to raw value if cleaning failed
+            candidates.append(value)
 
         qs = Taxonomy._default_manager
 
