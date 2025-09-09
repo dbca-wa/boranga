@@ -1,4 +1,3 @@
-# filepath: /home/oak/dev/boranga/boranga/management/commands/populate_occ_to_ocr_section_mapping.py
 import csv
 from datetime import datetime
 from pathlib import Path
