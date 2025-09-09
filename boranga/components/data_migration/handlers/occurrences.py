@@ -19,7 +19,7 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
-from boranga.components.occurrence.models import Occurrence
+from boranga.components.occurrence.models import OCCContactDetail, Occurrence
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OccurrenceTpflAdapter(),
@@ -98,7 +98,7 @@ class OccurrenceImporter(BaseSheetImporter):
         groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(
             list
         )
-        # groups[legacy_id] -> list of (transformed_dict, source, issues_list)
+        # groups[migrated_from_id] -> list of (transformed_dict, source, issues_list)
 
         for row in all_rows:
             processed += 1
@@ -120,7 +120,7 @@ class OccurrenceImporter(BaseSheetImporter):
             if has_error:
                 skipped += 1
                 continue
-            key = transformed.get("legacy_id")
+            key = transformed.get("migrated_from_id")
             if not key:
                 # missing key — cannot merge/persist
                 skipped += 1
@@ -160,7 +160,7 @@ class OccurrenceImporter(BaseSheetImporter):
             return merged, combined_issues
 
         # Persist merged rows
-        for legacy_id, entries in groups.items():
+        for migrated_from_id, entries in groups.items():
             merged, combined_issues = merge_group(entries, sources)
             # if any error in combined_issues => skip
             if any(i.level == "error" for _, i in combined_issues):
@@ -169,15 +169,25 @@ class OccurrenceImporter(BaseSheetImporter):
 
             # build defaults/payload; set legacy_source as joined sources involved
             involved_sources = sorted({src for _, src, _ in entries})
-            defaults = {
-                "species_code": merged.get("species_code"),
-                "observed_date": merged.get("observed_date"),
-                "count": merged.get("count"),
-                "location_name": merged.get("location_name"),
-                "observer_name": merged.get("observer_name"),
-                "notes": merged.get("notes"),
-                "legacy_source": ",".join(involved_sources),
-            }
+            # validate merged business rules using schema's OccurrenceRow
+            occ_row = schema.OccurrenceRow.from_dict(merged)
+            # if a single source involved, pass it to validate (helps source-specific rules)
+            source_for_validation = (
+                involved_sources[0] if len(involved_sources) == 1 else None
+            )
+            validation_issues = occ_row.validate(source=source_for_validation)
+            if any(level == "error" for level, _ in validation_issues):
+                skipped += 1
+                errors += sum(1 for level, _ in validation_issues if level == "error")
+                continue
+
+            defaults = occ_row.to_model_defaults()
+            defaults["lodgement_date"] = merged.get("datetime_created")
+            # include legacy source info
+            defaults["legacy_source"] = ",".join(involved_sources)
+            # include locked if present in merged payload
+            if merged.get("locked") is not None:
+                defaults["locked"] = merged.get("locked")
 
             if ctx.dry_run:
                 # don't persist, but update counters as if created/updated if desired
@@ -185,12 +195,25 @@ class OccurrenceImporter(BaseSheetImporter):
 
             with transaction.atomic():
                 obj, created_flag = Occurrence.objects.update_or_create(
-                    legacy_id=legacy_id, defaults=defaults
+                    migrated_from_id=migrated_from_id, defaults=defaults
                 )
                 if created_flag:
                     created += 1
                 else:
                     updated += 1
+
+                # Create OCCContactDetail
+                if (
+                    merged.get("contact")
+                    or merged.get("contact_name")
+                    or merged.get("notes")
+                ):
+                    OCCContactDetail.objects.get_or_create(
+                        occurrence=obj,
+                        contact=merged.get("contact"),
+                        contact_name=merged.get("contact_name"),
+                        notes=merged.get("notes"),
+                    )
 
         stats.update(
             processed=processed,
