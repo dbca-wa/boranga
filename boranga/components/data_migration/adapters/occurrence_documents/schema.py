@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from boranga.components.data_migration.adapters.schema_base import Schema
 from boranga.components.data_migration.registry import (
     emailuser_by_legacy_username_factory,
     fk_lookup,
 )
+from boranga.components.occurrence.models import Occurrence
 
 OCCURRENCE_ID_TRANSFORM = fk_lookup(
-    model="occurrence.Occurrence",
+    Occurrence,
     lookup_field="migrated_from_id",
 )
 
@@ -56,8 +58,8 @@ class OccurrenceDocumentRow:
     """
 
     occurrence_id: str
+    uploaded_by: int
+    uploaded_date: datetime
     document_category_id: int | None = None
     document_subcategory_id: int | None = None
-    uploaded_by: int | None
-    uploaded_date: object | None = None  # date
     description: str | None = None
