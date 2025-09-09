@@ -5,19 +5,14 @@ from datetime import date, datetime
 
 from boranga.components.data_migration import utils
 from boranga.components.data_migration.adapters.schema_base import Schema
+from boranga.components.data_migration.mappings import build_legacy_map_transform
 from boranga.components.data_migration.registry import (
     choices_transform,
     emailuser_by_legacy_username_factory,
     fk_lookup,
-    normalize_delimited_list_factory,
     taxonomy_lookup,
 )
-from boranga.components.occurrence.models import (
-    Occurrence,
-    OccurrenceTenurePurpose,
-    OccurrenceTenureVesting,
-    WildStatus,
-)
+from boranga.components.occurrence.models import Occurrence, WildStatus
 from boranga.components.species_and_communities.models import (
     Community,
     GroupType,
@@ -45,14 +40,16 @@ PROCESSING_STATUS = choices_transform(
 
 SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
-PURPOSE_TRANSFORM = fk_lookup(
-    model=OccurrenceTenurePurpose,
-    lookup_field="code",  # TODO confirm field
+PURPOSE_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "PURPOSE (DRF_LOV_PURPOSE_VWS)",
+    required=False,
 )
 
-VESTING_TRANSFORM = fk_lookup(
-    model=OccurrenceTenureVesting,
-    lookup_field="code",  # TODO confirm field
+VESTING_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "VESTING (DRF_LOV_PURPOSE_VWS)",
+    required=False,
 )
 
 COLUMN_MAP = {
@@ -67,12 +64,8 @@ COLUMN_MAP = {
     "CREATED_BY": "submitter",
     "LAND_MANAGER": "OCCContactDetail__contact_name",
     "LAND_MGR_NOTES": "OCCContactDetail__notes",
-    "PURPOSE1": "OccurrenceTenure__purpose",
-    "VESTING": "OccurrenceTenure__vesting",
-    "OCRVegetationStructure vegetation_structure_layer_one": "vegetation_structure_layer_one",
-    "OCRVegetationStructure vegetation_structure_layer_two": "vegetation_structure_layer_two",
-    "OCRVegetationStructure vegetation_structure_layer_three": "vegetation_structure_layer_three",
-    "OCRVegetationStructure vegetation_structure_layer_four": "vegetation_structure_layer_four",
+    "PURPOSE1": "OccurrenceTenure__purpose_id",
+    "VESTING": "OccurrenceTenure__vesting_id",
 }
 
 REQUIRED_COLUMNS = [
@@ -102,28 +95,8 @@ PIPELINES = {
     "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
     "OCCContactDetail__contact_name": ["strip", "blank_to_none"],
     "OCCContactDetail__notes": ["strip", "blank_to_none"],
-    "OccurrenceTenure__purpose": ["strip", "blank_to_none", PURPOSE_TRANSFORM],
-    "OccurrenceTenure__vesting": ["strip", "blank_to_none", VESTING_TRANSFORM],
-    "vegetation_structure_layer_one": [
-        "strip",
-        "blank_to_none",
-        normalize_delimited_list_factory(),
-    ],
-    "vegetation_structure_layer_two": [
-        "strip",
-        "blank_to_none",
-        normalize_delimited_list_factory(),
-    ],
-    "vegetation_structure_layer_three": [
-        "strip",
-        "blank_to_none",
-        normalize_delimited_list_factory(),
-    ],
-    "vegetation_structure_layer_four": [
-        "strip",
-        "blank_to_none",
-        normalize_delimited_list_factory(),
-    ],
+    "OccurrenceTenure__purpose_id": ["strip", "blank_to_none", PURPOSE_TRANSFORM],
+    "OccurrenceTenure__vesting_id": ["strip", "blank_to_none", VESTING_TRANSFORM],
 }
 
 SCHEMA = Schema(
@@ -164,9 +137,13 @@ class OccurrenceRow:
     datetime_created: datetime | None = None
     datetime_updated: datetime | None = None
     locked: bool = False
+
     OCCContactDetail__contact: str | None = None
     OCCContactDetail__contact_name: str | None = None
     OCCContactDetail__notes: str | None = None
+
+    OccurrenceTenure__purpose_id: int | None = None
+    OccurrenceTenure__vesting_id: int | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceRow:
