@@ -25,6 +25,26 @@ class OccurrenceTpflAdapter(SourceAdapter):
             canonical["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
             canonical["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
             canonical["locked"] = True
-            # TODO: Add any other source dependent constants here
+            POP_COMMENTS = canonical.get("POP_COMMENTS", "")
+            REASON_DEACTIVATED = canonical.get("REASON_DEACTIVATED", "")
+            DEACTIVATED_DATE = canonical.get("DEACTIVATED_DATE", "")
+            comment = POP_COMMENTS
+            if REASON_DEACTIVATED:
+                if comment:
+                    comment += "\n\n"
+                comment += f"Reason Deactivated: {REASON_DEACTIVATED}"
+            if DEACTIVATED_DATE:
+                if comment:
+                    comment += "\n\n"
+                comment += f"Date Deactivated: {DEACTIVATED_DATE}"
+            canonical["comment"] = comment if comment else None
+            LAND_MGR_ADDRESS = canonical.get("LAND_MGR_ADDRESS", "")
+            LAND_MGR_PHONE = canonical.get("LAND_MGR_PHONE", "")
+            contact = LAND_MGR_ADDRESS
+            if LAND_MGR_PHONE:
+                if contact:
+                    contact += ", "
+                contact += LAND_MGR_PHONE
+            canonical["OCCContactDetail__contact"] = contact if contact else None
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)
