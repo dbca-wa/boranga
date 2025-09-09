@@ -156,7 +156,7 @@ class OccurrenceRow:
     species_id: int | None = None
     community_id: int | None = None
     wild_status_id: int | None = None
-    occurrence_source: str | None
+    occurrence_source: str | None = None
     comment: str | None = None
     review_status: str | None = None
     processing_status: str | None = None
