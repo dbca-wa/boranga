@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -47,6 +48,9 @@ class Command(BaseCommand):
             return
 
         if action == "run":
+            path = opts["path"]
+            if not os.path.exists(path):
+                raise CommandError(f"Path not found: {path}")
             slug = opts["slug"]
             try:
                 imp_cls = get(slug)
@@ -61,6 +65,9 @@ class Command(BaseCommand):
             return
 
         if action == "runmany":
+            path = opts["path"]
+            if not os.path.exists(path):
+                raise CommandError(f"Path not found: {path}")
             wanted = opts.get("only")
             if wanted:
                 # Validate slugs early
