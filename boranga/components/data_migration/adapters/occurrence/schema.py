@@ -58,7 +58,7 @@ VESTING_TRANSFORM = fk_lookup(
 COLUMN_MAP = {
     "POP_ID": "migrated_from_id",
     "SPNAME": "species_id",
-    "Community Code": "community_id",
+    "Community Code": "community_id",  # TODO Add real column name later when working on community import
     "STATUS": "wild_status_id",
     "CREATED_DATE": "datetime_created",
     "MODIFIED_DATE": "datetime_updated",
@@ -164,6 +164,9 @@ class OccurrenceRow:
     datetime_created: datetime | None = None
     datetime_updated: datetime | None = None
     locked: bool = False
+    OCCContactDetail__contact: str | None = None
+    OCCContactDetail__contact_name: str | None = None
+    OCCContactDetail__notes: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceRow:
