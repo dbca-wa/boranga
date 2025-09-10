@@ -952,3 +952,87 @@ def dependent_from_column_factory(
 
     registry._fns[name] = _inner
     return name
+
+
+def dependent_apply_transform_factory(
+    dependency_column: str, transform_name: str
+) -> str:
+    """
+    Return a registered transform name which takes the value from `dependency_column`
+    in the raw row and applies the already-registered transform `transform_name`
+    to that value.
+
+    Example:
+      FK_ON_ALT = dependent_apply_transform_factory("ALT_SPNAME", "fk_app_label.modelname_taxonomy_id")
+      PIPELINES["species_id"] = ["strip", "blank_to_none", FK_ON_ALT]
+    """
+    if not dependency_column:
+        raise ValueError("dependency_column must be provided")
+    if not transform_name:
+        raise ValueError("transform_name must be provided")
+
+    key_repr = f"dep_apply:{dependency_column}:{transform_name}"
+    name = "dep_apply_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(_value, ctx: TransformContext):
+        dep = (
+            ctx.row.get(dependency_column)
+            if ctx and isinstance(ctx.row, dict)
+            else None
+        )
+
+        fn = registry._fns.get(transform_name)
+        if fn is None:
+            return _result(
+                _value,
+                TransformIssue("error", f"Unknown transform '{transform_name}'"),
+            )
+
+        try:
+            # Apply the target transform to the dependency value and return its result.
+            res = fn(dep, ctx)
+            # Ensure we return a TransformResult instance (preserve issues/value)
+            if isinstance(res, TransformResult):
+                return res
+            # Fallback: wrap raw return values
+            return _result(res)
+        except Exception as e:
+            return _result(_value, TransformIssue("error", f"transform error: {e}"))
+
+    registry._fns[name] = _inner
+    return name
+
+
+def pluck_attribute_factory(attr: str, default=None) -> str:
+    """
+    Return a transform name that takes the incoming value (often a model instance)
+    and returns getattr(value, attr, default).
+    """
+    if not attr:
+        raise ValueError("attr must be provided")
+    name = "pluck_" + attr
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        try:
+            if value is None:
+                return _result(default)
+            if hasattr(value, attr):
+                return _result(getattr(value, attr))
+            # support dict-like returns
+            if isinstance(value, dict) and attr in value:
+                return _result(value[attr])
+            return _result(
+                default,
+                TransformIssue("warning", f"attribute {attr!r} not found on value"),
+            )
+        except Exception as e:
+            return _result(
+                default, TransformIssue("error", f"pluck attribute error: {e}")
+            )
+
+    registry._fns[name] = _inner
+    return name
