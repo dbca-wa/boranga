@@ -763,7 +763,7 @@ def csv_lookup_factory(
     key_column: str,
     value_column: str,
     csv_filename: str,
-    legacy_system: str,
+    legacy_system: str | None = None,
     path: str | None = None,
     *,
     default=None,
@@ -787,7 +787,10 @@ def csv_lookup_factory(
     if not key_column or not value_column or not csv_filename:
         raise ValueError("key_column, value_column and csv_filename must be provided")
 
-    key_repr = f"csv_lookup:{csv_filename}:{key_column}:{value_column}:{path or ''}:{case_insensitive}:{delimiter}"
+    key_repr = (
+        f"csv_lookup:{csv_filename}:{key_column}:{value_column}:"
+        f"legacy_system={legacy_system}:{path or ''}:{case_insensitive}:{delimiter}"
+    )
     name = "csv_lookup_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
