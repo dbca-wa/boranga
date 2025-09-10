@@ -777,3 +777,87 @@ def get(slug: str) -> type[BaseSheetImporter]:
         raise KeyError(
             f"Importer slug '{slug}' not found. Available: {', '.join(sorted(_importer_registry))}"
         )
+
+
+def dependent_from_column_factory(
+    dependency_column: str,
+    mapping: dict | None = None,
+    mapper: Callable[[Any, TransformContext], Any] | None = None,
+    default=None,
+    error_on_unknown: bool = False,
+    warning_on_unknown: bool = False,
+) -> str:
+    """
+    Return a registered transform name that derives its output from another column
+    in the same raw row (ctx.row). Use either `mapping` (dict lookup) or `mapper`
+    (callable receiving the dependency value and ctx). If neither mapping nor
+    mapper is provided the transform simply returns the dependency value.
+
+    Example usages:
+      # simple mapping: if FORM_STATUS == 'ACCEPTED' return 'approved', else None
+      DERIVE_APPROVAL = dependent_from_column_factory(
+          "FORM_STATUS", mapping={"ACCEPTED": "approved"}, default=None
+      )
+      PIPELINE = [DERIVE_APPROVAL]
+
+      # callable mapper:
+      def my_mapper(dep_val, ctx):
+          if dep_val == "X": return "foo"
+          return None
+      DERIVE = dependent_from_column_factory("SOME_COL", mapper=my_mapper)
+    """
+    if not dependency_column:
+        raise ValueError("dependency_column must be provided")
+
+    key_repr = f"{dependency_column}:{mapping!r}:{bool(mapper)}:{default!r}:{error_on_unknown}:{warning_on_unknown}"
+    name = "dependent_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        dep = (
+            ctx.row.get(dependency_column)
+            if ctx and isinstance(ctx.row, dict)
+            else None
+        )
+
+        # if mapper supplied, call it
+        if mapper is not None:
+            try:
+                out = mapper(dep, ctx)
+                return _result(out)
+            except Exception as e:
+                return _result(value, TransformIssue("error", f"mapper error: {e}"))
+
+        # mapping dict behaviour
+        if mapping is not None:
+            if dep in mapping:
+                return _result(mapping[dep])
+            # try string-normalised lookup for convenience
+            try:
+                k = str(dep).strip()
+                if k in mapping:
+                    return _result(mapping[k])
+            except Exception:
+                pass
+            if error_on_unknown:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error", f"Unknown value for {dependency_column}: {dep!r}"
+                    ),
+                )
+            if warning_on_unknown:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "warning", f"Unknown value for {dependency_column}: {dep!r}"
+                    ),
+                )
+            return _result(default)
+
+        # no mapping or mapper -> return the dependency value (or default if absent)
+        return _result(dep if dep is not None else default)
+
+    registry._fns[name] = _inner
+    return name
