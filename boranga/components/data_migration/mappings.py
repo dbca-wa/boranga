@@ -241,6 +241,7 @@ def load_legacy_to_pk_map(
 
 
 def load_csv_mapping(
+    csv_filename: str,
     key_column: str,
     value_column: str,
     path: str | None = None,
@@ -250,18 +251,32 @@ def load_csv_mapping(
 ) -> tuple[dict[str, str] | None, str]:
     """
     Load a simple CSV mapping file (headers include key_column and value_column).
-    If path is None a default under 'legacy_data' next to this file is used:
-      <data_migration>/legacy_data/{key_column}_to_{value_column}.csv
+
+    Parameters:
+      - csv_filename: name of the CSV file (e.g. "DRF_LOV_RECORD_SOURCE_VWS.csv").
+      - key_column / value_column: header names in the CSV to use for mapping.
+      - path: optional directory or full path to the CSV file. If omitted the
+        default directory is "<data_migration>/legacy_data" (next to this file).
+        If `path` is a directory the csv_filename will be joined to it. If it
+        already points to a .csv file it will be used as-is.
+      - delimiter, case_insensitive: parsing options.
 
     Returns (mapping_dict, resolved_path) or (None, resolved_path) if file not found
     or could not be read.
     """
     base_dir = Path(__file__).resolve().parent
-    resolved = (
-        Path(path)
-        if path
-        else base_dir / "legacy_data" / f"{key_column}_to_{value_column}.csv"
-    )
+
+    # Resolve file path:
+    if path:
+        p = Path(path)
+        if p.suffix and p.suffix.lower() == ".csv":
+            resolved = p
+        else:
+            # treat provided path as directory
+            resolved = p / csv_filename
+    else:
+        resolved = base_dir / "legacy_data" / csv_filename
+
     resolved_str = str(resolved)
 
     mapping: dict[str, str] = {}
