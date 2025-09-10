@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from datetime import timezone as stdlib_timezone
-from typing import Any
+from typing import Any, Literal
 
 import nh3
 from django.core.cache import cache
@@ -762,7 +762,8 @@ def normalize_delimited_list_factory(delimiter: str = ";", suffix: str | None = 
 def csv_lookup_factory(
     key_column: str,
     value_column: str,
-    csv_path: str | None = None,
+    csv_filename: str,
+    path: str | None = None,
     *,
     default=None,
     required: bool = False,
@@ -773,70 +774,52 @@ def csv_lookup_factory(
 ) -> str:
     """
     Return a registered transform name that looks up a value in a CSV file
-    (or a cached copy of it) and returns the corresponding value from another column.
+    and returns the corresponding value from another column.
 
     Parameters:
-      - key_column: the column in the CSV to match the input value against
-      - value_column: the column in the CSV to return the value from
-      - csv_path: optional path to a specific CSV file (overrides default mapping)
-      - default: default value if lookup fails (or None)
-      - required: if True, return an error if the value is not found
-      - case_insensitive: if True, key matching is case-insensitive
-      - delimiter: CSV delimiter (default is ',')
-      - use_cache: if True, use cached mapping if available
-      - cache_timeout: cache timeout in seconds (default 3600s = 1 hour)
-
-    The CSV file should have a header row with column names matching the
-    key_column and value_column parameters.
-
-    Example:
-      # lookup species code in a local CSV file, return scientific name
-      "species_code_to_scientific_name": csv_lookup_factory(
-          "Species Code", "Scientific Name", csv_path="path/to/csvfile.csv"
-      )
+      - csv_filename: filename of the CSV (e.g. "DRF_LOV_RECORD_SOURCE_VWS.csv")
+      - path: optional directory or full path to CSV; if omitted the loader will
+              search the default legacy_data location (dm_mappings.load_csv_mapping)
+      - key_column / value_column: header names in the CSV
     """
-    # (keep initial validations)
-    key_repr = f"csv_lookup:{key_column}:{value_column}:{csv_path or ''}:{case_insensitive}:{delimiter}"
+    if not key_column or not value_column or not csv_filename:
+        raise ValueError("key_column, value_column and csv_filename must be provided")
+
+    key_repr = f"csv_lookup:{csv_filename}:{key_column}:{value_column}:{path or ''}:{case_insensitive}:{delimiter}"
     name = "csv_lookup_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
-
-    def _load_map():
-        # delegate CSV loading to mappings.py
-        mapping, resolved_path = dm_mappings.load_csv_mapping(
-            key_column,
-            value_column,
-            path=csv_path,
-            delimiter=delimiter,
-            case_insensitive=case_insensitive,
-        )
-        return mapping, resolved_path
 
     def _inner(value, ctx: TransformContext):
         if value in (None, ""):
             return _result(default)
 
-        # Try cache first
-        resolved_path_signature = csv_path or f"{key_column}_to_{value_column}"
+        # Use mappings loader which will resolve default location if path is None
+        mapping, resolved_path = dm_mappings.load_csv_mapping(
+            csv_filename,
+            key_column,
+            value_column,
+            path=path,
+            delimiter=delimiter,
+            case_insensitive=case_insensitive,
+        )
+
+        # Use cache keyed by resolved path + params
         cache_key = (
             "csv_lookup_map:"
             + hashlib.sha1(
-                f"{resolved_path_signature}:{case_insensitive}:{delimiter}".encode()
+                f"{resolved_path}:{case_insensitive}:{delimiter}".encode()
             ).hexdigest()
         )
         if use_cache:
             cached = cache.get(cache_key)
-            if cached is not None:
-                mapping, resolved_path = cached, None
-            else:
-                mapping, resolved_path = _load_map()
-                if mapping is not None:
-                    cache.set(cache_key, mapping, cache_timeout)
-        else:
-            mapping, resolved_path = _load_map()
+            if cached is None and mapping is not None:
+                cache.set(cache_key, mapping, cache_timeout)
+            elif cached is not None:
+                mapping = cached
 
         if mapping is None:
-            msg = f"CSV mapping file not found: {resolved_path}"
+            msg = f"CSV mapping file not usable: {resolved_path}"
             if required:
                 return _result(value, TransformIssue("error", msg))
             return _result(default, TransformIssue("warning", msg))
@@ -847,7 +830,7 @@ def csv_lookup_factory(
         if mapped is not None:
             return _result(mapped)
 
-        # fallback raw
+        # fallback raw key check
         if key in mapping:
             return _result(mapping[key])
 
@@ -1138,4 +1121,70 @@ def pluck_attribute_factory(attr: str, default=None) -> str:
             )
 
     registry._fns[name] = _inner
+    return name
+
+
+def build_legacy_map_transform(
+    legacy_system: str,
+    list_name: str,
+    *,
+    required: bool = True,
+    return_type: Literal["id", "canonical", "both"] = "id",
+) -> str:
+    """
+    Register and return a transform name that maps legacy enumerated values
+    via the mappings.preload_map / dm_mappings._CACHE mechanism.
+    """
+    key = f"legacy_map:{legacy_system}:{list_name}:{return_type}"
+    name = "legacy_map_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def fn(value, ctx):
+        if value in (None, ""):
+            if required:
+                return TransformResult(
+                    value=None,
+                    issues=[TransformIssue("error", f"{list_name} required")],
+                )
+            return _result(None)
+
+        # ensure mapping loaded
+        dm_mappings.preload_map(legacy_system, list_name)
+        table = dm_mappings._CACHE.get((legacy_system, list_name), {})
+        norm = dm_mappings._norm(value)
+        if norm not in table:
+            return TransformResult(
+                value=None,
+                issues=[
+                    TransformIssue(
+                        "error", f"Unmapped {legacy_system}.{list_name} value '{value}'"
+                    )
+                ],
+            )
+        entry = table[norm]
+        canonical = entry.get("canonical") or entry.get("raw")
+        # sentinel ignores
+        canonical_norm = str(canonical).strip().casefold()
+        if canonical_norm in {dm_mappings.IGNORE_SENTINEL.casefold(), "ignore"}:
+            ctx.stats.setdefault("ignored_legacy_values", []).append(
+                {"system": legacy_system, "list": list_name, "value": value}
+            )
+            return _result(
+                None,
+                TransformIssue(
+                    "info",
+                    f"Legacy {legacy_system}.{list_name} value '{value}' intentionally ignored",
+                ),
+            )
+
+        if return_type == "id":
+            return _result(entry.get("target_id"))
+        if return_type == "canonical":
+            return _result(canonical)
+        if return_type == "both":
+            return _result((entry.get("target_id"), canonical))
+        return _result(entry.get("target_id"))
+
+    registry._fns[name] = fn
     return name

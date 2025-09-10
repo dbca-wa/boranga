@@ -8,13 +8,6 @@ from typing import Any, Literal
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 
-from boranga.components.data_migration.registry import (
-    TransformContext,
-    TransformIssue,
-    TransformResult,
-    _result,
-    registry,
-)
 from boranga.components.main.models import LegacyValueMap
 
 logger = logging.getLogger(__name__)
@@ -52,76 +45,6 @@ def preload_map(legacy_system: str, list_name: str, active_only: bool = True):
 
 
 ReturnMode = Literal["id", "canonical", "both"]
-
-
-def build_legacy_map_transform(
-    legacy_system: str,
-    list_name: str,
-    *,
-    required: bool = True,
-    return_type: ReturnMode = "id",
-):
-    """
-    Create (or return existing) transform that maps legacy enumerated values.
-    return_type:
-        id         -> returns target_object_id
-        canonical  -> returns canonical_name (fallback to raw legacy value)
-        both       -> returns tuple (target_id, canonical_name)
-    """
-    transform_name = (
-        f"legacy_map_{legacy_system.lower()}_{list_name.lower()}_{return_type}"
-    )
-    if transform_name in registry._fns:
-        return transform_name
-
-    def fn(value, ctx: TransformContext):
-        if value in (None, ""):
-            if required:
-                return TransformResult(
-                    value=None,
-                    issues=[TransformIssue("error", f"{list_name} required")],
-                )
-            return _result(None)
-        preload_map(legacy_system, list_name)
-        table = _CACHE[(legacy_system, list_name)]
-        norm = _norm(value)
-        if norm not in table:
-            return TransformResult(
-                value=None,
-                issues=[
-                    TransformIssue(
-                        "error", f"Unmapped {legacy_system}.{list_name} value '{value}'"
-                    )
-                ],
-            )
-        entry = table[norm]
-        canonical = entry["canonical"] or entry["raw"]
-
-        # treat sentinel canonical values as intentional ignore
-        canonical_norm = str(canonical).strip().casefold()
-        if canonical_norm in {IGNORE_SENTINEL.casefold(), "ignore"}:
-            ctx.stats.setdefault("ignored_legacy_values", []).append(
-                {"system": legacy_system, "list": list_name, "value": value}
-            )
-            return _result(
-                None,
-                TransformIssue(
-                    "info",
-                    f"Legacy {legacy_system}.{list_name} value '{value}' intentionally ignored",
-                ),
-            )
-
-        if return_type == "id":
-            return _result(entry["target_id"])
-        if return_type == "canonical":
-            return _result(canonical)
-        if return_type == "both":
-            return _result((entry["target_id"], canonical))
-        # Fallback (should not happen with Literal typing)
-        return _result(entry["target_id"])
-
-    registry._fns[transform_name] = fn
-    return transform_name
 
 
 def load_species_to_district_links(
