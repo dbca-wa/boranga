@@ -10,10 +10,12 @@ from datetime import timezone as stdlib_timezone
 from typing import Any
 
 import nh3
+from django.core.cache import cache
 from django.db import models
 from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
 
+from boranga.components.data_migration import mappings as dm_mappings
 from boranga.components.main.models import (
     LegacyUsernameEmailuserMapping,
     LegacyValueMap,
@@ -752,6 +754,107 @@ def normalize_delimited_list_factory(delimiter: str = ";", suffix: str | None = 
         if len(items) == 1:
             return _result(items[0])
         return _result(joiner.join(items))
+
+    registry._fns[name] = _inner
+    return name
+
+
+def csv_lookup_factory(
+    key_column: str,
+    value_column: str,
+    csv_path: str | None = None,
+    *,
+    default=None,
+    required: bool = False,
+    case_insensitive: bool = True,
+    delimiter: str = ",",
+    use_cache: bool = True,
+    cache_timeout: int = 3600,
+) -> str:
+    """
+    Return a registered transform name that looks up a value in a CSV file
+    (or a cached copy of it) and returns the corresponding value from another column.
+
+    Parameters:
+      - key_column: the column in the CSV to match the input value against
+      - value_column: the column in the CSV to return the value from
+      - csv_path: optional path to a specific CSV file (overrides default mapping)
+      - default: default value if lookup fails (or None)
+      - required: if True, return an error if the value is not found
+      - case_insensitive: if True, key matching is case-insensitive
+      - delimiter: CSV delimiter (default is ',')
+      - use_cache: if True, use cached mapping if available
+      - cache_timeout: cache timeout in seconds (default 3600s = 1 hour)
+
+    The CSV file should have a header row with column names matching the
+    key_column and value_column parameters.
+
+    Example:
+      # lookup species code in a local CSV file, return scientific name
+      "species_code_to_scientific_name": csv_lookup_factory(
+          "Species Code", "Scientific Name", csv_path="path/to/csvfile.csv"
+      )
+    """
+    # (keep initial validations)
+    key_repr = f"csv_lookup:{key_column}:{value_column}:{csv_path or ''}:{case_insensitive}:{delimiter}"
+    name = "csv_lookup_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _load_map():
+        # delegate CSV loading to mappings.py
+        mapping, resolved_path = dm_mappings.load_csv_mapping(
+            key_column,
+            value_column,
+            path=csv_path,
+            delimiter=delimiter,
+            case_insensitive=case_insensitive,
+        )
+        return mapping, resolved_path
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(default)
+
+        # Try cache first
+        resolved_path_signature = csv_path or f"{key_column}_to_{value_column}"
+        cache_key = (
+            "csv_lookup_map:"
+            + hashlib.sha1(
+                f"{resolved_path_signature}:{case_insensitive}:{delimiter}".encode()
+            ).hexdigest()
+        )
+        if use_cache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                mapping, resolved_path = cached, None
+            else:
+                mapping, resolved_path = _load_map()
+                if mapping is not None:
+                    cache.set(cache_key, mapping, cache_timeout)
+        else:
+            mapping, resolved_path = _load_map()
+
+        if mapping is None:
+            msg = f"CSV mapping file not found: {resolved_path}"
+            if required:
+                return _result(value, TransformIssue("error", msg))
+            return _result(default, TransformIssue("warning", msg))
+
+        key = str(value).strip()
+        lookup_key = key.casefold() if case_insensitive else key
+        mapped = mapping.get(lookup_key)
+        if mapped is not None:
+            return _result(mapped)
+
+        # fallback raw
+        if key in mapping:
+            return _result(mapping[key])
+
+        msg = f"Value '{value}' not found in mapping file {resolved_path}"
+        if required:
+            return _result(value, TransformIssue("error", msg))
+        return _result(default)
 
     registry._fns[name] = _inner
     return name
