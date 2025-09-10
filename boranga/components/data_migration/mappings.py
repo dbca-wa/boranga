@@ -167,6 +167,7 @@ def load_csv_mapping(
     csv_filename: str,
     key_column: str,
     value_column: str,
+    legacy_system: str | None = None,
     path: str | None = None,
     *,
     delimiter: str = ",",
@@ -178,6 +179,8 @@ def load_csv_mapping(
     Parameters:
       - csv_filename: name of the CSV file (e.g. "DRF_LOV_RECORD_SOURCE_VWS.csv").
       - key_column / value_column: header names in the CSV to use for mapping.
+      - legacy_system: optional legacy system subfolder to look under the default
+        legacy_data directory (e.g. "TPFL"). Ignored when `path` is provided.
       - path: optional directory or full path to the CSV file. If omitted the
         default directory is "<data_migration>/legacy_data" (next to this file).
         If `path` is a directory the csv_filename will be joined to it. If it
@@ -198,7 +201,11 @@ def load_csv_mapping(
             # treat provided path as directory
             resolved = p / csv_filename
     else:
-        resolved = base_dir / "legacy_data" / csv_filename
+        # include legacy_system as a subdirectory under legacy_data when provided
+        if legacy_system:
+            resolved = base_dir / "legacy_data" / legacy_system / csv_filename
+        else:
+            resolved = base_dir / "legacy_data" / csv_filename
 
     resolved_str = str(resolved)
 
