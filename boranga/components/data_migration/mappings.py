@@ -238,3 +238,62 @@ def load_legacy_to_pk_map(
         model_name,
     )
     return mapping
+
+
+def load_csv_mapping(
+    key_column: str,
+    value_column: str,
+    path: str | None = None,
+    *,
+    delimiter: str = ",",
+    case_insensitive: bool = True,
+) -> tuple[dict[str, str] | None, str]:
+    """
+    Load a simple CSV mapping file (headers include key_column and value_column).
+    If path is None a default under 'legacy_data' next to this file is used:
+      <data_migration>/legacy_data/{key_column}_to_{value_column}.csv
+
+    Returns (mapping_dict, resolved_path) or (None, resolved_path) if file not found
+    or could not be read.
+    """
+    base_dir = Path(__file__).resolve().parent
+    resolved = (
+        Path(path)
+        if path
+        else base_dir / "legacy_data" / f"{key_column}_to_{value_column}.csv"
+    )
+    resolved_str = str(resolved)
+
+    mapping: dict[str, str] = {}
+    try:
+        with open(resolved_str, newline="", encoding="utf-8") as fh:
+            rdr = csv.DictReader(fh, delimiter=delimiter)
+            if (
+                not rdr.fieldnames
+                or key_column not in rdr.fieldnames
+                or value_column not in rdr.fieldnames
+            ):
+                logger.warning(
+                    "CSV %s missing expected columns (%s, %s); found: %s",
+                    resolved_str,
+                    key_column,
+                    value_column,
+                    rdr.fieldnames,
+                )
+                return None, resolved_str
+            for row in rdr:
+                k = row.get(key_column)
+                v = row.get(value_column)
+                if k is None:
+                    continue
+                key_norm = str(k).strip()
+                if case_insensitive:
+                    key_norm = key_norm.casefold()
+                mapping[key_norm] = v
+        return mapping, resolved_str
+    except FileNotFoundError:
+        logger.debug("CSV mapping file not found: %s", resolved_str)
+        return None, resolved_str
+    except Exception as exc:
+        logger.exception("Error reading CSV mapping %s: %s", resolved_str, exc)
+        return None, resolved_str
