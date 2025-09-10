@@ -763,6 +763,7 @@ def csv_lookup_factory(
     key_column: str,
     value_column: str,
     csv_filename: str,
+    legacy_system: str,
     path: str | None = None,
     *,
     default=None,
@@ -778,6 +779,7 @@ def csv_lookup_factory(
 
     Parameters:
       - csv_filename: filename of the CSV (e.g. "DRF_LOV_RECORD_SOURCE_VWS.csv")
+      - legacy_system: legacy system name (e.g. "TPFL") to add to the path
       - path: optional directory or full path to CSV; if omitted the loader will
               search the default legacy_data location (dm_mappings.load_csv_mapping)
       - key_column / value_column: header names in the CSV
@@ -799,6 +801,7 @@ def csv_lookup_factory(
             csv_filename,
             key_column,
             value_column,
+            legacy_system=legacy_system,
             path=path,
             delimiter=delimiter,
             case_insensitive=case_insensitive,
