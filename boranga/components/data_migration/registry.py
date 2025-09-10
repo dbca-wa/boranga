@@ -14,7 +14,10 @@ from django.db import models
 from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
 
-from boranga.components.main.models import LegacyUsernameEmailuserMapping
+from boranga.components.main.models import (
+    LegacyUsernameEmailuserMapping,
+    LegacyValueMap,
+)
 from boranga.components.species_and_communities.models import (
     GroupType,
     Taxonomy,
@@ -308,6 +311,94 @@ def t_date_from_datetime_iso(value, ctx):
         dt = dt.astimezone(stdlib_timezone.utc)
 
     return _result(dt.date())
+
+
+@registry.register("ocr_comments_transform")
+def t_ocr_comments_transform(value, ctx):
+    PURPOSE1 = ctx.row.get("PURPOSE1", "").strip()
+    PURPOSE2 = ctx.row.get("PURPOSE2", "").strip()
+    VESTING = ctx.row.get("VESTING", "").strip()
+    FENCING_STATUS = ctx.row.get("FENCING_STATUS", "").strip()
+    FENCING_COMMENTS = ctx.row.get("FENCING_COMMENTS", "").strip()
+    ROADSIDE_MARKER_STATUS = ctx.row.get("ROADSIDE_MARKER_STATUS", "").strip()
+    RDSIDE_MKR_COMMENTS = ctx.row.get("RDSIDE_MKR_COMMENTS", "").strip()
+
+    comments = None
+    transform_issues = []
+
+    if PURPOSE1:
+        purpose1 = LegacyValueMap.get_target(
+            legacy_system="TPFL",
+            list_name="PURPOSE (DRF_LOV_PURPOSE_VWS)",
+            value=PURPOSE1,
+            use_cache=True,
+        )
+        if not purpose1:
+            transform_issues.append(
+                TransformIssue(
+                    "error", f"No Purpose found that maps to legacy value: {value!r}"
+                )
+            )
+
+    if PURPOSE2:
+        purpose2 = LegacyValueMap.get_target(
+            legacy_system="TPFL",
+            list_name="PURPOSE (DRF_LOV_PURPOSE_VWS)",
+            value=PURPOSE2,
+            use_cache=True,
+        )
+        if not purpose2:
+            transform_issues.append(
+                TransformIssue(
+                    "error", f"No Purpose found that maps to legacy value: {value!r}"
+                )
+            )
+
+    if VESTING:
+        vesting = LegacyValueMap.get_target(
+            legacy_system="TPFL",
+            list_name="VESTING (DRF_LOV_VESTING_VWS)",
+            value=VESTING,
+            use_cache=True,
+        )
+        if not vesting:
+            transform_issues.append(
+                TransformIssue(
+                    "error", f"No Vesting found that maps to legacy value: {value!r}"
+                )
+            )
+
+    if PURPOSE1:
+        comments = purpose1.current_value
+
+    if PURPOSE2:
+        if comments:
+            comments += ", "
+        comments += purpose2.current_value
+
+    if VESTING:
+        if comments:
+            comments += ", "
+        comments += f"Vesting: {vesting.current_value}"
+
+    if FENCING_STATUS:
+        if comments:
+            comments += ", "
+        comments = f"Fencing Status: {FENCING_STATUS}"
+    if FENCING_COMMENTS:
+        if comments:
+            comments += ", "
+        comments += f"Fencing Comments: {FENCING_COMMENTS}"
+    if ROADSIDE_MARKER_STATUS:
+        if comments:
+            comments += ", "
+        comments += f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}"
+    if RDSIDE_MKR_COMMENTS:
+        if comments:
+            comments += ", "
+        comments += f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}"
+
+    return _result(comments, *transform_issues)
 
 
 def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
