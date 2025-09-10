@@ -495,6 +495,59 @@ class LegacyValueMap(models.Model):
     def key_tuple(self):
         return (self.legacy_system, self.list_name, self.legacy_value)
 
+    @classmethod
+    def get_target(
+        cls,
+        legacy_system: str,
+        list_name: str,
+        legacy_value: str,
+        *,
+        require_active: bool = True,
+        use_cache: bool = True,
+    ):
+        """
+        Return the resolved target object or canonical_name (if no target_object) for the
+        given legacy tuple. Returns None if no mapping found or (require_active and not active).
+
+        Usage:
+            obj_or_name = LegacyValueMap.get_target('TPFL', 'community', 'COMM123')
+        """
+        if not (legacy_system and list_name and legacy_value):
+            return None
+
+        cache_key = f"legacymap:{legacy_system}:{list_name}:{legacy_value}"
+        if use_cache:
+            from django.core.cache import cache
+
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return cached
+
+        try:
+            rec = cls.objects.get(
+                legacy_system=legacy_system,
+                list_name=list_name,
+                legacy_value=legacy_value,
+            )
+        except cls.DoesNotExist:
+            if use_cache:
+                cache.set(cache_key, None, 60)  # negative cache short TTL
+            return None
+
+        if require_active and not rec.active:
+            if use_cache:
+                cache.set(cache_key, None, 60)
+            return None
+
+        # prefer target object if present, otherwise return canonical string (or None)
+        result = (
+            rec.target_object if rec.target_object is not None else rec.canonical_name
+        )
+
+        if use_cache:
+            cache.set(cache_key, result, 300)
+        return result
+
 
 class OccToOcrSectionMapping(models.Model):
     """
