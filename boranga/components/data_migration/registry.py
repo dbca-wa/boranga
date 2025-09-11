@@ -1234,3 +1234,42 @@ def t_format_date_dmy(value, ctx):
         return _result(d.strftime("%d/%m/%Y"))
     except Exception as e:
         return _result(value, TransformIssue("error", f"format_date_dmy error: {e}"))
+
+
+def to_int_trailing_factory(prefix: str, required: bool = False):
+    """
+    Build a transform that extracts trailing integer digits only when the input
+    string begins with `prefix`. If required=True and the prefix is missing
+    or no trailing digits found, emit an error TransformIssue.
+    """
+    pref = str(prefix or "")
+
+    def _transform(value, ctx):
+        if value in (None, ""):
+            return _result(None)
+        s = str(value).strip()
+        # must start with prefix
+        if not s.startswith(pref):
+            if required:
+                return _result(
+                    value, TransformIssue("error", f"expected prefix {pref!r}")
+                )
+            return _result(None)
+        m = re.search(r"(" + r"\d+" + r")\s*$", s)
+        if not m:
+            if required:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error", f"no trailing digits after prefix {pref!r}"
+                    ),
+                )
+            return _result(None)
+        try:
+            return _result(int(m.group(1)))
+        except Exception as e:
+            return _result(
+                value, TransformIssue("error", f"to_int_trailing failed: {e}")
+            )
+
+    return _transform
