@@ -1,4 +1,6 @@
+from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.occurrence.models import OccurrenceReport
+from boranga.components.species_and_communities.models import GroupType
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
@@ -21,7 +23,7 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             canonical["occurrence_report_name"] = (
                 f"{canonical.get('POP_NUMBER','').strip()} {canonical.get('SUBPOP_CODE','').strip()}".strip()
             )
-            canonical["group_type"] = "flora"
+            canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
             canonical["occurrence_source"] = OccurrenceReport.OCCURRENCE_CHOICE_OCR
             canonical["processing_status"] = OccurrenceReport.PROCESSING_STATUS_ACTIVE
             canonical["locked"] = True

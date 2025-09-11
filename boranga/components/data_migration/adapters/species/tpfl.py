@@ -1,3 +1,4 @@
+from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.species_and_communities.models import GroupType
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
@@ -29,6 +30,6 @@ class SpeciesTpflAdapter(SourceAdapter):
             canonical["conservation_plan_reference"] = (
                 " ".join(parts) if parts else None
             )
-            canonical["group_type_id"] = GroupType.objects.get(name="flora").id
+            canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)
