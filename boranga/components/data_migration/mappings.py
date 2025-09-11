@@ -35,12 +35,26 @@ def preload_map(legacy_system: str, list_name: str, active_only: bool = True):
         qs = qs.filter(active=True)
     data: dict[str, dict] = {}
     for row in qs.select_related("target_content_type"):
-        data[_norm(row.legacy_value)] = {
-            "target_id": row.target_object_id,
-            "content_type_id": row.target_content_type_id,
-            "canonical": row.canonical_name,
-            "raw": row.legacy_value,
-        }
+        # Preserve intentional ignore sentinel entries in the map so callers
+        # can detect and silently ignore them.
+        canon = (row.canonical_name or "").strip()
+        key = _norm(row.legacy_value)
+        if canon.casefold() == IGNORE_SENTINEL.casefold():
+            data[key] = {
+                "target_id": None,
+                "content_type_id": None,
+                "canonical": None,
+                "raw": row.legacy_value,
+                "ignored": True,
+            }
+        else:
+            data[key] = {
+                "target_id": row.target_object_id,
+                "content_type_id": row.target_content_type_id,
+                "canonical": row.canonical_name,
+                "raw": row.legacy_value,
+                "ignored": False,
+            }
     _CACHE[key] = data
 
 
@@ -148,11 +162,18 @@ def load_legacy_to_pk_map(
         qs = qs.filter(list_name__iexact=model_name)
 
     for row in qs.select_related("target_content_type"):
+        canon = (row.canonical_name or "").strip()
+        key = str(row.legacy_value).strip()
+        if not key:
+            continue
+        # record intentional ignore as an explicit None value so callers can
+        # distinguish "ignored" vs "missing"
+        if canon.casefold() == IGNORE_SENTINEL.casefold():
+            mapping[key] = None
+            continue
         if row.target_object_id:
-            key = str(row.legacy_value).strip()
-            if key:
-                # later entries may override earlier; keep last-seen
-                mapping[key] = int(row.target_object_id)
+            # later entries may override earlier; keep last-seen
+            mapping[key] = int(row.target_object_id)
 
     logger.debug(
         "load_legacy_to_pk_map: loaded %d mappings for %s -> %s",
