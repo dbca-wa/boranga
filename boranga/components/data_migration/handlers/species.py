@@ -184,6 +184,7 @@ class SpeciesImporter(BaseSheetImporter):
             )
             merged = {}
             combined_issues = []
+            # first merge the canonical columns defined by the schema/pipelines
             for col in pipelines.keys():
                 val = None
                 for trans, src, _ in entries_sorted:
@@ -192,6 +193,21 @@ class SpeciesImporter(BaseSheetImporter):
                         val = v
                         break
                 merged[col] = val
+            # also merge any adapter-added keys (e.g. group_type_id) that are present
+            # in the transformed dicts but not in the schema pipelines
+            extra_keys = set().union(
+                *(set(trans.keys()) for trans, _, _ in entries_sorted)
+            )
+            for extra in sorted(extra_keys):
+                if extra in pipelines:
+                    continue
+                val = None
+                for trans, src, _ in entries_sorted:
+                    v = trans.get(extra)
+                    if v not in (None, ""):
+                        val = v
+                        break
+                merged[extra] = val
             for _, _, iss in entries_sorted:
                 combined_issues.extend(iss)
             return merged, combined_issues
