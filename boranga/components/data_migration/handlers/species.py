@@ -162,6 +162,16 @@ class SpeciesImporter(BaseSheetImporter):
             if has_error:
                 skipped += 1
                 continue
+
+            # copy adapter-added keys (e.g. group_type_id) from the source row into
+            # the transformed dict so they survive the merge. Skip internals.
+            for k, v in row.items():
+                if k.startswith("_"):
+                    continue
+                if k in transformed:
+                    continue
+                transformed[k] = v
+
             key = transformed.get("migrated_from_id")
             if not key:
                 skipped += 1
@@ -262,6 +272,13 @@ class SpeciesImporter(BaseSheetImporter):
             }
 
             if ctx.dry_run:
+                pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
+                logger.debug(
+                    "SpeciesImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
+                    self.slug,
+                    migrated_from_id,
+                    pretty,
+                )
                 continue
 
             with transaction.atomic():
