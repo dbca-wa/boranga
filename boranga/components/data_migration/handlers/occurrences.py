@@ -117,6 +117,13 @@ class OccurrenceImporter(BaseSheetImporter):
 
         for row in all_rows:
             processed += 1
+            # progress output every 500 rows
+            if processed % 500 == 0:
+                logger.info(
+                    "OccurrenceImporter %s: processed %d rows so far",
+                    self.slug,
+                    processed,
+                )
             tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
             issues = []
             transformed = {}
@@ -145,6 +152,16 @@ class OccurrenceImporter(BaseSheetImporter):
             if has_error:
                 skipped += 1
                 continue
+
+            # copy adapter-added keys (e.g. group_type_id) from the source row into
+            # the transformed dict so they survive the merge. Skip internals.
+            for k, v in row.items():
+                if k.startswith("_"):
+                    continue
+                if k in transformed:
+                    continue
+                transformed[k] = v
+
             key = transformed.get("migrated_from_id")
             if not key:
                 # missing key — cannot merge/persist
@@ -159,12 +176,9 @@ class OccurrenceImporter(BaseSheetImporter):
         # 4. Merge groups and persist one object per key
         def merge_group(entries, source_priority):
             """
-            entries: list of (transformed_dict, source, issues)
-            source_priority: list of source keys in preferred order
-            Merge rule: for each column pick first non-None/non-empty value
-            according to source_priority; combine issues.
+            Merge canonical columns (from schema pipelines) and also preserve any
+            adapter-added keys found in transformed dicts (first non-empty wins).
             """
-            # sort entries by source priority so earlier sources win
             entries_sorted = sorted(
                 entries,
                 key=lambda e: (
@@ -175,6 +189,7 @@ class OccurrenceImporter(BaseSheetImporter):
             )
             merged = {}
             combined_issues = []
+            # first merge the canonical columns defined by the schema/pipelines
             for col in pipelines.keys():
                 val = None
                 for trans, src, _ in entries_sorted:
@@ -183,6 +198,20 @@ class OccurrenceImporter(BaseSheetImporter):
                         val = v
                         break
                 merged[col] = val
+            # also merge any adapter-added keys that are present in transformed dicts
+            extra_keys = set().union(
+                *(set(trans.keys()) for trans, _, _ in entries_sorted)
+            )
+            for extra in sorted(extra_keys):
+                if extra in pipelines:
+                    continue
+                val = None
+                for trans, src, _ in entries_sorted:
+                    v = trans.get(extra)
+                    if v not in (None, ""):
+                        val = v
+                        break
+                merged[extra] = val
             for _, _, iss in entries_sorted:
                 combined_issues.extend(iss)
             return merged, combined_issues
@@ -234,7 +263,16 @@ class OccurrenceImporter(BaseSheetImporter):
                 defaults["locked"] = merged.get("locked")
 
             if ctx.dry_run:
-                # don't persist, but update counters as if created/updated if desired
+                # pretty print defaults on dry-run for easier debugging
+                pretty = __import__("json").dumps(
+                    defaults, default=str, indent=2, sort_keys=True
+                )
+                logger.debug(
+                    "OccurrenceImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
+                    self.slug,
+                    migrated_from_id,
+                    pretty,
+                )
                 continue
 
             with transaction.atomic():
