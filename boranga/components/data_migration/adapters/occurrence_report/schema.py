@@ -12,6 +12,7 @@ from boranga.components.data_migration.registry import (
     fk_lookup,
     pluck_attribute_factory,
     taxonomy_lookup,
+    to_int_trailing_factory,
 )
 from boranga.components.occurrence.models import OccurrenceReport
 from boranga.components.species_and_communities.models import Species
@@ -76,6 +77,9 @@ ROLE_TRANSFORM = build_legacy_map_transform(
     required=False,
 )
 
+# require the "GRVL_" prefix and error if missing
+GRAVEL_TRAILING_INT = to_int_trailing_factory(prefix="GRVL_", required=True)
+
 # Header → canonical key
 COLUMN_MAP = {
     "SHEETNO": "migrated_from_id",
@@ -97,6 +101,8 @@ COLUMN_MAP = {
     "OBS_ROLE_CODE": "OCRObserverDetail__role",
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
     "OBS_NAME": "OCRObserverDetail__observer_name",
+    # OCRHabitatComposition fields
+    "GRAVEL": "OCRHabitatComposition__loose_rock_percent",
 }
 
 REQUIRED_COLUMNS = [
@@ -130,6 +136,12 @@ PIPELINES = {
     # OCRObserverDetail fields
     "OCRObserverDetail__role": ["strip", "blank_to_none", ROLE_TRANSFORM],
     "OCRObserverDetail__observer_name": ["strip", "blank_to_none"],
+    # OCRHabitatComposition fields
+    "OCRHabitatComposition__loose_rock_percent": [
+        "strip",
+        "blank_to_none",
+        GRAVEL_TRAILING_INT,
+    ],
 }
 
 SCHEMA = Schema(
@@ -175,3 +187,6 @@ class OccurrenceReportRow:
 
     # OCRObserverDetail fields
     OCRObserverDetail__role: str | None = None
+
+    # OCRHabitatComposition fields
+    OCRHabitatComposition__loose_rock_percent: int | None = None

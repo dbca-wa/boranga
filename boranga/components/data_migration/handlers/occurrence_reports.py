@@ -21,7 +21,7 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
-from boranga.components.occurrence.models import OccurrenceReport
+from boranga.components.occurrence.models import OccurrenceReport, OCRHabitatComposition
 
 logger = logging.getLogger(__name__)
 
@@ -277,6 +277,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # no per-row related models here by default; adapters/schemas can populate extras
             # (e.g. contact records) via merged fields if needed
+
+            # OCRHabitatComposition
+            OCRHabitatComposition.objects.get_or_create(
+                occurrence_report=obj,
+                # TODO add more fields here as needed
+                loose_rock_percent=merged.get(
+                    "OCRHabitatComposition__loose_rock_percent"
+                ),
+            )
 
         stats.update(
             processed=processed,
