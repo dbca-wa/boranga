@@ -9,6 +9,7 @@ from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 
 from boranga.components.main.models import LegacyValueMap
+from boranga.components.species_and_communities.models import GroupType
 
 logger = logging.getLogger(__name__)
 
@@ -263,3 +264,27 @@ def load_csv_mapping(
     except Exception as exc:
         logger.exception("Error reading CSV mapping %s: %s", resolved_str, exc)
         return None, resolved_str
+
+
+# simple in-process cache for GroupType id lookups
+_GROUP_TYPE_CACHE: dict[str, int] = {}
+
+
+def get_group_type_id(name: str) -> int | None:
+    """
+    Return GroupType.id for the given name (case-insensitive). Cached in-process.
+    Returns None if no matching GroupType is found.
+    """
+    if not name:
+        return None
+    key = str(name).strip().casefold()
+    if key in _GROUP_TYPE_CACHE:
+        return _GROUP_TYPE_CACHE[key]
+    try:
+        obj = GroupType.objects.filter(name__iexact=name).first()
+        if obj:
+            _GROUP_TYPE_CACHE[key] = obj.id
+            return obj.id
+    except Exception:
+        logger.exception("Error looking up GroupType %s", name)
+    return None
