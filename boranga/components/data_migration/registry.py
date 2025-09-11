@@ -5,7 +5,7 @@ import logging
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from datetime import timezone as stdlib_timezone
 from typing import Any, Literal
 
@@ -1194,3 +1194,43 @@ def build_legacy_map_transform(
 
     registry._fns[name] = fn
     return name
+
+
+@registry.register("format_date_dmy")
+def t_format_date_dmy(value, ctx):
+    """
+    Accept a date or datetime and return "dd/mm/YYYY" string.
+    Expect this to be used after date_from_datetime_iso (so value is a date).
+    """
+    if value in (None, ""):
+        return _result(None)
+    # value may be date or datetime or string
+    try:
+        if isinstance(value, datetime):
+            d = value.date()
+        elif isinstance(value, date):
+            d = value
+        else:
+            # try to parse forgivingly using existing date_from_datetime_iso logic:
+            res = registry._fns.get("date_from_datetime_iso")
+            if res is not None:
+                parsed = res(value, ctx)
+                if parsed and parsed.value:
+                    d = parsed.value
+                else:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error", f"Unrecognized date for formatting: {value!r}"
+                        ),
+                    )
+            else:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error", f"No parser available for date value: {value!r}"
+                    ),
+                )
+        return _result(d.strftime("%d/%m/%Y"))
+    except Exception as e:
+        return _result(value, TransformIssue("error", f"format_date_dmy error: {e}"))
