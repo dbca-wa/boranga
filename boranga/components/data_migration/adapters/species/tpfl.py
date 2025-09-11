@@ -18,10 +18,17 @@ class SpeciesTpflAdapter(SourceAdapter):
 
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
-            RP_COMMENTS = canonical.get("RP_COMMENTS", "").strip()
-            RP_EXP_DATE = canonical.get("RP_EXP_DATE", "").strip()
-            if RP_COMMENTS or RP_EXP_DATE:
-                canonical["conservation_plan_reference"] = f"{RP_COMMENTS}{RP_EXP_DATE}"
+            # RP_EXP_DATE is already formatted by the pipeline to "dd/mm/YYYY"
+            rp_comments = (canonical.get("RP_COMMENTS") or "").strip()
+            rp_exp_date = canonical.get("RP_EXP_DATE")  # already formatted or None
+            parts = []
+            if rp_comments:
+                parts.append(rp_comments)
+            if rp_exp_date:
+                parts.append(f"RP Expiry Date: {rp_exp_date}")
+            canonical["conservation_plan_reference"] = (
+                " ".join(parts) if parts else None
+            )
             canonical["group_type_id"] = GroupType.objects.get(name="flora").id
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)
