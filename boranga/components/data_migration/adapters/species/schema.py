@@ -31,6 +31,8 @@ COLUMN_MAP = {
     "ACTIVE_IND": "processing_status",
     "CREATED_BY": "submitter",
     "DISTRIBUTION": "distribution",
+    # source column with RP expiry date
+    "RP_EXP_DATE": "RP_EXP_DATE",
 }
 
 # Minimal required canonical fields for migration
@@ -44,6 +46,13 @@ PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     "taxonomy_id": ["strip", "blank_to_none", "required", TAXONOMY_TRANSFORM],
     "comment": ["strip", "blank_to_none"],
+    # normalize & format RP_EXP_DATE to "dd/mm/YYYY"
+    "RP_EXP_DATE": [
+        "strip",
+        "blank_to_none",
+        "date_from_datetime_iso",
+        "format_date_dmy",
+    ],
     "conservation_plan_exists": ["strip", "blank_to_none", "is_present"],
     "department_file_numbers": ["strip", "blank_to_none"],
     "last_data_curation_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
