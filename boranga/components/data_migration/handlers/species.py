@@ -312,6 +312,7 @@ class SpeciesImporter(BaseSheetImporter):
                         "conservation_status_public": processing_status_is_active,
                         "distribution_public": processing_status_is_active,
                         "species_public": processing_status_is_active,
+                        "threats_public": processing_status_is_active,
                     },
                 )
 
