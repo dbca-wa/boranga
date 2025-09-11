@@ -5,8 +5,8 @@ from datetime import date, datetime
 
 from boranga.components.data_migration import utils
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.mappings import build_legacy_map_transform
 from boranga.components.data_migration.registry import (
+    build_legacy_map_transform,
     choices_transform,
     emailuser_by_legacy_username_factory,
     fk_lookup,
