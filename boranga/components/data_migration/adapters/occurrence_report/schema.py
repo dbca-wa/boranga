@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+import boranga.components.data_migration.mappings as dm_mappings
 from boranga.components.data_migration.adapters.schema_base import Schema
+from boranga.components.data_migration.registry import _result  # add this import
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
     csv_lookup_factory,
@@ -15,7 +17,16 @@ from boranga.components.data_migration.registry import (
     to_int_trailing_factory,
 )
 from boranga.components.occurrence.models import OccurrenceReport
-from boranga.components.species_and_communities.models import Species
+from boranga.components.species_and_communities.models import Community, Species
+
+# build mapper that reads SHEETNO column and returns POP_ID (uses cached map)
+POP_ID_FROM_SHEETNO = dependent_from_column_factory(
+    "SHEETNO",
+    mapper=lambda dep, ctx: dm_mappings.get_pop_id_for_sheetno(
+        dep, legacy_system="TPFL"
+    ),
+    default=None,
+)
 
 TAXONOMY_TRANSFORM = taxonomy_lookup(
     lookup_field="scientific_name",
@@ -23,10 +34,10 @@ TAXONOMY_TRANSFORM = taxonomy_lookup(
 
 SPECIES_TRANSFORM = fk_lookup(model=Species, lookup_field="taxonomy_id")
 
-COMMUNITY_TRANSFORM = build_legacy_map_transform("TPFL", "community", return_type="id")
+COMMUNITY_TRANSFORM = fk_lookup(model=Community, lookup_field="community_name")
 
 
-def map_form_status_code_to_processing_status(value: str) -> str | None:
+def map_form_status_code_to_processing_status(value: str, ctx=None) -> str | None:
     mapping = {
         "NEW": OccurrenceReport.PROCESSING_STATUS_DRAFT,
         "READY": OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
@@ -36,7 +47,7 @@ def map_form_status_code_to_processing_status(value: str) -> str | None:
     return mapping.get(value.strip().upper()) if value else None
 
 
-def map_form_status_code_to_customer_status(value: str) -> str | None:
+def map_form_status_code_to_customer_status(value: str, ctx=None) -> str | None:
     mapping = {
         "NEW": OccurrenceReport.CUSTOMER_STATUS_DRAFT,
         "READY": OccurrenceReport.CUSTOMER_STATUS_WITH_ASSESSOR,
@@ -46,13 +57,18 @@ def map_form_status_code_to_customer_status(value: str) -> str | None:
     return mapping.get(value.strip().upper()) if value else None
 
 
-MAP_FORM_STATUS_CODE_TO_PROCESSING_STATUS = map_form_status_code_to_processing_status
+# wrap the simple mapper so it fits the TransformFn signature (value, ctx) -> TransformResult
+def MAP_FORM_STATUS_CODE_TO_PROCESSING_STATUS(value, ctx):
+    return _result(map_form_status_code_to_processing_status(value, ctx))
+
+
+# keep the existing usage for dependent_from_column_factory (mapper expects dep, ctx)
 MAP_FORM_STATUS_CODE_TO_CUSTOMER_STATUS = map_form_status_code_to_customer_status
 
 # derive customer_status from the raw FORM_STATUS_CODE column
 CUSTOMER_STATUS_FROM_FORM_STATUS_CODE = dependent_from_column_factory(
     "FORM_STATUS_CODE",
-    mapper=lambda dep_val, ctx: MAP_FORM_STATUS_CODE_TO_CUSTOMER_STATUS(dep_val),
+    mapper=lambda dep_val, ctx: MAP_FORM_STATUS_CODE_TO_CUSTOMER_STATUS(dep_val, ctx),
     default=None,
 )
 
@@ -66,6 +82,7 @@ RECORD_SOURCE_FROM_CSV = csv_lookup_factory(
     key_column="TERM_CODE",
     value_column="LABEL",
     csv_filename="DRF_LOV_RECORD_SOURCE_VWS.csv",
+    legacy_system="TPFL",
     required=False,
 )
 
@@ -83,7 +100,6 @@ GRAVEL_TRAILING_INT = to_int_trailing_factory(prefix="GRVL_", required=True)
 # Header → canonical key
 COLUMN_MAP = {
     "SHEETNO": "migrated_from_id",
-    "POP_ID": "Occurrence__migrated_from_id",
     "SPNAME": "species_id",
     "COMM_NAME": "community_id",  # TODO replace with real column name later
     # approved_by - has no column as is derived from two other columns: See synthetic fields in handler
@@ -107,13 +123,12 @@ COLUMN_MAP = {
 
 REQUIRED_COLUMNS = [
     "migrated_from_id",
-    "Occurrence__migrated_from_id",
     "processing_status",
 ]
 
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
-    "Occurrence__migrated_from_id": ["strip", "required"],
+    "Occurrence__migrated_from_id": [POP_ID_FROM_SHEETNO],
     "species_id": ["strip", "blank_to_none", TAXONOMY_TRANSFORM, SPECIES_TRANSFORM],
     "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
     "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
