@@ -288,3 +288,87 @@ def get_group_type_id(name: str) -> int | None:
     except Exception:
         logger.exception("Error looking up GroupType %s", name)
     return None
+
+
+# Cached mapping helpers for SHEETNO <-> POP_ID (from DRF_POP_SECTION_MAP.csv)
+
+_SHEET_POP_CACHE: dict[str, dict[str, str]] = {}
+_POP_SHEET_CACHE: dict[str, dict[str, str]] = {}
+
+
+def preload_sheetno_pop_map(
+    legacy_system: str = "TPFL", path: str | None = None
+) -> None:
+    """
+    Populate in-memory caches for SHEETNO -> POP_ID and reverse using the
+    DRF_POP_SECTION_MAP.csv (under legacy_data/<legacy_system>/).
+    Safe to call multiple times; cheap after first call.
+    """
+    key = str(legacy_system or "TPFL")
+    if key in _SHEET_POP_CACHE:
+        return
+    mapping, resolved = load_csv_mapping(
+        "DRF_POP_SECTION_MAP.csv",
+        key_column="SHEETNO",
+        value_column="POP_ID",
+        legacy_system=legacy_system,
+        path=path,
+        case_insensitive=True,
+    )
+    if not mapping:
+        logger.debug(
+            "preload_sheetno_pop_map: no mapping found at %s (legacy=%s)",
+            resolved,
+            legacy_system,
+        )
+        _SHEET_POP_CACHE[key] = {}
+        _POP_SHEET_CACHE[key] = {}
+        return
+
+    # normalise keys to casefolded strings
+    norm_map: dict[str, str] = {}
+    rev_map: dict[str, str] = {}
+    for k, v in mapping.items():
+        if k is None or v is None:
+            continue
+        ks = str(k).strip().casefold()
+        vs = str(v).strip()
+        if not ks:
+            continue
+        norm_map[ks] = vs
+        rev_map[vs] = k  # keep original sheetno string for reverse lookup
+
+    _SHEET_POP_CACHE[key] = norm_map
+    _POP_SHEET_CACHE[key] = rev_map
+    logger.debug(
+        "preload_sheetno_pop_map: loaded %d entries for legacy=%s from %s",
+        len(norm_map),
+        legacy_system,
+        resolved,
+    )
+
+
+def get_pop_id_for_sheetno(
+    sheetno: Any, legacy_system: str = "TPFL", path: str | None = None
+) -> str | None:
+    """
+    Return POP_ID for the given SHEETNO (string-like). Uses in-memory cache.
+    """
+    if sheetno in (None, ""):
+        return None
+    key = str(legacy_system or "TPFL")
+    preload_sheetno_pop_map(legacy_system=legacy_system, path=path)
+    return _SHEET_POP_CACHE.get(key, {}).get(str(sheetno).strip().casefold())
+
+
+def get_sheetno_for_pop_id(
+    pop_id: Any, legacy_system: str = "TPFL", path: str | None = None
+) -> str | None:
+    """
+    Reverse lookup: return SHEETNO for a POP_ID (if present).
+    """
+    if pop_id in (None, ""):
+        return None
+    key = str(legacy_system or "TPFL")
+    preload_sheetno_pop_map(legacy_system=legacy_system, path=path)
+    return _POP_SHEET_CACHE.get(key, {}).get(str(pop_id).strip())
