@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from datetime import timezone as stdlib_timezone
+from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any, Literal
 
 import nh3
@@ -71,8 +72,20 @@ class TransformRegistry:
 
         return deco
 
-    def build_pipeline(self, names: Sequence[str]) -> list[TransformFn]:
-        return [self._fns[n] for n in names]
+    def build_pipeline(self, names):
+        pipeline = []
+        for n in names:
+            # allow either a registered transform name (str) or a callable transform
+            if callable(n):
+                pipeline.append(n)
+                continue
+            try:
+                pipeline.append(self._fns[n])
+            except KeyError:
+                raise KeyError(
+                    f"unknown transform {n!r} (pipeline entry must be a registered name or a callable)"
+                )
+        return pipeline
 
 
 registry = TransformRegistry()
@@ -167,6 +180,62 @@ def t_to_decimal(value, ctx):
         return _result(Decimal(str(value)))
     except (InvalidOperation, ValueError):
         return _result(value, TransformIssue("error", f"Not a decimal: {value!r}"))
+
+
+def to_decimal_factory(
+    max_digits: int | None = None, decimal_places: int | None = None
+):
+    """
+    Return a registered transform name that converts value -> Decimal and optionally
+    enforces max_digits (total digits) and decimal_places (scale).
+
+    Usage:
+      D10_2 = to_decimal_factory(max_digits=10, decimal_places=2)
+      PIPELINES["amount"] = ["strip", "blank_to_none", D10_2]
+    """
+    key = f"to_decimal_max{max_digits}_dp{decimal_places}"
+    name = "to_decimal_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx):
+        if value in (None, ""):
+            return _result(None)
+        try:
+            dec = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return _result(value, TransformIssue("error", f"Not a decimal: {value!r}"))
+
+        # enforce decimal places by quantizing
+        if decimal_places is not None:
+            try:
+                quant = Decimal(f"1e-{int(decimal_places)}")
+                dec = dec.quantize(quant, rounding=ROUND_HALF_EVEN)
+            except Exception as e:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error", f"Failed to quantize to {decimal_places} dp: {e}"
+                    ),
+                )
+
+        # enforce max digits (total significant digits excluding sign)
+        if max_digits is not None:
+            tup = dec.as_tuple()
+            total_digits = len(tup.digits)
+            if total_digits > int(max_digits):
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error",
+                        f"Decimal {dec!r} exceeds max_digits={max_digits} (has {total_digits} digits)",
+                    ),
+                )
+
+        return _result(dec)
+
+    registry._fns[name] = _inner
+    return name
 
 
 @registry.register("date_iso")
@@ -972,22 +1041,11 @@ def dependent_from_column_factory(
 ) -> str:
     """
     Return a registered transform name that derives its output from another column
-    in the same raw row (ctx.row). Use either `mapping` (dict lookup) or `mapper`
-    (callable receiving the dependency value and ctx). If neither mapping nor
-    mapper is provided the transform simply returns the dependency value.
-
-    Example usages:
-      # simple mapping: if FORM_STATUS == 'ACCEPTED' return 'approved', else None
-      DERIVE_APPROVAL = dependent_from_column_factory(
-          "FORM_STATUS", mapping={"ACCEPTED": "approved"}, default=None
-      )
-      PIPELINE = [DERIVE_APPROVAL]
-
-      # callable mapper:
-      def my_mapper(dep_val, ctx):
-          if dep_val == "X": return "foo"
-          return None
-      DERIVE = dependent_from_column_factory("SOME_COL", mapper=my_mapper)
+    in the same raw row (ctx.row). `mapping` may be:
+      - a dict for direct lookups,
+      - a registered transform name (str) to apply to the dependency value,
+      - or a callable taking (dep, ctx) returning a value or TransformResult.
+    If `mapper` is provided it takes precedence.
     """
     if not dependency_column:
         raise ValueError("dependency_column must be provided")
@@ -1004,7 +1062,7 @@ def dependent_from_column_factory(
             else None
         )
 
-        # if mapper supplied, call it
+        # mapper supplied -> call it
         if mapper is not None:
             try:
                 out = mapper(dep, ctx)
@@ -1012,12 +1070,42 @@ def dependent_from_column_factory(
             except Exception as e:
                 return _result(value, TransformIssue("error", f"mapper error: {e}"))
 
-        # mapping dict behaviour
+        # If mapping is a registered transform name (str) or a callable, apply it
         if mapping is not None:
-            if dep in mapping:
-                return _result(mapping[dep])
-            # try string-normalised lookup for convenience
+            # registered transform name
+            if isinstance(mapping, str):
+                fn = registry._fns.get(mapping)
+                if fn is None:
+                    return _result(
+                        value, TransformIssue("error", f"Unknown transform '{mapping}'")
+                    )
+                try:
+                    res = fn(dep, ctx)
+                    if isinstance(res, TransformResult):
+                        return res
+                    return _result(res)
+                except Exception as e:
+                    return _result(
+                        value, TransformIssue("error", f"mapping transform error: {e}")
+                    )
+
+            # callable mapping
+            if callable(mapping):
+                try:
+                    res = mapping(dep, ctx)
+                    if isinstance(res, TransformResult):
+                        return res
+                    return _result(res)
+                except Exception as e:
+                    return _result(
+                        value, TransformIssue("error", f"mapping callable error: {e}")
+                    )
+
+            # mapping dict behaviour (fallback)
             try:
+                if dep in mapping:
+                    return _result(mapping[dep])
+                # try string-normalised lookup for convenience
                 k = str(dep).strip()
                 if k in mapping:
                     return _result(mapping[k])
