@@ -21,7 +21,11 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
-from boranga.components.occurrence.models import OccurrenceReport, OCRHabitatComposition
+from boranga.components.occurrence.models import (
+    OccurrenceReport,
+    OCRHabitatComposition,
+    OCRObserverDetail,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -225,11 +229,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 continue
 
             # validate using schema's row dataclass if available
+            report_row = None
             try:
                 report_row = schema.OccurrenceReportRow.from_dict(merged)
                 validation_issues = report_row.validate()
-            except Exception:
-                validation_issues = []
+            except Exception as e:
+                # treat construction/parsing errors as a validation error so the row is skipped
+                validation_issues = [("error", f"row_dataclass_error: {e}")]
 
             if validation_issues:
                 for level, msg in validation_issues:
@@ -251,6 +257,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     )
                     continue
 
+            # At this point report_row is guaranteed to exist
             defaults = report_row.to_model_defaults()
             # add any extra adapter-supplied metadata (e.g. legacy source)
             involved_sources = sorted({src for _, src, _ in entries})
@@ -277,6 +284,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # no per-row related models here by default; adapters/schemas can populate extras
             # (e.g. contact records) via merged fields if needed
+
+            # OCRObserverDetail
+            OCRObserverDetail.objects.get_or_create(
+                occurrence_report=obj,
+                main_observer=True,
+            )
 
             # OCRHabitatComposition
             OCRHabitatComposition.objects.get_or_create(
