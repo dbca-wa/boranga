@@ -65,7 +65,7 @@
             "name": "Wheatbelt"
         }
     },
-    
+
     {
         "pk": 1,
         "model": "boranga.district",
@@ -102,8 +102,8 @@
         "fields": {
             "archive_date": null,
             "region": 3,
-            "code": "GER",
-            "name": "Geraldton"
+            "code": "MUR",
+            "name": "Murchison"
         }
     },
     {
@@ -112,8 +112,8 @@
         "fields": {
             "archive_date": null,
             "region": 3,
-            "code": "MOR",
-            "name": "Moora"
+            "code": "TQC",
+            "name": "Turquoise Coast"
         }
     },
     {
@@ -122,8 +122,8 @@
         "fields": {
             "archive_date": null,
             "region": 3,
-            "code": "SHB",
-            "name": "Shark Bay"
+            "code": "GAS",
+            "name": "Gascoyne"
         }
     },
     {
@@ -224,16 +224,6 @@
             "region": 8,
             "code": "FRK",
             "name": "Frankland"
-        }
-    },
-    {
-        "pk": 17,
-        "model": "boranga.district",
-        "fields": {
-            "archive_date": null,
-            "region": 9,
-            "code": "CWB",
-            "name": "Central Wheatbelt"
         }
     },
     {

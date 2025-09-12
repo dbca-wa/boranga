@@ -11,8 +11,8 @@
                 <div class="row">
                     <form class="form-horizontal" name="approvalForm">
                         <alert v-if="showError" type="danger"
-                            ><strong>{{ errorString }}</strong></alert
-                        >
+                            ><ErrorRenderer :errors="errorString"
+                        /></alert>
                         <alert v-if="!isEffectiveDateValid" type="danger"
                             ><strong
                                 >Please select Effective To Date that is after
@@ -167,11 +167,13 @@ import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import FileField2 from '@/components/forms/filefield.vue';
 import { helpers, api_endpoints } from '@/utils/hooks.js';
+import ErrorRenderer from '@/utils/vue/ErrorRenderer.vue';
 export default {
     name: 'ProposedApproval',
     components: {
         modal,
         alert,
+        ErrorRenderer,
         FileField2,
     },
     props: {
@@ -310,21 +312,29 @@ export default {
                         },
                         body: JSON.stringify(approval),
                     }
-                ).then(
-                    (response) => {
+                )
+                    .then(
+                        async (response) => {
+                            if (!response.ok) {
+                                vm.errors = true;
+                                const data = await response.json();
+                                vm.errorString = data;
+                                return;
+                            }
+                            vm.close();
+                            vm.$emit('refreshFromResponse', response);
+                            vm.$router.push({
+                                path: '/internal/conservation-status/',
+                            }); //Navigate to dashboard page after Propose issue.
+                        },
+                        (error) => {
+                            vm.errors = true;
+                            vm.errorString = helpers.apiVueResourceError(error);
+                        }
+                    )
+                    .finally(() => {
                         vm.issuingApproval = false;
-                        vm.close();
-                        vm.$emit('refreshFromResponse', response);
-                        vm.$router.push({
-                            path: '/internal/conservation-status/',
-                        }); //Navigate to dashboard page after Propose issue.
-                    },
-                    (error) => {
-                        vm.errors = true;
-                        vm.issuingApproval = false;
-                        vm.errorString = helpers.apiVueResourceError(error);
-                    }
-                );
+                    });
             } else if (vm.state == 'final_approval') {
                 let formData = new FormData();
                 var files = vm.$refs.filefield.files;
@@ -341,18 +351,26 @@ export default {
                         method: 'POST',
                         body: formData,
                     }
-                ).then(
-                    (response) => {
+                )
+                    .then(
+                        async (response) => {
+                            if (!response.ok) {
+                                vm.errors = true;
+                                const data = await response.json();
+                                vm.errorString = data;
+                                return;
+                            }
+                            vm.close();
+                            vm.$emit('refreshFromResponse', response);
+                        },
+                        (error) => {
+                            vm.errors = true;
+                            vm.errorString = helpers.apiVueResourceError(error);
+                        }
+                    )
+                    .finally(() => {
                         vm.issuingApproval = false;
-                        vm.close();
-                        vm.$emit('refreshFromResponse', response);
-                    },
-                    (error) => {
-                        vm.errors = true;
-                        vm.issuingApproval = false;
-                        vm.errorString = helpers.apiVueResourceError(error);
-                    }
-                );
+                    });
             }
         },
         validateEffectiveFromDate: function (event) {

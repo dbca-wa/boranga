@@ -14,6 +14,7 @@ from boranga.components.main.models import (
     Document,
     FileExtensionWhitelist,
     HelpTextEntry,
+    LegacyUsernameEmailuserMapping,
     LegacyValueMap,
     OccToOcrSectionMapping,
     UserSystemSettings,
@@ -103,8 +104,21 @@ class OccToOcrSectionMappingAdmin(admin.ModelAdmin):
     search_fields = ["legacy_system", "section"]
 
 
+class LegacyUsernameEmailuserMappingAdmin(admin.ModelAdmin):
+    list_display = [
+        "legacy_system",
+        "legacy_username",
+        "email",
+        "first_name",
+        "last_name",
+        "emailuser_id",
+    ]
+    search_fields = ["legacy_username", "email_user__email"]
+
+
 admin.site.register(FileExtensionWhitelist, FileExtensionWhitelistAdmin)
 admin.site.register(UserSystemSettings, UserSystemSettingsAdmin)
 admin.site.register(HelpTextEntry, HelpTextEntryAdmin)
 admin.site.register(LegacyValueMap, LegacyValueMapAdmin)
 admin.site.register(OccToOcrSectionMapping, OccToOcrSectionMappingAdmin)
+admin.site.register(LegacyUsernameEmailuserMapping, LegacyUsernameEmailuserMappingAdmin)

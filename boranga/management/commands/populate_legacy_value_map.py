@@ -82,13 +82,11 @@ class Command(BaseCommand):
                     r.get("target_model") or r.get("model") or ""
                 ).strip() or None
                 # default lookup field to "name" when the CSV cell is empty
-                lookup_field = (
-                    r.get("target_lookup_field_name") or r.get("lookup_field") or ""
-                ).strip()
+                lookup_field = (r.get("target_lookup_field_name") or "").strip().lower()
                 if not lookup_field:
                     lookup_field = "name"
                 lookup_value = (
-                    r.get("target_lookup_field_value") or r.get("lookup_value") or ""
+                    r.get("target_lookup_field_value") or ""
                 ).strip() or None
 
                 # optional second lookup pair to further filter the target (parent/related)

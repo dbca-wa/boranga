@@ -137,7 +137,84 @@ export default {
         console.log(error_str);
         return error_str;
     },
+    renderErrorsAsHtml: function (errors) {
+        const esc = (v) => {
+            if (v === null || v === undefined) return '';
+            return String(v)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        };
 
+        if (typeof errors === 'string') {
+            return esc(errors);
+        }
+
+        if (Array.isArray(errors)) {
+            if (errors.length === 0) return '';
+
+            if (errors.length > 1) {
+                // Prefer error.detail when present, otherwise show the element
+                const items = errors
+                    .map((err) => {
+                        if (err && typeof err === 'object' && 'detail' in err) {
+                            return `<li>${esc(err.detail)}</li>`;
+                        }
+                        return `<li>${esc(err)}</li>`;
+                    })
+                    .join('');
+                return `<ul class="errors-list">${items}</ul>`;
+            }
+
+            // Single-element array
+            const single = errors[0];
+            if (single && typeof single === 'object') {
+                const keys = Object.keys(single);
+                if (keys.length > 1) {
+                    if (
+                        Object.prototype.hasOwnProperty.call(single, 'detail')
+                    ) {
+                        return esc(single.detail);
+                    }
+                    // Render object as list of key: value
+                    const items = keys
+                        .map(
+                            (k) =>
+                                `<li><span class="fw-bold">${esc(k)}</span>: ${esc(single[k])}</li>`
+                        )
+                        .join('');
+                    return `<ul class="errors-list">${items}</ul>`;
+                }
+                // single-key object -> bold key: value
+                const k = keys[0];
+                return `<span class="fw-bold">${esc(k)}</span>: ${esc(single[k])}`;
+            }
+
+            // single primitive
+            return esc(single);
+        }
+
+        if (errors && typeof errors === 'object') {
+            const keys = Object.keys(errors);
+            if (keys.length === 0) return '';
+            if (keys.length > 1) {
+                const items = keys
+                    .map(
+                        (k) =>
+                            `<li><span class="fw-bold">${esc(k)}</span>: ${esc(errors[k])}</li>`
+                    )
+                    .join('');
+                return `<ul class="errors-list">${items}</ul>`;
+            }
+            const k = keys[0];
+            return `<span class="fw-bold">${esc(k)}</span>: ${esc(errors[k])}`;
+        }
+
+        // Fallback: stringify other types
+        return esc(errors);
+    },
     goBack: function (vm) {
         vm.$router.go(window.history.back());
     },

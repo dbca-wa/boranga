@@ -109,3 +109,5 @@ git_history_recent
 *.DAV
 
 private-media/
+
+.~lock.*#

@@ -1721,15 +1721,22 @@ class ProposedApprovalSerializer(BaseSerializer):
     cc_email = serializers.CharField(required=False, allow_null=True)
 
     def validate(self, data):
-        if (
-            data.get("effective_to_date", None)
-            and data["effective_to_date"] < data["effective_from_date"]
+        if data.get("effective_to_date", None) and data.get(
+            "effective_from_date", None
         ):
-            raise serializers.ValidationError(
-                {
-                    "effective_to_date": "Effective to date must be greater than effective from date."
-                }
-            )
+            if data["effective_to_date"] < data["effective_from_date"]:
+                raise serializers.ValidationError(
+                    {
+                        "Effective To Date": "Effective to date must be greater than effective from date."
+                    }
+                )
+        if data.get("effective_from_date", None):
+            if data["effective_from_date"] > timezone.now().date():
+                raise serializers.ValidationError(
+                    {
+                        "Effective From Date": "The effective from date cannot be in the future."
+                    }
+                )
         return data
 
 

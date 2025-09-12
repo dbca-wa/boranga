@@ -219,7 +219,9 @@ class Taxonomy(BaseModel):
     """
 
     taxon_name_id = models.IntegerField(null=True, blank=True)
-    scientific_name = models.CharField(max_length=512, null=True, blank=True)
+    scientific_name = models.CharField(
+        max_length=512, null=True, blank=True, unique=True
+    )
     kingdom_id = models.CharField(max_length=100, null=True, blank=True)
     kingdom_fk = models.ForeignKey(
         Kingdom, on_delete=models.SET_NULL, null=True, blank=True, related_name="taxons"

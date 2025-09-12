@@ -1,113 +1,102 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import date, datetime
 
 from boranga.components.data_migration import utils
 from boranga.components.data_migration.adapters.schema_base import Schema
 from boranga.components.data_migration.registry import (
+    build_legacy_map_transform,
     choices_transform,
+    emailuser_by_legacy_username_factory,
     fk_lookup,
-    normalize_delimited_list_factory,
+    taxonomy_lookup,
 )
-from boranga.components.occurrence.models import Occurrence
-from boranga.components.species_and_communities.models import GroupType
+from boranga.components.occurrence.models import Occurrence, WildStatus
+from boranga.components.species_and_communities.models import (
+    Community,
+    GroupType,
+    Species,
+)
 
 from ..sources import Source
 
-# NOTE: All values in this file are examples only at this point
-# TODO: Replace with real data
+TAXONOMY_TRANSFORM = taxonomy_lookup(
+    lookup_field="scientific_name",
+)
 
-# Legacy → target FK / lookup transforms (require LegacyValueMap data)
-WILD_STATUS_TRANSFORM = fk_lookup(
-    model="components.occurrence.WildStatus", lookup_field="name", return_field="id"
-)
-SPECIES_NAME_TRANSFORM = fk_lookup(
-    model="components.species_and_communities.Species",
-    lookup_field="taxonomy__scientific_name",
-    return_field="id",
-)
-COMMUNITY_NAME_TRANSFORM = fk_lookup(
-    model="components.species_and_communities.Community",
+SPECIES_TRANSFORM = fk_lookup(model=Species, lookup_field="taxonomy_id")
+
+COMMUNITY_TRANSFORM = fk_lookup(
+    model=Community,
     lookup_field="taxonomy__community_name",
-    return_field="id",
 )
 
-REVIEW_STATUS = choices_transform([c[0] for c in Occurrence.REVIEW_STATUS_CHOICES])
+WILD_STATUS_TRANSFORM = fk_lookup(model=WildStatus, lookup_field="name")
+
 PROCESSING_STATUS = choices_transform(
     [c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES]
 )
 
-# You still need a multi-select splitter + per-item validator in the registry:
-# - split_multiselect_occ_source (splits on ';' or ',' into list)
-# - validate_occurrence_source_choices (iterates items, applying OCCURRENCE_SOURCE_CHOICE_TRANSFORM or equivalent)
-# (Placeholders referenced below.)
+SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
+
+PURPOSE_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "PURPOSE (DRF_LOV_PURPOSE_VWS)",
+    required=False,
+)
+
+VESTING_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "VESTING (DRF_LOV_PURPOSE_VWS)",
+    required=False,
+)
 
 COLUMN_MAP = {
     "POP_ID": "migrated_from_id",
-    "Occurrence Name": "occurrence_name",
-    "Group Type": "group_type_id",
     "SPNAME": "species_id",
-    "Community Code": "community_id",
-    "Wild Status": "wild_status_id",
-    "Occurrence Source": "occurrence_source",
+    "Community Code": "community_id",  # TODO Add real column name later when working on community import
+    "STATUS": "wild_status_id",
+    "CREATED_DATE": "datetime_created",
+    "MODIFIED_DATE": "datetime_updated",
     "POP_COMMENTS": "comment",
-    "Review Status": "review_status",
-    "Processing Status": "processing_status",
-    "Review Due Date": "review_due_date",
-    "Combined Into Occurrence ID": "combined_occurrence_legacy_id",
-    "OCRVegetationStructure vegetation_structure_layer_one": "vegetation_structure_layer_one",
-    "OCRVegetationStructure vegetation_structure_layer_two": "vegetation_structure_layer_two",
-    "OCRVegetationStructure vegetation_structure_layer_three": "vegetation_structure_layer_three",
-    "OCRVegetationStructure vegetation_structure_layer_four": "vegetation_structure_layer_four",
+    "ACTIVE_IND": "processing_status",
+    "CREATED_BY": "submitter",
+    "LAND_MANAGER": "OCCContactDetail__contact_name",
+    "LAND_MGR_NOTES": "OCCContactDetail__notes",
+    "PURPOSE1": "OccurrenceTenure__purpose_id",
+    "VESTING": "OccurrenceTenure__vesting_id",
 }
 
 REQUIRED_COLUMNS = [
-    "occurrence_name",
+    "migrated_from_id",
     "processing_status",
 ]
 
 PIPELINES = {
-    # Identifiers / required basics
     "migrated_from_id": ["strip", "required"],
-    "occurrence_name": ["strip", "blank_to_none", "cap_length_50"],
-    "combined_occurrence_legacy_id": ["strip", "blank_to_none"],
-    # FK / lookup mappings
-    "group_type_id": ["strip", "blank_to_none", "group_type_by_name", "required"],
     "species_id": [
         "strip",
         "blank_to_none",
-        SPECIES_NAME_TRANSFORM,
-    ],  # conditional required later
-    "community_id": ["strip", "blank_to_none", COMMUNITY_NAME_TRANSFORM],
+        TAXONOMY_TRANSFORM,  # Get the taxonomy id from the scientific name
+        SPECIES_TRANSFORM,  # Then get the species id from the taxonomy id
+    ],  # conditional required later (cross field check that either species_id or community_id is present)
+    "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
     "wild_status_id": ["strip", "blank_to_none", WILD_STATUS_TRANSFORM],
-    # Simple text
     "comment": ["strip", "blank_to_none"],
-    # Choices (enums)
-    "review_status": ["strip", "blank_to_none", REVIEW_STATUS],
-    "processing_status": ["strip", "required", PROCESSING_STATUS],
-    # Dates
-    "review_due_date": ["strip", "blank_to_none", "date_iso"],
-    # Example of normalising semi colon delimited string
-    "vegetation_structure_layer_one": [
+    "datetime_created": ["strip", "blank_to_none", "datetime_iso"],
+    "datetime_updated": ["strip", "blank_to_none", "datetime_iso"],
+    "processing_status": [
         "strip",
-        "blank_to_none",
-        normalize_delimited_list_factory(),
+        "required",
+        "Y_to_active_else_historical",
+        PROCESSING_STATUS,
     ],
-    "vegetation_structure_layer_two": [
-        "strip",
-        "blank_to_none",
-        normalize_delimited_list_factory(),
-    ],
-    "vegetation_structure_layer_three": [
-        "strip",
-        "blank_to_none",
-        normalize_delimited_list_factory(),
-    ],
-    "vegetation_structure_layer_four": [
-        "strip",
-        "blank_to_none",
-        normalize_delimited_list_factory(),
-    ],
+    "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
+    "OCCContactDetail__contact_name": ["strip", "blank_to_none"],
+    "OCCContactDetail__notes": ["strip", "blank_to_none"],
+    "OccurrenceTenure__purpose_id": ["strip", "blank_to_none", PURPOSE_TRANSFORM],
+    "OccurrenceTenure__vesting_id": ["strip", "blank_to_none", VESTING_TRANSFORM],
 }
 
 SCHEMA = Schema(
@@ -140,12 +129,21 @@ class OccurrenceRow:
     species_id: int | None = None
     community_id: int | None = None
     wild_status_id: int | None = None
-    occurrence_source: list[str] = field(default_factory=list)
+    occurrence_source: str | None = None
     comment: str | None = None
     review_status: str | None = None
     processing_status: str | None = None
-    review_due_date: object | None = None  # datetime preferred after parsing
-    combined_occurrence_legacy_id: str | None = None
+    review_due_date: date | None = None
+    datetime_created: datetime | None = None
+    datetime_updated: datetime | None = None
+    locked: bool = False
+
+    OCCContactDetail__contact: str | None = None
+    OCCContactDetail__contact_name: str | None = None
+    OCCContactDetail__notes: str | None = None
+
+    OccurrenceTenure__purpose_id: int | None = None
+    OccurrenceTenure__vesting_id: int | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceRow:
@@ -176,9 +174,6 @@ class OccurrenceRow:
             review_status=utils.safe_strip(d.get("review_status")),
             processing_status=utils.safe_strip(d.get("processing_status")),
             review_due_date=d.get("review_due_date"),
-            combined_occurrence_legacy_id=utils.safe_strip(
-                d.get("combined_occurrence_legacy_id")
-            ),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:
@@ -234,5 +229,4 @@ class OccurrenceRow:
             "review_status": self.review_status,
             "processing_status": self.processing_status,
             "review_due_date": self.review_due_date,
-            "combined_occurrence_legacy_id": self.combined_occurrence_legacy_id,
         }
