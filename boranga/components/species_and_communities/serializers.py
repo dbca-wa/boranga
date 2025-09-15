@@ -1930,7 +1930,7 @@ class CommunityUserActionSerializer(BaseModelSerializer):
 class DistrictSerializer(BaseModelSerializer):
     class Meta:
         model = District
-        fields = ("id", "name", "code")
+        fields = ("id", "name", "code", "archive_date")
 
 
 class RegionSerializer(BaseModelSerializer):
