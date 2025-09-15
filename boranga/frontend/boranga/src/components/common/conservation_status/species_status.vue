@@ -597,10 +597,11 @@
                             <template v-if="!isReadOnly">
                                 <template
                                     v-if="
-                                        wa_legislative_categories &&
-                                        wa_legislative_categories.length > 0 &&
+                                        filtered_wa_legislative_categories &&
+                                        filtered_wa_legislative_categories.length >
+                                            0 &&
                                         conservation_status_obj.wa_legislative_category_id &&
-                                        !wa_legislative_categories
+                                        !filtered_wa_legislative_categories
                                             .map((d) => d.id)
                                             .includes(
                                                 conservation_status_obj.wa_legislative_category_id
@@ -636,7 +637,7 @@
                                         Category
                                     </option>
                                     <option
-                                        v-for="option in wa_legislative_categories"
+                                        v-for="option in filtered_wa_legislative_categories"
                                         :key="option.id"
                                         :value="option.id"
                                     >
@@ -836,10 +837,11 @@
                             <template v-if="!isReadOnly">
                                 <template
                                     v-if="
-                                        wa_priority_categories &&
-                                        wa_priority_categories.length > 0 &&
+                                        filtered_wa_priority_categories &&
+                                        filtered_wa_priority_categories.length >
+                                            0 &&
                                         conservation_status_obj.wa_priority_category_id &&
-                                        !wa_priority_categories
+                                        !filtered_wa_priority_categories
                                             .map((d) => d.id)
                                             .includes(
                                                 conservation_status_obj.wa_priority_category_id
@@ -875,7 +877,7 @@
                                         Category
                                     </option>
                                     <option
-                                        v-for="option in wa_priority_categories"
+                                        v-for="option in filtered_wa_priority_categories"
                                         :key="option.id"
                                         :value="option.id"
                                     >
