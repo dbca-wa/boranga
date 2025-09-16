@@ -410,16 +410,8 @@
                                 :disabled="
                                     option.archive_date &&
                                     new Date(option.archive_date) <= new Date()
-                                        ? 'disabled'
-                                        : ''
                                 "
                             >
-                                {{
-                                    option.archive_date &&
-                                    new Date(option.archive_date) <= new Date()
-                                        ? 'disabled'
-                                        : ''
-                                }}
                                 {{ option.text }}
                                 <template
                                     v-if="
