@@ -1,6 +1,7 @@
 import logging
 
 import django_cron
+from django.conf import settings
 from django.core import management
 
 log = logging.getLogger(__name__)
@@ -8,7 +9,7 @@ log = logging.getLogger(__name__)
 
 class CronJobFetchNomosTaxonDataDaily(django_cron.CronJobBase):
     RUN_ON_DAYS = [0, 1, 2, 3, 4, 5, 6]
-    RUN_AT_TIMES = ["20:00"]
+    RUN_AT_TIMES = [settings.FETCH_NOMOS_DATA_TIME_OF_DAY]
     schedule = django_cron.Schedule(
         run_weekly_on_days=RUN_ON_DAYS, run_at_times=RUN_AT_TIMES
     )
