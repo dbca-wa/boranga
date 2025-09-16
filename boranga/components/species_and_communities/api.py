@@ -629,7 +629,11 @@ class GetRegionDistrictFilterDict(views.APIView):
                         "id": district.id,
                         "name": district.name,
                         "region_id": district.region_id,
-                        "archive_date": district.archive_date,
+                        "archive_date": (
+                            district.archive_date.strftime("%Y-%m-%d")
+                            if district.archive_date
+                            else None
+                        ),
                     }
                 )
         res_json = {
