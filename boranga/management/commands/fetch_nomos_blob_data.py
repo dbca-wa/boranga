@@ -85,24 +85,6 @@ class Command(BaseCommand):
                                     logger.error(f"{err_msg}\n{str(e)}")
                                     errors.append(str(e))
 
-                        duplicate_scientific_name_qs = Taxonomy.objects.exclude(
-                            taxon_name_id=t["taxon_name_id"]
-                        ).filter(scientific_name__iexact=t["canonical_name"])
-                        if duplicate_scientific_name_qs.exists():
-                            taxon_obj = duplicate_scientific_name_qs.first()
-                            err_msg = (
-                                "Duplicate canonical_name '{}' detected in NOMOS blob data. "
-                                "Canonical name already exists in Boranga with taxon_name_id {}. "
-                                "Skipping import of record with taxon_name_id {}".format(  # noqa
-                                    t["canonical_name"],
-                                    taxon_obj.taxon_name_id,
-                                    t["taxon_name_id"],
-                                )
-                            )
-                            logger.error(f"{err_msg}")
-                            errors.append(err_msg)
-                            continue
-
                         taxon_obj, created = Taxonomy.objects.update_or_create(
                             taxon_name_id=t["taxon_name_id"],
                             defaults={
