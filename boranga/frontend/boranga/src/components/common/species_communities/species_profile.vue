@@ -1665,7 +1665,7 @@ export default {
         },
         initialiseScientificNameLookup: function () {
             let vm = this;
-            let refName = 'scientific_name_lookup';
+            let refName = vm.scientific_name_lookup;
             if (vm.rename_species) {
                 refName = 'scientific_name_lookup_rename';
             }
