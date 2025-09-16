@@ -407,8 +407,29 @@
                                 v-for="option in district_list"
                                 :key="option.value"
                                 :value="option.value"
+                                :disabled="
+                                    option.archive_date &&
+                                    new Date(option.archive_date) <= new Date()
+                                        ? 'disabled'
+                                        : ''
+                                "
                             >
+                                {{
+                                    option.archive_date &&
+                                    new Date(option.archive_date) <= new Date()
+                                        ? 'disabled'
+                                        : ''
+                                }}
                                 {{ option.text }}
+                                <template
+                                    v-if="
+                                        option.archive_date &&
+                                        new Date(option.archive_date) <=
+                                            new Date()
+                                    "
+                                >
+                                    (Archived)</template
+                                >
                             </option>
                         </select>
                     </div>
@@ -1601,6 +1622,7 @@ export default {
                         id: null,
                         name: '',
                         region_id: null,
+                        archive_date: null,
                     },
                 ];
                 //---filter districts as per region selected
@@ -1964,6 +1986,7 @@ export default {
                             this.district_list.push({
                                 text: api_districts[i].name,
                                 value: api_districts[i].id,
+                                archive_date: api_districts[i].archive_date,
                             });
                         }
                     }
