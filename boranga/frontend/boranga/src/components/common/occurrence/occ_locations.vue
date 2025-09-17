@@ -152,19 +152,54 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">District:</label>
                 <div class="col-sm-9">
-                    <select
-                        v-model="occurrence_obj.location.district_id"
-                        :disabled="isReadOnly"
-                        class="form-select"
-                    >
-                        <option
-                            v-for="option in filtered_district_list"
-                            :key="option.id"
-                            :value="option.id"
+                    <template v-if="!isReadOnly">
+                        <template
+                            v-if="
+                                filtered_district_list &&
+                                filtered_district_list.length > 0 &&
+                                occurrence_obj.location.district_id &&
+                                !filtered_district_list
+                                    .map((d) => d.id)
+                                    .includes(
+                                        occurrence_obj.location.district_id
+                                    )
+                            "
                         >
-                            {{ option.name }}
-                        </option>
-                    </select>
+                            <input
+                                v-if="occurrence_obj.location.district_id"
+                                type="text"
+                                class="form-control mb-3"
+                                :value="
+                                    occurrence_obj.location.district +
+                                    ' (Now Archived)'
+                                "
+                                disabled
+                            />
+                            <div class="mb-3 text-muted">
+                                Change district to:
+                            </div>
+                        </template>
+                        <select
+                            v-model="occurrence_obj.location.district_id"
+                            class="form-select"
+                        >
+                            <option
+                                v-for="option in filtered_district_list"
+                                :key="option.id"
+                                :value="option.id"
+                            >
+                                {{ option.name }}
+                            </option>
+                        </select>
+                    </template>
+                    <template v-else>
+                        <input
+                            v-model="occurrence_obj.location.district"
+                            class="form-control"
+                            type="text"
+                            :disabled="isReadOnly"
+                        />
+                    </template>
                 </div>
             </div>
             <div class="row mb-3">
@@ -765,13 +800,16 @@ export default {
                         id: null,
                         name: '',
                         region_id: null,
+                        archive_date: null,
                     },
                 ];
                 //---filter districts as per region selected
                 for (let choice of this.district_list) {
                     if (
                         choice.region_id ===
-                        this.occurrence_obj.location.region_id
+                            this.occurrence_obj.location.region_id &&
+                        !choice.archive_date &&
+                        !new Date(choice.archive_date) <= new Date()
                     ) {
                         this.filtered_district_list.push(choice);
                     }
