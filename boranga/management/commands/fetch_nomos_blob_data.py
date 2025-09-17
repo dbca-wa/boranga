@@ -196,6 +196,14 @@ class Command(BaseCommand):
                                     # A taxon can have more than one previous_names
                                     # (at the moment only the latest given in blob)
                                     for p in previous_names:
+                                        previous_taxonomy = None
+                                        try:
+                                            previous_taxonomy = Taxonomy.objects.get(
+                                                taxon_name_id=p["id"]
+                                            )
+                                        except Taxonomy.DoesNotExist:
+                                            previous_taxonomy = None
+
                                         obj, created = (
                                             TaxonPreviousName.objects.update_or_create(
                                                 previous_name_id=p["id"],
@@ -204,6 +212,7 @@ class Command(BaseCommand):
                                                         "name"
                                                     ],
                                                     "taxonomy": taxon_obj,
+                                                    "previous_taxonomy": previous_taxonomy,
                                                 },
                                             )
                                         )
