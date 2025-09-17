@@ -244,8 +244,13 @@ class TaxonomyAdmin(admin.ModelAdmin):
         "scientific_name",
         "kingdom_name",
         "grouptype__name",
+        "name_currency",
     )
-    list_filter = ["kingdom_fk__kingdom_name", "kingdom_fk__grouptype__name"]
+    list_filter = [
+        "kingdom_fk__kingdom_name",
+        "kingdom_fk__grouptype__name",
+        "name_currency",
+    ]
     inlines = [TaxonVernacularInline, TaxonPreviousNameInline, InformalGroupInline]
     search_fields = ("taxon_name_id", "scientific_name")
     actions = None
