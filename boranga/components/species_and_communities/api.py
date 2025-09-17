@@ -287,9 +287,15 @@ class GetScientificName(views.APIView):
                 scientific_name__icontains=search_term,
             )
 
+        taxonomies = taxonomies[: settings.DEFAULT_SELECT2_RECORDS_LIMIT]
+
+        # check if any of the scientific names in the queryset are duplicates
+        scientific_names = list(taxonomies.values_list("scientific_name", flat=True))
+        has_duplicates = len(scientific_names) != len(set(scientific_names))
+
         serializer = TaxonomySerializer(
-            taxonomies[: settings.DEFAULT_SELECT2_RECORDS_LIMIT],
-            context={"request": request},
+            taxonomies,
+            context={"request": request, "has_duplicates": has_duplicates},
             many=True,
         )
         return Response({"results": serializer.data})
