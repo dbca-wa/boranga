@@ -322,6 +322,14 @@ class TaxonPreviousName(BaseModel):
     )
     previous_name_id = models.IntegerField(null=True, blank=True)
     previous_scientific_name = models.CharField(max_length=512, null=True, blank=True)
+    # new FK to the canonical Taxonomy record (optional, populated by data migration)
+    previous_taxonomy = models.ForeignKey(
+        Taxonomy,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="previous_name_from",
+    )
 
     class Meta:
         app_label = "boranga"
