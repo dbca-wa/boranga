@@ -533,7 +533,7 @@
         </div>
 
         <SpeciesSplit
-            v-if="species_community && !isCommunity"
+            v-if="species_community && !isCommunity && isActive"
             ref="species_split"
             :species_community="species_community"
             :is_internal="true"
@@ -541,14 +541,14 @@
             @refresh-from-response="refreshFromResponse"
         />
         <SpeciesCombine
-            v-if="species_community && !isCommunity"
+            v-if="species_community && !isCommunity && isActive"
             ref="species_combine"
             :species_community="species_community"
             :is_internal="true"
             @refresh-from-response="refreshFromResponse"
         />
         <SpeciesRename
-            v-if="species_community && !isCommunity"
+            v-if="species_community && !isCommunity && isActive"
             ref="species_rename"
             :species_community_original="species_community"
             :is_internal="true"

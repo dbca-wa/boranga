@@ -417,7 +417,18 @@ class TaxonomySerializer(BaseModelSerializer):
             return obj.species.id
 
     def get_text(self, obj):
-        return obj.scientific_name
+        scientific_name = obj.scientific_name
+        if self.context.get("has_duplicates", False):
+            parts = []
+            if obj.family_name:
+                parts.append(obj.family_name)
+            if obj.kingdom_name:
+                parts.append(obj.kingdom_name)
+            parts.append(f"NOMOS: {obj.taxon_name_id}")
+            scientific_name = f"{obj.scientific_name} ({', '.join(parts)})"
+        scientific_name = scientific_name.replace("&amp;", "&")
+
+        return scientific_name
 
     def get_common_name(self, obj):
         if not obj.vernaculars:
@@ -1930,7 +1941,7 @@ class CommunityUserActionSerializer(BaseModelSerializer):
 class DistrictSerializer(BaseModelSerializer):
     class Meta:
         model = District
-        fields = ("id", "name", "code")
+        fields = ("id", "name", "code", "archive_date")
 
 
 class RegionSerializer(BaseModelSerializer):

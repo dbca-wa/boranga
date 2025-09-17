@@ -407,8 +407,21 @@
                                 v-for="option in district_list"
                                 :key="option.value"
                                 :value="option.value"
+                                :disabled="
+                                    option.archive_date &&
+                                    new Date(option.archive_date) <= new Date()
+                                "
                             >
                                 {{ option.text }}
+                                <template
+                                    v-if="
+                                        option.archive_date &&
+                                        new Date(option.archive_date) <=
+                                            new Date()
+                                    "
+                                >
+                                    (Archived)</template
+                                >
                             </option>
                         </select>
                     </div>
@@ -1601,6 +1614,7 @@ export default {
                         id: null,
                         name: '',
                         region_id: null,
+                        archive_date: null,
                     },
                 ];
                 //---filter districts as per region selected
@@ -1665,7 +1679,7 @@ export default {
         },
         initialiseScientificNameLookup: function () {
             let vm = this;
-            let refName = 'scientific_name_lookup';
+            let refName = vm.scientific_name_lookup;
             if (vm.rename_species) {
                 refName = 'scientific_name_lookup_rename';
             }
@@ -1964,6 +1978,7 @@ export default {
                             this.district_list.push({
                                 text: api_districts[i].name,
                                 value: api_districts[i].id,
+                                archive_date: api_districts[i].archive_date,
                             });
                         }
                     }
