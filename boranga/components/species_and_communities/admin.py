@@ -211,6 +211,7 @@ class TaxonVernacularInline(admin.TabularInline):
 
 class TaxonPreviousNameInline(admin.TabularInline):
     model = TaxonPreviousName
+    fk_name = "taxonomy"
     list_display = ("id", "previous_name_id", "previous_scientific_name")
     ordering = ("-id",)
     extra = 0
