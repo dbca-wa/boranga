@@ -325,7 +325,7 @@ class TaxonPreviousName(BaseModel):
     )
     previous_name_id = models.IntegerField(null=True, blank=True)
     previous_scientific_name = models.CharField(max_length=512, null=True, blank=True)
-    # new FK to the canonical Taxonomy record (optional, populated by data migration)
+    # FK to previous taxonomy record if it exists in Boranga
     previous_taxonomy = models.ForeignKey(
         Taxonomy,
         on_delete=models.SET_NULL,
