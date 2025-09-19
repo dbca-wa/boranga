@@ -41,7 +41,14 @@ class NH3SanitizeSerializerMixin:
             if isinstance(field, serializers.CharField):
                 value = data.get(field_name)
                 if isinstance(value, str):
-                    data[field_name] = nh3.clean(value)
+                    # sanitize (remove tags / unsafe HTML) then unescape entities
+                    cleaned = nh3.clean(value)
+                    cleaned = (
+                        cleaned.replace("&amp;", "&")
+                        .replace("&quot;", '"')
+                        .replace("&#39;", "'")
+                    )
+                    data[field_name] = cleaned
         return super().to_internal_value(data)
 
     def to_representation(self, instance):
@@ -89,7 +96,9 @@ class BaseModelSerializer(
 
 
 class BaseSerializer(
-    NH3SanitizeSerializerMixin, AbsoluteFileUrlSerializerMixin, serializers.Serializer
+    NH3SanitizeSerializerMixin,
+    AbsoluteFileUrlSerializerMixin,
+    serializers.Serializer,
 ):
     """
     Base serializer that applies NH3 sanitization and absolute URL conversion.
