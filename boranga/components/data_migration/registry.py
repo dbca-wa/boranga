@@ -11,10 +11,14 @@ from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any, Literal
 
 import nh3
+from django.contrib.gis.geos import GEOSGeometry
 from django.core.cache import cache
 from django.db import models
 from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
+from pyproj import Transformer
+from shapely.geometry import Point
+from shapely.ops import transform as shapely_transform
 
 from boranga.components.data_migration import mappings as dm_mappings
 from boranga.components.main.models import (
@@ -747,6 +751,120 @@ def t_split_multiselect(value, ctx):
         seen.add(key)
         out.append(p)
     return _result(out)
+
+
+# map spreadsheet datum values -> source CRS
+_DATUM_CRS = {
+    "GDA94": "EPSG:4283",
+    "AGD84": "EPSG:4283",
+    "WGS84": "EPSG:4326",
+    "GPS": "EPSG:4326",
+    "UNKNOWN": "EPSG:4326",
+}
+
+# single continental projection to use for metric buffering
+_ALBERS_EPSG = "EPSG:3577"  # GDA94 / Australian Albers
+
+
+def point_to_circle_factory(
+    lat_col: str,
+    lon_col: str,
+    datum_col: str = "DATUM",
+    diameter_m: float = 1.0,
+    buffer_resolution: int = 16,
+    return_wkt: bool = False,
+):
+    """
+    Returns a transform function (value, ctx) -> TransformResult(GEOSGeometry|WKT|None, issues).
+
+    - The returned function ignores 'value' and reads the row from ctx (ctx.row or ctx['row']).
+    - datum values UNKNOWN/GPS -> WGS84 by default.
+    - Buffers using a single continental projected CRS (EPSG:3577) for meter units.
+    """
+    radius = float(diameter_m) / 2.0
+
+    def transform_fn(value, ctx):
+        # support both TransformContext objects and plain dict ctx
+        row = None
+        if ctx is None:
+            logger.warning(
+                "point_to_circle: missing transform context for value=%r", value
+            )
+            return _result(
+                None,
+                TransformIssue("warning", "No valid coordinates (missing context)"),
+            )
+        # ctx may be an object with .row attribute (TransformContext) or a dict
+        row = getattr(ctx, "row", None) or (
+            ctx.get("row") if isinstance(ctx, dict) else None
+        )
+        if not row:
+            logger.warning(
+                "point_to_circle: missing row in context for value=%r", value
+            )
+            return _result(
+                None, TransformIssue("warning", "No valid coordinates (missing row)")
+            )
+
+        try:
+            raw_lat = row.get(lat_col)
+            raw_lon = row.get(lon_col)
+            raw_datum = row.get(datum_col, "UNKNOWN")
+            if raw_lat in (None, "") or raw_lon in (None, ""):
+                logger.warning(
+                    "point_to_circle: no valid lat/lon (lat=%r lon=%r) for row: %r",
+                    raw_lat,
+                    raw_lon,
+                    # keep row small in logs
+                    {k: row.get(k) for k in (lat_col, lon_col, datum_col) if k in row},
+                )
+                return _result(None, TransformIssue("warning", "No valid coordinates"))
+
+            lat = float(raw_lat)
+            lon = float(raw_lon)
+            datum = (raw_datum or "UNKNOWN").strip().upper()
+            src_crs = _DATUM_CRS.get(datum, "EPSG:4326")
+
+            # normalize to EPSG:4326 lon/lat for consistent processing
+            if src_crs != "EPSG:4326":
+                to_4326 = Transformer.from_crs(src_crs, "EPSG:4326", always_xy=True)
+                lon_x, lat_y = to_4326.transform(lon, lat)
+            else:
+                lon_x, lat_y = lon, lat
+
+            # project to Albers (meters), buffer, then back to 4326
+            to_albers = Transformer.from_crs("EPSG:4326", _ALBERS_EPSG, always_xy=True)
+            from_albers = Transformer.from_crs(
+                _ALBERS_EPSG, "EPSG:4326", always_xy=True
+            )
+
+            pt_geo = Point(lon_x, lat_y)
+            pt_alb = shapely_transform(lambda x, y: to_albers.transform(x, y), pt_geo)
+            circ_alb = pt_alb.buffer(radius, resolution=buffer_resolution)
+            circ_4326 = shapely_transform(
+                lambda x, y: from_albers.transform(x, y), circ_alb
+            )
+
+            geom = GEOSGeometry(circ_4326.wkt, srid=4326)
+            return _result(geom.wkt if return_wkt else geom)
+
+        except Exception as e:
+            logger.exception("point_to_circle transform failed for row: %r", row)
+            return _result(
+                value, TransformIssue("error", f"point_to_circle error: {e}")
+            )
+
+    return transform_fn
+
+
+# register a default no-arg transform for convenience
+try:
+    TRANSFORMS  # type: ignore[name-defined]
+except NameError:
+    TRANSFORMS = {}
+
+TRANSFORMS["point_to_1m_circle"] = point_to_circle_factory()
+# ...existing code...
 
 
 def validate_multiselect(choice_transform_name: str):
