@@ -1,3 +1,14 @@
 **/*.pyc
 **/*.csv
 **/*.xls*
+
+.git
+.gitignore
+node_modules
+venv
+*.pyc
+__pycache__
+.env
+*.pem
+tests
+docs
