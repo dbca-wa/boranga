@@ -60,17 +60,30 @@ class Command(BaseCommand):
                 c.classification_system_id: c
                 for c in ClassificationSystem.objects.all()
             }
+            # map existing previous_names by id -> model instance (so we can update)
             prev_name_map = {
                 p.previous_name_id: p for p in TaxonPreviousName.objects.all()
             }
 
+            # map existing InformalGroup by (taxonomy_id, classification_system_id) to avoid duplicates
+            informal_group_map = {
+                (ig.taxonomy_id, ig.classification_system_id): ig
+                for ig in InformalGroup.objects.all()
+            }
+
             new_kingdoms, new_ranks, new_taxonomies = [], [], []
+            taxonomy_updates = (
+                []
+            )  # collect existing Taxonomy instances that need updating
             new_vernaculars, new_class_systems, new_informal_groups, new_prev_names = (
                 [],
                 [],
                 [],
                 [],
             )
+            prev_updates = (
+                []
+            )  # existing TaxonPreviousName instances to update (set previous_taxonomy)
 
             with transaction.atomic():
                 # 1. Collect new Kingdoms
@@ -106,31 +119,85 @@ class Command(BaseCommand):
                     )
                 rank_map = {r.taxon_rank_id: r for r in TaxonomyRank.objects.all()}
 
-                # 3. Collect new Taxonomies
+                # 3. Collect new Taxonomies (and prepare updates for existing ones)
                 for t in taxon:
                     taxon_name_id = t.get("taxon_name_id")
+                    desired = dict(
+                        scientific_name=t.get("canonical_name", "") or "",
+                        kingdom_id=t.get("kingdom_id"),
+                        kingdom_fk=kingdom_map.get(t.get("kingdom_id")),
+                        kingdom_name=t.get("kingdom_name", "") or "",
+                        name_authority=t.get("author", "") or "",
+                        name_comments=t.get("notes", "") or "",
+                        name_currency=t.get("is_current"),
+                        taxon_rank_id=t.get("rank_id"),
+                        taxonomy_rank_fk=rank_map.get(t.get("rank_id")),
+                        family_id=t.get("family_id"),
+                        family_name=t.get("family_canonical_name", "") or "",
+                        genera_id=t.get("genus_id"),
+                        genera_name=t.get("genus_canonical_name", "") or "",
+                    )
                     if taxon_name_id and taxon_name_id not in taxonomy_map:
-                        taxonomy = Taxonomy(
-                            taxon_name_id=taxon_name_id,
-                            scientific_name=t.get("canonical_name", ""),
-                            kingdom_id=t.get("kingdom_id"),
-                            kingdom_fk=kingdom_map.get(t.get("kingdom_id")),
-                            kingdom_name=t.get("kingdom_name", ""),
-                            name_authority=t.get("author", ""),
-                            name_comments=t.get("notes", ""),
-                            name_currency=t.get("is_current"),
-                            taxon_rank_id=t.get("rank_id"),
-                            taxonomy_rank_fk=rank_map.get(t.get("rank_id")),
-                            family_id=t.get("family_id"),
-                            family_name=t.get("family_canonical_name", ""),
-                            genera_id=t.get("genus_id"),
-                            genera_name=t.get("genus_canonical_name", ""),
-                        )
+                        taxonomy = Taxonomy(taxon_name_id=taxon_name_id, **desired)
                         new_taxonomies.append(taxonomy)
+                    elif taxon_name_id:
+                        existing = taxonomy_map.get(taxon_name_id)
+                        if existing:
+                            changed = False
+                            # non-FK fields to compare
+                            for k, v in desired.items():
+                                if k.endswith("_fk"):
+                                    # compare by id for FK fields
+                                    fk_id_attr = f"{k}_id"
+                                    existing_fk_id = getattr(existing, fk_id_attr, None)
+                                    desired_fk_id = v.id if v else None
+                                    if existing_fk_id != desired_fk_id:
+                                        setattr(existing, k, v)
+                                        changed = True
+                                else:
+                                    # compare as strings/values
+                                    existing_val = getattr(existing, k, None)
+                                    if (existing_val or "") != (v or ""):
+                                        setattr(existing, k, v)
+                                        changed = True
+                            if changed:
+                                taxonomy_updates.append(existing)
+
                 if new_taxonomies:
                     Taxonomy.objects.bulk_create(
                         new_taxonomies, ignore_conflicts=True, batch_size=500
                     )
+                    logger.info(
+                        "bulk_created %d new Taxonomy records", len(new_taxonomies)
+                    )
+
+                # apply updates to existing taxonomy rows
+                if taxonomy_updates:
+                    Taxonomy.objects.bulk_update(
+                        taxonomy_updates,
+                        fields=[
+                            "scientific_name",
+                            "kingdom_id",
+                            "kingdom_fk",
+                            "kingdom_name",
+                            "name_authority",
+                            "name_comments",
+                            "name_currency",
+                            "taxon_rank_id",
+                            "taxonomy_rank_fk",
+                            "family_id",
+                            "family_name",
+                            "genera_id",
+                            "genera_name",
+                        ],
+                        batch_size=500,
+                    )
+                    logger.info(
+                        "bulk_updated %d existing Taxonomy records",
+                        len(taxonomy_updates),
+                    )
+
+                # reload taxonomy_map to include newly created/updated taxonomies
                 taxonomy_map = {t.taxon_name_id: t for t in Taxonomy.objects.all()}
 
                 # 4. Collect new ClassificationSystems
@@ -173,32 +240,57 @@ class Command(BaseCommand):
                             )
                             vernacular_map[vernacular_id] = True
 
-                    # InformalGroups
+                    # InformalGroups (avoid duplicates)
                     for c in t.get("class_desc") or []:
                         class_system_id = c.get("id")
-                        if class_system_id:
-                            new_informal_groups.append(
-                                InformalGroup(
-                                    taxonomy=taxon_obj,
-                                    classification_system_fk=class_system_map.get(
-                                        class_system_id
-                                    ),
-                                    classification_system_id=class_system_id,
-                                    taxon_name_id=taxon_obj.taxon_name_id,
-                                )
+                        if not class_system_id:
+                            continue
+                        ig_key = (taxon_obj.id, class_system_id)
+                        if ig_key in informal_group_map:
+                            continue
+                        new_informal_groups.append(
+                            InformalGroup(
+                                taxonomy=taxon_obj,
+                                classification_system_fk=class_system_map.get(
+                                    class_system_id
+                                ),
+                                classification_system_id=class_system_id,
+                                taxon_name_id=taxon_obj.taxon_name_id,
                             )
+                        )
+                        informal_group_map[ig_key] = True
 
-                    # PreviousNames
+                    # PreviousNames - create new ones and update existing ones to set previous_taxonomy
                     for p in t.get("previous_names") or []:
                         prev_name_id = p.get("id")
-                        if prev_name_id and prev_name_id not in prev_name_map:
+                        if not prev_name_id:
+                            continue
+                        prev_tax_fk = taxonomy_map.get(prev_name_id)  # may be None
+                        existing_prev = prev_name_map.get(prev_name_id)
+                        if existing_prev:
+                            # update FK if missing or different
+                            target_id = prev_tax_fk.id if prev_tax_fk else None
+                            if existing_prev.previous_taxonomy_id != target_id:
+                                existing_prev.previous_taxonomy = prev_tax_fk
+                                # optionally update scientific name if empty
+                                if (
+                                    not existing_prev.previous_scientific_name
+                                    and p.get("name")
+                                ):
+                                    existing_prev.previous_scientific_name = p.get(
+                                        "name"
+                                    )
+                                prev_updates.append(existing_prev)
+                        else:
                             new_prev_names.append(
                                 TaxonPreviousName(
                                     previous_name_id=prev_name_id,
                                     previous_scientific_name=p.get("name", ""),
                                     taxonomy=taxon_obj,
+                                    previous_taxonomy=prev_tax_fk,
                                 )
                             )
+                            # mark as created so we don't duplicate in this run
                             prev_name_map[prev_name_id] = True
 
                 if new_vernaculars:
@@ -213,12 +305,18 @@ class Command(BaseCommand):
                     TaxonPreviousName.objects.bulk_create(
                         new_prev_names, ignore_conflicts=True, batch_size=500
                     )
-
+                if prev_updates:
+                    TaxonPreviousName.objects.bulk_update(
+                        prev_updates,
+                        ["previous_taxonomy", "previous_scientific_name"],
+                        batch_size=500,
+                    )
+                # done
             logger.info(f"{len(taxon)} Taxon Records Updated. End")
 
-        except Exception as e:
+        except Exception:
             logger.exception("Error at the end")
-            errors.append(str(e))
+            errors.append("fetch_nomos_blob_data_fast failed")
 
         cmd_name = __name__.split(".")[-1].replace("_", " ").upper()
         err_str = (
