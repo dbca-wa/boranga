@@ -1,6 +1,5 @@
 import json
 import logging
-import traceback
 from datetime import datetime, time
 from io import BytesIO
 
@@ -5956,34 +5955,21 @@ class OccurrenceReportBulkImportTaskViewSet(
     def perform_create(self, serializer):
         instance = serializer.save(email_user=self.request.user.id)
         if settings.OCR_BULK_IMPORT_PROCESS_TASKS_IMMEDIATELY is True:
-            try:
-                errors = instance.process()
-                if errors:
-                    instance.processing_status = (
-                        OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-                    )
-                    instance.datetime_error = timezone.now()
-                    error_message = ""
-                    for error in errors:
-                        error_message += f"Row: {error['row_index'] + 1}. Error: {error['error_message']}\n"
-                    instance.error_message = error_message
-                else:
-                    instance.processing_status = (
-                        OccurrenceReportBulkImportTask.PROCESSING_STATUS_COMPLETED
-                    )
-                    instance.datetime_completed = timezone.now()
-
-            except Exception as e:
-                logger.error(
-                    f"Error processing bulk import task {instance.id}: {str(e)}"
-                )
-                logger.error(traceback.format_exc())
-                instance.processing_status = (
-                    OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-                )
-                instance.datetime_error = timezone.now()
-                instance.error_message = str(e)
-            instance.save()
+            # Atomically claim so the status is visible/committed before long work
+            updated = OccurrenceReportBulkImportTask.objects.filter(
+                id=instance.id,
+                processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
+            ).update(
+                processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
+                datetime_started=timezone.now(),
+            )
+            if updated == 1:
+                instance.refresh_from_db()
+                # count rows quickly (non-blocking) and then process (prefer async)
+                instance.count_rows()
+                # Prefer: enqueue a background worker (Celery/RQ). If not available, run instance.process()
+                instance.process()
+        return instance
 
     @detail_route(methods=["patch"], detail=True)
     def retry(self, request, *args, **kwargs):
