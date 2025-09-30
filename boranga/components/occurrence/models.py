@@ -6415,8 +6415,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     failure_summary = {
                         "processing_status": self.PROCESSING_STATUS_FAILED,
                         "datetime_error": timezone.now(),
-                        "error_message": f"{len(errors)} rows failed. See task logs for details.",
+                        "error_message": f"{len(errors)} rows failed.",
                         "error_count": len(errors),
+                        "errors": errors,
                     }
                     transaction.set_rollback(True)
 
@@ -6430,11 +6431,44 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     if failure_summary
                     else timezone.now()
                 )
-                self.error_message = (
-                    failure_summary.get("error_message")
-                    if failure_summary
-                    else f"{len(errors)} rows failed"
-                )
+
+                # Persist full errors list (human readable string) so the API/UI can display detailed errors.
+                if failure_summary and failure_summary.get("errors") is not None:
+                    try:
+                        # Build a single string with each error on its own line.
+                        error_lines = []
+                        for e in failure_summary.get("errors"):
+                            if isinstance(e, dict):
+                                row_idx = e.get("row_index")
+                                msg = (
+                                    e.get("error_message")
+                                    or e.get("error_type")
+                                    or str(e)
+                                )
+                                prefix = (
+                                    f"Row: {row_idx}. " if row_idx is not None else ""
+                                )
+                                error_lines.append(f"{prefix}Error: {msg}")
+                            else:
+                                error_lines.append(str(e))
+                        self.error_message = (
+                            "Errors occurred during processing:\n"
+                            + "\n".join(error_lines)
+                        )
+                    except Exception:
+                        # Fallback to concise message if building the string fails
+                        self.error_message = (
+                            failure_summary.get("error_message")
+                            if failure_summary
+                            else f"{len(errors)} rows failed"
+                        )
+                else:
+                    self.error_message = (
+                        failure_summary.get("error_message")
+                        if failure_summary
+                        else f"{len(errors)} rows failed"
+                    )
+
                 self.error_row = errors[0].get("row_index") if errors else None
                 # persist last progress so UI can show how far we got
                 # self.rows_processed was updated inside the import tx; refresh to get DB value (or keep current attr)
@@ -6461,16 +6495,19 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             return []
 
     def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
+        # Present row numbers to humans starting at 1 (not 0)
+        row_index = index + 1
+
         row_hash = hashlib.sha256(str(row).encode()).hexdigest()
         if OccurrenceReport.objects.filter(import_hash=row_hash).exists():
             duplicate_ocr = OccurrenceReport.objects.get(import_hash=row_hash)
             error_message = (
-                f"Row {index} has the exact same data as "
+                f"Row {row_index} has the exact same data as "
                 f"Occurrence Report {duplicate_ocr.occurrence_report_number} did when it was imported."
             )
             errors.append(
                 {
-                    "row_index": index,
+                    "row_index": row_index,
                     "error_type": "row",
                     "data": row,
                     "error_message": error_message,
@@ -6485,7 +6522,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             error_message = "Row does not have an Occurrence Report migrated from id"
             errors.append(
                 {
-                    "row_index": index,
+                    "row_index": row_index,
                     "error_type": "missing_migrated_from_id",
                     "data": row,
                     "error_message": error_message,
@@ -6544,7 +6581,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             cell_value = row[column_index]
 
             cell_value, errors_added = column.validate(
-                self, cell_value, mode, index, headers, row, errors
+                self, cell_value, mode, row_index, headers, row, errors
             )
 
             model_class = apps.get_model(
@@ -6653,7 +6690,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     )
                     errors.append(
                         {
-                            "row_index": index,
+                            "row_index": row_index,
                             "error_type": "ambiguous_occurrence_idenfitier",
                             "data": model_data,
                             "error_message": error_message,
@@ -6670,7 +6707,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         error_message = "The occurrence number provided does not exist in the database"
                         errors.append(
                             {
-                                "row_index": index,
+                                "row_index": row_index,
                                 "error_type": "invalid_occurrence_number",
                                 "data": model_data,
                                 "error_message": error_message,
@@ -6691,7 +6728,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         )
                         errors.append(
                             {
-                                "row_index": index,
+                                "row_index": row_index,
                                 "error_type": "duplicate_occurrence_name",
                                 "data": model_data,
                                 "error_message": error_message,
@@ -6746,7 +6783,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             errors.append(
                                 {
-                                    "row_index": index,
+                                    "row_index": row_index,
                                     "error_type": "invalid_occurrence_group_type",
                                     "data": model_data,
                                     "error_message": error_message,
@@ -6768,7 +6805,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             errors.append(
                                 {
-                                    "row_index": index,
+                                    "row_index": row_index,
                                     "error_type": "invalid_occurrence_species",
                                     "data": model_data,
                                     "error_message": error_message,
@@ -6787,7 +6824,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             errors.append(
                                 {
-                                    "row_index": index,
+                                    "row_index": row_index,
                                     "error_type": "invalid_occurrence_community",
                                     "data": model_data,
                                     "error_message": error_message,
@@ -6860,7 +6897,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     )
                     errors.append(
                         {
-                            "row_index": index,
+                            "row_index": row_index,
                             "error_type": "relationship",
                             "data": model_data,
                             "error_message": error_message,
@@ -6916,7 +6953,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 logger.error(f"Error creating model instance: {e}")
                 errors.append(
                     {
-                        "row_index": index,
+                        "row_index": row_index,
                         "error_type": "integrity",
                         "data": model_data,
                         "error_message": f"Error creating model instance: {e}",
