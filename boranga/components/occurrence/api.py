@@ -989,6 +989,14 @@ class OccurrenceReportViewSet(
     @detail_route(methods=["get"], detail=True)
     def get_related_species(self, request, *args, **kwargs):
         instance = self.get_object()
+        if (
+            not hasattr(instance, "associated_species")
+            or not instance.associated_species
+        ):
+            logger.warning(
+                f"Occurrence Report {instance.id} does not have associated species returning empty list."
+            )
+            return Response([])
         serializer = AssociatedSpeciesTaxonomySerializer(
             instance.associated_species.related_species.all(),
             many=True,
