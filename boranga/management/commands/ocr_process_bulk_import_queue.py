@@ -40,8 +40,8 @@ class Command(BaseCommand):
             logger.info("There is already a task running, returning")
             return
 
-        # Get the next task to process
-        task = (
+        # Get the next task to process (non-blocking) and try to claim it atomically
+        candidate = (
             OccurrenceReportBulkImportTask.objects.filter(
                 processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
                 _file__isnull=False,
@@ -50,9 +50,25 @@ class Command(BaseCommand):
             .first()
         )
 
-        if task is None:
+        if candidate is None:
             logger.info("No tasks to process, returning")
             return
+
+        # Attempt to claim the candidate so only one worker processes it
+        updated = OccurrenceReportBulkImportTask.objects.filter(
+            id=candidate.id,
+            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
+        ).update(
+            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
+            datetime_started=timezone.now(),
+        )
+
+        if updated != 1:
+            logger.info("Task already claimed by another worker, returning")
+            return
+
+        # We own the task — reload instance and process
+        task = OccurrenceReportBulkImportTask.objects.get(id=candidate.id)
 
         try:
             # Process the task
