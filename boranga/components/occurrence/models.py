@@ -6282,6 +6282,157 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
     @transaction.atomic
     def process(self):
+        """
+        Claim the task if still queued, then run the import work in a separate
+        transaction so the STARTED state is visible immediately to other workers.
+        Preserve all-or-nothing for data changes by using an inner atomic that
+        is rolled back if row errors are collected; persist failure metadata
+        in a final separate transaction so it survives that rollback.
+        """
+        # If caller hasn't claimed it, try to claim atomically and commit that change.
+        if self.processing_status == self.PROCESSING_STATUS_QUEUED:
+            updated = OccurrenceReportBulkImportTask.objects.filter(
+                id=self.id,
+                processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
+            ).update(
+                processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
+                datetime_started=timezone.now(),
+            )
+            if updated != 1:
+                # someone else claimed it
+                logger.info(
+                    f"Bulk import task {self.id} could not be claimed, aborting process()"
+                )
+                return
+            # refresh to reflect committed claim
+            self.refresh_from_db()
+        elif self.processing_status != self.PROCESSING_STATUS_STARTED:
+            logger.info(
+                f"Bulk import task {self.id} is in status {self.processing_status}, not processing"
+            )
+            return
+
+        # Now run the import work inside a transaction for data changes only.
+        errors = []
+        failure_summary = None
+
+        # Outer transaction governs data changes (all-or-nothing for data)
+        with transaction.atomic():
+            # re-check rows count / open file etc (these DB ops are inside the data transaction)
+            if not self.rows:
+                self.count_rows()
+
+            logger.info(f"Opening bulk import file {self._file.name}")
+            try:
+                workbook = openpyxl.load_workbook(self._file, read_only=True)
+            except Exception as e:
+                logger.exception(
+                    f"Error opening bulk import file {self._file.name}: {e}"
+                )
+                errors.append(
+                    {
+                        "row_index": None,
+                        "error_type": "file",
+                        "data": None,
+                        "error_message": str(e),
+                    }
+                )
+                failure_summary = {
+                    "processing_status": self.PROCESSING_STATUS_FAILED,
+                    "datetime_error": timezone.now(),
+                    "error_message": f"Error opening bulk import file: {e}",
+                }
+                transaction.set_rollback(True)
+            else:
+                sheet = workbook.active
+                headers = [cell.value for cell in sheet[1] if cell.value is not None]
+                rows = list(
+                    sheet.iter_rows(
+                        min_row=2,
+                        max_row=self.rows + 1,
+                        max_col=self.schema.columns.count(),
+                        values_only=True,
+                    )
+                )
+
+                ocr_migrated_from_ids = []
+
+                for index, row in enumerate(rows):
+                    if index + 1 > self.rows:
+                        logger.warning(
+                            f"Bulk import task {self.id} tried to process row {index + 1} "
+                            "which is greater than the total number of rows"
+                        )
+                        break
+
+                    try:
+                        with transaction.atomic():  # per-row savepoint
+                            self.rows_processed = index + 1
+                            self.save()
+                            self.process_row(
+                                ocr_migrated_from_ids, index, headers, row, errors
+                            )
+                    except IntegrityError as e:
+                        logger.exception(
+                            f"IntegrityError on row {index} for import {self.id}: {e}"
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "integrity",
+                                "data": row,
+                                "error_message": str(e),
+                            }
+                        )
+                        continue
+                    except Exception as e:
+                        logger.exception(
+                            f"Unhandled error on row {index} for import {self.id}: {e}"
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "exception",
+                                "data": row,
+                                "error_message": str(e),
+                                "traceback": traceback.format_exc(),
+                            }
+                        )
+                        continue
+
+                if errors:
+                    failure_summary = {
+                        "processing_status": self.PROCESSING_STATUS_FAILED,
+                        "datetime_error": timezone.now(),
+                        "error_message": f"{len(errors)} rows failed. See task logs for details.",
+                        "error_count": len(errors),
+                    }
+                    transaction.set_rollback(True)
+
+        # Persist final task metadata outside the import transaction so it survives rollback.
+        with transaction.atomic():
+            self.refresh_from_db()
+            if errors:
+                self.processing_status = self.PROCESSING_STATUS_FAILED
+                self.datetime_error = (
+                    failure_summary.get("datetime_error", timezone.now())
+                    if failure_summary
+                    else timezone.now()
+                )
+                self.error_message = (
+                    failure_summary.get("error_message")
+                    if failure_summary
+                    else f"{len(errors)} rows failed"
+                )
+                self.error_row = errors[0].get("row_index") if errors else None
+                self.save()
+                return errors
+
+            self.processing_status = self.PROCESSING_STATUS_COMPLETED
+            self.datetime_completed = timezone.now()
+            self.save()
+
+        return []
         if self.processing_status == self.PROCESSING_STATUS_COMPLETED:
             logger.info(f"Bulk import task {self.id} has already been processed")
             return
