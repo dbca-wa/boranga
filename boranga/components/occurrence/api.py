@@ -11,7 +11,6 @@ from django.db.models import CharField, Q, Value
 from django.db.models.functions import Concat
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from django_filters import rest_framework as filters
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 from multiselectfield import MultiSelectField
@@ -5955,20 +5954,10 @@ class OccurrenceReportBulkImportTaskViewSet(
     def perform_create(self, serializer):
         instance = serializer.save(email_user=self.request.user.id)
         if settings.OCR_BULK_IMPORT_PROCESS_TASKS_IMMEDIATELY is True:
-            # Atomically claim so the status is visible/committed before long work
-            updated = OccurrenceReportBulkImportTask.objects.filter(
-                id=instance.id,
-                processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
-            ).update(
-                processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
-                datetime_started=timezone.now(),
-            )
-            if updated == 1:
-                instance.refresh_from_db()
-                # count rows quickly (non-blocking) and then process (prefer async)
-                instance.count_rows()
-                # Prefer: enqueue a background worker (Celery/RQ). If not available, run instance.process()
-                instance.process()
+            # count rows quickly (non-blocking) and then process (prefer async)
+            instance.count_rows()
+            # Prefer: enqueue a background worker (Celery/RQ). If not available, run instance.process()
+            instance.process()
         return instance
 
     @detail_route(methods=["patch"], detail=True)
