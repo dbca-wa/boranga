@@ -6283,42 +6283,51 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
     @transaction.atomic
     def process(self):
         """
-        Claim the task if still queued, then run the import work in a separate
-        transaction so the STARTED state is visible immediately to other workers.
-        Preserve all-or-nothing for data changes by using an inner atomic that
-        is rolled back if row errors are collected; persist failure metadata
-        in a final separate transaction so it survives that rollback.
+        Claim the task atomically, run the import inside an outer transaction with
+        per-row savepoints, and persist failure metadata in a separate transaction
+        so it survives the rollback of the import data.
+        Returns a list of row errors (empty list on success).
         """
-        # If caller hasn't claimed it, try to claim atomically and commit that change.
+        # quick guards
+        if self.processing_status == self.PROCESSING_STATUS_COMPLETED:
+            logger.info(f"Bulk import task {self.id} has already been processed")
+            return []
+        if self.processing_status == self.PROCESSING_STATUS_FAILED:
+            logger.info(
+                f"Bulk import task {self.id} failed. Please correct the issues and try again"
+            )
+            return []
+        if self.processing_status == self.PROCESSING_STATUS_STARTED:
+            logger.info(f"Bulk import task {self.id} is already in progress")
+            return []
+
+        # Attempt to claim the task if queued (small committed step)
         if self.processing_status == self.PROCESSING_STATUS_QUEUED:
             updated = OccurrenceReportBulkImportTask.objects.filter(
                 id=self.id,
-                processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
+                processing_status=self.PROCESSING_STATUS_QUEUED,
             ).update(
-                processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
+                processing_status=self.PROCESSING_STATUS_STARTED,
                 datetime_started=timezone.now(),
             )
             if updated != 1:
-                # someone else claimed it
                 logger.info(
                     f"Bulk import task {self.id} could not be claimed, aborting process()"
                 )
-                return
-            # refresh to reflect committed claim
+                return []
             self.refresh_from_db()
         elif self.processing_status != self.PROCESSING_STATUS_STARTED:
             logger.info(
                 f"Bulk import task {self.id} is in status {self.processing_status}, not processing"
             )
-            return
+            return []
 
-        # Now run the import work inside a transaction for data changes only.
         errors = []
         failure_summary = None
 
-        # Outer transaction governs data changes (all-or-nothing for data)
+        # Outer transaction governs data changes (all-or-nothing for imported data)
         with transaction.atomic():
-            # re-check rows count / open file etc (these DB ops are inside the data transaction)
+            # ensure rows count
             if not self.rows:
                 self.count_rows()
 
@@ -6366,7 +6375,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         break
 
                     try:
-                        with transaction.atomic():  # per-row savepoint
+                        # per-row savepoint so single-row failures don't abort the whole outer tx immediately
+                        with transaction.atomic():
                             self.rows_processed = index + 1
                             self.save()
                             self.process_row(
@@ -6400,6 +6410,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         )
                         continue
 
+                # If any row errors collected, mark outer transaction to rollback
                 if errors:
                     failure_summary = {
                         "processing_status": self.PROCESSING_STATUS_FAILED,
@@ -6425,120 +6436,29 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     else f"{len(errors)} rows failed"
                 )
                 self.error_row = errors[0].get("row_index") if errors else None
+                # persist last progress so UI can show how far we got
+                # self.rows_processed was updated inside the import tx; refresh to get DB value (or keep current attr)
+                try:
+                    db_rows_processed = (
+                        OccurrenceReportBulkImportTask.objects.filter(id=self.id)
+                        .values_list("rows_processed", flat=True)
+                        .first()
+                    )
+                    self.rows_processed = (
+                        db_rows_processed
+                        if db_rows_processed is not None
+                        else getattr(self, "rows_processed", 0)
+                    )
+                except Exception:
+                    self.rows_processed = getattr(self, "rows_processed", 0)
                 self.save()
                 return errors
 
+            # success path
             self.processing_status = self.PROCESSING_STATUS_COMPLETED
             self.datetime_completed = timezone.now()
             self.save()
-
-        return []
-        if self.processing_status == self.PROCESSING_STATUS_COMPLETED:
-            logger.info(f"Bulk import task {self.id} has already been processed")
-            return
-
-        if self.processing_status == self.PROCESSING_STATUS_FAILED:
-            logger.info(
-                f"Bulk import task {self.id} failed. Please correct the issues and try again"
-            )
-            return
-
-        if self.processing_status == self.PROCESSING_STATUS_STARTED:
-            logger.info(f"Bulk import task {self.id} is already in progress")
-            return
-
-        self.processing_status = self.PROCESSING_STATUS_STARTED
-        self.datetime_started = timezone.now()
-        self.save()
-
-        if not self.rows:
-            self.count_rows()
-
-        # Open the file
-        logger.info(f"Opening bulk import file {self._file.name}")
-        try:
-            workbook = openpyxl.load_workbook(self._file, read_only=True)
-        except Exception as e:
-            logger.error(f"Error opening bulk import file {self._file.name}: {e}")
-            self.processing_status = (
-                OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-            )
-            self.datetime_error = timezone.now()
-            self.error_message = f"Error opening bulk import file: {e}"
-            self.save()
-            return
-
-        # Get the first sheet
-        sheet = workbook.active
-
-        # headers
-        headers = [cell.value for cell in sheet[1] if cell.value is not None]
-
-        # Get the rows
-        rows = list(
-            sheet.iter_rows(
-                min_row=2,
-                max_row=self.rows + 1,
-                max_col=self.schema.columns.count(),
-                values_only=True,
-            )
-        )
-
-        errors = []
-        ocr_migrated_from_ids = []
-
-        # Process rows using per-row savepoints so we can collect row-level errors
-        for index, row in enumerate(rows):
-            if index + 1 > self.rows:
-                logger.warning(
-                    f"Bulk import task {self.id} tried to process row {index + 1} "
-                    "which is greater than the total number of rows"
-                )
-                break
-
-            try:
-                with transaction.atomic():  # creates a savepoint for this row
-                    self.rows_processed = index + 1
-                    self.save()  # part of the savepoint
-                    self.process_row(ocr_migrated_from_ids, index, headers, row, errors)
-            except IntegrityError as e:
-                logger.exception(
-                    f"IntegrityError on row {index} for import {self.id}: {e}"
-                )
-                errors.append(
-                    {
-                        "row_index": index,
-                        "error_type": "integrity",
-                        "data": row,
-                        "error_message": str(e),
-                    }
-                )
-                # savepoint rolled back automatically; continue with next row
-                continue
-            except Exception as e:
-                logger.exception(
-                    f"Unhandled error on row {index} for import {self.id}: {e}"
-                )
-                errors.append(
-                    {
-                        "row_index": index,
-                        "error_type": "exception",
-                        "data": row,
-                        "error_message": str(e),
-                        "traceback": traceback.format_exc(),
-                    }
-                )
-                continue
-
-        # preserve all-or-nothing: rollback whole outer transaction if any rows failed
-        if errors:
-            transaction.set_rollback(True)
-            # Note: saving task.failure metadata here won't persist because we're inside the outer atomic.
-            # If you need the failure status persisted, update it in a separate transaction after exiting.
-            return errors
-
-        # success: commit happens when the outer transaction exits
-        return []
+            return []
 
     def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
         row_hash = hashlib.sha256(str(row).encode()).hexdigest()
