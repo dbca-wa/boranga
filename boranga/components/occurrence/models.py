@@ -6280,6 +6280,38 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             error_string += f" The file has the following headers that are not part of the schema: {extra_headers}"
         raise ValidationError(error_string)
 
+    def _coerce_non_nullable_string_fields(self, model_class, model_data: dict) -> dict:
+        """
+        Convert None -> "" for non-nullable CharField/TextField and MultiSelectField
+        so model.save() doesn't raise when a field defaults to empty string but was
+        provided as None by the importer.
+        """
+        from django.core.exceptions import FieldDoesNotExist
+
+        for field_name, value in list(model_data.items()):
+            if value is not None:
+                continue
+            try:
+                field = model_class._meta.get_field(field_name)
+            except FieldDoesNotExist:
+                continue
+
+            # CharField / TextField should be empty string when null is False
+            if isinstance(field, (models.CharField, models.TextField)) and not getattr(
+                field, "null", False
+            ):
+                model_data[field_name] = ""
+                continue
+
+            # multiselect field stores choices as text; coerce None -> "" when null is False
+            if isinstance(field, MultiSelectField) and not getattr(
+                field, "null", False
+            ):
+                model_data[field_name] = ""
+                continue
+
+        return model_data
+
     @transaction.atomic
     def process(self):
         """
@@ -6653,6 +6685,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             model_class = apps.get_model(
                 "boranga",
                 current_model_name,
+            )
+
+            # Coerce None -> "" for non-nullable string fields so Django won't error when saving
+            model_data = self._coerce_non_nullable_string_fields(
+                model_class, model_data
             )
 
             if mode == "update":
