@@ -6335,26 +6335,59 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
         errors = []
         ocr_migrated_from_ids = []
-        # Process the rows
+
+        # Process rows using per-row savepoints so we can collect row-level errors
         for index, row in enumerate(rows):
-            self.rows_processed = index + 1
-            if self.rows_processed > self.rows:
+            if index + 1 > self.rows:
                 logger.warning(
                     f"Bulk import task {self.id} tried to process row {index + 1} "
                     "which is greater than the total number of rows"
                 )
                 break
 
-            self.save()
+            try:
+                with transaction.atomic():  # creates a savepoint for this row
+                    self.rows_processed = index + 1
+                    self.save()  # part of the savepoint
+                    self.process_row(ocr_migrated_from_ids, index, headers, row, errors)
+            except IntegrityError as e:
+                logger.exception(
+                    f"IntegrityError on row {index} for import {self.id}: {e}"
+                )
+                errors.append(
+                    {
+                        "row_index": index,
+                        "error_type": "integrity",
+                        "data": row,
+                        "error_message": str(e),
+                    }
+                )
+                # savepoint rolled back automatically; continue with next row
+                continue
+            except Exception as e:
+                logger.exception(
+                    f"Unhandled error on row {index} for import {self.id}: {e}"
+                )
+                errors.append(
+                    {
+                        "row_index": index,
+                        "error_type": "exception",
+                        "data": row,
+                        "error_message": str(e),
+                        "traceback": traceback.format_exc(),
+                    }
+                )
+                continue
 
-            self.process_row(ocr_migrated_from_ids, index, headers, row, errors)
-
-        if errors and len(errors) > 0:
-            # If a single thing went wrong roll back everything
-            # Imports either work completely or fail completely
+        # preserve all-or-nothing: rollback whole outer transaction if any rows failed
+        if errors:
             transaction.set_rollback(True)
+            # Note: saving task.failure metadata here won't persist because we're inside the outer atomic.
+            # If you need the failure status persisted, update it in a separate transaction after exiting.
+            return errors
 
-        return errors
+        # success: commit happens when the outer transaction exits
+        return []
 
     def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
         row_hash = hashlib.sha256(str(row).encode()).hexdigest()
