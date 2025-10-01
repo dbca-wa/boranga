@@ -17,21 +17,16 @@ class Command(BaseCommand):
         logger.info(f"Running command {__name__}")
 
         # Check if there are any tasks that have been processing for too long
-        qs = OccurrenceReportBulkImportTask.objects.filter(
+        stuck_qs = OccurrenceReportBulkImportTask.objects.filter(
             processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
             datetime_started__lt=timezone.now()
             - timezone.timedelta(seconds=settings.OCR_BULK_IMPORT_TASK_TIMEOUT_SECONDS),
         )
-        if qs.exists():
-            for task in qs:
-                logger.info(
-                    f"Task {task.id} has been processing for too long. Adding back to the queue"
-                )
-                task.processing_status = (
-                    OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED
-                )
-                task.rows_processed = 0
-                task.save()
+        stuck_qs.update(
+            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
+            rows_processed=0,
+            datetime_queued=timezone.now(),
+        )
 
         # Check if there are already any tasks running and return if so
         if OccurrenceReportBulkImportTask.objects.filter(
@@ -40,8 +35,8 @@ class Command(BaseCommand):
             logger.info("There is already a task running, returning")
             return
 
-        # Get the next task to process
-        task = (
+        # Get the next task to process (non-blocking) and try to claim it atomically
+        candidate = (
             OccurrenceReportBulkImportTask.objects.filter(
                 processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
                 _file__isnull=False,
@@ -50,9 +45,13 @@ class Command(BaseCommand):
             .first()
         )
 
-        if task is None:
+        if candidate is None:
             logger.info("No tasks to process, returning")
             return
+
+        # Let OccurrenceReportBulkImportTask.process() handle atomic claiming;
+        # reload instance and call process()
+        task = OccurrenceReportBulkImportTask.objects.get(id=candidate.id)
 
         try:
             # Process the task

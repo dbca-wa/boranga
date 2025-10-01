@@ -211,6 +211,7 @@ class TaxonVernacularInline(admin.TabularInline):
 
 class TaxonPreviousNameInline(admin.TabularInline):
     model = TaxonPreviousName
+    fk_name = "taxonomy"
     list_display = ("id", "previous_name_id", "previous_scientific_name")
     ordering = ("-id",)
     extra = 0
@@ -243,8 +244,13 @@ class TaxonomyAdmin(admin.ModelAdmin):
         "scientific_name",
         "kingdom_name",
         "grouptype__name",
+        "name_currency",
     )
-    list_filter = ["kingdom_fk__kingdom_name", "kingdom_fk__grouptype__name"]
+    list_filter = [
+        "kingdom_fk__kingdom_name",
+        "kingdom_fk__grouptype__name",
+        "name_currency",
+    ]
     inlines = [TaxonVernacularInline, TaxonPreviousNameInline, InformalGroupInline]
     search_fields = ("taxon_name_id", "scientific_name")
     actions = None

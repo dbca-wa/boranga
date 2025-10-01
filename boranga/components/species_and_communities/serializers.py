@@ -428,6 +428,10 @@ class TaxonomySerializer(BaseModelSerializer):
             scientific_name = f"{obj.scientific_name} ({', '.join(parts)})"
         scientific_name = scientific_name.replace("&amp;", "&")
 
+        # append custom marker for taxonomies that are previous names (annotated in the view)
+        if getattr(obj, "is_previous", False):
+            scientific_name = f"{scientific_name} (non-current)"
+
         return scientific_name
 
     def get_common_name(self, obj):

@@ -6,7 +6,7 @@ from datetime import datetime
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.http import HttpResponse
 from rest_framework import mixins, serializers, status, views, viewsets
 from rest_framework.decorators import action as detail_route
@@ -73,6 +73,7 @@ from boranga.components.species_and_communities.models import (
     SpeciesPublishingStatus,
     SpeciesUserAction,
     Taxonomy,
+    TaxonPreviousName,
     TaxonVernacular,
     ThreatAgent,
     ThreatCategory,
@@ -286,6 +287,13 @@ class GetScientificName(views.APIView):
             taxonomies = taxonomies.filter(
                 scientific_name__icontains=search_term,
             )
+
+        # annotate whether the taxonomy appears as a previous_taxonomy on any TaxonPreviousName
+        taxonomies = taxonomies.annotate(
+            is_previous=Exists(
+                TaxonPreviousName.objects.filter(previous_taxonomy=OuterRef("pk"))
+            )
+        )
 
         taxonomies = taxonomies[: settings.DEFAULT_SELECT2_RECORDS_LIMIT]
 

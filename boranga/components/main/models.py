@@ -37,7 +37,17 @@ class Nh3SanitizationModelMixin:
             if isinstance(field, (models.CharField, models.TextField)):
                 value = getattr(self, field.name, None)
                 if isinstance(value, str):
-                    setattr(self, field.name, nh3.clean(value))
+                    # sanitize then selectively restore harmless entities:
+                    # - nh3.clean() removes/neutralises tags; restore & and quotes so UI shows '&' etc.
+                    # - keep &lt; and &gt; encoded by default to avoid reintroducing tags
+                    cleaned = nh3.clean(value)
+                    cleaned = (
+                        cleaned.replace("&amp;", "&")
+                        .replace("&quot;", '"')
+                        .replace("&#39;", "'")
+                    )
+                    setattr(self, field.name, cleaned)
+
         super().save(*args, **kwargs)
 
 

@@ -152,7 +152,9 @@ class Kingdom(BaseModel):
         blank=True,
         related_name="kingdoms",
     )
-    kingdom_id = models.CharField(max_length=100, null=True, blank=True)  # nomos data
+    kingdom_id = models.CharField(
+        max_length=100, null=True, blank=True, unique=True
+    )  # nomos data
     kingdom_name = models.CharField(max_length=100, null=True, blank=True)  # nomos data
 
     class Meta:
@@ -197,7 +199,9 @@ class TaxonomyRank(BaseModel):
     kingdom_fk = models.ForeignKey(
         Kingdom, on_delete=models.SET_NULL, null=True, blank=True, related_name="ranks"
     )
-    taxon_rank_id = models.IntegerField(null=True, blank=True)  # nomos data
+    taxon_rank_id = models.IntegerField(
+        null=True, blank=True, unique=True
+    )  # nomos data
     rank_name = models.CharField(max_length=512, null=True, blank=True)
 
     class Meta:
@@ -220,7 +224,7 @@ class Taxonomy(BaseModel):
 
     taxon_name_id = models.IntegerField(null=True, blank=True, unique=True)
     scientific_name = models.CharField(max_length=512, null=True, blank=True)
-    kingdom_id = models.CharField(max_length=100, null=True, blank=True)
+    kingdom_id = models.IntegerField(null=True, blank=True)
     kingdom_fk = models.ForeignKey(
         Kingdom, on_delete=models.SET_NULL, null=True, blank=True, related_name="taxons"
     )
@@ -246,11 +250,17 @@ class Taxonomy(BaseModel):
     genera_id = models.IntegerField(null=True, blank=True)
     genera_name = models.CharField(max_length=512, null=True, blank=True)
 
+    datetime_created = models.DateTimeField(auto_now_add=True)
+    datetime_updated = models.DateTimeField(auto_now=True)
+
     class Meta:
         app_label = "boranga"
         ordering = ["scientific_name"]
         verbose_name = "Taxonomy"
         verbose_name_plural = "Taxonomies"
+        indexes = [
+            models.Index(fields=["kingdom_id"], name="idx_taxonomy_kingdom_id"),
+        ]
 
     def __str__(self):
         return str(self.scientific_name)
@@ -297,7 +307,7 @@ class TaxonVernacular(BaseModel):
     -Taxonomy
     """
 
-    vernacular_id = models.IntegerField(null=True, blank=True)
+    vernacular_id = models.IntegerField(null=True, blank=True, unique=True)
     vernacular_name = models.CharField(max_length=512, null=True, blank=True)
     taxonomy = models.ForeignKey(
         Taxonomy, on_delete=models.CASCADE, null=True, related_name="vernaculars"
@@ -320,8 +330,16 @@ class TaxonPreviousName(BaseModel):
     taxonomy = models.ForeignKey(
         Taxonomy, on_delete=models.CASCADE, null=True, related_name="previous_names"
     )
-    previous_name_id = models.IntegerField(null=True, blank=True)
+    previous_name_id = models.IntegerField(null=True, blank=True, unique=True)
     previous_scientific_name = models.CharField(max_length=512, null=True, blank=True)
+    # FK to previous taxonomy record if it exists in Boranga
+    previous_taxonomy = models.ForeignKey(
+        Taxonomy,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="previous_name_from",
+    )
 
     class Meta:
         app_label = "boranga"
@@ -338,7 +356,7 @@ class ClassificationSystem(BaseModel):
     -InformalGroup
     """
 
-    classification_system_id = models.IntegerField(null=True, blank=True)
+    classification_system_id = models.IntegerField(null=True, blank=True, unique=True)
     class_desc = models.CharField(max_length=100, null=True, blank=True)
 
     class Meta:
@@ -369,6 +387,12 @@ class InformalGroup(BaseModel):
 
     class Meta:
         app_label = "boranga"
+        indexes = [
+            models.Index(
+                fields=["taxonomy_id", "classification_system_fk_id"],
+                name="idx_ig_taxonomy_classsys",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.classification_system_fk.class_desc} {self.taxonomy.scientific_name} "

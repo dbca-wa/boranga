@@ -1,6 +1,5 @@
 import json
 import logging
-import traceback
 from datetime import datetime, time
 from io import BytesIO
 
@@ -12,7 +11,6 @@ from django.db.models import CharField, Q, Value
 from django.db.models.functions import Concat
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from django_filters import rest_framework as filters
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 from multiselectfield import MultiSelectField
@@ -991,6 +989,14 @@ class OccurrenceReportViewSet(
     @detail_route(methods=["get"], detail=True)
     def get_related_species(self, request, *args, **kwargs):
         instance = self.get_object()
+        if (
+            not hasattr(instance, "associated_species")
+            or not instance.associated_species
+        ):
+            logger.warning(
+                f"Occurrence Report {instance.id} does not have associated species returning empty list."
+            )
+            return Response([])
         serializer = AssociatedSpeciesTaxonomySerializer(
             instance.associated_species.related_species.all(),
             many=True,
@@ -5956,34 +5962,11 @@ class OccurrenceReportBulkImportTaskViewSet(
     def perform_create(self, serializer):
         instance = serializer.save(email_user=self.request.user.id)
         if settings.OCR_BULK_IMPORT_PROCESS_TASKS_IMMEDIATELY is True:
-            try:
-                errors = instance.process()
-                if errors:
-                    instance.processing_status = (
-                        OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-                    )
-                    instance.datetime_error = timezone.now()
-                    error_message = ""
-                    for error in errors:
-                        error_message += f"Row: {error['row_index'] + 1}. Error: {error['error_message']}\n"
-                    instance.error_message = error_message
-                else:
-                    instance.processing_status = (
-                        OccurrenceReportBulkImportTask.PROCESSING_STATUS_COMPLETED
-                    )
-                    instance.datetime_completed = timezone.now()
-
-            except Exception as e:
-                logger.error(
-                    f"Error processing bulk import task {instance.id}: {str(e)}"
-                )
-                logger.error(traceback.format_exc())
-                instance.processing_status = (
-                    OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-                )
-                instance.datetime_error = timezone.now()
-                instance.error_message = str(e)
-            instance.save()
+            # count rows quickly (non-blocking) and then process (prefer async)
+            instance.count_rows()
+            # Prefer: enqueue a background worker (Celery/RQ). If not available, run instance.process()
+            instance.process()
+        return instance
 
     @detail_route(methods=["patch"], detail=True)
     def retry(self, request, *args, **kwargs):

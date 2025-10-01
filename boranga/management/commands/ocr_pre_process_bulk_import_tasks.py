@@ -1,6 +1,7 @@
 import logging
 
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from boranga.components.occurrence.models import OccurrenceReportBulkImportTask
 
@@ -13,15 +14,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         logger.info(f"Running command {__name__}")
 
-        # Check if there are already any tasks running and return if so
-        if OccurrenceReportBulkImportTask.objects.filter(
-            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED
-        ).exists():
-            logger.info("There is already a task running, returning")
-            return
-
-        # Get the next task to process
-        task = (
+        # Find a candidate (non-blocking)
+        candidate = (
             OccurrenceReportBulkImportTask.objects.filter(
                 processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
                 _file__isnull=False,
@@ -31,13 +25,25 @@ class Command(BaseCommand):
             .first()
         )
 
-        if task is None:
+        if candidate is None:
             logger.info("No tasks to process, returning")
             return
 
-        # Process the task
+        # Try to claim it atomically — only one process will succeed
+        updated = OccurrenceReportBulkImportTask.objects.filter(
+            id=candidate.id,
+            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
+        ).update(
+            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
+            datetime_started=timezone.now(),
+        )
+
+        if updated != 1:
+            logger.info("Task already claimed by another worker, returning")
+            return
+
+        # We own the task — reload instance and do pre-processing (long work) outside the claim step
+        task = OccurrenceReportBulkImportTask.objects.get(id=candidate.id)
         task.count_rows()
-
         logger.info(f"OCR Bulk Import Task {task.id} has {task.rows} rows.")
-
         return

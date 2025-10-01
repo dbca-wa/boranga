@@ -22,9 +22,14 @@ logger = logging.getLogger(__name__)
 
 class NH3SanitizeSerializerMixin:
     """
-    Sanitizes all CharField inputs using nh3 before validation
-    and also before adding to the response.
+    Sanitizes all CharField inputs using nh3 before validation.
+
+    Output sanitization is disabled by default to avoid double-escaping
+    (e.g. "&" -> "&amp;"). Enable per-serializer by setting
+    SANITIZE_OUTPUT = True on the serializer class if you really need it.
     """
+
+    SANITIZE_OUTPUT = False
 
     def to_internal_value(self, data):
         if isinstance(data, list):
@@ -36,11 +41,21 @@ class NH3SanitizeSerializerMixin:
             if isinstance(field, serializers.CharField):
                 value = data.get(field_name)
                 if isinstance(value, str):
-                    data[field_name] = nh3.clean(value)
+                    # sanitize (remove tags / unsafe HTML) then unescape entities
+                    cleaned = nh3.clean(value)
+                    cleaned = (
+                        cleaned.replace("&amp;", "&")
+                        .replace("&quot;", '"')
+                        .replace("&#39;", "'")
+                    )
+                    data[field_name] = cleaned
         return super().to_internal_value(data)
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
+        if not getattr(self, "SANITIZE_OUTPUT", False):
+            return rep
+
         for field_name, field in self.fields.items():
             if isinstance(field, serializers.CharField):
                 value = rep.get(field_name)
@@ -81,7 +96,9 @@ class BaseModelSerializer(
 
 
 class BaseSerializer(
-    NH3SanitizeSerializerMixin, AbsoluteFileUrlSerializerMixin, serializers.Serializer
+    NH3SanitizeSerializerMixin,
+    AbsoluteFileUrlSerializerMixin,
+    serializers.Serializer,
 ):
     """
     Base serializer that applies NH3 sanitization and absolute URL conversion.

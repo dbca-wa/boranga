@@ -14,6 +14,7 @@ from datetime import timezone as dt_timezone
 from decimal import Decimal
 from io import BytesIO
 
+import nh3
 import openpyxl
 import pyproj
 import reversion
@@ -6280,93 +6281,266 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             error_string += f" The file has the following headers that are not part of the schema: {extra_headers}"
         raise ValidationError(error_string)
 
+    def _coerce_non_nullable_string_fields(self, model_class, model_data: dict) -> dict:
+        """
+        Convert None -> "" for non-nullable CharField/TextField and MultiSelectField
+        so model.save() doesn't raise when a field defaults to empty string but was
+        provided as None by the importer.
+        """
+        from django.core.exceptions import FieldDoesNotExist
+
+        for field_name, value in list(model_data.items()):
+            if value is not None:
+                continue
+            try:
+                field = model_class._meta.get_field(field_name)
+            except FieldDoesNotExist:
+                continue
+
+            # CharField / TextField should be empty string when null is False
+            if isinstance(field, (models.CharField, models.TextField)) and not getattr(
+                field, "null", False
+            ):
+                model_data[field_name] = ""
+                continue
+
+            # multiselect field stores choices as text; coerce None -> "" when null is False
+            if isinstance(field, MultiSelectField) and not getattr(
+                field, "null", False
+            ):
+                model_data[field_name] = ""
+                continue
+
+        return model_data
+
     @transaction.atomic
     def process(self):
+        """
+        Claim the task atomically, run the import inside an outer transaction with
+        per-row savepoints, and persist failure metadata in a separate transaction
+        so it survives the rollback of the import data.
+        Returns a list of row errors (empty list on success).
+        """
+        # quick guards
         if self.processing_status == self.PROCESSING_STATUS_COMPLETED:
             logger.info(f"Bulk import task {self.id} has already been processed")
-            return
-
+            return []
         if self.processing_status == self.PROCESSING_STATUS_FAILED:
             logger.info(
                 f"Bulk import task {self.id} failed. Please correct the issues and try again"
             )
-            return
-
+            return []
         if self.processing_status == self.PROCESSING_STATUS_STARTED:
             logger.info(f"Bulk import task {self.id} is already in progress")
-            return
+            return []
 
-        self.processing_status = self.PROCESSING_STATUS_STARTED
-        self.datetime_started = timezone.now()
-        self.save()
-
-        if not self.rows:
-            self.count_rows()
-
-        # Open the file
-        logger.info(f"Opening bulk import file {self._file.name}")
-        try:
-            workbook = openpyxl.load_workbook(self._file, read_only=True)
-        except Exception as e:
-            logger.error(f"Error opening bulk import file {self._file.name}: {e}")
-            self.processing_status = (
-                OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
+        # Attempt to claim the task if queued (small committed step)
+        if self.processing_status == self.PROCESSING_STATUS_QUEUED:
+            updated = OccurrenceReportBulkImportTask.objects.filter(
+                id=self.id,
+                processing_status=self.PROCESSING_STATUS_QUEUED,
+            ).update(
+                processing_status=self.PROCESSING_STATUS_STARTED,
+                datetime_started=timezone.now(),
             )
-            self.datetime_error = timezone.now()
-            self.error_message = f"Error opening bulk import file: {e}"
-            self.save()
-            return
-
-        # Get the first sheet
-        sheet = workbook.active
-
-        # headers
-        headers = [cell.value for cell in sheet[1] if cell.value is not None]
-
-        # Get the rows
-        rows = list(
-            sheet.iter_rows(
-                min_row=2,
-                max_row=self.rows + 1,
-                max_col=self.schema.columns.count(),
-                values_only=True,
+            if updated != 1:
+                logger.info(
+                    f"Bulk import task {self.id} could not be claimed, aborting process()"
+                )
+                return []
+            self.refresh_from_db()
+        elif self.processing_status != self.PROCESSING_STATUS_STARTED:
+            logger.info(
+                f"Bulk import task {self.id} is in status {self.processing_status}, not processing"
             )
-        )
+            return []
 
         errors = []
-        ocr_migrated_from_ids = []
-        # Process the rows
-        for index, row in enumerate(rows):
-            self.rows_processed = index + 1
-            if self.rows_processed > self.rows:
-                logger.warning(
-                    f"Bulk import task {self.id} tried to process row {index + 1} "
-                    "which is greater than the total number of rows"
+        failure_summary = None
+
+        # Outer transaction governs data changes (all-or-nothing for imported data)
+        with transaction.atomic():
+            # ensure rows count
+            if not self.rows:
+                self.count_rows()
+
+            logger.info(f"Opening bulk import file {self._file.name}")
+            try:
+                workbook = openpyxl.load_workbook(self._file, read_only=True)
+            except Exception as e:
+                logger.exception(
+                    f"Error opening bulk import file {self._file.name}: {e}"
                 )
-                break
+                errors.append(
+                    {
+                        "row_index": None,
+                        "error_type": "file",
+                        "data": None,
+                        "error_message": str(e),
+                    }
+                )
+                failure_summary = {
+                    "processing_status": self.PROCESSING_STATUS_FAILED,
+                    "datetime_error": timezone.now(),
+                    "error_message": f"Error opening bulk import file: {e}",
+                }
+                transaction.set_rollback(True)
+            else:
+                sheet = workbook.active
+                headers = [cell.value for cell in sheet[1] if cell.value is not None]
+                rows = list(
+                    sheet.iter_rows(
+                        min_row=2,
+                        max_row=self.rows + 1,
+                        max_col=self.schema.columns.count(),
+                        values_only=True,
+                    )
+                )
 
+                ocr_migrated_from_ids = []
+
+                for index, row in enumerate(rows):
+                    if index + 1 > self.rows:
+                        logger.warning(
+                            f"Bulk import task {self.id} tried to process row {index + 1} "
+                            "which is greater than the total number of rows"
+                        )
+                        break
+
+                    try:
+                        # per-row savepoint so single-row failures don't abort the whole outer tx immediately
+                        with transaction.atomic():
+                            self.rows_processed = index + 1
+                            self.save()
+                            self.process_row(
+                                ocr_migrated_from_ids, index, headers, row, errors
+                            )
+                    except IntegrityError as e:
+                        logger.exception(
+                            f"IntegrityError on row {index} for import {self.id}: {e}"
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "integrity",
+                                "data": row,
+                                "error_message": str(e),
+                            }
+                        )
+                        continue
+                    except Exception as e:
+                        logger.exception(
+                            f"Unhandled error on row {index} for import {self.id}: {e}"
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "exception",
+                                "data": row,
+                                "error_message": str(e),
+                                "traceback": traceback.format_exc(),
+                            }
+                        )
+                        continue
+
+                # If any row errors collected, mark outer transaction to rollback
+                if errors:
+                    failure_summary = {
+                        "processing_status": self.PROCESSING_STATUS_FAILED,
+                        "datetime_error": timezone.now(),
+                        "error_message": f"{len(errors)} rows failed.",
+                        "error_count": len(errors),
+                        "errors": errors,
+                    }
+                    transaction.set_rollback(True)
+
+        # Persist final task metadata outside the import transaction so it survives rollback.
+        with transaction.atomic():
+            self.refresh_from_db()
+            if errors:
+                self.processing_status = self.PROCESSING_STATUS_FAILED
+                self.datetime_error = (
+                    failure_summary.get("datetime_error", timezone.now())
+                    if failure_summary
+                    else timezone.now()
+                )
+
+                # Persist full errors list (human readable string) so the API/UI can display detailed errors.
+                if failure_summary and failure_summary.get("errors") is not None:
+                    try:
+                        # Build a single string with each error on its own line.
+                        error_lines = []
+                        for e in failure_summary.get("errors"):
+                            if isinstance(e, dict):
+                                row_idx = e.get("row_index")
+                                msg = (
+                                    e.get("error_message")
+                                    or e.get("error_type")
+                                    or str(e)
+                                )
+                                prefix = (
+                                    f"Row: {row_idx}. " if row_idx is not None else ""
+                                )
+                                error_lines.append(f"{prefix}Error: {msg}")
+                            else:
+                                error_lines.append(str(e))
+                        self.error_message = (
+                            "Errors occurred during processing:\n"
+                            + "\n".join(error_lines)
+                        )
+                    except Exception:
+                        # Fallback to concise message if building the string fails
+                        self.error_message = (
+                            failure_summary.get("error_message")
+                            if failure_summary
+                            else f"{len(errors)} rows failed"
+                        )
+                else:
+                    self.error_message = (
+                        failure_summary.get("error_message")
+                        if failure_summary
+                        else f"{len(errors)} rows failed"
+                    )
+
+                self.error_row = errors[0].get("row_index") if errors else None
+                # persist last progress so UI can show how far we got
+                # self.rows_processed was updated inside the import tx; refresh to get DB value (or keep current attr)
+                try:
+                    db_rows_processed = (
+                        OccurrenceReportBulkImportTask.objects.filter(id=self.id)
+                        .values_list("rows_processed", flat=True)
+                        .first()
+                    )
+                    self.rows_processed = (
+                        db_rows_processed
+                        if db_rows_processed is not None
+                        else getattr(self, "rows_processed", 0)
+                    )
+                except Exception:
+                    self.rows_processed = getattr(self, "rows_processed", 0)
+                self.save()
+                return errors
+
+            # success path
+            self.processing_status = self.PROCESSING_STATUS_COMPLETED
+            self.datetime_completed = timezone.now()
             self.save()
-
-            self.process_row(ocr_migrated_from_ids, index, headers, row, errors)
-
-        if errors and len(errors) > 0:
-            # If a single thing went wrong roll back everything
-            # Imports either work completely or fail completely
-            transaction.set_rollback(True)
-
-        return errors
+            return []
 
     def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
+        # Present row numbers to humans starting at 1 (not 0)
+        row_index = index + 1
+
         row_hash = hashlib.sha256(str(row).encode()).hexdigest()
         if OccurrenceReport.objects.filter(import_hash=row_hash).exists():
             duplicate_ocr = OccurrenceReport.objects.get(import_hash=row_hash)
             error_message = (
-                f"Row {index} has the exact same data as "
+                f"Row {row_index} has the exact same data as "
                 f"Occurrence Report {duplicate_ocr.occurrence_report_number} did when it was imported."
             )
             errors.append(
                 {
-                    "row_index": index,
+                    "row_index": row_index,
                     "error_type": "row",
                     "data": row,
                     "error_message": error_message,
@@ -6381,7 +6555,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             error_message = "Row does not have an Occurrence Report migrated from id"
             errors.append(
                 {
-                    "row_index": index,
+                    "row_index": row_index,
                     "error_type": "missing_migrated_from_id",
                     "data": row,
                     "error_message": error_message,
@@ -6440,7 +6614,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             cell_value = row[column_index]
 
             cell_value, errors_added = column.validate(
-                self, cell_value, mode, index, headers, row, errors
+                self, cell_value, mode, row_index, headers, row, errors
             )
 
             model_class = apps.get_model(
@@ -6514,6 +6688,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 current_model_name,
             )
 
+            # Coerce None -> "" for non-nullable string fields so Django won't error when saving
+            model_data = self._coerce_non_nullable_string_fields(
+                model_class, model_data
+            )
+
             if mode == "update":
                 # Remove empty values from the model data
                 model_data = {k: v for k, v in model_data.items() if v is not None}
@@ -6549,7 +6728,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     )
                     errors.append(
                         {
-                            "row_index": index,
+                            "row_index": row_index,
                             "error_type": "ambiguous_occurrence_idenfitier",
                             "data": model_data,
                             "error_message": error_message,
@@ -6566,7 +6745,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         error_message = "The occurrence number provided does not exist in the database"
                         errors.append(
                             {
-                                "row_index": index,
+                                "row_index": row_index,
                                 "error_type": "invalid_occurrence_number",
                                 "data": model_data,
                                 "error_message": error_message,
@@ -6587,7 +6766,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         )
                         errors.append(
                             {
-                                "row_index": index,
+                                "row_index": row_index,
                                 "error_type": "duplicate_occurrence_name",
                                 "data": model_data,
                                 "error_message": error_message,
@@ -6642,7 +6821,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             errors.append(
                                 {
-                                    "row_index": index,
+                                    "row_index": row_index,
                                     "error_type": "invalid_occurrence_group_type",
                                     "data": model_data,
                                     "error_message": error_message,
@@ -6664,7 +6843,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             errors.append(
                                 {
-                                    "row_index": index,
+                                    "row_index": row_index,
                                     "error_type": "invalid_occurrence_species",
                                     "data": model_data,
                                     "error_message": error_message,
@@ -6683,7 +6862,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             errors.append(
                                 {
-                                    "row_index": index,
+                                    "row_index": row_index,
                                     "error_type": "invalid_occurrence_community",
                                     "data": model_data,
                                     "error_message": error_message,
@@ -6756,7 +6935,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     )
                     errors.append(
                         {
-                            "row_index": index,
+                            "row_index": row_index,
                             "error_type": "relationship",
                             "data": model_data,
                             "error_message": error_message,
@@ -6812,7 +6991,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 logger.error(f"Error creating model instance: {e}")
                 errors.append(
                     {
-                        "row_index": index,
+                        "row_index": row_index,
                         "error_type": "integrity",
                         "data": model_data,
                         "error_message": f"Error creating model instance: {e}",
@@ -7512,6 +7691,49 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     def __str__(self):
         return f"{self.xlsx_column_header_name} - {self.schema}"
+
+    # Helper: try exact lookup, then fallback to nh3.clean(value) if not found
+    def _get_related_instance(self, related_model_qs, lookup_field, value):
+        try:
+            return related_model_qs.get(**{lookup_field: value})
+        except related_model_qs.model.DoesNotExist:
+            if isinstance(value, str):
+                try:
+                    cleaned = nh3.clean(value)
+                except Exception:
+                    cleaned = None
+                if cleaned and cleaned != value:
+                    try:
+                        return related_model_qs.get(**{lookup_field: cleaned})
+                    except related_model_qs.model.DoesNotExist:
+                        pass
+            raise related_model_qs.model.DoesNotExist
+
+    # Helper: try filtering with provided values, then with nh3.clean()ed values
+    def _filter_related_instances(self, related_model_qs, lookup_field, values):
+        if not isinstance(values, (list, tuple)):
+            values = [values]
+
+        qs = related_model_qs.filter(**{lookup_field: values})
+        if qs.exists():
+            return qs
+
+        # Attempt cleaned variants for string values
+        cleaned_values = []
+        for v in values:
+            if isinstance(v, str):
+                try:
+                    cleaned_values.append(nh3.clean(v))
+                except Exception:
+                    cleaned_values.append(v)
+            else:
+                cleaned_values.append(v)
+
+        # If cleaned set is the same as original, nothing more to try
+        if set(cleaned_values) == set(values):
+            return qs
+
+        return related_model_qs.filter(**{lookup_field: cleaned_values})
 
     @property
     def model_name(self):
@@ -8503,8 +8725,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 lookup_field = get_display_field_for_model(related_model)
 
             try:
-                related_model_instance = related_model_qs.get(
-                    **{lookup_field: cell_value}
+                related_model_instance = self._get_related_instance(
+                    related_model_qs, lookup_field, cell_value
                 )
 
             except FieldError:
@@ -8587,8 +8809,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             ]
 
             try:
-                related_model_instances = related_model_qs.filter(
-                    **{lookup_field: cell_value}
+                related_model_instances = self._filter_related_instances(
+                    related_model_qs, lookup_field, cell_value
                 )
             except FieldError:
                 error_message = (
