@@ -8725,8 +8725,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 lookup_field = get_display_field_for_model(related_model)
 
             try:
-                related_model_instance = related_model_qs.get(
-                    **{lookup_field: cell_value}
+                related_model_instance = self._get_related_instance(
+                    related_model_qs, lookup_field, cell_value
                 )
 
             except FieldError:
@@ -8809,8 +8809,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             ]
 
             try:
-                related_model_instances = related_model_qs.filter(
-                    **{lookup_field: cell_value}
+                related_model_instances = self._filter_related_instances(
+                    related_model_qs, lookup_field, cell_value
                 )
             except FieldError:
                 error_message = (
