@@ -49,20 +49,8 @@ class Command(BaseCommand):
             logger.info("No tasks to process, returning")
             return
 
-        # Attempt to claim the candidate so only one worker processes it
-        updated = OccurrenceReportBulkImportTask.objects.filter(
-            id=candidate.id,
-            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
-        ).update(
-            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
-            datetime_started=timezone.now(),
-        )
-
-        if updated != 1:
-            logger.info("Task already claimed by another worker, returning")
-            return
-
-        # We own the task — reload instance and process
+        # Let OccurrenceReportBulkImportTask.process() handle atomic claiming;
+        # reload instance and call process()
         task = OccurrenceReportBulkImportTask.objects.get(id=candidate.id)
 
         try:
