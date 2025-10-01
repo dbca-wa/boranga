@@ -14,6 +14,7 @@ from datetime import timezone as dt_timezone
 from decimal import Decimal
 from io import BytesIO
 
+import nh3
 import openpyxl
 import pyproj
 import reversion
@@ -7690,6 +7691,49 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     def __str__(self):
         return f"{self.xlsx_column_header_name} - {self.schema}"
+
+    # Helper: try exact lookup, then fallback to nh3.clean(value) if not found
+    def _get_related_instance(self, related_model_qs, lookup_field, value):
+        try:
+            return related_model_qs.get(**{lookup_field: value})
+        except related_model_qs.model.DoesNotExist:
+            if isinstance(value, str):
+                try:
+                    cleaned = nh3.clean(value)
+                except Exception:
+                    cleaned = None
+                if cleaned and cleaned != value:
+                    try:
+                        return related_model_qs.get(**{lookup_field: cleaned})
+                    except related_model_qs.model.DoesNotExist:
+                        pass
+            raise related_model_qs.model.DoesNotExist
+
+    # Helper: try filtering with provided values, then with nh3.clean()ed values
+    def _filter_related_instances(self, related_model_qs, lookup_field, values):
+        if not isinstance(values, (list, tuple)):
+            values = [values]
+
+        qs = related_model_qs.filter(**{lookup_field: values})
+        if qs.exists():
+            return qs
+
+        # Attempt cleaned variants for string values
+        cleaned_values = []
+        for v in values:
+            if isinstance(v, str):
+                try:
+                    cleaned_values.append(nh3.clean(v))
+                except Exception:
+                    cleaned_values.append(v)
+            else:
+                cleaned_values.append(v)
+
+        # If cleaned set is the same as original, nothing more to try
+        if set(cleaned_values) == set(values):
+            return qs
+
+        return related_model_qs.filter(**{lookup_field: cleaned_values})
 
     @property
     def model_name(self):
