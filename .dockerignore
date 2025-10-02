@@ -2,7 +2,6 @@
 **/*.csv
 **/*.xls*
 
-.git
 .gitignore
 node_modules
 venv
