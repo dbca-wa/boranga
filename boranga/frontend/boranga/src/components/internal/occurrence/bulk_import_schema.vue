@@ -1652,6 +1652,7 @@ export default {
                                         this.schema.columns.some(
                                             (column) =>
                                                 column.field_exists !== false &&
+                                                column.field_exists === true &&
                                                 column.django_import_field_name ==
                                                     modelField.name &&
                                                 column.django_import_content_type ==
@@ -1697,6 +1698,7 @@ export default {
                         !this.schema.columns.some(
                             (column) =>
                                 column.field_exists !== false &&
+                                column.field_exists === true &&
                                 column.django_import_field_name ==
                                     modelField.name &&
                                 column.django_import_content_type ==
@@ -1709,14 +1711,14 @@ export default {
                 !this.selectedColumn.id &&
                 this.schema.columns.filter(
                     (column) =>
-                        column.field_exists !== false &&
+                        column.field_exists === true &&
                         column.django_import_content_type ==
                             this.selectedColumn.django_import_content_type
                 ).length > 1
             ) {
                 let lastColumn = this.schema.columns.findLast(
                     (column) =>
-                        column.field_exists !== false &&
+                        column.field_exists === true &&
                         column.django_import_content_type ==
                             this.selectedColumn.django_import_content_type &&
                         column.django_import_field_name !=
@@ -1854,9 +1856,18 @@ export default {
                                     modelField.allow_null,
                                 default_value: null,
                                 import_validations: [],
+                                // Set these so the UI shows the new columns as
+                                // valid immediately (they'll be persisted on save)
+                                model_name:
+                                    this.selectedContentType.model_verbose_name,
+                                model_exists: true,
+                                field_exists: true,
                             };
                         }
                     );
+                    // DEBUG: show selected content type fields and current schema columns
+                    // (debug logs removed)
+
                     // Remove columns that are already in the schema. Ignore
                     // invalid schema columns (field_exists === false) so they
                     // don't block adding the new field again.
@@ -1864,11 +1875,15 @@ export default {
                         (newColumn) =>
                             !this.schema.columns.some(
                                 (column) =>
-                                    column.field_exists !== false &&
+                                    column.field_exists === true &&
+                                    column.django_import_content_type ==
+                                        newColumn.django_import_content_type &&
                                     column.django_import_field_name ==
                                         newColumn.django_import_field_name
                             )
                     );
+
+                    // (debug logs removed)
 
                     if (newColumns.length == 0) {
                         swal.fire({
@@ -1913,14 +1928,14 @@ export default {
                     if (
                         this.schema.columns.filter(
                             (column) =>
-                                column.field_exists !== false &&
+                                column.field_exists === true &&
                                 column.django_import_content_type ==
                                     selectedContentType
                         ).length > 0
                     ) {
                         let lastColumn = this.schema.columns.findLast(
                             (column) =>
-                                column.field_exists !== false &&
+                                column.field_exists === true &&
                                 column.django_import_content_type ==
                                     selectedContentType
                         );
@@ -1929,6 +1944,7 @@ export default {
                     }
 
                     for (let i = 0; i < newColumns.length; i++) {
+                        // inserting newColumn
                         this.schema.columns.splice(
                             lastColumnIndex + i,
                             0,
@@ -1936,6 +1952,8 @@ export default {
                         );
                     }
                     this.applyOrderToColumns();
+
+                    // snapshot after insertion
 
                     this.save();
                     this.addEditMode = false;
@@ -2186,6 +2204,7 @@ export default {
                     const data = await response.json();
                     this.saving = false;
                     this.schema = Object.assign({}, data);
+                    // server returned schema
                     // Restore selection using id if possible, else fallback to previous index
                     if (wasSelected) {
                         let restored =
