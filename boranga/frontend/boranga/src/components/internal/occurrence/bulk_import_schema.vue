@@ -366,7 +366,10 @@
                                                 >*</span
                                             >
                                             <i
-                                                v-if="!column.field_exists"
+                                                v-if="
+                                                    column.field_exists ===
+                                                    false
+                                                "
                                                 class="bi bi-exclamation-circle-fill text-danger"
                                                 title="This column is no longer present in the underlying database"
                                             ></i>
@@ -380,21 +383,25 @@
                                             >
                                                 <span
                                                     :class="
-                                                        column.model_exists
-                                                            ? ''
-                                                            : 'text-danger'
+                                                        column.model_exists ===
+                                                        false
+                                                            ? 'text-danger'
+                                                            : ''
                                                     "
                                                     :title="
-                                                        column.model_exists
-                                                            ? ''
-                                                            : `Model ${column.model_name} no longer exists in the database`
+                                                        column.model_exists ===
+                                                        false
+                                                            ? `Model ${column.model_name} no longer exists in the database`
+                                                            : ''
                                                     "
-                                                    >{{
-                                                        column.model_name
-                                                    }}</span
                                                 >
+                                                    {{ column.model_name }}
+                                                </span>
                                                 <i
-                                                    v-if="!column.model_exists"
+                                                    v-if="
+                                                        column.model_exists ===
+                                                        false
+                                                    "
                                                     class="bi bi-exclamation-circle-fill text-danger ps-1"
                                                     title="This model is no longer present in the underlying database"
                                                 ></i>
@@ -505,7 +512,7 @@
                                 "
                             >
                                 <div
-                                    v-if="!selectedColumn.model_exists"
+                                    v-if="selectedColumn.model_exists === false"
                                     class="row d-flex align-items-start mb-2"
                                 >
                                     <label
@@ -590,7 +597,9 @@
                                         </select>
                                     </div>
                                 </div>
-                                <template v-if="selectedColumn.model_exists">
+                                <template
+                                    v-if="selectedColumn.model_exists !== false"
+                                >
                                     <div
                                         v-if="
                                             selectedContentType &&
@@ -644,7 +653,10 @@
                                         </div>
                                     </div>
                                     <div
-                                        v-if="!selectedColumn.field_exists"
+                                        v-if="
+                                            selectedColumn.field_exists ===
+                                            false
+                                        "
                                         class="row d-flex align-items-center mb-2"
                                     >
                                         <label
@@ -1628,7 +1640,10 @@ export default {
                             (djangoContentType) =>
                                 djangoContentType.model_fields.length > 0
                         );
-                    // Filter out content types where all their fields are already columns in the schema
+                    // Filter out content types where all their fields are already
+                    // columns in the schema. Ignore schema columns that are
+                    // known to be invalid (field_exists === false) so that
+                    // recovered/invalid columns do not block adding new columns.
                     this.djangoContentTypesFiltered =
                         this.djangoContentTypesFiltered.filter(
                             (djangoContentType) =>
@@ -1636,6 +1651,7 @@ export default {
                                     (modelField) =>
                                         this.schema.columns.some(
                                             (column) =>
+                                                column.field_exists !== false &&
                                                 column.django_import_field_name ==
                                                     modelField.name &&
                                                 column.django_import_content_type ==
@@ -1672,12 +1688,15 @@ export default {
                     djangoContentType.id ==
                     this.selectedColumn.django_import_content_type
             )[0];
-            // Filter out fields that are already columns in the schema
+            // Filter out fields that are already columns in the schema.
+            // Ignore schema columns that are known to be invalid so users
+            // can add fields even if an invalid column remains.
             this.djangoImportFieldsFiltered =
                 this.selectedContentType.model_fields.filter(
                     (modelField) =>
                         !this.schema.columns.some(
                             (column) =>
+                                column.field_exists !== false &&
                                 column.django_import_field_name ==
                                     modelField.name &&
                                 column.django_import_content_type ==
@@ -1690,12 +1709,14 @@ export default {
                 !this.selectedColumn.id &&
                 this.schema.columns.filter(
                     (column) =>
+                        column.field_exists !== false &&
                         column.django_import_content_type ==
-                        this.selectedColumn.django_import_content_type
+                            this.selectedColumn.django_import_content_type
                 ).length > 1
             ) {
                 let lastColumn = this.schema.columns.findLast(
                     (column) =>
+                        column.field_exists !== false &&
                         column.django_import_content_type ==
                             this.selectedColumn.django_import_content_type &&
                         column.django_import_field_name !=
@@ -1836,13 +1857,16 @@ export default {
                             };
                         }
                     );
-                    // Remove columns that are already in the schema
+                    // Remove columns that are already in the schema. Ignore
+                    // invalid schema columns (field_exists === false) so they
+                    // don't block adding the new field again.
                     newColumns = newColumns.filter(
                         (newColumn) =>
                             !this.schema.columns.some(
                                 (column) =>
+                                    column.field_exists !== false &&
                                     column.django_import_field_name ==
-                                    newColumn.django_import_field_name
+                                        newColumn.django_import_field_name
                             )
                     );
 
@@ -1889,14 +1913,16 @@ export default {
                     if (
                         this.schema.columns.filter(
                             (column) =>
+                                column.field_exists !== false &&
                                 column.django_import_content_type ==
-                                selectedContentType
+                                    selectedContentType
                         ).length > 0
                     ) {
                         let lastColumn = this.schema.columns.findLast(
                             (column) =>
+                                column.field_exists !== false &&
                                 column.django_import_content_type ==
-                                selectedContentType
+                                    selectedContentType
                         );
                         lastColumnIndex =
                             this.schema.columns.indexOf(lastColumn) + 1;
@@ -1927,7 +1953,7 @@ export default {
         },
         selectColumn(column) {
             if (column.django_import_content_type) {
-                if (!column.model_exists) {
+                if (column.model_exists === false) {
                     this.selectedContentType = 'invalid_content_type';
                 } else {
                     this.selectedContentType = this.djangoContentTypes.filter(
@@ -1963,7 +1989,7 @@ export default {
                             }
                         }
                     } else {
-                        if (!column.model_exists) {
+                        if (column.model_exists === false) {
                             column.invalid_model = column.model_name;
                         }
                         column.invalid_field = column.django_import_field_name;
