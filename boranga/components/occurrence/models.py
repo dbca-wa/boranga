@@ -43,6 +43,7 @@ from django.db.models import (
     Q,
     Subquery,
 )
+from django.db.models.fields import NOT_PROVIDED
 from django.db.models.functions import Cast, Length
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -7197,9 +7198,17 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 )
             model_field = model_class._meta.get_field(column.django_import_field_name)
 
-            allow_blank = model_field.null
-            if allow_blank and column.xlsx_data_validation_allow_blank is False:
-                allow_blank = False
+            # Determine whether blanks should be allowed for this column.
+            # Allow blank if the model field allows null, if the schema column
+            # explicitly allows blank, or if the model field has a default value.
+            field_default = getattr(model_field, "default", NOT_PROVIDED)
+            has_default = field_default is not NOT_PROVIDED
+
+            allow_blank = (
+                getattr(model_field, "null", False)
+                or column.xlsx_data_validation_allow_blank
+                or has_default
+            )
 
             dv = None
             if column.default_value is not None:
@@ -8434,18 +8443,41 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
             return cell_value, errors_added
 
-        if not self.xlsx_data_validation_allow_blank and (
-            cell_value is None or cell_value == ""
-        ):
-            errors.append(
-                {
-                    "row_index": index,
-                    "error_type": "column",
-                    "data": cell_value,
-                    "error_message": f"Value in column {self.xlsx_column_header_name} is blank",
-                }
-            )
-            errors_added += 1
+        # Treat blank cells as allowed if the schema column allows blanks,
+        # the underlying model field allows nulls, or the model field has a default.
+        field_default = getattr(field, "default", NOT_PROVIDED)
+        has_default = field_default is not NOT_PROVIDED
+        allow_blank = (
+            self.xlsx_data_validation_allow_blank
+            or getattr(field, "null", False)
+            or has_default
+        )
+
+        if cell_value is None or cell_value == "":
+            if not allow_blank:
+                errors.append(
+                    {
+                        "row_index": index,
+                        "error_type": "column",
+                        "data": cell_value,
+                        "error_message": f"Value in column {self.xlsx_column_header_name} is blank",
+                    }
+                )
+                errors_added += 1
+                return cell_value, errors_added
+
+            # If the model field has a default value, use it for blank cells.
+            if has_default:
+                default_value = field_default
+                try:
+                    if callable(default_value):
+                        default_value = default_value()
+                except Exception:
+                    # If default callable fails, leave cell_value as-is and continue; validation later may catch issues
+                    default_value = field_default
+
+                cell_value = default_value
+                return cell_value, errors_added
 
         xlsx_data_validation_type = self.xlsx_validation_type
 
