@@ -310,7 +310,7 @@
                                         :style="
                                             selectedColumn == column
                                                 ? ''
-                                                : `background-color:${stringToRGBAColor(column.model_name)};`
+                                                : `background-color: ${stringToRGBAColor(column.model_name)} !important;`
                                         "
                                         role="button"
                                         @click="selectColumn(column)"
@@ -2236,8 +2236,11 @@ export default {
             });
         },
         stringToRGBAColor(str) {
+            // Return a valid CSS color string. Fallback to transparent so
+            // the inline style is always valid. Alpha is low so the
+            // background is subtle.
             if (!str) {
-                return '';
+                return 'transparent';
             }
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
@@ -2249,7 +2252,9 @@ export default {
             let r = parseInt(color_hash.slice(1, 3), 16);
             let g = parseInt(color_hash.slice(3, 5), 16);
             let b = parseInt(color_hash.slice(5, 7), 16);
-            return `rgba(${r}, ${g}, ${b}, 0.1)`;
+            // Ensure numbers are valid
+            if (isNaN(r) || isNaN(g) || isNaN(b)) return 'transparent';
+            return `rgba(${r}, ${g}, ${b}, 0.10)`;
         },
         classesForRow(index, column, selectedColumn) {
             let classes = selectedColumn == column ? 'active bg-success' : '';
