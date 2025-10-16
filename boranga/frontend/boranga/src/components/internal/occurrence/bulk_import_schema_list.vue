@@ -340,6 +340,6 @@ export default {
 </script>
 <style scoped>
 .master-schema {
-    background-color: rgba(255, 193, 7, 0.3);
+    background-color: rgba(255, 193, 7, 0.3) !important;
 }
 </style>
