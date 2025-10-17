@@ -4,22 +4,17 @@ import os
 from decimal import Decimal
 
 import reversion
-import shapely.geometry as shp
 from django.conf import settings
-from django.contrib.gis.db import models as gis_models
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.storage import FileSystemStorage
 from django.core.validators import MinValueValidator
 from django.db import models, transaction
-from django.db.models import Sum
-from django.db.models.functions import Cast
 from django.http import HttpRequest
 from django.utils.functional import cached_property
 from ledger_api_client.managed_models import SystemGroup
 from multiselectfield import MultiSelectField
 from ordered_model.models import OrderedModel
-from pyproj import Geod
 
 from boranga.components.main.models import (
     ArchivableModel,
@@ -65,6 +60,8 @@ def _sum_area_of_occupancy_m2(obj, owner_field: str):
     owner_field: 'species' or 'community' - used to build filters for Occurrence relations.
     Returns 0 when no area can be determined.
     """
+    from django.db.models import F, Func
+
     from boranga.components.occurrence.models import (
         BufferGeometry,
         Occurrence,
@@ -76,9 +73,7 @@ def _sum_area_of_occupancy_m2(obj, owner_field: str):
         "occurrence__processing_status__in": [Occurrence.PROCESSING_STATUS_ACTIVE],
     }
 
-    area = OccurrenceGeometry.objects.filter(**base_filter).aggregate(sum=Sum("area"))[
-        "sum"
-    ]
+    qs = OccurrenceGeometry.objects.filter(**base_filter)
 
     # Fauna uses buffered geometries for area calculation
     if (
@@ -91,21 +86,25 @@ def _sum_area_of_occupancy_m2(obj, owner_field: str):
                 Occurrence.PROCESSING_STATUS_ACTIVE
             ],
         }
-        area = BufferGeometry.objects.filter(**buffer_filter).aggregate(
-            sum=Sum("area")
-        )["sum"]
+        qs = BufferGeometry.objects.filter(**buffer_filter)
+
+    # Use PostGIS to sum areas in the DB (geometry::geography to get metres)
+    # SUM(ST_Area(geometry::geography)) per-row area aggregation
+    area_expr = Func(
+        F("geometry"),
+        function="ST_Area",
+        template="ST_Area(%(expressions)s::geography)",
+    )
+    res = qs.aggregate(area=models.Sum(area_expr, output_field=models.FloatField()))
+    area = res.get("area")
 
     if not area:
         return 0
 
-    # area may be an Area object (has .sq_m) or a numeric/Decimal - handle both
     try:
-        return area.sq_m
-    except AttributeError:
-        try:
-            return float(area)
-        except Exception:
-            return 0
+        return float(area)
+    except Exception:
+        return 0
 
 
 def _convex_hull_area_m2(obj, owner_field: str):
@@ -113,6 +112,8 @@ def _convex_hull_area_m2(obj, owner_field: str):
     Compute the convex hull of all occurrence geometries related to obj and return its
     geodesic area in square metres. Returns 0 on error or if no geometries.
     """
+    from django.db.models import Aggregate, F
+
     from boranga.components.occurrence.models import (
         BufferGeometry,
         Occurrence,
@@ -124,11 +125,7 @@ def _convex_hull_area_m2(obj, owner_field: str):
         "occurrence__processing_status__in": [Occurrence.PROCESSING_STATUS_ACTIVE],
     }
 
-    qs = (
-        OccurrenceGeometry.objects.filter(**qs_kwargs)
-        .annotate(geom=Cast("geometry", gis_models.GeometryField(geography=True)))
-        .values_list("geom", flat=True)
-    )
+    qs = OccurrenceGeometry.objects.filter(**qs_kwargs)
 
     if (
         getattr(obj, "group_type", None)
@@ -140,65 +137,25 @@ def _convex_hull_area_m2(obj, owner_field: str):
                 Occurrence.PROCESSING_STATUS_ACTIVE
             ],
         }
-        qs = (
-            BufferGeometry.objects.filter(**buffer_qs_kwargs)
-            .annotate(geom=Cast("geometry", gis_models.GeometryField(geography=True)))
-            .values_list("geom", flat=True)
-        )
+        qs = BufferGeometry.objects.filter(**buffer_qs_kwargs)
 
-    geometries = list(qs)
-    if not geometries:
-        return 0
-
-    points = []
-    for g in geometries:
-        if not g:
-            continue
-        # Handle common geometry types defensively
-        try:
-            gtype = getattr(g, "geom_type", None)
-            if gtype == "Point":
-                points.append((g.x, g.y))
-            elif gtype in ("MultiPoint",):
-                for part in g:
-                    points.append((part.x, part.y))
-            elif gtype in ("Polygon", "MultiPolygon"):
-                polys = getattr(g, "geoms", [g])
-                for poly in polys:
-                    ring = list(poly.exterior.coords)
-                    points.extend([tuple(c) for c in ring])
-            else:
-                # Best-effort fallback: try to flatten coords
-                coords = getattr(g, "coords", None)
-                if coords:
-
-                    def _flatten(c):
-                        if isinstance(c[0], (list, tuple)):
-                            for s in c:
-                                yield from _flatten(s)
-                        else:
-                            yield tuple(c)
-
-                    for coord in _flatten(coords):
-                        points.append(coord)
-        except Exception:
-            logger.warning(
-                f"Skipping invalid geometry when computing convex hull for {obj}"
-            )
-            continue
-
-    if not points:
+    # Use PostGIS to compute ST_Area(ST_ConvexHull(ST_Collect(geometry))::geography)
+    # Use a generic Aggregate with a custom template so Django emits a single aggregated expression
+    collect_agg = Aggregate(
+        F("geometry"),
+        function="ST_Collect",
+        template="ST_Area(ST_ConvexHull(ST_Collect(%(expressions)s))::geography)",
+        output_field=models.FloatField(),
+    )
+    res = qs.aggregate(area=collect_agg)
+    area = res.get("area")
+    if not area:
         return 0
 
     try:
-        convex_hull = shp.MultiPoint(points).convex_hull
+        return float(area)
     except Exception:
-        logger.warning(f"Error in creating convex hull for {obj}")
         return 0
-
-    geod = Geod(ellps="WGS84")
-    geod_area = abs(geod.geometry_area_perimeter(convex_hull)[0])
-    return geod_area
 
 
 class Region(BaseModel):
