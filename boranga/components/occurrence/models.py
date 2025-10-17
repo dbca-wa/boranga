@@ -7212,10 +7212,16 @@ class OccurrenceReportBulkImportSchema(BaseModel):
 
             dv = None
             if column.default_value is not None:
+                # For openpyxl/list validations with literal values Excel
+                # requires the formula1 to be a quoted, comma separated
+                # string (eg: "A,B,C"). Ensure default values are
+                # wrapped in quotes so the produced .xlsx is valid on
+                # Windows Excel and doesn't get repaired (which strips
+                # data validations).
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
-                    formula1=column.default_value,
+                    formula1=f'"{column.default_value}"',
                     error=f"This field may only contain the value '{column.default_value}'",
                     errorTitle="Invalid value for column with default value",
                     prompt="Either leave the field blank or enter the default value",
@@ -7240,10 +7246,14 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                         c[0]
                         for c in OccurrenceReport.VALID_BULK_IMPORT_PROCESSING_STATUSES
                     ]
+                # Excel expects a quoted, comma-separated string for
+                # literal list validations (eg: "opt1,opt2"). Wrap the
+                # joined choices in quotes so the file is valid across
+                # platforms/locales.
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
-                    formula1=",".join(choices),
+                    formula1=f'"{",".join(choices)}"',
                     error="Please select a valid option from the list",
                     errorTitle="Invalid selection",
                     prompt="Select a value from the list",
@@ -7355,8 +7365,8 @@ class OccurrenceReportBulkImportSchema(BaseModel):
             worksheet.add_data_validation(dv)
             dv.add(cell_range)
 
-        # Make the headers bold
-        for cell in worksheet["A0:ZZ0"][0]:
+        # Make the headers bold (headers are written to row 1)
+        for cell in worksheet["A1:ZZ1"][0]:
             cell.font = Font(bold=True)
 
         # Make the column widths appropriate
