@@ -90,7 +90,35 @@ def override_upload_to_in_module(
     wrapped = randomize_upload_to(
         orig, name_generator=name_generator, keep_ext=keep_ext
     )
+    # replace the function on the module
     setattr(module, func_name, wrapped)
+
+    # Update any already-declared model fields that reference the original function
+    # so they pick up the wrapped callable (fields are created at import time).
+    try:
+        from django.db import models as dj_models
+
+        for attr in vars(module).values():
+            try:
+                if isinstance(attr, type) and issubclass(attr, dj_models.Model):
+                    model_class = attr
+                    # iterate model fields
+                    for field in getattr(model_class, "_meta").get_fields():
+                        # only fields that have upload_to attribute (FileField/ImageField)
+                        if hasattr(field, "upload_to"):
+                            try:
+                                if field.upload_to is orig:
+                                    field.upload_to = wrapped
+                            except Exception:
+                                # ignore fields that are not simple callables
+                                continue
+            except Exception:
+                # skip attributes that aren't model classes
+                continue
+    except Exception:
+        # If Django isn't ready or import fails, we silently skip updating fields
+        # The module-level function replacement still helps for future references.
+        pass
 
 
 # British-spelling alias
