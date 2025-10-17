@@ -43,8 +43,7 @@ def trigger_error(request):
 
 # API patterns
 router = routers.DefaultRouter()
-if settings.DEBUG is not True:
-    router.include_root_view = False
+router.include_root_view = settings.INCLUDE_ROOT_VIEW
 
 
 router.register(
