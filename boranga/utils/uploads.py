@@ -1,0 +1,103 @@
+import os
+import posixpath
+from collections.abc import Callable
+from uuid import uuid4
+
+
+def _default_name_generator(instance=None, filename=None) -> str:
+    """Return a uuid4 hex string. Signature allows instance/filename but ignores them."""
+    return uuid4().hex
+
+
+def randomize_upload_to(
+    upload_to, name_generator: Callable | None = None, keep_ext: bool = True
+):
+    """
+    Wrap an existing upload_to (callable or string) and return a new callable suitable
+    for Django FileField/ImageField `upload_to` that preserves the directory structure
+    produced by the original `upload_to` but replaces the final filename with a
+    randomized value (preserving the original extension by default).
+
+    Parameters
+    - upload_to: callable(instance, filename) -> path OR a string directory
+    - name_generator: callable(instance=None, filename=None) -> str, defaults to uuid4 hex
+    - keep_ext: whether to keep the original file extension (default True)
+
+    Usage examples
+    - file = models.FileField(upload_to=randomize_upload_to(old_upload_to_fn))
+    - # or to override globally after the original function is defined:
+      update_fn = randomize_upload_to(update_fn)
+    """
+
+    if name_generator is None:
+        name_generator = _default_name_generator
+
+    def _upload(instance, filename: str) -> str:
+        # Get the path from the original upload_to (callable or string)
+        if callable(upload_to):
+            original_path = upload_to(instance, filename)
+        else:
+            # treat upload_to as a directory path
+            original_path = upload_to
+
+        # Normalize to POSIX style (Django storages expect forward slashes)
+        original_path = original_path.replace(os.sep, "/")
+
+        # Split into dir and final component
+        dir_name, final_component = posixpath.split(original_path)
+
+        # Decide which extension to preserve
+        if keep_ext:
+            if final_component:
+                ext = os.path.splitext(final_component)[1]
+            else:
+                ext = os.path.splitext(filename)[1]
+        else:
+            ext = ""
+
+        # Generate randomized basename (support callables that accept instance/filename)
+        try:
+            new_base = name_generator(instance=instance, filename=filename)
+        except TypeError:
+            # fallback for simple callables that ignore kwargs
+            new_base = name_generator()
+
+        new_name = f"{new_base}{ext}"
+
+        if dir_name:
+            return posixpath.join(dir_name, new_name)
+        return new_name
+
+    return _upload
+
+
+def override_upload_to_in_module(
+    module,
+    func_name: str,
+    name_generator: Callable | None = None,
+    keep_ext: bool = True,
+):
+    """
+    Convenience helper to replace an existing upload_to callable in-place inside a module.
+    Example:
+        override_upload_to_in_module(models_module, 'update_conservation_status_comms_log_filename')
+
+    This is useful when you have many FileField definitions that reference the same
+    upload_to function name and you want to change the behaviour globally without
+    editing each field.
+    """
+    orig = getattr(module, func_name)
+    wrapped = randomize_upload_to(
+        orig, name_generator=name_generator, keep_ext=keep_ext
+    )
+    setattr(module, func_name, wrapped)
+
+
+# British-spelling alias
+def randomise_upload_to(
+    upload_to, name_generator: Callable | None = None, keep_ext: bool = True
+):
+    """Alias for randomize_upload_to using British spelling."""
+    return randomize_upload_to(
+        upload_to, name_generator=name_generator, keep_ext=keep_ext
+    )
