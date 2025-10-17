@@ -2398,10 +2398,17 @@ table.table-schema {
 
 /* Ensure active/bg-success row shows green even if cells have their own background */
 table.table-schema tbody tr.active.bg-success > td {
-    background-color: var(--bs-success) !important;
-    color: var(--bs-white) !important;
+    background-color: var(--bs-success, #198754) !important;
+    color: var(--bs-white, #fff) !important;
 }
 table.table-schema tbody tr.active.bg-success {
-    background-color: var(--bs-success) !important;
+    background-color: var(--bs-success, #198754) !important;
+}
+
+/* Let per-row background colours (calculated from model name) show through:
+   force cells to be transparent for non-active rows so the TR background is visible. */
+table.table-schema tbody tr:not(.active) > td {
+    background-color: transparent !important;
+    color: inherit !important;
 }
 </style>
