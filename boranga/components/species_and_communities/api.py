@@ -2321,10 +2321,18 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
                 "Cannot update species record in current state"
             )
 
+        # Accept either a direct value in request.data or a file in request.FILES
         speciesCommunitiesImageFile = request.data.get("speciesCommunitiesImage", None)
+        if not speciesCommunitiesImageFile:
+            # If the frontend sent FormData the file should be in request.FILES
+            files = request.FILES.getlist("speciesCommunitiesImage")
+            if files:
+                speciesCommunitiesImageFile = files[0]
+
         if not speciesCommunitiesImageFile:
             raise serializers.ValidationError("No file provided")
 
+        # speciesCommunitiesImageFile can be a Django UploadedFile or raw bytes/str
         instance.upload_image(speciesCommunitiesImageFile)
         instance.save(version_user=request.user)
         instance.log_user_action(
@@ -2773,7 +2781,13 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             raise serializers.ValidationError(
                 "Cannot update community record in current state"
             )
+        # Accept either a direct value in request.data or a file in request.FILES
         speciesCommunitiesImageFile = request.data.get("speciesCommunitiesImage", None)
+        if not speciesCommunitiesImageFile:
+            files = request.FILES.getlist("speciesCommunitiesImage")
+            if files:
+                speciesCommunitiesImageFile = files[0]
+
         if not speciesCommunitiesImageFile:
             raise serializers.ValidationError("No file provided")
 

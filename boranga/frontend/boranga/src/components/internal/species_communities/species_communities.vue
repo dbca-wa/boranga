@@ -863,9 +863,8 @@ export default {
                     {
                         method: 'POST',
                         body: data,
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        // Do not set Content-Type when sending FormData; the browser
+                        // will set the correct multipart/form-data boundary.
                     }
                 ).then(
                     async (response) => {
