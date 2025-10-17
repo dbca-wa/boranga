@@ -7186,6 +7186,16 @@ class OccurrenceReportBulkImportSchema(BaseModel):
             zip(DataValidation.operator.values, DataValidation.operator.values)
         )
 
+        # Create a hidden lookup sheet to store picklist values. Using a
+        # sheet-range for validations avoids locale/separator and formula
+        # length issues that occur with quoted literal lists.
+        lookup_sheet_name = f"_lk_{getattr(self, 'id', 'schema') }"
+        # Excel sheet names are limited to 31 chars
+        if len(lookup_sheet_name) > 31:
+            lookup_sheet_name = lookup_sheet_name[:31]
+        lookup_sheet = workbook.create_sheet(title=lookup_sheet_name)
+        lookup_next_col = 1
+
         # Add the data validation for each column
         for index, column in enumerate(columns):
             column_letter = get_column_letter(index + 1)
@@ -7217,16 +7227,31 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 # string (eg: "A,B,C"). Ensure default values are
                 # wrapped in quotes so the produced .xlsx is valid on
                 # Windows Excel and doesn't get repaired (which strips
-                # data validations).
+                # data validations). Instead of embedding a quoted
+                # literal, put the allowed value(s) on the lookup sheet
+                # and reference that range.
+                values = [str(column.default_value)]
+                col_letter = get_column_letter(lookup_next_col)
+                # header in row 1, values from row 2
+                lookup_sheet.cell(
+                    row=1, column=lookup_next_col, value=column.xlsx_column_header_name
+                )
+                for i, v in enumerate(values, start=2):
+                    lookup_sheet.cell(row=i, column=lookup_next_col, value=v)
+                last_row = 1 + len(values)
+                range_ref = (
+                    f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
+                )
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
-                    formula1=f'"{column.default_value}"',
+                    formula1=f"={range_ref}",
                     error=f"This field may only contain the value '{column.default_value}'",
                     errorTitle="Invalid value for column with default value",
                     prompt="Either leave the field blank or enter the default value",
                     promptTitle="Value",
                 )
+                lookup_next_col += 1
             elif isinstance(
                 model_field, MultiSelectField
             ):  # MultiSelectField is a custom field, not a standard Django field
@@ -7246,29 +7271,33 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                         c[0]
                         for c in OccurrenceReport.VALID_BULK_IMPORT_PROCESSING_STATUSES
                     ]
-                # Excel expects a quoted, comma-separated string for
-                # literal list validations (eg: "opt1,opt2"). Wrap the
-                # joined choices in quotes so the file is valid across
-                # platforms/locales.
-                # Avoid embedding extremely long literal lists — Excel has
-                # limits on formula length and very long comma-joined lists
-                # can cause the workbook to be repaired/invalidated. If the
-                # quoted list would be long, skip embedding and validate at
-                # import time instead.
-                literal_list = f'{",".join(choices)}'
-                quoted_literal = f'"{literal_list}"'
-                if len(quoted_literal) > 250:
-                    # too long to safely embed; defer validation to import
+                # If there are too many choices, defer validation to import
+                # time (preserve existing behaviour). Otherwise store the
+                # choices on the lookup sheet and reference that sheet-range
+                # in the validation.
+                if len(choices) > settings.OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT:
                     continue
+                values = [str(c) for c in choices]
+                col_letter = get_column_letter(lookup_next_col)
+                lookup_sheet.cell(
+                    row=1, column=lookup_next_col, value=column.xlsx_column_header_name
+                )
+                for i, v in enumerate(values, start=2):
+                    lookup_sheet.cell(row=i, column=lookup_next_col, value=v)
+                last_row = 1 + len(values)
+                range_ref = (
+                    f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
+                )
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
-                    formula1=quoted_literal,
+                    formula1=f"={range_ref}",
                     error="Please select a valid option from the list",
                     errorTitle="Invalid selection",
                     prompt="Select a value from the list",
                     promptTitle="List selection",
                 )
+                lookup_next_col += 1
             elif isinstance(model_field, models.fields.CharField):
                 dv = DataValidation(
                     type=dv_types["textLength"],
@@ -7323,15 +7352,28 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     promptTitle="Decimal number",
                 )
             elif isinstance(model_field, models.fields.BooleanField):
+                # Put True/False on the lookup sheet and reference it
+                values = ["True", "False"]
+                col_letter = get_column_letter(lookup_next_col)
+                lookup_sheet.cell(
+                    row=1, column=lookup_next_col, value=column.xlsx_column_header_name
+                )
+                for i, v in enumerate(values, start=2):
+                    lookup_sheet.cell(row=i, column=lookup_next_col, value=v)
+                last_row = 1 + len(values)
+                range_ref = (
+                    f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
+                )
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
-                    formula1='"True,False"',
+                    formula1=f"={range_ref}",
                     error="Please select True or False",
                     errorTitle="Invalid selection",
                     prompt="Select True or False",
                     promptTitle="Boolean selection",
                 )
+                lookup_next_col += 1
             elif (
                 isinstance(model_field, models.fields.related.ForeignKey)
                 and model_field.related_model
@@ -7356,15 +7398,37 @@ class OccurrenceReportBulkImportSchema(BaseModel):
 
                 display_field = get_display_field_for_model(related_model)
 
+                # Prepare display values, deduplicate while preserving order
+                seen = set()
+                values = []
+                for obj in related_model_qs.order_by(display_field):
+                    val = str(getattr(obj, display_field))
+                    if val in seen:
+                        continue
+                    seen.add(val)
+                    values.append(val)
+
+                # Write values to lookup sheet and reference by sheet-range
+                col_letter = get_column_letter(lookup_next_col)
+                lookup_sheet.cell(
+                    row=1, column=lookup_next_col, value=column.xlsx_column_header_name
+                )
+                for i, v in enumerate(values, start=2):
+                    lookup_sheet.cell(row=i, column=lookup_next_col, value=v)
+                last_row = 1 + len(values)
+                range_ref = (
+                    f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
+                )
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
-                    formula1=f'"{",".join([str(getattr(obj, display_field)) for obj in related_model_qs])}"',
+                    formula1=f"={range_ref}",
                     error="Please select a valid option from the list",
                     errorTitle="Invalid selection",
                     prompt="Select a value from the list",
                     promptTitle="List selection",
                 )
+                lookup_next_col += 1
             else:
                 # Mostly covers TextField
                 # Postgresql Text field can handle up to 65,535 characters, .xlsx can handle 32,767 characters
@@ -7389,6 +7453,25 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     ) + 2
         for col, value in dims.items():
             worksheet.column_dimensions[get_column_letter(col)].width = value
+
+        # If the lookup sheet is empty (no columns were written), remove it.
+        try:
+            # If only header row exists but no data, consider it empty
+            has_data = any(
+                cell.value
+                for row in lookup_sheet.iter_rows(
+                    min_row=2, max_row=lookup_sheet.max_row
+                )
+                for cell in row
+            )
+        except Exception:
+            has_data = False
+
+        if has_data:
+            lookup_sheet.sheet_state = "hidden"
+        else:
+            # remove the empty lookup sheet
+            workbook.remove(lookup_sheet)
 
         return workbook
 
