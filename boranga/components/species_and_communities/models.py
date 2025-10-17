@@ -983,6 +983,7 @@ class Species(RevisionedMixin):
     @transaction.atomic
     def upload_image(self, speciesCommunitiesImageFile):
         document = SpeciesDocument(
+            name=speciesCommunitiesImageFile.name,
             input_name="speciesCommunitiesImageFile",
             _file=speciesCommunitiesImageFile,
             species=self,
@@ -1004,7 +1005,7 @@ class Species(RevisionedMixin):
         return [
             {
                 "id": image.id,
-                "filename": os.path.basename(image._file.name),
+                "filename": image.name,
                 "url": image._file.url,
                 "uploaded_date": image.uploaded_date,
             }
