@@ -7250,10 +7250,20 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 # literal list validations (eg: "opt1,opt2"). Wrap the
                 # joined choices in quotes so the file is valid across
                 # platforms/locales.
+                # Avoid embedding extremely long literal lists — Excel has
+                # limits on formula length and very long comma-joined lists
+                # can cause the workbook to be repaired/invalidated. If the
+                # quoted list would be long, skip embedding and validate at
+                # import time instead.
+                literal_list = f'{",".join(choices)}'
+                quoted_literal = f'"{literal_list}"'
+                if len(quoted_literal) > 250:
+                    # too long to safely embed; defer validation to import
+                    continue
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
-                    formula1=f'"{",".join(choices)}"',
+                    formula1=quoted_literal,
                     error="Please select a valid option from the list",
                     errorTitle="Invalid selection",
                     prompt="Select a value from the list",
