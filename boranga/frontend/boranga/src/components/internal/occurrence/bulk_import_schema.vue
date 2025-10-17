@@ -2395,4 +2395,13 @@ table.table-schema {
 .sticky-top {
     top: 1.5em;
 }
+
+/* Ensure active/bg-success row shows green even if cells have their own background */
+table.table-schema tbody tr.active.bg-success > td {
+    background-color: var(--bs-success) !important;
+    color: var(--bs-white) !important;
+}
+table.table-schema tbody tr.active.bg-success {
+    background-color: var(--bs-success) !important;
+}
 </style>
