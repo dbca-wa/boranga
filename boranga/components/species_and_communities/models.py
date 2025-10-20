@@ -32,6 +32,7 @@ from boranga.settings import GROUP_NAME_SPECIES_COMMUNITIES_APPROVER
 
 logger = logging.getLogger(__name__)
 
+
 private_storage = FileSystemStorage(
     location=settings.BASE_DIR + "/private-media/", base_url="/private-media/"
 )
@@ -642,6 +643,24 @@ class Species(RevisionedMixin):
             self.save(*args, **kwargs)
         else:
             super().save(*args, **kwargs)
+        # Enforce eoo_auto False for fauna species on save (no signals).
+        try:
+            if (
+                getattr(self, "group_type", None)
+                and getattr(self.group_type, "name", None) == GroupType.GROUP_TYPE_FAUNA
+            ):
+                try:
+                    dist = self.species_distribution
+                except SpeciesDistribution.DoesNotExist:
+                    dist = None
+
+                if dist and dist.aoo_actual_auto is not False:
+                    dist.aoo_actual_auto = False
+                    # Save distribution so frontend-provided values cannot persist for fauna
+                    dist.save()
+        except Exception:
+            # Log but do not raise to avoid breaking save flows
+            logger.exception("Failed to enforce eoo_auto for fauna in Species.save()")
 
     @property
     def reference(self):
@@ -1494,6 +1513,32 @@ class SpeciesDistribution(BaseModel):
         if self.species:
             string += f" for Species ({self.species})"
         return string
+
+    def save(self, *args, **kwargs):
+        """
+        Enforce that eoo_auto is only False for fauna species.
+
+        - If this distribution is linked to a Species whose GroupType name is 'fauna',
+                - If this distribution is linked to a Species whose GroupType name is 'fauna',
+                    set eoo_auto = False.
+                - For non-fauna species, do not alter eoo_auto (allow either True/False).
+                - If no species is linked, leave eoo_auto unchanged.
+        """
+        try:
+            if self.species and getattr(self.species, "group_type", None):
+                if (
+                    getattr(self.species.group_type, "name", None)
+                    == GroupType.GROUP_TYPE_FAUNA
+                ):
+                    # Force False for fauna
+                    self.aoo_actual_auto = False
+                # else: leave eoo_auto unchanged for non-fauna
+        except Exception:
+            # Be conservative: if anything unexpected happens while checking group_type,
+            # don't modify the field and let the save proceed.
+            pass
+
+        super().save(*args, **kwargs)
 
 
 class Community(RevisionedMixin):
