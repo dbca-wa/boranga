@@ -74,7 +74,8 @@ body {
     border-color: #226fbb !important;
 }
 
-.nav-link {
+/* Explicitly style links within our primary navbar and nav-pills only */
+.nav-pills .nav-link {
     color: #226fbb;
 }
 

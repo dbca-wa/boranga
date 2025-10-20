@@ -1,4 +1,5 @@
 # syntax = docker/dockerfile:1.2
+ARG GIT_COMMIT_HASH="unknown"
 
 # Prepare the base environment.
 FROM ubuntu:24.04 AS builder_base_boranga
@@ -106,7 +107,6 @@ ENV VIRTUAL_ENV_PATH=/app/venv
 ENV PATH=$VIRTUAL_ENV_PATH/bin:$PATH
 
 COPY --chown=oim:oim requirements.txt gunicorn.ini.py manage.py python-cron ./
-COPY --chown=oim:oim .git ./.git
 COPY --chown=oim:oim boranga ./boranga
 
 RUN python3.12 -m venv $VIRTUAL_ENV_PATH
@@ -125,6 +125,10 @@ RUN touch /app/.env && \
     $VIRTUAL_ENV_PATH/bin/python manage.py collectstatic --noinput
 
 FROM collectstatic_boranga AS launch_boranga
+ARG GIT_COMMIT_HASH
+ENV GIT_COMMIT_HASH=$GIT_COMMIT_HASH
+LABEL org.opencontainers.image.revision=$GIT_COMMIT_HASH
+LABEL com.azure.dev.image.build.sourceversion=$GIT_COMMIT_HASH
 
 EXPOSE 8080
 HEALTHCHECK --interval=1m --timeout=5s --start-period=10s --retries=3 CMD ["wget", "-q", "-O", "-", "http://localhost:8080/"]

@@ -6048,8 +6048,12 @@ class OccurrenceReportBulkImportSchemaViewSet(
         workbook.save(buffer)
         buffer.seek(0)
         filename = f"bulk-import-schema-{instance.group_type.name}-version-{instance.version}-preview.xlsx"
-        response = HttpResponse(buffer.read(), content_type="application/vnd.ms-excel")
-        response["Content-Disposition"] = f"attachment; filename={filename}"
+        # Use the correct MIME for .xlsx and quote the filename to be safe
+        response = HttpResponse(
+            buffer.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
         buffer.close()
         return response
 
@@ -6106,8 +6110,11 @@ class OccurrenceReportBulkImportSchemaColumnViewSet(
             f"{instance.django_import_content_type.model}-{instance.django_import_field_name}"
             f"-foreign-key-list-values.xlsx"
         )
-        response = HttpResponse(buffer.read(), content_type="application/vnd.ms-excel")
-        response["Content-Disposition"] = f"attachment; filename={filename}"
+        response = HttpResponse(
+            buffer.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
         buffer.close()
         return response
 

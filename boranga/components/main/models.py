@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import logging
 import os
 from abc import ABCMeta, abstractmethod
@@ -13,6 +14,7 @@ from django.core.cache import cache
 from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.utils import timezone
+from django.utils.html import strip_tags
 from ordered_model.models import OrderedModel, OrderedModelManager
 from reversion.models import Version
 
@@ -24,6 +26,26 @@ private_storage = FileSystemStorage(
 model_type = models.base.ModelBase
 
 logger = logging.getLogger(__name__)
+
+
+class TagStrippingModelMixin:
+    """
+    Mixin to strip HTML tags from all CharField and TextField string values before saving.
+
+    Uses Django's `strip_tags` to remove HTML tags and `html.unescape` to
+    convert entities like `&amp;` back to readable characters.
+    """
+
+    def save(self, *args, **kwargs):
+        for field in self._meta.get_fields():
+            if isinstance(field, (models.CharField, models.TextField)):
+                value = getattr(self, field.name, None)
+                if isinstance(value, str) and value:
+                    cleaned = strip_tags(value)
+                    cleaned = html.unescape(cleaned)
+                    setattr(self, field.name, cleaned)
+
+        super().save(*args, **kwargs)
 
 
 class Nh3SanitizationModelMixin:
@@ -51,7 +73,7 @@ class Nh3SanitizationModelMixin:
         super().save(*args, **kwargs)
 
 
-class BaseModel(Nh3SanitizationModelMixin, models.Model):
+class BaseModel(TagStrippingModelMixin, Nh3SanitizationModelMixin, models.Model):
     """
     Base model class that all models should inherit from.
     It provides a common interface for saving and retrieving models.

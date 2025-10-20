@@ -310,7 +310,7 @@
                                         :style="
                                             selectedColumn == column
                                                 ? ''
-                                                : `background-color:${stringToRGBAColor(column.model_name)};`
+                                                : `background-color: ${stringToRGBAColor(column.model_name)} !important;`
                                         "
                                         role="button"
                                         @click="selectColumn(column)"
@@ -366,7 +366,10 @@
                                                 >*</span
                                             >
                                             <i
-                                                v-if="!column.field_exists"
+                                                v-if="
+                                                    column.field_exists ===
+                                                    false
+                                                "
                                                 class="bi bi-exclamation-circle-fill text-danger"
                                                 title="This column is no longer present in the underlying database"
                                             ></i>
@@ -380,21 +383,25 @@
                                             >
                                                 <span
                                                     :class="
-                                                        column.model_exists
-                                                            ? ''
-                                                            : 'text-danger'
+                                                        column.model_exists ===
+                                                        false
+                                                            ? 'text-danger'
+                                                            : ''
                                                     "
                                                     :title="
-                                                        column.model_exists
-                                                            ? ''
-                                                            : `Model ${column.model_name} no longer exists in the database`
+                                                        column.model_exists ===
+                                                        false
+                                                            ? `Model ${column.model_name} no longer exists in the database`
+                                                            : ''
                                                     "
-                                                    >{{
-                                                        column.model_name
-                                                    }}</span
                                                 >
+                                                    {{ column.model_name }}
+                                                </span>
                                                 <i
-                                                    v-if="!column.model_exists"
+                                                    v-if="
+                                                        column.model_exists ===
+                                                        false
+                                                    "
                                                     class="bi bi-exclamation-circle-fill text-danger ps-1"
                                                     title="This model is no longer present in the underlying database"
                                                 ></i>
@@ -505,7 +512,7 @@
                                 "
                             >
                                 <div
-                                    v-if="!selectedColumn.model_exists"
+                                    v-if="selectedColumn.model_exists === false"
                                     class="row d-flex align-items-start mb-2"
                                 >
                                     <label
@@ -590,7 +597,9 @@
                                         </select>
                                     </div>
                                 </div>
-                                <template v-if="selectedColumn.model_exists">
+                                <template
+                                    v-if="selectedColumn.model_exists !== false"
+                                >
                                     <div
                                         v-if="
                                             selectedContentType &&
@@ -644,7 +653,10 @@
                                         </div>
                                     </div>
                                     <div
-                                        v-if="!selectedColumn.field_exists"
+                                        v-if="
+                                            selectedColumn.field_exists ===
+                                            false
+                                        "
                                         class="row d-flex align-items-center mb-2"
                                     >
                                         <label
@@ -1628,7 +1640,10 @@ export default {
                             (djangoContentType) =>
                                 djangoContentType.model_fields.length > 0
                         );
-                    // Filter out content types where all their fields are already columns in the schema
+                    // Filter out content types where all their fields are already
+                    // columns in the schema. Ignore schema columns that are
+                    // known to be invalid (field_exists === false) so that
+                    // recovered/invalid columns do not block adding new columns.
                     this.djangoContentTypesFiltered =
                         this.djangoContentTypesFiltered.filter(
                             (djangoContentType) =>
@@ -1636,6 +1651,8 @@ export default {
                                     (modelField) =>
                                         this.schema.columns.some(
                                             (column) =>
+                                                column.field_exists !== false &&
+                                                column.field_exists === true &&
                                                 column.django_import_field_name ==
                                                     modelField.name &&
                                                 column.django_import_content_type ==
@@ -1672,12 +1689,16 @@ export default {
                     djangoContentType.id ==
                     this.selectedColumn.django_import_content_type
             )[0];
-            // Filter out fields that are already columns in the schema
+            // Filter out fields that are already columns in the schema.
+            // Ignore schema columns that are known to be invalid so users
+            // can add fields even if an invalid column remains.
             this.djangoImportFieldsFiltered =
                 this.selectedContentType.model_fields.filter(
                     (modelField) =>
                         !this.schema.columns.some(
                             (column) =>
+                                column.field_exists !== false &&
+                                column.field_exists === true &&
                                 column.django_import_field_name ==
                                     modelField.name &&
                                 column.django_import_content_type ==
@@ -1690,12 +1711,14 @@ export default {
                 !this.selectedColumn.id &&
                 this.schema.columns.filter(
                     (column) =>
+                        column.field_exists === true &&
                         column.django_import_content_type ==
-                        this.selectedColumn.django_import_content_type
+                            this.selectedColumn.django_import_content_type
                 ).length > 1
             ) {
                 let lastColumn = this.schema.columns.findLast(
                     (column) =>
+                        column.field_exists === true &&
                         column.django_import_content_type ==
                             this.selectedColumn.django_import_content_type &&
                         column.django_import_field_name !=
@@ -1833,18 +1856,34 @@ export default {
                                     modelField.allow_null,
                                 default_value: null,
                                 import_validations: [],
+                                // Set these so the UI shows the new columns as
+                                // valid immediately (they'll be persisted on save)
+                                model_name:
+                                    this.selectedContentType.model_verbose_name,
+                                model_exists: true,
+                                field_exists: true,
                             };
                         }
                     );
-                    // Remove columns that are already in the schema
+                    // DEBUG: show selected content type fields and current schema columns
+                    // (debug logs removed)
+
+                    // Remove columns that are already in the schema. Ignore
+                    // invalid schema columns (field_exists === false) so they
+                    // don't block adding the new field again.
                     newColumns = newColumns.filter(
                         (newColumn) =>
                             !this.schema.columns.some(
                                 (column) =>
+                                    column.field_exists === true &&
+                                    column.django_import_content_type ==
+                                        newColumn.django_import_content_type &&
                                     column.django_import_field_name ==
-                                    newColumn.django_import_field_name
+                                        newColumn.django_import_field_name
                             )
                     );
+
+                    // (debug logs removed)
 
                     if (newColumns.length == 0) {
                         swal.fire({
@@ -1889,20 +1928,23 @@ export default {
                     if (
                         this.schema.columns.filter(
                             (column) =>
+                                column.field_exists === true &&
                                 column.django_import_content_type ==
-                                selectedContentType
+                                    selectedContentType
                         ).length > 0
                     ) {
                         let lastColumn = this.schema.columns.findLast(
                             (column) =>
+                                column.field_exists === true &&
                                 column.django_import_content_type ==
-                                selectedContentType
+                                    selectedContentType
                         );
                         lastColumnIndex =
                             this.schema.columns.indexOf(lastColumn) + 1;
                     }
 
                     for (let i = 0; i < newColumns.length; i++) {
+                        // inserting newColumn
                         this.schema.columns.splice(
                             lastColumnIndex + i,
                             0,
@@ -1910,6 +1952,8 @@ export default {
                         );
                     }
                     this.applyOrderToColumns();
+
+                    // snapshot after insertion
 
                     this.save();
                     this.addEditMode = false;
@@ -1927,7 +1971,7 @@ export default {
         },
         selectColumn(column) {
             if (column.django_import_content_type) {
-                if (!column.model_exists) {
+                if (column.model_exists === false) {
                     this.selectedContentType = 'invalid_content_type';
                 } else {
                     this.selectedContentType = this.djangoContentTypes.filter(
@@ -1963,7 +2007,7 @@ export default {
                             }
                         }
                     } else {
-                        if (!column.model_exists) {
+                        if (column.model_exists === false) {
                             column.invalid_model = column.model_name;
                         }
                         column.invalid_field = column.django_import_field_name;
@@ -2160,6 +2204,7 @@ export default {
                     const data = await response.json();
                     this.saving = false;
                     this.schema = Object.assign({}, data);
+                    // server returned schema
                     // Restore selection using id if possible, else fallback to previous index
                     if (wasSelected) {
                         let restored =
@@ -2236,8 +2281,11 @@ export default {
             });
         },
         stringToRGBAColor(str) {
+            // Return a valid CSS color string. Fallback to transparent so
+            // the inline style is always valid. Alpha is low so the
+            // background is subtle.
             if (!str) {
-                return '';
+                return 'transparent';
             }
             let hash = 0;
             for (let i = 0; i < str.length; i++) {
@@ -2249,7 +2297,9 @@ export default {
             let r = parseInt(color_hash.slice(1, 3), 16);
             let g = parseInt(color_hash.slice(3, 5), 16);
             let b = parseInt(color_hash.slice(5, 7), 16);
-            return `rgba(${r}, ${g}, ${b}, 0.1)`;
+            // Ensure numbers are valid
+            if (isNaN(r) || isNaN(g) || isNaN(b)) return 'transparent';
+            return `rgba(${r}, ${g}, ${b}, 0.10)`;
         },
         classesForRow(index, column, selectedColumn) {
             let classes = selectedColumn == column ? 'active bg-success' : '';
@@ -2344,5 +2394,21 @@ table.table-schema {
 
 .sticky-top {
     top: 1.5em;
+}
+
+/* Ensure active/bg-success row shows green even if cells have their own background */
+table.table-schema tbody tr.active.bg-success > td {
+    background-color: var(--bs-success, #198754) !important;
+    color: var(--bs-white, #fff) !important;
+}
+table.table-schema tbody tr.active.bg-success {
+    background-color: var(--bs-success, #198754) !important;
+}
+
+/* Let per-row background colours (calculated from model name) show through:
+   force cells to be transparent for non-active rows so the TR background is visible. */
+table.table-schema tbody tr:not(.active) > td {
+    background-color: transparent !important;
+    color: inherit !important;
 }
 </style>

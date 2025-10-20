@@ -264,16 +264,7 @@ if DEBUG:
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 # Use git commit hash for purging cache in browser for deployment changes
-GIT_COMMIT_HASH = os.popen(
-    f"cd {BASE_DIR}; git log -1 --format=%H"
-).read()  # noqa: S605
-GIT_COMMIT_DATE = os.popen(
-    f"cd {BASE_DIR}; git log -1 --format=%cd"
-).read()  # noqa: S605
-if len(GIT_COMMIT_HASH) == 0:
-    GIT_COMMIT_HASH = os.popen("cat /app/git_hash").read()
-    if len(GIT_COMMIT_HASH) == 0:
-        logger.error("No git hash available to tag urls for pinned caching")
+GIT_COMMIT_HASH = os.environ.get("GIT_COMMIT", os.environ.get("COMMIT", "unknown"))
 
 APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0") + "-" + GIT_COMMIT_HASH[:7]
 
@@ -570,3 +561,5 @@ UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES = config(
 FETCH_NOMOS_DATA_TIME_OF_DAY = config(
     "FETCH_NOMOS_DATA_TIME_OF_DAY", default="03:00"
 )  # 24 hour format HH:MM
+
+INCLUDE_ROOT_VIEW = env("INCLUDE_ROOT_VIEW", False)
