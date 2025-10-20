@@ -263,8 +263,7 @@ if DEBUG:
 
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
-# Use git commit hash for purging cache in browser for deployment changes
-GIT_COMMIT_HASH = os.environ.get("GIT_COMMIT", os.environ.get("COMMIT", "unknown"))
+GIT_COMMIT_HASH = env("GIT_COMMIT_HASH", "unknown")
 
 APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0") + "-" + GIT_COMMIT_HASH[:7]
 
