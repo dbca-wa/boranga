@@ -15,15 +15,21 @@ class RelatedItem:
         self.action_url = action_url
 
     def __hash__(self):
+        # Use a tuple for hashing so None values are handled safely
         return hash(
-            self.model_name
-            + self.identifier
-            + self.descriptor
-            + self.status
-            + self.action_url
+            (
+                self.model_name,
+                self.identifier,
+                self.descriptor,
+                self.status,
+                self.action_url,
+            )
         )
 
     def __eq__(self, other):
+        if not isinstance(other, RelatedItem):
+            return False
+
         return (
             self.identifier == other.identifier
             and self.model_name == other.model_name
