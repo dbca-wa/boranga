@@ -3,6 +3,7 @@ import logging
 import nh3
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.db.models.fields import NOT_PROVIDED
 from django.db.models.fields.related import ForeignKey, ManyToManyField, OneToOneField
 from ledger_api_client.ledger_models import EmailUserRO
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
@@ -264,6 +265,26 @@ class ContentTypeSerializer(BaseModelSerializer):
                 field
             )
 
+            # Detect whether the model field defines a default value
+            field_has_default = False
+            if hasattr(field, "default"):
+                try:
+                    field_has_default = field.default is not NOT_PROVIDED
+                except Exception:
+                    field_has_default = False
+            # Stringify the default value for safe JSON serialization
+            field_default = None
+            if field_has_default:
+                try:
+                    default_val = field.default
+                    if callable(default_val):
+                        # Represent callables in a human-friendly way
+                        field_default = "<callable>"
+                    else:
+                        field_default = str(default_val)
+                except Exception:
+                    field_default = None
+
             if isinstance(field, GenericForeignKey):
                 continue
 
@@ -277,6 +298,8 @@ class ContentTypeSerializer(BaseModelSerializer):
                     "content_type": content_type,
                     "type": field_type,
                     "allow_null": allow_null,
+                    "has_default": field_has_default,
+                    "default": field_default,
                     "max_length": max_length,
                     "xlsx_validation_type": xlsx_validation_type,
                     "choices": choices,
