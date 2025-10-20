@@ -114,11 +114,7 @@ def _convex_hull_area_m2(obj, owner_field: str):
     """
     from django.db.models import Aggregate, F
 
-    from boranga.components.occurrence.models import (
-        BufferGeometry,
-        Occurrence,
-        OccurrenceGeometry,
-    )
+    from boranga.components.occurrence.models import Occurrence, OccurrenceGeometry
 
     qs_kwargs = {
         f"occurrence__{owner_field}": obj,
@@ -126,18 +122,6 @@ def _convex_hull_area_m2(obj, owner_field: str):
     }
 
     qs = OccurrenceGeometry.objects.filter(**qs_kwargs)
-
-    if (
-        getattr(obj, "group_type", None)
-        and obj.group_type.name == GroupType.GROUP_TYPE_FAUNA
-    ):
-        buffer_qs_kwargs = {
-            f"buffered_from_geometry__occurrence__{owner_field}": obj,
-            "buffered_from_geometry__occurrence__processing_status__in": [
-                Occurrence.PROCESSING_STATUS_ACTIVE
-            ],
-        }
-        qs = BufferGeometry.objects.filter(**buffer_qs_kwargs)
 
     # Use PostGIS to compute ST_Area(ST_ConvexHull(ST_Collect(geometry))::geography)
     # Use a generic Aggregate with a custom template so Django emits a single aggregated expression
