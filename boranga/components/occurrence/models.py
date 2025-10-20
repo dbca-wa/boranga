@@ -7991,7 +7991,11 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     @cached_property
     def filtered_related_model_qs(self):
-        if not self.related_model_qs:
+        # If there is no related_model_qs (e.g. related model isn't set),
+        # return None. But don't treat an empty QuerySet as None here —
+        # callers expect a QuerySet and may call queryset methods like
+        # .annotate() even when it's empty.
+        if self.related_model_qs is None:
             return None
 
         if not self.lookup_filters.exists():
