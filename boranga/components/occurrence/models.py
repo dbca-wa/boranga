@@ -7820,6 +7820,34 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     except related_model_qs.model.DoesNotExist:
                         pass
             raise related_model_qs.model.DoesNotExist
+        except related_model_qs.model.MultipleObjectsReturned:
+            # The lookup field is not unique for this value. This can happen
+            # for fields like file_hash where multiple attempts/users may have
+            # uploaded the same file multiple times. For validation purposes
+            # it's acceptable to use a single representative instance rather
+            # than treating this as a hard error. Return a random matching
+            # instance and log a warning so ops can investigate duplicates.
+            try:
+                instance = (
+                    related_model_qs.filter(**{lookup_field: value})
+                    .order_by("?")
+                    .first()
+                )
+            except Exception:
+                # If random ordering isn't supported or fails, fall back to first()
+                instance = related_model_qs.filter(**{lookup_field: value}).first()
+
+            if instance is not None:
+                logger.warning(
+                    f"Multiple {related_model_qs.model.__name__} records found for {lookup_field}={value}; "
+                    f"using id={getattr(instance, 'id', None)} for validation"
+                )
+                return instance
+
+            # If we couldn't pick a single instance, re-raise the original exception
+            raise related_model_qs.model.MultipleObjectsReturned(
+                f"Multiple objects returned for lookup {lookup_field} with value {value}"
+            )
 
     # Helper: try filtering with provided values, then with nh3.clean()ed values
     def _filter_related_instances(self, related_model_qs, lookup_field, values):
