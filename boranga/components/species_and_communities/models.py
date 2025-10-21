@@ -26,11 +26,16 @@ from boranga.components.main.models import (
     UserAction,
 )
 from boranga.components.main.related_item import RelatedItem
-from boranga.helpers import is_species_communities_approver, no_commas_validator
+from boranga.helpers import (
+    filefield_exists,
+    is_species_communities_approver,
+    no_commas_validator,
+)
 from boranga.ledger_api_utils import retrieve_email_user
 from boranga.settings import GROUP_NAME_SPECIES_COMMUNITIES_APPROVER
 
 logger = logging.getLogger(__name__)
+
 
 private_storage = FileSystemStorage(
     location=settings.BASE_DIR + "/private-media/", base_url="/private-media/"
@@ -114,11 +119,7 @@ def _convex_hull_area_m2(obj, owner_field: str):
     """
     from django.db.models import Aggregate, F
 
-    from boranga.components.occurrence.models import (
-        BufferGeometry,
-        Occurrence,
-        OccurrenceGeometry,
-    )
+    from boranga.components.occurrence.models import Occurrence, OccurrenceGeometry
 
     qs_kwargs = {
         f"occurrence__{owner_field}": obj,
@@ -126,18 +127,6 @@ def _convex_hull_area_m2(obj, owner_field: str):
     }
 
     qs = OccurrenceGeometry.objects.filter(**qs_kwargs)
-
-    if (
-        getattr(obj, "group_type", None)
-        and obj.group_type.name == GroupType.GROUP_TYPE_FAUNA
-    ):
-        buffer_qs_kwargs = {
-            f"buffered_from_geometry__occurrence__{owner_field}": obj,
-            "buffered_from_geometry__occurrence__processing_status__in": [
-                Occurrence.PROCESSING_STATUS_ACTIVE
-            ],
-        }
-        qs = BufferGeometry.objects.filter(**buffer_qs_kwargs)
 
     # Use PostGIS to compute ST_Area(ST_ConvexHull(ST_Collect(geometry))::geography)
     # Use a generic Aggregate with a custom template so Django emits a single aggregated expression
@@ -658,6 +647,24 @@ class Species(RevisionedMixin):
             self.save(*args, **kwargs)
         else:
             super().save(*args, **kwargs)
+        # Enforce eoo_auto False for fauna species on save (no signals).
+        try:
+            if (
+                getattr(self, "group_type", None)
+                and getattr(self.group_type, "name", None) == GroupType.GROUP_TYPE_FAUNA
+            ):
+                try:
+                    dist = self.species_distribution
+                except SpeciesDistribution.DoesNotExist:
+                    dist = None
+
+                if dist and dist.aoo_actual_auto is not False:
+                    dist.aoo_actual_auto = False
+                    # Save distribution so frontend-provided values cannot persist for fauna
+                    dist.save()
+        except Exception:
+            # Log but do not raise to avoid breaking save flows
+            logger.exception("Failed to enforce eoo_auto for fauna in Species.save()")
 
     @property
     def reference(self):
@@ -1020,6 +1027,12 @@ class Species(RevisionedMixin):
 
         self.image_doc = document
         self.save()
+
+    def image_exists(self) -> bool:
+        """Return True if the Species image_doc file exists in storage."""
+        if not self.image_doc:
+            return False
+        return filefield_exists(self.image_doc)
 
     @transaction.atomic
     def copy_split_documents(
@@ -1511,6 +1524,32 @@ class SpeciesDistribution(BaseModel):
             string += f" for Species ({self.species})"
         return string
 
+    def save(self, *args, **kwargs):
+        """
+        Enforce that eoo_auto is only False for fauna species.
+
+        - If this distribution is linked to a Species whose GroupType name is 'fauna',
+                - If this distribution is linked to a Species whose GroupType name is 'fauna',
+                    set eoo_auto = False.
+                - For non-fauna species, do not alter eoo_auto (allow either True/False).
+                - If no species is linked, leave eoo_auto unchanged.
+        """
+        try:
+            if self.species and getattr(self.species, "group_type", None):
+                if (
+                    getattr(self.species.group_type, "name", None)
+                    == GroupType.GROUP_TYPE_FAUNA
+                ):
+                    # Force False for fauna
+                    self.aoo_actual_auto = False
+                # else: leave eoo_auto unchanged for non-fauna
+        except Exception:
+            # Be conservative: if anything unexpected happens while checking group_type,
+            # don't modify the field and let the save proceed.
+            pass
+
+        super().save(*args, **kwargs)
+
 
 class Community(RevisionedMixin):
     """
@@ -1983,6 +2022,12 @@ class Community(RevisionedMixin):
 
         self.image_doc = document
         self.save()
+
+    def image_exists(self) -> bool:
+        """Return True if the Community image_doc file exists in storage."""
+        if not self.image_doc:
+            return False
+        return filefield_exists(self.image_doc)
 
     @property
     def occurrence_count(self):

@@ -1188,7 +1188,19 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
     def public_image(self, request, *args, **kwargs):
         instance = self.get_object()
         if not instance.image_doc:
+            logger.error(
+                "Public image requested for community id %s but none exists",
+                instance.id,
+            )
             return Response(status=status.HTTP_404_NOT_FOUND)
+
+        if not instance.image_exists():
+            logger.error(
+                "Public image requested for community id %s but file does not exist",
+                instance.id,
+            )
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
         extension = instance.image_doc._file.path.split(".")[-1].lower()
         try:
             content_type = mimetypes.types_map["." + str(extension)]
@@ -1248,7 +1260,18 @@ class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     def public_image(self, request, *args, **kwargs):
         instance = self.get_object()
         if not instance.image_doc:
+            logger.error(
+                "Public image requested for species id %s but none exists", instance.id
+            )
             return Response(status=status.HTTP_404_NOT_FOUND)
+
+        if not instance.image_exists():
+            logger.error(
+                "Public image requested for species id %s but file does not exist",
+                instance.id,
+            )
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
         extension = instance.image_doc._file.path.split(".")[-1].lower()
         try:
             content_type = mimetypes.types_map["." + str(extension)]

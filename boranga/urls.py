@@ -227,11 +227,6 @@ api_patterns = [
         users_api.GetSubmitterCategories.as_view(),
         name="get-submitter-categories",
     ),
-    re_path(
-        r"^api/department_users$",
-        users_api.DepartmentUserList.as_view(),
-        name="department-users-list",
-    ),
     re_path(r"^api/", include(router.urls)),
     re_path(
         r"^api/filter_lists_species",

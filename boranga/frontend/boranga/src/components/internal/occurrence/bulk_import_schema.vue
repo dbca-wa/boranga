@@ -802,6 +802,9 @@
                                                             selectedColumn.default_value
                                                         "
                                                         class="form-select"
+                                                        @change="
+                                                            onDefaultValueChange
+                                                        "
                                                     >
                                                         <option :value="null">
                                                             No Default
@@ -815,6 +818,34 @@
                                                         </option>
                                                     </select>
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        <div
+                                            v-if="
+                                                selectedField.has_default &&
+                                                (selectedColumn.default_value ===
+                                                    null ||
+                                                    selectedColumn.default_value ===
+                                                        undefined)
+                                            "
+                                            class="row d-flex align-items-center mb-2"
+                                        >
+                                            <label
+                                                class="col-sm-4 col-form-label"
+                                                >Model Default</label
+                                            >
+                                            <div class="col-sm-8">
+                                                <input
+                                                    type="text"
+                                                    class="form-control form-control-sm"
+                                                    :value="
+                                                        formatDefault(
+                                                            selectedField.default
+                                                        )
+                                                    "
+                                                    disabled
+                                                />
                                             </div>
                                         </div>
                                         <div
@@ -992,9 +1023,7 @@
                                                             class="form-select w-50"
                                                             aria-label="Allow Blank"
                                                             :disabled="
-                                                                !selectedField.allow_null &&
-                                                                selectedField.name !=
-                                                                    'occurrence_number'
+                                                                allowBlankDisabled
                                                             "
                                                         >
                                                             <option
@@ -1570,6 +1599,23 @@ export default {
                 )
             );
         },
+        allowBlankDisabled() {
+            // If selectedField is not set, keep control disabled
+            if (!this.selectedField) return true;
+            // Consider both a schema-level default_value and the model field's has_default metadata
+            const hasDefault =
+                !(
+                    this.selectedColumn.default_value === null ||
+                    this.selectedColumn.default_value === '' ||
+                    this.selectedColumn.default_value === undefined
+                ) || !!this.selectedField.has_default;
+            // Disabled when field does not allow null and there is no default and it's not the occurrence_number special case
+            return (
+                !this.selectedField.allow_null &&
+                !hasDefault &&
+                this.selectedField.name != 'occurrence_number'
+            );
+        },
     },
     created() {
         this.fetchBulkImportSchema();
@@ -1760,8 +1806,14 @@ export default {
                 this.enablePopovers();
                 this.selectedColumn.xlsx_column_header_name = `${this.selectedContentType.model_abbreviation.toUpperCase()} ${this.selectedField.display_name}`;
                 if (!this.selectedColumn.id) {
+                    const hasDefault =
+                        !(
+                            this.selectedColumn.default_value === null ||
+                            this.selectedColumn.default_value === '' ||
+                            this.selectedColumn.default_value === undefined
+                        ) || !!this.selectedField.has_default;
                     this.selectedColumn.xlsx_data_validation_allow_blank =
-                        this.selectedField.allow_null;
+                        this.selectedField.allow_null || hasDefault;
                 }
                 this.$refs['column-name'].focus();
             });
@@ -1783,6 +1835,23 @@ export default {
                 this.selectedColumn.django_lookup_field_name =
                     this.$refs['lookup-field'].value;
             }
+        },
+        onDefaultValueChange() {
+            // When a default value is set, ensure allow blank is enabled
+            const hasDefault = !(
+                this.selectedColumn.default_value === null ||
+                this.selectedColumn.default_value === '' ||
+                this.selectedColumn.default_value === undefined
+            );
+            if (hasDefault) {
+                this.selectedColumn.xlsx_data_validation_allow_blank = true;
+            }
+        },
+        formatDefault(val) {
+            // Distinguish between null/undefined and an explicit empty string
+            if (val === null || val === undefined) return '';
+            if (val === '') return '"" (Empty String)';
+            return String(val);
         },
         getNewColumnData() {
             return {
@@ -1853,7 +1922,8 @@ export default {
                                 django_import_field_name: modelField.name,
                                 xlsx_column_header_name: `${this.selectedContentType.model_abbreviation.toUpperCase()} ${modelField.display_name}`,
                                 xlsx_data_validation_allow_blank:
-                                    modelField.allow_null,
+                                    modelField.allow_null ||
+                                    !!modelField.has_default,
                                 default_value: null,
                                 import_validations: [],
                                 // Set these so the UI shows the new columns as

@@ -212,7 +212,7 @@
                         <div class="mb-2"><strong>Referrals</strong></div>
                         <div class="form-group mb-3">
                             <select
-                                ref="department_users"
+                                ref="referees"
                                 :disabled="!canAction"
                                 class="form-control"
                             ></select>
@@ -836,7 +836,6 @@ export default {
             imageURL: '',
             isSaved: false,
             DATE_TIME_FORMAT: 'DD/MM/YYYY HH:mm:ss',
-            department_users: null,
             contributors: null,
             external_referee_email: '',
             selectedReassignUser: null,
@@ -1026,7 +1025,6 @@ export default {
     mounted: function () {
         let vm = this;
         vm.fetchProfile();
-        vm.fetchDeparmentUsers();
         vm.$nextTick(() => {
             vm.initialiseContributorsSelect();
         });
@@ -1352,7 +1350,7 @@ export default {
                     vm.occurrence_report = data;
                     vm.original_occurrence_report = helpers.copyObject(data);
                     // Only initialise referee seelct if it's ref is not already a select2
-                    const select2Instance = $(this.$refs.department_users).data(
+                    const select2Instance = $(this.$refs.referees).data(
                         'select2'
                     );
                     if (!select2Instance) {
@@ -1624,9 +1622,7 @@ export default {
                                     confirmButton: 'btn btn-primary',
                                 },
                             });
-                            $(vm.$refs.department_users)
-                                .val(null)
-                                .trigger('change');
+                            $(vm.$refs.referees).val(null).trigger('change');
                             vm.selected_referral = '';
                             vm.referral_text = '';
                             return;
@@ -1642,9 +1638,7 @@ export default {
                                 confirmButton: 'btn btn-primary',
                             },
                         });
-                        $(vm.$refs.department_users)
-                            .val(null)
-                            .trigger('change');
+                        $(vm.$refs.referees).val(null).trigger('change');
                         vm.selected_referral = '';
                         vm.referral_text = '';
                     },
@@ -1676,17 +1670,15 @@ export default {
                     const data = await response.json();
                     vm.original_occurrence_report = helpers.copyObject(data);
                     vm.occurrence_report = data;
-                    swal.fire({
-                        title: 'Referral Reminder',
-                        text:
-                            'A reminder has been sent to ' +
-                            vm.department_users.find(
-                                (d) => d.id == r.referral.id
-                            ).name,
-                        icon: 'success',
-                        customClass: {
-                            confirmButton: 'btn btn-primary',
-                        },
+                    vm.getReferralDisplayName(r.referral).then((name) => {
+                        swal.fire({
+                            title: 'Referral Reminder',
+                            text: 'A reminder has been sent to ' + name,
+                            icon: 'success',
+                            customClass: {
+                                confirmButton: 'btn btn-primary',
+                            },
+                        });
                     });
                 },
                 (error) => {
@@ -1715,17 +1707,15 @@ export default {
                     vm.occurrence_report = data;
                     $('.popover').hide();
                     vm.enablePopovers();
-                    swal.fire({
-                        title: 'Referral Recall',
-                        text:
-                            'The referral has been recalled from ' +
-                            vm.department_users.find(
-                                (d) => d.id == r.referral.id
-                            ).name,
-                        icon: 'success',
-                        customClass: {
-                            confirmButton: 'btn btn-primary',
-                        },
+                    vm.getReferralDisplayName(r.referral).then((name) => {
+                        swal.fire({
+                            title: 'Referral Recall',
+                            text: 'The referral has been recalled from ' + name,
+                            icon: 'success',
+                            customClass: {
+                                confirmButton: 'btn btn-primary',
+                            },
+                        });
                     });
                 },
                 (error) => {
@@ -1754,17 +1744,15 @@ export default {
                     vm.occurrence_report = data;
                     $('.popover').hide();
                     vm.enablePopovers();
-                    swal.fire({
-                        title: 'Referral Resent',
-                        text:
-                            'The referral has been resent to ' +
-                            vm.department_users.find(
-                                (d) => d.id == r.referral.id
-                            ).name,
-                        icon: 'success',
-                        customClass: {
-                            confirmButton: 'btn btn-primary',
-                        },
+                    vm.getReferralDisplayName(r.referral).then((name) => {
+                        swal.fire({
+                            title: 'Referral Resent',
+                            text: 'The referral has been resent to ' + name,
+                            icon: 'success',
+                            customClass: {
+                                confirmButton: 'btn btn-primary',
+                            },
+                        });
                     });
                 },
                 (error) => {
@@ -1779,16 +1767,52 @@ export default {
                 }
             );
         },
-        fetchDeparmentUsers: function () {
+        // Return a display name for a referral. `referral` may be an object with
+        // fullname/email already present, or a ledger id. Prefer existing data
+        // to avoid extra network calls. If only an id is available, fall back to
+        // fetching the user by ledger id.
+        getReferralDisplayName: async function (referral) {
+            // referral can be either an object { id, fullname, email } or a ledger id
             let vm = this;
-            fetch(api_endpoints.department_users).then(
-                async (response) => {
-                    vm.department_users = await response.json();
-                },
-                (error) => {
-                    console.log(error);
+            if (!referral) return 'Unknown User';
+            if (typeof referral === 'object') {
+                if (referral.fullname) return referral.fullname;
+                if (referral.first_name && referral.last_name)
+                    return referral.first_name + ' ' + referral.last_name;
+                if (referral.email) return referral.email;
+                if (referral.id) {
+                    // fallthrough to fetch by id
+                    referral = referral.id;
+                } else {
+                    return 'Unknown User';
                 }
-            );
+            }
+
+            // If we reach here, `referral` is an id; fetch the user record
+            try {
+                vm._userNameCache = vm._userNameCache || {};
+                if (vm._userNameCache[referral]) {
+                    return vm._userNameCache[referral];
+                }
+                const resp = await fetch(
+                    `${api_endpoints.users_api}/${referral}/`
+                );
+                if (!resp.ok) {
+                    return 'Unknown User';
+                }
+                const user = await resp.json();
+                let name;
+                if (user.first_name && user.last_name) {
+                    name = `${user.first_name} ${user.last_name}`;
+                } else {
+                    name = user.fullname || user.email || 'Unknown User';
+                }
+                vm._userNameCache[referral] = name;
+                return name;
+            } catch (e) {
+                console.error('Error fetching referral user', e);
+                return 'Unknown User';
+            }
         },
         initialiseContributorsSelect: function () {
             let vm = this;
@@ -1822,7 +1846,7 @@ export default {
         },
         initialiseReferreeSelect: function () {
             let vm = this;
-            $(vm.$refs.department_users)
+            $(vm.$refs.referees)
                 .select2({
                     minimumInputLength: 2,
                     theme: 'bootstrap-5',
@@ -1880,9 +1904,7 @@ export default {
                                 confirmButton: 'btn btn-primary',
                             },
                         });
-                        $(vm.$refs.department_users)
-                            .val(null)
-                            .trigger('change');
+                        $(vm.$refs.referees).val(null).trigger('change');
                         vm.selected_referral = null;
                         return;
                     }

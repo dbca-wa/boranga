@@ -35,7 +35,7 @@ stages:
         repository: dbcawa/boranga
         buildArguments: |
           GIT_COMMIT_HASH=$(Build.SourceVersion)
-        arguments: --label com.azure.dev.image.build.sourceversion=$(Build.SourceVersion) --label org.opencontainers.image.revision=$(Build.SourceVersion)
+        arguments: --build-arg GIT_COMMIT_HASH=$(Build.SourceVersion) --label com.azure.dev.image.build.sourceversion=$(Build.SourceVersion) --label org.opencontainers.image.revision=$(Build.SourceVersion)
       env:
         DOCKER_BUILDKIT: 1
     - task: Docker@2

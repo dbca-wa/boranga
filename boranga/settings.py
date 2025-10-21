@@ -1,5 +1,7 @@
 import logging
 import os
+import shutil
+import subprocess
 import sys
 
 import confy
@@ -188,7 +190,9 @@ STATICFILES_DIRS.append(
     os.path.join(os.path.join(BASE_DIR, "boranga", "static", "boranga_vue"))
 )
 DATA_UPLOAD_MAX_NUMBER_FIELDS = None
-DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = env("FILE_UPLOAD_MAX_MEMORY_SIZE", 2621440)
+MAX_UPLOAD_SIZE_BYTES = env("MAX_UPLOAD_SIZE_BYTES", 20 * 1024 * 1024)  # 20 MB
 
 # Department details
 SYSTEM_NAME = "Boranga System"
@@ -263,8 +267,41 @@ if DEBUG:
 
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
-# Use git commit hash for purging cache in browser for deployment changes
-GIT_COMMIT_HASH = os.environ.get("GIT_COMMIT", os.environ.get("COMMIT", "unknown"))
+
+def _get_git_commit_hash():
+    """Return git commit hash if git is available and we are in a repo.
+
+    Falls back to the GIT_COMMIT_HASH env var (or 'unknown') when git is not
+    available or the current directory is not a git repository.
+    """
+    try:
+        git_exe = shutil.which("git")
+        if git_exe:
+            # Run in the project base directory in case settings are executed
+            # from elsewhere.
+            try:
+                commit = (
+                    subprocess.check_output(
+                        [git_exe, "rev-parse", "HEAD"],
+                        cwd=BASE_DIR,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    .decode()
+                    .strip()
+                )
+                if commit:
+                    return commit
+            except Exception:
+                # Could be not a git repo or other git error; fall through
+                pass
+    except Exception:
+        # Any unexpected failure (shutil, subprocess) - fall back to env
+        pass
+
+    return env("GIT_COMMIT_HASH", "unknown")
+
+
+GIT_COMMIT_HASH = _get_git_commit_hash()
 
 APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0") + "-" + GIT_COMMIT_HASH[:7]
 

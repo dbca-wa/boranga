@@ -161,6 +161,41 @@ def compressed_content_valid(file, whitelist, model):
     raise ValidationError("Compression/Archive format type not supported")
 
 
+def filefield_exists(fieldfile_or_document) -> bool:
+    """
+    Return True if the supplied FieldFile (or Document instance exposing an
+    attribute named `_file`) points at an existing file in the configured
+    storage backend.
+
+    - Accepts either a Django FieldFile (e.g. `document._file`) or a model
+      instance that contains a `_file` attribute (the project's Document models
+      use `_file` for the FileField).
+    - For filesystem-backed storages this uses `os.path.exists(fieldfile.path)`
+      which is fast. For non-filesystem storages it falls back to
+      `storage.exists(name)` which works for S3/GCS/etc.
+    """
+    if not fieldfile_or_document:
+        return False
+
+    # Normalize to a FieldFile-like object
+    fieldfile = getattr(fieldfile_or_document, "_file", fieldfile_or_document)
+
+    name = getattr(fieldfile, "name", None)
+    if not name:
+        return False
+
+    try:
+        # Fast path for filesystem storages
+        try:
+            return os.path.exists(fieldfile.path)
+        except (ValueError, NotImplementedError, AttributeError):
+            # Storage doesn't expose a local path — use storage.exists()
+            return fieldfile.storage.exists(name)
+    except Exception:
+        logger.exception("Failed to check file existence for %s", name)
+        return False
+
+
 def superuser_ids_list():
     cache_key = settings.CACHE_KEY_SUPERUSER_IDS
     superuser_ids = cache.get(cache_key)

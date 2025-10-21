@@ -7806,20 +7806,30 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     # Helper: try exact lookup, then fallback to nh3.clean(value) if not found
     def _get_related_instance(self, related_model_qs, lookup_field, value):
-        try:
-            return related_model_qs.get(**{lookup_field: value})
-        except related_model_qs.model.DoesNotExist:
-            if isinstance(value, str):
-                try:
-                    cleaned = nh3.clean(value)
-                except Exception:
-                    cleaned = None
-                if cleaned and cleaned != value:
-                    try:
-                        return related_model_qs.get(**{lookup_field: cleaned})
-                    except related_model_qs.model.DoesNotExist:
-                        pass
-            raise related_model_qs.model.DoesNotExist
+        # Prefer using filter().first() to avoid MultipleObjectsReturned
+        # (common and acceptable for validation). If multiple matches are
+        # present, return the first
+        qs = related_model_qs.filter(**{lookup_field: value})
+        instance = qs.first()
+        if instance is not None:
+            return instance
+
+        # Try cleaned variant for string values (e.g. nh3 cleaned names)
+        if isinstance(value, str):
+            try:
+                cleaned = nh3.clean(value)
+            except Exception:
+                cleaned = None
+            if cleaned and cleaned != value:
+                qs2 = related_model_qs.filter(**{lookup_field: cleaned})
+                instance2 = qs2.first()
+                if instance2 is not None:
+                    return instance2
+
+        # Maintain previous contract by raising DoesNotExist when no match found
+        raise related_model_qs.model.DoesNotExist(
+            f"No {related_model_qs.model.__name__} matches for {lookup_field} with value {value}"
+        )
 
     # Helper: try filtering with provided values, then with nh3.clean()ed values
     def _filter_related_instances(self, related_model_qs, lookup_field, values):
@@ -7991,7 +8001,11 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     @cached_property
     def filtered_related_model_qs(self):
-        if not self.related_model_qs:
+        # If there is no related_model_qs (e.g. related model isn't set),
+        # return None. But don't treat an empty QuerySet as None here —
+        # callers expect a QuerySet and may call queryset methods like
+        # .annotate() even when it's empty.
+        if self.related_model_qs is None:
             return None
 
         if not self.lookup_filters.exists():

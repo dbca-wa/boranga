@@ -659,7 +659,7 @@
                             </div>
                         </div>
                         <div
-                            v-if="!isReadOnly"
+                            v-if="!isReadOnly && !isFauna"
                             class="col-sm-3 d-flex align-items-center"
                         >
                             <div class="form-check form-check-inline">
