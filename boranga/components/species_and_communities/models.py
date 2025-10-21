@@ -26,7 +26,11 @@ from boranga.components.main.models import (
     UserAction,
 )
 from boranga.components.main.related_item import RelatedItem
-from boranga.helpers import is_species_communities_approver, no_commas_validator
+from boranga.helpers import (
+    filefield_exists,
+    is_species_communities_approver,
+    no_commas_validator,
+)
 from boranga.ledger_api_utils import retrieve_email_user
 from boranga.settings import GROUP_NAME_SPECIES_COMMUNITIES_APPROVER
 
@@ -1024,6 +1028,12 @@ class Species(RevisionedMixin):
         self.image_doc = document
         self.save()
 
+    def image_exists(self) -> bool:
+        """Return True if the Species image_doc file exists in storage."""
+        if not self.image_doc:
+            return False
+        return filefield_exists(self.image_doc)
+
     @transaction.atomic
     def copy_split_documents(
         self: "Species",
@@ -2012,6 +2022,12 @@ class Community(RevisionedMixin):
 
         self.image_doc = document
         self.save()
+
+    def image_exists(self) -> bool:
+        """Return True if the Community image_doc file exists in storage."""
+        if not self.image_doc:
+            return False
+        return filefield_exists(self.image_doc)
 
     @property
     def occurrence_count(self):

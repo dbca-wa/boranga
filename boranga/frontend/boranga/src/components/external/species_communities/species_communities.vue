@@ -40,6 +40,7 @@
                                                 v-show="!downloadingImage"
                                                 width="258"
                                                 :src="image_url"
+                                                @error="onImageError"
                                                 class="img-thumbnail img-fluid"
                                                 :alt="display_name"
                                                 @load="onImageLoad"
@@ -122,13 +123,15 @@ export default {
             to.query.group_type_name === 'flora' ||
             to.query.group_type_name === 'fauna'
         ) {
-            fetch(
-                `/api/external_species/${to.params.species_community_id}/`
-            ).then(
+            const speciesUrl =
+                '/api/external_species/' + to.params.species_community_id + '/';
+            fetch(speciesUrl).then(
                 async (response) => {
                     next(async (vm) => {
                         vm.species_community = await response.json(); //--temp species_obj
                         vm.uploadedID = vm.species_community.image_doc;
+                        // reset the downloading flag when a new image id is present
+                        vm.downloadingImage = !!vm.uploadedID;
                     });
                 },
                 (err) => {
@@ -138,13 +141,17 @@ export default {
         }
         //------get community object if received community id
         else {
-            fetch(
-                `/api/external_community/${to.params.species_community_id}/`
-            ).then(
+            const communityUrl =
+                '/api/external_community/' +
+                to.params.species_community_id +
+                '/';
+            fetch(communityUrl).then(
                 async (response) => {
                     next(async (vm) => {
                         vm.species_community = await response.json(); //--temp community_obj
                         vm.uploadedID = vm.species_community.image_doc;
+                        // reset the downloading flag when a new image id is present
+                        vm.downloadingImage = !!vm.uploadedID;
                     });
                 },
                 (err) => {
@@ -199,6 +206,11 @@ export default {
     methods: {
         onImageLoad: function () {
             this.downloadingImage = false;
+        },
+        onImageError: function () {
+            // stop the spinner and clear uploadedID so the 'No Image Available' placeholder shows
+            this.downloadingImage = false;
+            this.uploadedID = null;
         },
         returnToDashboard: function () {
             let vm = this;
