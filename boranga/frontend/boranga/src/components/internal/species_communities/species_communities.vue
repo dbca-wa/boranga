@@ -42,6 +42,8 @@
                                             width="258"
                                             class="img-thumbnail img-fluid rounded"
                                             @load="onImageLoad"
+                                            @error="onImageError"
+                                            :alt="imageAlt"
                                         />
                                     </div>
                                 </div>
@@ -689,6 +691,17 @@ export default {
                     this.species_community.taxonomy_details.taxon_name_id +
                     ')'
                   : '';
+        },
+        imageAlt: function () {
+            // Prefer the scientific name if present, otherwise fallback to display_name
+            if (
+                this.species_community &&
+                this.species_community.taxonomy_details &&
+                this.species_community.taxonomy_details.scientific_name
+            ) {
+                return this.species_community.taxonomy_details.scientific_name;
+            }
+            return this.display_name || 'Species image';
         },
         class_ncols: function () {
             return this.comparing ? 'col-md-12' : 'col-md-8';
@@ -1583,6 +1596,24 @@ export default {
         },
         onImageLoad: function () {
             this.downloadingImage = false;
+        },
+        onImageError: function () {
+            // Show a simple inline SVG placeholder if the image cannot be loaded
+            const placeholderSVG = `data:image/svg+xml;utf8,${encodeURIComponent(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="258" height="258">' +
+                    '<rect width="100%" height="100%" fill="#f5f5f5"/>' +
+                    '<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#6c757d" font-family="Arial, Helvetica, sans-serif" font-size="16">Image File Not Found</text>' +
+                    '</svg>'
+            )}`;
+
+            // Avoid repeatedly setting the same failing src to prevent loops
+            if (this.speciesCommunitiesImage !== placeholderSVG) {
+                this.speciesCommunitiesImage = placeholderSVG;
+                // keep downloadingImage true so placeholder's load event will clear the shimmer
+            } else {
+                // If even the placeholder fails for some reason, stop the loading animation
+                this.downloadingImage = false;
+            }
         },
         activateEditMode: function () {
             this.$router
