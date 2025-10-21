@@ -1,5 +1,7 @@
 import logging
 import os
+import shutil
+import subprocess
 import sys
 
 import confy
@@ -263,7 +265,41 @@ if DEBUG:
 
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
-GIT_COMMIT_HASH = env("GIT_COMMIT_HASH", "unknown")
+
+def _get_git_commit_hash():
+    """Return short git commit hash (7 chars) if git is available and we are in a repo.
+
+    Falls back to the GIT_COMMIT_HASH env var (or 'unknown') when git is not
+    available or the current directory is not a git repository.
+    """
+    try:
+        git_exe = shutil.which("git")
+        if git_exe:
+            # Run in the project base directory in case settings are executed
+            # from elsewhere.
+            try:
+                commit = (
+                    subprocess.check_output(
+                        [git_exe, "rev-parse", "HEAD"],
+                        cwd=BASE_DIR,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    .decode()
+                    .strip()
+                )
+                if commit:
+                    return commit
+            except Exception:
+                # Could be not a git repo or other git error; fall through
+                pass
+    except Exception:
+        # Any unexpected failure (shutil, subprocess) - fall back to env
+        pass
+
+    return env("GIT_COMMIT_HASH", "unknown")
+
+
+GIT_COMMIT_HASH = _get_git_commit_hash()
 
 APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0") + "-" + GIT_COMMIT_HASH[:7]
 
