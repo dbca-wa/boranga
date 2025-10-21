@@ -1074,7 +1074,6 @@ export default {
             submitting: false,
             saveExitCSProposal: false,
             savingCSProposal: false,
-            department_users: [],
             selected_referral: '',
             referral_text: '',
             approver_comment: '',
@@ -1393,7 +1392,6 @@ export default {
         },
     },
     mounted: function () {
-        this.fetchDeparmentUsers();
         this.startPollingForUpdates();
         window.addEventListener('beforeunload', this.handleBeforeUnload);
     },
@@ -2280,20 +2278,7 @@ export default {
                     vm.assignTo();
                 });
         },
-        fetchDeparmentUsers: function () {
-            let vm = this;
-            vm.loading.push('Loading Department Users');
-            fetch(api_endpoints.department_users).then(
-                async (response) => {
-                    vm.department_users = await response.json();
-                    vm.loading.splice('Loading Department Users', 1);
-                },
-                (error) => {
-                    console.log(error);
-                    vm.loading.splice('Loading Department Users', 1);
-                }
-            );
-        },
+
         initialiseSelects: function () {
             let vm = this;
             if (!vm.initialisedSelects) {
