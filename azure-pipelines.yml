@@ -3,48 +3,61 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/docker
 
 trigger:
-- main
+  - main
 
 resources:
-- repo: self
+  - repo: self
 
 variables:
-  tag: '$(Build.BuildId)'
+  tag: "$(Build.BuildId)"
   tagDate: $[ format('{0:yyyy}.{0:MM}.{0:dd}.{0:HH}.{0:mm}{0:ss}', pipeline.startTime) ]
   isMain: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
 
 stages:
-- stage: Build
-  condition: and(succeeded(), eq(variables.isMain, 'true'))
-  displayName: Build image
-  jobs:
-  - job: Build
-    displayName: Build
-    pool:
-      vmImage: ubuntu-latest
-    steps:
-    - task: Docker@2
-      displayName: Build an image and Push
-      inputs:
-        command: buildAndPush
-        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
-        tags: |
-              latest
-              $(tagDate)
-        containerRegistry: DockerHub
-        repository: dbcawa/boranga
-        buildArguments: |
-          GIT_COMMIT_HASH=$(Build.SourceVersion)
-        arguments: --build-arg GIT_COMMIT_HASH=$(Build.SourceVersion) --label com.azure.dev.image.build.sourceversion=$(Build.SourceVersion) --label org.opencontainers.image.revision=$(Build.SourceVersion)
-      env:
-        DOCKER_BUILDKIT: 1
-    - task: Docker@2
-      displayName: Dev Build image and Push
-      inputs:
-        command: buildAndPush
-        dockerfile: '$(Build.SourcesDirectory)/dockerdev/Dockerfile'
-        tags: |
-              boranga_dev_latest
-              boranga_dev_$(tagDate)
-        containerRegistry: DockerHub
-        repository: dbcawa/docker_app_dev
+  - stage: Build
+    condition: and(succeeded(), eq(variables.isMain, 'true'))
+    displayName: Build image
+    jobs:
+      - job: Build
+        displayName: Build
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - script: echo "Build.SourceVersion=$(Build.SourceVersion)"
+            displayName: "Show Build.SourceVersion for debugging"
+
+          - task: Docker@2
+            displayName: Build image
+            inputs:
+              command: build
+              dockerfile: "$(Build.SourcesDirectory)/Dockerfile"
+              buildContext: "$(Build.SourcesDirectory)"
+              tags: |
+                $(tagDate)
+              containerRegistry: DockerHub
+              repository: dbcawa/boranga
+              # Pass the git commit hash as a build argument to avoid copying git repo into image
+              arguments: --build-arg GIT_COMMIT_HASH=$(Build.SourceVersion)
+            env:
+              DOCKER_BUILDKIT: 1
+
+          - task: Docker@2
+            displayName: Push image
+            inputs:
+              command: push
+              containerRegistry: DockerHub
+              repository: dbcawa/boranga
+              tags: |
+                latest
+                $(tagDate)
+
+          - task: Docker@2
+            displayName: Dev Build image and Push
+            inputs:
+              command: buildAndPush
+              dockerfile: "$(Build.SourcesDirectory)/dockerdev/Dockerfile"
+              tags: |
+                boranga_dev_latest
+                boranga_dev_$(tagDate)
+              containerRegistry: DockerHub
+              repository: dbcawa/docker_app_dev
