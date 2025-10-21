@@ -212,7 +212,7 @@
                         <div class="mb-2"><strong>Referrals</strong></div>
                         <div class="form-group mb-3">
                             <select
-                                ref="department_users"
+                                ref="referees"
                                 :disabled="!canAction"
                                 class="form-control"
                             ></select>
@@ -1350,7 +1350,7 @@ export default {
                     vm.occurrence_report = data;
                     vm.original_occurrence_report = helpers.copyObject(data);
                     // Only initialise referee seelct if it's ref is not already a select2
-                    const select2Instance = $(this.$refs.department_users).data(
+                    const select2Instance = $(this.$refs.referees).data(
                         'select2'
                     );
                     if (!select2Instance) {
@@ -1622,9 +1622,7 @@ export default {
                                     confirmButton: 'btn btn-primary',
                                 },
                             });
-                            $(vm.$refs.department_users)
-                                .val(null)
-                                .trigger('change');
+                            $(vm.$refs.referees).val(null).trigger('change');
                             vm.selected_referral = '';
                             vm.referral_text = '';
                             return;
@@ -1640,9 +1638,7 @@ export default {
                                 confirmButton: 'btn btn-primary',
                             },
                         });
-                        $(vm.$refs.department_users)
-                            .val(null)
-                            .trigger('change');
+                        $(vm.$refs.referees).val(null).trigger('change');
                         vm.selected_referral = '';
                         vm.referral_text = '';
                     },
@@ -1850,7 +1846,7 @@ export default {
         },
         initialiseReferreeSelect: function () {
             let vm = this;
-            $(vm.$refs.department_users)
+            $(vm.$refs.referees)
                 .select2({
                     minimumInputLength: 2,
                     theme: 'bootstrap-5',
@@ -1908,9 +1904,7 @@ export default {
                                 confirmButton: 'btn btn-primary',
                             },
                         });
-                        $(vm.$refs.department_users)
-                            .val(null)
-                            .trigger('change');
+                        $(vm.$refs.referees).val(null).trigger('change');
                         vm.selected_referral = null;
                         return;
                     }
