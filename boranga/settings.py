@@ -267,7 +267,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 
 def _get_git_commit_hash():
-    """Return short git commit hash (7 chars) if git is available and we are in a repo.
+    """Return git commit hash if git is available and we are in a repo.
 
     Falls back to the GIT_COMMIT_HASH env var (or 'unknown') when git is not
     available or the current directory is not a git repository.
