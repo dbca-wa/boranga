@@ -7808,7 +7808,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
     def _get_related_instance(self, related_model_qs, lookup_field, value):
         # Prefer using filter().first() to avoid MultipleObjectsReturned
         # (common and acceptable for validation). If multiple matches are
-        # present, return the first and log a warning so ops can investigate.
+        # present, return the first
         qs = related_model_qs.filter(**{lookup_field: value})
         instance = qs.first()
         if instance is not None:
