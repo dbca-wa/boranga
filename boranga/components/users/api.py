@@ -1,6 +1,5 @@
 import logging
 
-from django.core.cache import cache
 from django.db import transaction
 from django.db.models import CharField, F, Value
 from django.db.models.functions import Coalesce, Concat
@@ -20,7 +19,6 @@ from rest_framework.response import Response
 from boranga.components.conservation_status.models import ConservationStatusReferral
 from boranga.components.main.models import UserSystemSettings
 from boranga.components.main.permissions import CommsLogPermission
-from boranga.components.main.utils import retrieve_department_users
 from boranga.components.occurrence.models import OccurrenceReportReferral
 from boranga.components.species_and_communities.models import GroupType
 from boranga.components.users.models import SubmitterCategory, SubmitterInformation
@@ -34,24 +32,9 @@ from boranga.components.users.serializers import (
     UserSerializer,
 )
 from boranga.helpers import is_internal, is_internal_contributor
-from boranga.permissions import IsApprover, IsAssessor, IsInternal
+from boranga.permissions import IsApprover, IsAssessor
 
 logger = logging.getLogger(__name__)
-
-
-class DepartmentUserList(views.APIView):
-    renderer_classes = [
-        JSONRenderer,
-    ]
-    permission_classes = [IsInternal]
-
-    def get(self, request, format=None):
-        data = cache.get("department_users")
-        if not data:
-            retrieve_department_users()
-            data = cache.get("department_users")
-        data = retrieve_department_users()
-        return Response(data)
 
 
 class GetCountries(views.APIView):

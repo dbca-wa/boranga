@@ -17,7 +17,6 @@ export default {
     countries: '/api/countries',
     cs_external_referee_invites: '/api/cs_external_referee_invites',
     cs_referrals: '/api/cs_referrals.json',
-    department_users: '/api/department_users',
     districts: '/api/districts.json',
     document_categories_dict: '/api/document_categories_dict',
     filtered_organisations: '/api/filtered_organisations',

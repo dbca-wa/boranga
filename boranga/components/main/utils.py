@@ -5,11 +5,8 @@ from datetime import datetime
 import pytz
 from django.conf import settings
 from django.db import connection
-from django.db.models import Q
-from ledger_api_client.ledger_models import EmailUserRO
 from rest_framework import serializers
 
-from boranga.components.main.serializers import EmailUserROSerializerForReferral
 from boranga.helpers import member_ids
 from boranga.settings import (
     GROUP_NAME_OCCURRENCE_APPROVER,
@@ -17,16 +14,6 @@ from boranga.settings import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def retrieve_department_users():
-    dep_users = (
-        EmailUserRO.objects.filter(Q(email__endswith="@dbca.wa.gov.au"))
-        .exclude(Q(first_name=""), Q(last_name=""))
-        .order_by("first_name")
-    )
-    serialiser = EmailUserROSerializerForReferral(dep_users, many=True)
-    return serialiser.data
 
 
 def to_local_tz(_date):
