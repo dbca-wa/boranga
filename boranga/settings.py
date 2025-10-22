@@ -600,3 +600,8 @@ FETCH_NOMOS_DATA_TIME_OF_DAY = config(
 )  # 24 hour format HH:MM
 
 INCLUDE_ROOT_VIEW = env("INCLUDE_ROOT_VIEW", False)
+
+KB_CADASTRE_LAYER_URL = env("KB_CADASTRE_LAYER_URL", default=None)
+KB_AUTH_USER = env("KB_AUTH_USER", default=None)
+KB_AUTH_PASS = env("KB_AUTH_PASS", default=None)
+KB_LAYER_TABLE = env("KB_LAYER_TABLE", default="kb_cadastre")
