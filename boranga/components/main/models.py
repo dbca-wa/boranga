@@ -10,6 +10,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.gis.db import models as gis_models
 from django.core.cache import cache
 from django.core.files.storage import FileSystemStorage
 from django.db import models
@@ -82,6 +83,22 @@ class BaseModel(TagStrippingModelMixin, Nh3SanitizationModelMixin, models.Model)
     class Meta:
         abstract = True
         app_label = "boranga"
+
+
+# GeoDjango model for the imported cadastre layer. The table is expected to be
+# created outside of Django (via ogr2ogr), so this model is unmanaged.
+
+
+class CadastreLayer(models.Model):
+    gid = models.BigIntegerField(primary_key=True)
+    geom = gis_models.GeometryField(srid=4326, null=True)
+
+    class Meta:
+        managed = False
+        db_table = '"public"."kb_cadastre"'
+        app_label = "boranga"
+        verbose_name = "Cadastre layer"
+        verbose_name_plural = "Cadastre layer"
 
 
 class AbstractModelMeta(ABCMeta, model_type):
