@@ -16,7 +16,7 @@ from django.contrib.contenttypes import models as ct_models
 from django.contrib.gis.geos import GEOSGeometry, Polygon
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -26,6 +26,7 @@ from shapely.ops import transform, unary_union, voronoi_diagram
 from wagov_utils.components.proxy.views import proxy_view
 
 from boranga import settings
+from boranga.components.main.models import CadastreLayer
 from boranga.components.occurrence.models import (
     BufferGeometry,
     OccurrenceGeometry,
@@ -64,11 +65,16 @@ def intersect_geometry_with_layer(
     intersect_layer_name = intersect_layer.layer_name
     invert_xy = intersect_layer.invert_xy
 
-    test_geom = geometry
+    # Use a separate geometry for WFS queries (which some layers expect inverted XY)
+    # and keep the original geometry for local DB/PostGIS queries. Previously we
+    # inverted the geometry unconditionally which caused local PostGIS intersects
+    # to receive lat/lon swapped coordinates and return 0 results.
+    db_geom = geometry
+    wfs_geom = geometry
     if invert_xy:
-        test_geom = invert_xy_coordinates([geometry])[0]
+        wfs_geom = invert_xy_coordinates([geometry])[0]
 
-    if test_geom.geom_type in ["MultiPoint"]:
+    if wfs_geom.geom_type in ["MultiPoint"]:
         # For some unknown silly reason, geoserver's jts cannot handle valid single-bracketed multipoint geometries,
         # e.g. MULTIPOINT (3 1, 4 1, 5 2), and rather throws unintelligible java class exceptions at me, so we
         # have to convert them to a double-bracket notation in the form of MULTIPOINT ((3 1), (4 1), (5 2)). Even
@@ -76,15 +82,15 @@ def intersect_geometry_with_layer(
         # seems to except singleton lists
         # (https://www.tsusiatsoftware.net/jts/javadoc/com/vividsolutions/jts/io/WKTReader.html)
         logger.warning(
-            f"Converting MultiPoint geometry {test_geom} to double-bracket notation"
+            f"Converting MultiPoint geometry {wfs_geom} to double-bracket notation"
         )
         test_geom_wkt = (
-            f'MULTIPOINT ({", ".join([f"({c[0]} {c[1]})" for c in test_geom.coords])})'
+            f'MULTIPOINT ({", ".join([f"({c[0]} {c[1]})" for c in wfs_geom.coords])})'
         )
     else:
-        test_geom_wkt = test_geom.wkt
+        test_geom_wkt = wfs_geom.wkt
 
-    wkt.loads(test_geom.wkt)
+    wkt.loads(wfs_geom.wkt)
     params = {
         "service": "WFS",
         "version": "2.0.0",
@@ -98,11 +104,135 @@ def intersect_geometry_with_layer(
         "CQL_FILTER": f"INTERSECTS({geometry_name}, {test_geom_wkt})",
     }
 
-    request_path = (
-        re.match(r"^\/geoproxy\/(?P<request_path>[\w-]+)/.*$", geoserver_url.url)
-        .groupdict()
-        .get("request_path", None)
-    )
+    m = re.match(r"^\/geoproxy\/(?P<request_path>[\w-]+)/.*$", geoserver_url.url or "")
+    request_path = m.groupdict().get("request_path") if m else None
+
+    # If this layer represents the cadastre and we have a local CadastreLayer model,
+    # perform the intersection locally using PostGIS instead of calling the remote WFS.
+    try:
+        layer_name_lower = (intersect_layer.layer_name or "").lower()
+    except Exception:
+        layer_name_lower = ""
+
+    if "cadastre" in layer_name_lower:
+        # Prefer the unmanaged CadastreLayer model only when the underlying table exists
+        # and contains at least one row. This avoids returning empty/local stubs when an
+        # ogr2ogr import hasn't been performed yet.
+        try:
+            # Derive schema and table name from the model's db_table (handles quoted names)
+            db_table = getattr(CadastreLayer._meta, "db_table", None) or "kb_cadastre"
+            parts = [p.strip('"') for p in db_table.split(".")]
+            if len(parts) == 2:
+                sch, tbl = parts
+            else:
+                sch = "public"
+                tbl = parts[-1]
+
+            logger.info(
+                "intersect_geometry_with_layer: attempting local cadastre lookup for table %s",
+                db_table,
+            )
+            # Check table exists
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=%s AND table_name=%s)",
+                    [sch, tbl],
+                )
+                exists = bool(cursor.fetchone()[0])
+
+            if not exists:
+                logger.error(
+                    "Local cadastre table %s.%s not found; falling back to remote WFS",
+                    sch,
+                    tbl,
+                )
+                raise Exception("local-cadastre-missing")
+
+            # Check table has at least one row. Validate identifiers before using them
+            if not re.match(r"^[A-Za-z0-9_]+$", sch) or not re.match(
+                r"^[A-Za-z0-9_]+$", tbl
+            ):
+                # Unexpected/complex table name; don't attempt raw SQL, fall back
+                logger.error(
+                    "Local cadastre table name appears complex (%s.%s); skipping local check and falling back.",
+                    sch,
+                    tbl,
+                )
+                raise Exception("local-cadastre-complex-name")
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=%s AND table_name=%s)",
+                    [sch, tbl],
+                )
+                exists = bool(cursor.fetchone()[0])
+
+            if not exists:
+                logger.error(
+                    "Local cadastre table %s.%s not found; falling back to remote WFS",
+                    sch,
+                    tbl,
+                )
+                raise Exception("local-cadastre-missing")
+
+            with connection.cursor() as cursor:
+                cursor.execute(f"SELECT EXISTS (SELECT 1 FROM {sch}.{tbl} LIMIT 1)")
+                # Note: The above uses simple interpolation only after validation;
+                # it is safe for common schema/table names
+                has_row = bool(cursor.fetchone()[0])
+
+            if not has_row:
+                logger.error(
+                    "Local cadastre table %s.%s exists but is empty; falling back to remote WFS",
+                    sch,
+                    tbl,
+                )
+                raise Exception("local-cadastre-empty")
+
+            # Ensure db_geom is in the correct SRID (CadastreLayer uses 4326)
+            geom_for_query = db_geom
+            if getattr(db_geom, "srid", None) and db_geom.srid != 4326:
+                geom_for_query = GEOSGeometry(db_geom.wkt, srid=db_geom.srid)
+                geom_for_query.transform(4326)
+
+            qs = CadastreLayer.objects.filter(geom__intersects=geom_for_query)
+            count = qs.count()
+            logger.debug(
+                "intersect_geometry_with_layer: local cadastre count=%s for geometry extent=%s",
+                count,
+                getattr(geom_for_query, "extent", None),
+            )
+
+            if result_type == "hits":
+                # Return a small XML snippet compatible with existing parser that reads numberMatched
+                return f'<features numberMatched="{count}" />'
+
+            # Build a minimal GeoJSON-like structure expected by downstream code
+            features = []
+            for row in qs:
+                try:
+                    geom_json = json.loads(row.geom.json)
+                except Exception:
+                    geom_json = None
+                features.append(
+                    {
+                        "id": getattr(row, "gid", None),
+                        "type": "Feature",
+                        "properties": {
+                            "CAD_OWNER_NAME": getattr(row, "cad_owner_name", None),
+                            "CAD_OWNER_COUNT": getattr(row, "cad_owner_count", None),
+                        },
+                        "geometry": geom_json,
+                    }
+                )
+
+            return {
+                "type": "FeatureCollection",
+                "totalFeatures": count,
+                "features": features,
+            }
+        except Exception as e:
+            logger.exception("Local cadastre intersection skipped/fallback: %s", e)
 
     if request_path:
         try:
@@ -308,8 +438,6 @@ def save_geometry(
         return
 
     action = request.data.get("action", None)
-
-    # geometry_ids = []
     geometry_id_intersect_data = {}
     for feature in geometry.get("features"):
         supported_geometry_types = ["MultiPolygon", "Polygon", "MultiPoint", "Point"]
@@ -614,7 +742,25 @@ def feature_json_to_geosgeometry(feature, srid=4326):
     shape = geo_json.get("geometry") if "geometry" in geo_json else geo_json
     geom_shape = shp.shape(shape)
 
-    return GEOSGeometry(geom_shape.wkt, srid=srid)
+    try:
+        geos = GEOSGeometry(geom_shape.wkt, srid=srid)
+        # Debug information to help trace unexpected intersection results
+        try:
+            logger.debug(
+                "feature_json_to_geosgeometry: srid=%s type=%s bounds=%s",
+                getattr(geos, "srid", None),
+                getattr(geos, "geom_type", None),
+                getattr(geos, "extent", None),
+            )
+        except Exception:
+            # Ignore logging errors
+            pass
+        return geos
+    except Exception as e:
+        logger.exception(
+            "Failed to convert feature to GEOSGeometry: %s -- feature: %s", e, feature
+        )
+        raise
 
 
 def transform_json_geometry(json_geom, from_srid, to_srid):
