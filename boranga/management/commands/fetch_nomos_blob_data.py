@@ -209,7 +209,7 @@ class Command(BaseCommand):
                                                 previous_name_id=p["id"],
                                                 defaults={
                                                     "previous_scientific_name": p[
-                                                        "name"
+                                                        "canonical_name"
                                                     ],
                                                     "taxonomy": taxon_obj,
                                                     "previous_taxonomy": previous_taxonomy,
