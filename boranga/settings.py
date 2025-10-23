@@ -229,10 +229,15 @@ MEDIA_APP_DIR = env("MEDIA_APP_DIR", "boranga")
 CRON_RUN_AT_TIMES = env("CRON_RUN_AT_TIMES", "04:05")
 CRON_EMAIL = env("CRON_EMAIL", "cron@" + SITE_DOMAIN).lower()
 EMAIL_FROM = DEFAULT_FROM_EMAIL
+# Time of day to run the import cadastre geojson cron job. Read from env or default to 03:00
+IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY = env(
+    "IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY", "03:00"
+)
 
 CRON_CLASSES = [
     "appmonitor_client.cron.CronJobAppMonitorClient",
     "boranga.cron.CronJobFetchNomosTaxonDataDaily",
+    "boranga.cron.CronJobImportCadastreGeoJSONDaily",
     "boranga.cron.CronJobOCRPreProcessBulkImportTasks",
     "boranga.cron.CronJobOCRProcessBulkImportQueue",
     "boranga.cron.CronJobAutoLockConservationStatusRecords",
