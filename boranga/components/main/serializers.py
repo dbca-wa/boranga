@@ -9,7 +9,11 @@ from ledger_api_client.ledger_models import EmailUserRO
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 from rest_framework import serializers
 
-from boranga.components.main.models import CommunicationsLogEntry, HelpTextEntry
+from boranga.components.main.models import (
+    CommunicationsLogEntry,
+    HelpTextEntry,
+    neutralise_html,
+)
 from boranga.helpers import (
     get_choices_for_field,
     get_filter_field_options_for_field,
@@ -42,14 +46,7 @@ class NH3SanitizeSerializerMixin:
             if isinstance(field, serializers.CharField):
                 value = data.get(field_name)
                 if isinstance(value, str):
-                    # sanitize (remove tags / unsafe HTML) then unescape entities
-                    cleaned = nh3.clean(value)
-                    cleaned = (
-                        cleaned.replace("&amp;", "&")
-                        .replace("&quot;", '"')
-                        .replace("&#39;", "'")
-                    )
-                    data[field_name] = cleaned
+                    data[field_name] = neutralise_html(value)
         return super().to_internal_value(data)
 
     def to_representation(self, instance):
