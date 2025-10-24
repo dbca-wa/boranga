@@ -49,6 +49,17 @@ class TagStrippingModelMixin:
         super().save(*args, **kwargs)
 
 
+def neutralise_html(value: str) -> str:
+    """
+    Neutralise HTML tags in a string using nh3.
+    """
+    if not value:
+        return value
+    cleaned = nh3.clean(value)
+    cleaned = cleaned.replace("&amp;", "&").replace("&quot;", '"').replace("&#39;", "'")
+    return cleaned
+
+
 class Nh3SanitizationModelMixin:
     """
     Mixin to sanitize all CharField and TextField string values using nh3 before saving.
@@ -60,16 +71,7 @@ class Nh3SanitizationModelMixin:
             if isinstance(field, (models.CharField, models.TextField)):
                 value = getattr(self, field.name, None)
                 if isinstance(value, str):
-                    # sanitize then selectively restore harmless entities:
-                    # - nh3.clean() removes/neutralises tags; restore & and quotes so UI shows '&' etc.
-                    # - keep &lt; and &gt; encoded by default to avoid reintroducing tags
-                    cleaned = nh3.clean(value)
-                    cleaned = (
-                        cleaned.replace("&amp;", "&")
-                        .replace("&quot;", '"')
-                        .replace("&#39;", "'")
-                    )
-                    setattr(self, field.name, cleaned)
+                    setattr(self, field.name, neutralise_html(value))
 
         super().save(*args, **kwargs)
 
