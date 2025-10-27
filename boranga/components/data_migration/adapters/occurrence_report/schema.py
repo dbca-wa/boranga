@@ -29,7 +29,9 @@ POP_ID_FROM_SHEETNO = dependent_from_column_factory(
 )
 
 TAXONOMY_TRANSFORM = taxonomy_lookup(
+    group_type_name="flora",
     lookup_field="scientific_name",
+    source_key="TPFL",
 )
 
 SPECIES_TRANSFORM = fk_lookup(model=Species, lookup_field="taxonomy_id")
