@@ -4,6 +4,8 @@ import shutil
 import subprocess
 import sys
 
+from pathlib import Path
+
 import confy
 from confy import env
 from decouple import Csv, config
@@ -276,7 +278,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 def _get_git_commit_hash():
     """Return git commit hash if git is available and we are in a repo.
 
-    Falls back to the GIT_COMMIT_HASH env var (or 'unknown') when git is not
+    Falls back to the GIT_COMMIT_VERSION env var (or 'unknown') when git is not
     available or the current directory is not a git repository.
     """
     try:
@@ -303,12 +305,17 @@ def _get_git_commit_hash():
         # Any unexpected failure (shutil, subprocess) - fall back to env
         pass
 
-    return env("GIT_COMMIT_HASH", "unknown")
+    return env("GIT_COMMIT_VERSION", "unknown")
 
 
-GIT_COMMIT_HASH = _get_git_commit_hash()
+GIT_COMMIT_VERSION = _get_git_commit_hash()
 
-APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0") + "-" + GIT_COMMIT_HASH[:7]
+try:
+    GIT_COMMIT_HASH = Path("/app/git_hash").read_text().strip() or GIT_COMMIT_VERSION
+except Exception:
+    GIT_COMMIT_HASH = GIT_COMMIT_VERSION
+
+APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0") + "-" + GIT_COMMIT_VERSION[:7]
 
 RUNNING_DEVSERVER = len(sys.argv) > 1 and sys.argv[1] == "runserver"
 
@@ -383,7 +390,7 @@ DJANGO_VITE = {
             BASE_DIR, "boranga", "static", "boranga_vue", "manifest.json"
         ),
         "dev_server_host": "localhost",  # Default host for vite (can change if needed)
-        "dev_server_port": 5173,  # Default port for vite (can change if needed)
+        "dev_server_port": config("DEV_SERVER_PORT", default=9002, cast=int),  # Default port for vite (can change if needed)
         "static_url_prefix": STATIC_URL_PREFIX,
     }
 }
