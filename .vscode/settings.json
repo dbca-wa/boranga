@@ -7,4 +7,8 @@
     },
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "python-envs.pythonProjects": [],
+    "files.watcherExclude": { "**/.kb_layer_cache/**": true, "**/*.geojson": true },
+    "search.exclude": { "**/.kb_layer_cache/**": true, "**/*.geojson": true },
+    "files.associations": { "**/*.geojson": "plaintext" },
+    "editor.largeFileOptimizations": true
 }

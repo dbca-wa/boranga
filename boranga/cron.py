@@ -65,3 +65,19 @@ class CronJobAutoLockUnlockedOccurrenceRecords(django_cron.CronJobBase):
     def do(self) -> None:
         management.call_command("auto_lock_unlocked_occ")
         return "Job Completed Successfully"
+
+
+class CronJobImportCadastreGeoJSONDaily(django_cron.CronJobBase):
+    """Run the import_cadastre_geojson management command once per day at a configured time."""
+
+    RUN_ON_DAYS = [0, 1, 2, 3, 4, 5, 6]
+    RUN_AT_TIMES = [settings.IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY]
+    schedule = django_cron.Schedule(
+        run_weekly_on_days=RUN_ON_DAYS, run_at_times=RUN_AT_TIMES
+    )
+    code = "boranga.import_cadastre_geojson_daily"
+
+    def do(self) -> None:
+        log.info("Import cadastre GeoJSON cron job triggered, running...")
+        management.call_command("import_cadastre_geojson")
+        return "Job Completed Successfully"

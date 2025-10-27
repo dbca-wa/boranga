@@ -13,7 +13,9 @@ from boranga.components.species_and_communities.models import Species
 
 # Legacy → target FK / lookup transforms (require LegacyValueMap data)
 TAXONOMY_TRANSFORM = taxonomy_lookup(
+    group_type_name="flora",
     lookup_field="scientific_name",
+    source_key="TPFL",
 )
 
 SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")

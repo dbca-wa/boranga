@@ -14,7 +14,6 @@ from datetime import timezone as dt_timezone
 from decimal import Decimal
 from io import BytesIO
 
-import nh3
 import openpyxl
 import pyproj
 import reversion
@@ -73,6 +72,7 @@ from boranga.components.main.models import (
     OrderedArchivableManager,
     RevisionedMixin,
     UserAction,
+    neutralise_html,
 )
 from boranga.components.main.related_item import RelatedItem
 from boranga.components.occurrence.email import (
@@ -7817,7 +7817,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         # Try cleaned variant for string values (e.g. nh3 cleaned names)
         if isinstance(value, str):
             try:
-                cleaned = nh3.clean(value)
+                cleaned = neutralise_html(value)
             except Exception:
                 cleaned = None
             if cleaned and cleaned != value:
@@ -7845,7 +7845,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         for v in values:
             if isinstance(v, str):
                 try:
-                    cleaned_values.append(nh3.clean(v))
+                    cleaned_values.append(neutralise_html(v))
                 except Exception:
                     cleaned_values.append(v)
             else:

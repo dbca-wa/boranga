@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import logging
+import os
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -10,7 +12,6 @@ from datetime import timezone as stdlib_timezone
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any, Literal
 
-import nh3
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.cache import cache
 from django.db import models
@@ -24,6 +25,7 @@ from boranga.components.data_migration import mappings as dm_mappings
 from boranga.components.main.models import (
     LegacyUsernameEmailuserMapping,
     LegacyValueMap,
+    neutralise_html,
 )
 from boranga.components.species_and_communities.models import (
     GroupType,
@@ -39,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TransformIssue:
-    level: str  # 'error' | 'warning'
+    level: str  # 'error' | 'warning' | 'info'
     message: str
 
 
@@ -62,7 +64,6 @@ class TransformContext:
     row: dict[str, Any]
     model: type[models.Model] | None = None
     user_id: int | None = None
-    # Add more shared info as required
 
 
 class TransformRegistry:
@@ -79,7 +80,6 @@ class TransformRegistry:
     def build_pipeline(self, names):
         pipeline = []
         for n in names:
-            # allow either a registered transform name (str) or a callable transform
             if callable(n):
                 pipeline.append(n)
                 continue
@@ -99,13 +99,24 @@ def _result(value, *issues: TransformIssue):
     return TransformResult(value=value, issues=list(issues))
 
 
-# ------------------------ Common Transform Functions ------------------------
+@registry.register("is_present")
+def t_is_present(value, ctx):
+    if value in (None, "", []):
+        return _result(False)
+    return _result(True)
+
+
+@registry.register("Y_to_active_else_historical")
+def t_Y_to_active_else_historical(value, ctx):
+    if value == "Y":
+        return _result("active")
+    return _result("historical")
 
 
 @registry.register("strip")
 def t_strip(value, ctx):
     if value is None:
-        return _result(value)
+        return _result(None)
     return _result(str(value).strip())
 
 
@@ -128,20 +139,6 @@ def t_required(value, ctx):
     if value in (None, "", []):
         return _result(value, TransformIssue("error", "Value required"))
     return _result(value)
-
-
-@registry.register("is_present")
-def t_is_present(value, ctx):
-    if value in (None, "", []):
-        return _result(False)
-    return _result(True)
-
-
-@registry.register("Y_to_active_else_historical")
-def t_Y_to_active_else_historical(value, ctx):
-    if value == "Y":
-        return _result("active")
-    return _result("historical")
 
 
 def choices_transform(choices: Iterable[str]):
@@ -487,11 +484,42 @@ def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
 
         # Try lookup using the stored (cleaned) form first, then the raw value.
         try:
-            cleaned = nh3.clean(str(value))
+            cleaned = neutralise_html(str(value))
         except Exception:
             cleaned = None
 
         candidates = []
+        # If this row originates from TPFL, try a fast CSV-backed lookup (NAME -> nomos canonical)
+        try:
+            src = ctx.row.get("_source") if isinstance(ctx.row, dict) else None
+        except Exception:
+            src = None
+        if src == "TPFL":
+            try:
+                tpfl_map = _load_tpfl_name_to_nomos()
+                if tpfl_map:
+                    # the TPFL adapter sets NAME on the source row; normalise it the same way
+                    tpfl_name = ctx.row.get("NAME")
+                    if tpfl_name:
+                        tpfl_name_key = (
+                            str(tpfl_name)
+                            .replace("\u00a0", " ")
+                            .replace("\u202f", " ")
+                            .strip()
+                        )
+                        mapped = tpfl_map.get(tpfl_name_key)
+                        if mapped:
+                            # prefer cleaned mapping first
+                            try:
+                                mapped_clean = neutralise_html(mapped)
+                            except Exception:
+                                mapped_clean = None
+                            if mapped_clean:
+                                candidates.append(mapped_clean)
+                            candidates.append(mapped)
+            except Exception:
+                # be conservative: don't fail the transform if mapping load/lookup breaks
+                logger.exception("TPFL mapping lookup failed")
         if cleaned and cleaned != str(value):
             candidates.append(cleaned)
         candidates.append(value)
@@ -522,16 +550,23 @@ def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
     return key
 
 
-def taxonomy_lookup(lookup_field: str = "scientific_name", check_previous: bool = True):
+def taxonomy_lookup(
+    group_type_name: str | None = None,
+    lookup_field: str = "scientific_name",
+    check_previous: bool = True,
+    source_key: str | None = None,
+):
     """
     Resolve a Taxonomy by lookup_field (e.g. 'scientific_name' or 'taxon_name_id').
     Behaviour:
-      - tries cleaned (nh3.clean) then raw value against Taxonomy.{lookup_field}
+      - tries cleaned (neutralise_html) then raw value against Taxonomy.{lookup_field}
       - if not found and check_previous=True, looks for a TaxonPreviousName.previous_scientific_name
         matching the value (case-insensitive) and returns that previous_name.taxonomy.pk
     Returns a registered transform name.
     """
-    key = f"taxonomy_lookup_{lookup_field}_{int(check_previous)}"
+    # include source_key in registration key so different caller configs
+    # produce distinct registered transforms
+    key = f"taxonomy_lookup_{lookup_field}_{int(check_previous)}_{source_key or ''}"
 
     @registry.register(key)
     def inner(value, ctx):
@@ -539,31 +574,86 @@ def taxonomy_lookup(lookup_field: str = "scientific_name", check_previous: bool 
             return _result(None)
 
         # Prepare candidates: try cleaned first, then raw
+        raw = str(value)
         try:
-            cleaned = nh3.clean(str(value))
+            cleaned = neutralise_html(raw)
         except Exception:
             cleaned = None
 
         candidates = []
-        # Database values will be stored in cleaned form, so prefer only the cleaned candidates.
-        # Also try variants: cleaned with trailing " PN" removed, and cleaned with a trailing
-        # varietal suffix like " var. ..." removed.
+        # Database values will be stored in cleaned form, so prefer the cleaned candidate
+        # when available, otherwise use the raw value.
         if cleaned:
             candidates.append(cleaned)
-            # candidate with trailing " PN" removed
-            if isinstance(cleaned, str) and cleaned.endswith(" PN"):
-                candidates.append(cleaned[:-3].rstrip())
-            # TODO: Remove commented code once confirmed not needed
-            # candidate with " var. ..." (case-insensitive) stripped
-            # if isinstance(cleaned, str):
-            #     var_stripped = re.sub(r"\s*var\..*$", "", cleaned, flags=re.IGNORECASE).rstrip()
-            #     if var_stripped and var_stripped != cleaned:
-            #         candidates.append(var_stripped)
         else:
-            # fallback to raw value if cleaning failed
+            candidates.append(raw)
+
+        # Handle trailing ' PN' specially: normalise NBSPs and try pn-stripped
+        raw_norm = raw.replace("\u00a0", " ").replace("\u202f", " ")
+        if raw_norm.endswith(" PN"):
+            pn_raw = raw_norm[:-3].rstrip()
+            try:
+                cleaned_pn = neutralise_html(pn_raw)
+            except Exception:
+                cleaned_pn = None
+            if cleaned_pn:
+                candidates.append(cleaned_pn)
+            if cleaned:
+                candidates.append(cleaned)
+            if pn_raw and pn_raw != raw:
+                candidates.append(pn_raw)
+        else:
             candidates.append(value)
 
+        # If transform configured for TPFL, add mapping candidate last (final attempt)
+        if source_key and source_key.upper() == "TPFL":
+            try:
+                tpfl_map = _load_tpfl_name_to_nomos()
+                if tpfl_map:
+                    # Prefer the incoming `value` (this is the common case when
+                    # adapters have already mapped raw headers to canonical keys
+                    # and the pipeline value contains the NAME content). Fall back
+                    # to the original raw row 'NAME' header when present.
+                    tpfl_name = None
+                    if value not in (None, ""):
+                        tpfl_name = value
+                    elif isinstance(ctx.row, dict):
+                        tpfl_name = ctx.row.get("NAME")
+
+                    if tpfl_name:
+                        tpfl_key = (
+                            str(tpfl_name)
+                            .replace("\u00a0", " ")
+                            .replace("\u202f", " ")
+                            .strip()
+                        )
+                        mapped = tpfl_map.get(tpfl_key)
+                        if mapped:
+                            try:
+                                mapped_clean = neutralise_html(mapped)
+                            except Exception:
+                                mapped_clean = None
+                            if mapped_clean:
+                                candidates.append(mapped_clean)
+                            candidates.append(mapped)
+            except Exception:
+                logger.exception("TPFL mapping lookup failed in taxonomy_lookup")
+
         qs = Taxonomy._default_manager
+
+        # Filter by group type
+        if group_type_name:
+            try:
+                gt = GroupType.objects.get(name__iexact=str(group_type_name).strip())
+                qs = qs.filter(group_type=gt)
+            except GroupType.DoesNotExist:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error",
+                        f"Unknown group_type '{group_type_name}' for Taxonomy lookup",
+                    ),
+                )
 
         # Try direct Taxonomy lookup
         for candidate in candidates:
@@ -584,13 +674,11 @@ def taxonomy_lookup(lookup_field: str = "scientific_name", check_previous: bool 
         # Try previous names (case-insensitive match on previous_scientific_name)
         if check_previous:
             for candidate in candidates:
-                # prefer case-insensitive match for textual previous names
                 if isinstance(candidate, str):
                     prev_qs = TaxonPreviousName.objects.filter(
                         previous_scientific_name__iexact=str(candidate).strip()
                     )
                 else:
-                    # numeric id fallback (previous_name_id)
                     prev_qs = TaxonPreviousName.objects.filter(
                         previous_name_id=candidate
                     )
@@ -598,12 +686,30 @@ def taxonomy_lookup(lookup_field: str = "scientific_name", check_previous: bool 
                 if not prev_qs.exists():
                     continue
 
+                # If multiple previous-name entries exist, allow them when they all
+                # point to the same taxonomy_id. Only error when there are
+                # conflicting taxonomy links or no linked taxonomy_id at all.
                 if prev_qs.count() > 1:
+                    # collect taxonomy_id values (may include None)
+                    ids = list(prev_qs.values_list("taxonomy_id", flat=True))
+                    non_null_ids = {i for i in ids if i is not None}
+                    if len(non_null_ids) == 1:
+                        # all non-null entries point to the same taxonomy -> accept
+                        return _result(next(iter(non_null_ids)))
+                    if len(non_null_ids) == 0:
+                        return _result(
+                            value,
+                            TransformIssue(
+                                "error",
+                                f"TaxonPreviousName for '{value}' found but no linked Taxonomy",
+                            ),
+                        )
+                    # conflicting taxonomy links
                     return _result(
                         value,
                         TransformIssue(
                             "error",
-                            f"Multiple TaxonPreviousName entries for '{value}' found",
+                            f"Multiple TaxonPreviousName entries for '{value}' found with different taxonomy links",
                         ),
                     )
 
@@ -625,7 +731,57 @@ def taxonomy_lookup(lookup_field: str = "scientific_name", check_previous: bool 
             ),
         )
 
+    # end inner
+
     return key
+
+    # Lazy-loaded mapping for TPFL NAME -> nomos_canonical_name
+
+
+_tpfl_name_to_nomos: dict | None = None
+
+
+def _load_tpfl_name_to_nomos() -> dict:
+    """Load TPFL NAME -> nomos_canonical_name mapping from the CSV file.
+
+    Returns a dict where keys are NAME strings (NBSPs normalised and stripped)
+    and values are the nomos_canonical_name strings. Errors are logged and an
+    empty dict is returned if the CSV cannot be loaded.
+    """
+    global _tpfl_name_to_nomos
+    if _tpfl_name_to_nomos is not None:
+        return _tpfl_name_to_nomos
+
+    mapping = {}
+    try:
+        base_dir = os.path.dirname(__file__)
+        csv_path = os.path.join(
+            base_dir,
+            "legacy_data",
+            "TPFL",
+            "TPFL_CS_LISTING_NAME_TO_NOMOS_CANONICAL_NAME.csv",
+        )
+        if not os.path.exists(csv_path):
+            logger.debug("TPFL mapping CSV not found at %s", csv_path)
+            _tpfl_name_to_nomos = {}
+            return _tpfl_name_to_nomos
+
+        with open(csv_path, newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            for r in reader:
+                name = r.get("NAME")
+                nomos = r.get("nomos_canonical_name") or r.get("nomos_taxon_id")
+                if not name or not nomos:
+                    continue
+                # normalise non-breaking spaces and strip
+                key = str(name).replace("\u00a0", " ").replace("\u202f", " ").strip()
+                mapping[key] = str(nomos).strip()
+    except Exception as e:
+        logger.exception("Failed to load TPFL NAME->nomos mapping: %s", e)
+        mapping = {}
+
+    _tpfl_name_to_nomos = mapping
+    return _tpfl_name_to_nomos
 
 
 @registry.register("upper")
@@ -767,8 +923,8 @@ _ALBERS_EPSG = "EPSG:3577"  # GDA94 / Australian Albers
 
 
 def point_to_circle_factory(
-    lat_col: str,
-    lon_col: str,
+    lat_col: str = "LAT",
+    lon_col: str = "LON",
     datum_col: str = "DATUM",
     diameter_m: float = 1.0,
     buffer_resolution: int = 16,
@@ -778,6 +934,7 @@ def point_to_circle_factory(
     Returns a transform function (value, ctx) -> TransformResult(GEOSGeometry|WKT|None, issues).
 
     - The returned function ignores 'value' and reads the row from ctx (ctx.row or ctx['row']).
+    - If called with no args the factory defaults to lat_col='LAT' and lon_col='LON'.
     - datum values UNKNOWN/GPS -> WGS84 by default.
     - Buffers using a single continental projected CRS (EPSG:3577) for meter units.
     """
@@ -864,7 +1021,6 @@ except NameError:
     TRANSFORMS = {}
 
 TRANSFORMS["point_to_1m_circle"] = point_to_circle_factory()
-# ...existing code...
 
 
 def validate_multiselect(choice_transform_name: str):

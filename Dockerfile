@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.2
-ARG GIT_COMMIT_HASH="unknown"
+ARG GIT_COMMIT_VERSION="unknown"
 
 # Prepare the base environment.
 FROM ubuntu:24.04 AS builder_base_boranga
@@ -125,10 +125,10 @@ RUN touch /app/.env && \
     $VIRTUAL_ENV_PATH/bin/python manage.py collectstatic --noinput
 
 FROM collectstatic_boranga AS launch_boranga
-ARG GIT_COMMIT_HASH
-ENV GIT_COMMIT_HASH=$GIT_COMMIT_HASH
-LABEL org.opencontainers.image.revision=$GIT_COMMIT_HASH
-LABEL com.azure.dev.image.build.sourceversion=$GIT_COMMIT_HASH
+ARG GIT_COMMIT_VERSION
+ENV GIT_COMMIT_VERSION=$GIT_COMMIT_VERSION
+LABEL org.opencontainers.image.revision=$GIT_COMMIT_VERSION
+LABEL com.azure.dev.image.build.sourceversion=$GIT_COMMIT_VERSION
 
 EXPOSE 8080
 HEALTHCHECK --interval=1m --timeout=5s --start-period=10s --retries=3 CMD ["wget", "-q", "-O", "-", "http://localhost:8080/"]

@@ -111,3 +111,5 @@ git_history_recent
 private-media/
 
 .~lock.*#
+
+.kb_layer_cache/

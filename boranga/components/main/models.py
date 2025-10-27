@@ -10,6 +10,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.gis.db import models as gis_models
 from django.core.cache import cache
 from django.core.files.storage import FileSystemStorage
 from django.db import models
@@ -48,6 +49,17 @@ class TagStrippingModelMixin:
         super().save(*args, **kwargs)
 
 
+def neutralise_html(value: str) -> str:
+    """
+    Neutralise HTML tags in a string using nh3.
+    """
+    if not value:
+        return value
+    cleaned = nh3.clean(value)
+    cleaned = cleaned.replace("&amp;", "&").replace("&quot;", '"').replace("&#39;", "'")
+    return cleaned
+
+
 class Nh3SanitizationModelMixin:
     """
     Mixin to sanitize all CharField and TextField string values using nh3 before saving.
@@ -59,16 +71,7 @@ class Nh3SanitizationModelMixin:
             if isinstance(field, (models.CharField, models.TextField)):
                 value = getattr(self, field.name, None)
                 if isinstance(value, str):
-                    # sanitize then selectively restore harmless entities:
-                    # - nh3.clean() removes/neutralises tags; restore & and quotes so UI shows '&' etc.
-                    # - keep &lt; and &gt; encoded by default to avoid reintroducing tags
-                    cleaned = nh3.clean(value)
-                    cleaned = (
-                        cleaned.replace("&amp;", "&")
-                        .replace("&quot;", '"')
-                        .replace("&#39;", "'")
-                    )
-                    setattr(self, field.name, cleaned)
+                    setattr(self, field.name, neutralise_html(value))
 
         super().save(*args, **kwargs)
 
@@ -82,6 +85,22 @@ class BaseModel(TagStrippingModelMixin, Nh3SanitizationModelMixin, models.Model)
     class Meta:
         abstract = True
         app_label = "boranga"
+
+
+# GeoDjango model for the imported cadastre layer. The table is expected to be
+# created outside of Django (via ogr2ogr), so this model is unmanaged.
+
+
+class CadastreLayer(models.Model):
+    gid = models.BigIntegerField(primary_key=True)
+    geom = gis_models.GeometryField(srid=4326, null=True)
+
+    class Meta:
+        managed = False
+        db_table = '"public"."kb_cadastre"'
+        app_label = "boranga"
+        verbose_name = "Cadastre layer"
+        verbose_name_plural = "Cadastre layer"
 
 
 class AbstractModelMeta(ABCMeta, model_type):
