@@ -1271,7 +1271,7 @@ def validate_geometry_within_gis_extent(geometry, verbose_field_name="geometry")
     # Require the geometry to be completely within the configured extent.
     if gxmin < minx or gymin < miny or gxmax > maxx or gymax > maxy:
         raise serializers.ValidationError(
-            f"{verbose_field_name.capitalize()} lies outside the bounds of Western Australia ({minx}, {miny}, {maxx}, {maxy})."
+            f"{verbose_field_name.capitalize()}  is outside the WA boundaries. Please select a Latitude between {miny} and {maxy} and Longitude between {minx} and {maxx}. (Remember to include the negative symbol for Latitude.)"
         )
 
     return True
