@@ -238,6 +238,7 @@ from boranga.components.spatial.utils import (
     save_geometry,
     spatially_process_geometry,
     transform_json_geometry,
+    validate_geometry_within_gis_extent,
 )
 from boranga.components.species_and_communities.models import GroupType, Taxonomy
 from boranga.helpers import (
@@ -5770,9 +5771,15 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         data = json.loads(request.data.get("data"))
         point_data = "POINT({} {})".format(data["point_coord1"], data["point_coord2"])
 
+        datum = data.get("datum", None)
+        if not datum:
+            raise serializers.ValidationError("Please select a datum")
+
         original_geom = GEOSGeometry(point_data, srid=data["datum"])
         geom = GEOSGeometry(point_data, srid=data["datum"])
         geom.transform(4326)
+
+        validate_geometry_within_gis_extent(geom, verbose_field_name="point coordinate")
 
         data["original_geometry_ewkb"] = original_geom.ewkb
         data["geometry"] = geom
@@ -5809,6 +5816,10 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         except KeyError:
             raise serializers.ValidationError("Please enter a point coordinate")
 
+        datum = data.get("datum", None)
+        if not datum:
+            raise serializers.ValidationError("Please select a datum")
+
         try:
             original_geom = GEOSGeometry(point_data, srid=data["datum"])
         except GEOSException:
@@ -5816,6 +5827,8 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         geom = GEOSGeometry(point_data, srid=data["datum"])
         geom.transform(4326)
+
+        validate_geometry_within_gis_extent(geom, verbose_field_name="point coordinate")
 
         data["original_geometry_ewkb"] = original_geom.ewkb
         data["geometry"] = geom
