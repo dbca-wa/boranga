@@ -1256,18 +1256,6 @@ def validate_geometry_within_gis_extent(geometry, verbose_field_name="geometry")
     minx, miny, maxx, maxy = gis_extent
     gxmin, gymin, gxmax, gymax = geom_extent
 
-    logger.debug(
-        "Validating geometry extent (%s, %s, %s, %s) within GIS extent (%s, %s, %s, %s)",
-        gxmin,
-        gymin,
-        gxmax,
-        gymax,
-        minx,
-        miny,
-        maxx,
-        maxy,
-    )
-
     # Require the geometry to be completely within the configured extent.
     if gxmin < minx or gymin < miny or gxmax > maxx or gymax > maxy:
         raise serializers.ValidationError(
