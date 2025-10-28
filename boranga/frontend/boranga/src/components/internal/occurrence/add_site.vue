@@ -55,21 +55,6 @@
                                             :max="-10.000001"
                                             :min="-34.999999"
                                             step="0.000001"
-                                            @change="
-                                                if (
-                                                    $event.target.value <
-                                                    -34.999999
-                                                ) {
-                                                    siteObj.point_coord2 =
-                                                        -34.999999;
-                                                } else if (
-                                                    $event.target.value >
-                                                    -10.000001
-                                                ) {
-                                                    siteObj.point_coord2 =
-                                                        -10.000001;
-                                                }
-                                            "
                                         />
                                         <span class="input-group-text"
                                             >Longitude</span
@@ -84,19 +69,6 @@
                                             step="0.000001"
                                             class="form-control"
                                             placeholder=""
-                                            @change="
-                                                if (
-                                                    $event.target.value <
-                                                    96.000001
-                                                ) {
-                                                    siteObj.point_coord1 = 96.000001;
-                                                } else if (
-                                                    $event.target.value >
-                                                    128.999999
-                                                ) {
-                                                    siteObj.point_coord1 = 128.999999;
-                                                }
-                                            "
                                         />
                                     </div>
                                 </div>
@@ -321,6 +293,7 @@
                                 v-else
                                 type="button"
                                 class="btn btn-primary"
+                                :disabled="!isFormValid"
                                 @click="ok"
                             >
                                 Add Site
@@ -390,6 +363,15 @@ export default {
         },
         isReadOnly: function () {
             return this.site_action === 'view' ? true : false;
+        },
+        isFormValid: function () {
+            // form is assigned in mounted()
+            if (!this.form) return false;
+            try {
+                return $(this.form).valid();
+            } catch {
+                return false;
+            }
         },
     },
     watch: {
