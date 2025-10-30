@@ -113,3 +113,6 @@ private-media/
 .~lock.*#
 
 .kb_layer_cache/
+
+**/data_migration/handlers/handler_output/
+**/data_migration/legacy_data/
