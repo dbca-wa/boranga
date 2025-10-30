@@ -2806,7 +2806,7 @@ class AssociatedSpeciesTaxonomy(BaseModel):
 
     @property
     def is_current(self):
-        return self.taxonomy.name_currency.lower() == "true"
+        return self.taxonomy.is_current
 
     @property
     def conservation_status(self):
