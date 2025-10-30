@@ -326,7 +326,7 @@ class Taxonomy(BaseModel):
         blank=True,
         related_name="taxons",
     )
-    name_currency = models.BooleanField(default=True)
+    is_current = models.BooleanField(default=True)
     name_authority = models.CharField(max_length=500, null=True, blank=True)
     name_comments = models.CharField(max_length=500, null=True, blank=True)
     # storing the hierarchy id and scientific_names(class,family,genus) at the moment

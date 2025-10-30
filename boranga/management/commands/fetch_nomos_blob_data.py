@@ -95,7 +95,7 @@ class Command(BaseCommand):
                             "kingdom_name": t.get("kingdom_name"),
                             "name_authority": t.get("author"),
                             "name_comments": t.get("notes"),
-                            "name_currency": t.get("is_current"),
+                            "is_current": t.get("is_current"),
                             "taxon_rank_id": t.get("rank_id"),
                             "taxonomy_rank_fk": taxon_rank_fk,
                             "family_id": t.get("family_id"),
