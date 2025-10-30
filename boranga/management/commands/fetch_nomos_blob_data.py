@@ -85,24 +85,49 @@ class Command(BaseCommand):
                                     logger.error(f"{err_msg}\n{str(e)}")
                                     errors.append(str(e))
 
-                        taxon_obj, created = Taxonomy.objects.update_or_create(
-                            taxon_name_id=t["taxon_name_id"],
-                            defaults={
-                                "scientific_name": t["canonical_name"],
-                                "kingdom_id": t["kingdom_id"],
-                                "kingdom_fk": kingdom_fk,
-                                "kingdom_name": t["kingdom_name"],
-                                "name_authority": t["author"],
-                                "name_comments": t["notes"],
-                                "name_currency": t["is_current"],
-                                "taxon_rank_id": t["rank_id"],
-                                "taxonomy_rank_fk": taxon_rank_fk,
-                                "family_id": t["family_id"],
-                                "family_name": t["family_canonical_name"],
-                                "genera_id": t["genus_id"],
-                                "genera_name": t["genus_canonical_name"],
-                            },
-                        )
+                        # Only update the Taxonomy record when incoming data actually
+                        # changes an existing row. This prevents touching the
+                        # `datetime_updated` (auto_now) when nothing has changed.
+                        defaults = {
+                            "scientific_name": t.get("canonical_name"),
+                            "kingdom_id": t.get("kingdom_id"),
+                            "kingdom_fk": kingdom_fk,
+                            "kingdom_name": t.get("kingdom_name"),
+                            "name_authority": t.get("author"),
+                            "name_comments": t.get("notes"),
+                            "name_currency": t.get("is_current"),
+                            "taxon_rank_id": t.get("rank_id"),
+                            "taxonomy_rank_fk": taxon_rank_fk,
+                            "family_id": t.get("family_id"),
+                            "family_name": t.get("family_canonical_name"),
+                            "genera_id": t.get("genus_id"),
+                            "genera_name": t.get("genus_canonical_name"),
+                        }
+
+                        try:
+                            taxon_obj = Taxonomy.objects.get(
+                                taxon_name_id=t["taxon_name_id"]
+                            )
+                            # Determine if any of the fields would change
+                            changed = False
+                            for field_name, incoming_value in defaults.items():
+                                # current value on model
+                                current_value = getattr(taxon_obj, field_name)
+                                # Compare directly; if different, mark changed and set
+                                if current_value != incoming_value:
+                                    changed = True
+                                    setattr(taxon_obj, field_name, incoming_value)
+
+                            created = False
+                            if changed:
+                                # Only save (and thus update auto_now fields) when data differs
+                                taxon_obj.save()
+                        except Taxonomy.DoesNotExist:
+                            # Create new record when it doesn't exist
+                            taxon_obj = Taxonomy.objects.create(
+                                taxon_name_id=t["taxon_name_id"], **defaults
+                            )
+                            created = True
                         updates.append(taxon_obj.id)
                         count += 1
                         if count == 10000:
