@@ -27,7 +27,10 @@
                                         <label
                                             class="control-label mb-3 fw-bold"
                                             for="Name"
-                                            >Reason / Comments <span class="text-danger">*</span></label
+                                            >Reason / Comments
+                                            <span class="text-danger"
+                                                >*</span
+                                            ></label
                                         >
                                         <textarea
                                             ref="approver_comment"
