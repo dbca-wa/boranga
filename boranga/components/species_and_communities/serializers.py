@@ -1099,6 +1099,9 @@ class SaveCommunityTaxonomySerializer(BaseModelSerializer):
     community_id = serializers.IntegerField(
         required=False, allow_null=True, write_only=True
     )
+    community_migrated_id = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
 
     class Meta:
         model = CommunityTaxonomy
@@ -1112,6 +1115,19 @@ class SaveCommunityTaxonomySerializer(BaseModelSerializer):
             "name_authority",
             "name_comments",
         )
+
+    def validate(self, data):
+        # To avoid adding field error with 'community_migrated_id' key
+        # Since for the user this field is called 'Community ID'
+        community_id = data.get("community_id", None)
+        community_migrated_id = data.get("community_migrated_id", None)
+        if CommunityTaxonomy.objects.filter(
+            community_migrated_id=community_migrated_id
+        ).exclude(community_id=community_id).exists():
+            raise serializers.ValidationError(
+                {"community_id": "Community ID must be unique."}
+            )
+        return data
 
 
 class CommunityPublishingStatusSerializer(BaseModelSerializer):
@@ -1578,12 +1594,15 @@ class EmptySpeciesSerializer(serializers.Serializer):
 
 
 class SaveCommunitySerializer(BaseCommunitySerializer):
-
+    community_migrated_id = serializers.CharField(
+        required=False, allow_null=True, write_only=True
+    )
     class Meta:
         model = Community
         fields = (
             "id",
             "group_type",
+            "community_migrated_id",
             "last_data_curation_date",
             "submitter",
             "readonly",

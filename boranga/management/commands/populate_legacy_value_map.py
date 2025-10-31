@@ -11,6 +11,10 @@ APP_LABEL = "boranga"  # all target models live in this app
 
 
 class Command(BaseCommand):
+    """
+    Example command:
+        ./manage.py populate_legacy_value_map boranga/components/data_migration/legacy_data/TPFL/legacy-data-map-TPFL.csv --legacy-system TPFL
+    """
     help = (
         "Import LegacyValueMap rows from CSV. Columns: list_name, legacy_value, "
         "target_model, target_lookup_field_name, target_lookup_field_value, "
@@ -41,7 +45,7 @@ class Command(BaseCommand):
         do_update = options["update"]
 
         rows = []
-        with open(csvfile, newline="", encoding="utf-8") as fh:
+        with open(csvfile, newline="", encoding="utf-8-sig") as fh:
             reader = csv.DictReader(fh)
             for r in reader:
                 rows.append(r)

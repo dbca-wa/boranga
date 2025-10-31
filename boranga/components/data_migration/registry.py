@@ -645,7 +645,7 @@ def taxonomy_lookup(
         if group_type_name:
             try:
                 gt = GroupType.objects.get(name__iexact=str(group_type_name).strip())
-                qs = qs.filter(group_type=gt)
+                qs = qs.filter(kingdom_fk__grouptype=gt)
             except GroupType.DoesNotExist:
                 return _result(
                     value,

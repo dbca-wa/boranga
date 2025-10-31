@@ -2955,6 +2955,27 @@ class SaveOccurrenceSerializer(BaseModelSerializer):
             )
         ]
 
+    def update(self, instance, validated_data):
+        """
+        Extract version_user from save kwargs and pass to model.save()
+        so dirty_fields tracking works correctly.
+        """
+        # Get version_user from the save() call (not from validated_data)
+        request = self.context.get('request')
+        version_user = request.user if request else None
+
+        # Apply validated_data to instance (don't save yet)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Now save with version_user while fields are still dirty
+        if version_user is not None:
+            instance.save(version_user=version_user)
+        else:
+            instance.save()
+        
+        return instance
+
     def validate(self, data):
         obj = self.instance
         if (

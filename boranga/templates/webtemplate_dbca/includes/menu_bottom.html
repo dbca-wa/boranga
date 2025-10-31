@@ -4,23 +4,26 @@
 {% is_django_admin as is_django_admin_user %}
 
 {% if request.user.is_superuser %}
-    <li role="separator" class="divider"></li>
-{% endif %}
-{% if is_django_admin_user or request.user.is_superuser %}
-    <li><a class="dropdown-item" href="{% url 'mgt-commands' %}">Management Commands</a></li>
+  <li role="separator" class="divider"></li>
 {% endif %}
 {% if can_show_tests and request.user.is_superuser %}
-    <li><a class="dropdown-item" href="{% url 'test-emails' %}">Test Emails</a></li>
+  <li>
+    <a class="dropdown-item" href="{% url 'test-emails' %}">Test Emails</a>
+  </li>
 {% endif %}
-<li><a class="dropdown-item" href="/ledger-ui/accounts">Manage Account</a></li>
+<li>
+  <a class="dropdown-item" href="/ledger-ui/accounts">Manage Account</a>
+</li>
 {% for org in request.user.boranga_organisations.all %}
-    {% for org_contact in org.contacts.all%}
-        {% if org_contact.email == request.user.email %}
-            {% if org_contact.user_status == 'active' %}
-                {% if org_contact.is_admin or org_contact.check_consultant %}
-                    <li><a class="dropdown-item" href="/external/organisations/manage/{{org.id}}">Manage {{ org.organisation.name}} </a></li>
-                {% endif %}
-            {% endif %}
+  {% for org_contact in org.contacts.all %}
+    {% if org_contact.email == request.user.email %}
+      {% if org_contact.user_status == 'active' %}
+        {% if org_contact.is_admin or org_contact.check_consultant %}
+          <li>
+            <a class="dropdown-item" href="/external/organisations/manage/{{ org.id }}">Manage {{ org.organisation.name }}</a>
+          </li>
         {% endif %}
-    {% endfor %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
 {% endfor %}

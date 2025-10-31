@@ -827,7 +827,7 @@ class SpeciesFilterBackend(DatatablesFilterBackend):
 
         filter_name_status = request.POST.get("filter_name_status")
         if filter_name_status and not filter_name_status.lower() == "all":
-            queryset = queryset.filter(taxonomy__name_currency=filter_name_status)
+            queryset = queryset.filter(taxonomy__is_current=filter_name_status)
 
         filter_application_status = request.POST.get("filter_application_status")
         if filter_application_status and not filter_application_status.lower() == "all":
