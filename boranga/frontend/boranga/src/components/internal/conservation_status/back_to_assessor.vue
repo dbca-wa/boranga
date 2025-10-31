@@ -25,9 +25,9 @@
                                 <div class="col">
                                     <div class="form-group">
                                         <label
-                                            class="control-label mb-3"
+                                            class="control-label mb-3 fw-bold"
                                             for="Name"
-                                            >Reason / Comments</label
+                                            >Reason / Comments <span class="text-danger">*</span></label
                                         >
                                         <textarea
                                             ref="approver_comment"
