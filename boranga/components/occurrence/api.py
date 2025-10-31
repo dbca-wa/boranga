@@ -4451,7 +4451,7 @@ class OccurrenceViewSet(
                     update_site.save(version_user=request.user)
                 except Exception as e:
                     logger.exception(e)
-        serializer = SaveOccurrenceSerializer(instance, data=request_data, partial=True)
+        serializer = SaveOccurrenceSerializer(instance, data=request_data, partial=True, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(version_user=request.user)
 
