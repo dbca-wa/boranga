@@ -214,9 +214,22 @@ def intersect_geometry_with_layer(
                     geom_json = json.loads(row.geom.json)
                 except Exception:
                     geom_json = None
+
+                gid = getattr(row, "gid", None)
+
+                # Extract the layer name (after the colon) to use as the feature ID prefix
+                # e.g., "kaartdijin-boodja-private:LGATE-001" -> "LGATE-001"
+                # or "CPT_CADASTRE_SCDB:cadastre_scdb" -> "cadastre_scdb"
+                layer_name_parts = intersect_layer_name.split(":")
+                layer_suffix = layer_name_parts[-1] if len(layer_name_parts) > 1 else intersect_layer_name
+                
+                # Build feature ID with layer name to match WFS format
+                # e.g., "LGATE-001.12345" or "cadastre_scdb.12345"
+                feature_id = f"{layer_suffix}.{gid}" if gid else None
+
                 features.append(
                     {
-                        "id": getattr(row, "gid", None),
+                        "id": feature_id,
                         "type": "Feature",
                         "properties": {
                             "CAD_OWNER_NAME": getattr(row, "cad_owner_name", None),

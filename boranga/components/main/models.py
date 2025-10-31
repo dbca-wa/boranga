@@ -95,6 +95,9 @@ class CadastreLayer(models.Model):
     gid = models.BigIntegerField(primary_key=True)
     geom = gis_models.GeometryField(srid=4326, null=True)
 
+    cad_owner_name = models.CharField(max_length=512, null=True, blank=True)
+    cad_owner_count = models.IntegerField(null=True, blank=True)
+
     class Meta:
         managed = False
         db_table = '"public"."kb_cadastre"'
