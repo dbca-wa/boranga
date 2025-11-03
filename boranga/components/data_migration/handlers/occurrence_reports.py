@@ -317,8 +317,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         stats["time_taken"] = str(elapsed)
 
         if errors_details:
-            get_opt = getattr(options, "get", None)
-            csv_path = get_opt("error_csv") if callable(get_opt) else None
+            csv_path = options.get("error_csv")
             if csv_path:
                 csv_path = os.path.abspath(csv_path)
             else:
