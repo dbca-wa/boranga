@@ -904,10 +904,11 @@ export default {
         },
         refreshDatatables: function () {
             // Rather than recreating these components by incrementing their key
-            // we can just call the adjust_table_width method to make sure they
-            // are refreshed and have the correct width.
+            // we can just reload the datatables to ensure they have fresh data.
             this.refreshDatatableRelatedOCR();
-            this.$refs.occurrence_sites_datatable.adjust_table_width();
+            // The data for this datatable has to be reloaded as sites may have
+            // been modified or deleted when updating map geometries.
+            this.$refs.occurrence_sites_datatable.updatedSites();
             // The data for this datatable has to be reloaded as it's likely
             // the tenures would change based on modified map geometries.
             this.$refs.occurrence_tenure_datatable.updatedTenureArea();
