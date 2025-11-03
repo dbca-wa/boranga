@@ -45,8 +45,8 @@
         "vue-select": "^4.0.0-beta.6"
     },
     "engines": {
-        "node": ">= 20.0.0",
-        "npm": ">= 10.0.0"
+        "node": ">= 24.11.0",
+        "npm": ">= 11.6.1"
     },
     "browserslist": [
         "> 1%",

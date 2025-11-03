@@ -470,7 +470,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.NOTICE(
-                "Using streaming download to a temp file (no /vsicurl/ attempt)."
+                "Using streaming download to a temp file."
             )
         )
         meta_dir = self._meta_dir()

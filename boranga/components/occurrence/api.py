@@ -4426,6 +4426,7 @@ class OccurrenceViewSet(
 
         occ_sites = OccurrenceSite.objects
         site_geometry_data = json.loads(request.data.get("site_geometry", None))
+        posted_site_ids = []  # Track sites we received in the payload
         if site_geometry_data and "features" in site_geometry_data:
             for i in site_geometry_data["features"]:
                 try:
@@ -4449,8 +4450,27 @@ class OccurrenceViewSet(
                     update_site.geometry = geom_4326
                     update_site.original_geometry_ewkb = geom_original
                     update_site.save(version_user=request.user)
+                    posted_site_ids.append(update_site.id)
                 except Exception as e:
                     logger.exception(e)
+
+        # Soft-delete any existing sites not included in the posted payload
+        if site_geometry_data and "features" in site_geometry_data:
+            to_hide_qs = OccurrenceSite.objects.filter(
+                occurrence=instance, visible=True
+            ).exclude(id__in=posted_site_ids)
+
+            count = 0
+            for site in to_hide_qs:
+                site.visible = False
+                site.save(version_user=request.user)
+                count += 1
+            if count:
+                logger.info(
+                    "Discarded %s OccurrenceSite records for Occurrence %s",
+                    count,
+                    instance.id,
+                )
         serializer = SaveOccurrenceSerializer(instance, data=request_data, partial=True, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(version_user=request.user)
@@ -4544,6 +4564,7 @@ class OccurrenceViewSet(
 
         occ_sites = OccurrenceSite.objects
         site_geometry_data = json.loads(request.data.get("site_geometry", None))
+        posted_site_ids = []  # Track sites we received in the payload
         if site_geometry_data and "features" in site_geometry_data:
             for i in site_geometry_data["features"]:
                 try:
@@ -4567,8 +4588,27 @@ class OccurrenceViewSet(
                     update_site.geometry = geom_4326
                     update_site.original_geometry_ewkb = geom_original
                     update_site.save(version_user=request.user)
+                    posted_site_ids.append(update_site.id)
                 except Exception as e:
                     logger.exception(e)
+
+        # Soft-delete any existing sites not included in the posted payload
+        if site_geometry_data and "features" in site_geometry_data:
+            to_hide_qs = OccurrenceSite.objects.filter(
+                occurrence=occ_instance, visible=True
+            ).exclude(id__in=posted_site_ids)
+
+            count = 0
+            for site in to_hide_qs:
+                site.visible = False
+                site.save(version_user=request.user)
+                count += 1
+            if count:
+                logger.info(
+                    "Soft-deleted %s OccurrenceSite records for Occurrence %s (update_location_details)",
+                    count,
+                    occ_instance.id,
+                )
 
         # the request.data is only the habitat composition data thats been sent from front end
         location_data = request.data.get("location")

@@ -632,6 +632,20 @@ def save_geometry(
                 logger.info(
                     f"Creating new geometry for {instance_model_name}: {instance}"
                 )
+                
+                # For fauna occurrences, limit to one geometry per occurrence
+                if instance_fk_field_name == "occurrence":
+                    from boranga.components.species_and_communities.models import GroupType
+                    
+                    if hasattr(instance, 'group_type') and instance.group_type.name == GroupType.GROUP_TYPE_FAUNA:
+                        existing_count = InstanceGeometry.objects.filter(
+                            **{instance_fk_field_name: instance}
+                        ).count()
+                        if existing_count >= 1:
+                            raise serializers.ValidationError(
+                                "Fauna occurrences are limited to one geometry. Please edit the existing geometry instead of creating a new one."
+                            )
+                
                 geometry_data["drawn_by"] = request.user.id
                 geometry_data["last_updated_by"] = request.user.id
                 geometry_data["locked"] = action in ["submit"]
@@ -689,28 +703,38 @@ def save_geometry(
 
     # Remove any ocr geometries from the db that are no longer in the ocr_geometry that was submitted
     # Prevent deletion of polygons that are locked after status change (e.g. after submit)
-    # or have been drawn by another user
     geometry_ids = list(geometry_id_intersect_data.keys())
+    
+    # Build the base queryset for geometries to potentially delete
+    to_delete_qs = InstanceGeometry.objects.filter(
+        **{instance_fk_field_name: instance}
+    ).exclude(Q(id__in=geometry_ids) | Q(locked=True))
+    
+    # For non-occurrence geometries, respect the drawn_by constraint
+    # For occurrence geometries, only users who can edit the occurrence can delete geometries
+    if instance_fk_field_name != "occurrence":
+        to_delete_qs = to_delete_qs.exclude(~Q(drawn_by=request.user.id))
+    elif not instance.can_user_edit:
+        # User cannot edit this occurrence, so restrict to only their own geometries
+        to_delete_qs = to_delete_qs.exclude(~Q(drawn_by=request.user.id))
+    
     if instance_fk_field_name == "occurrence":
         affected_tenure_ids = list(
             OccurrenceTenure.objects.filter(
-                occurrence_geometry__in=(
-                    InstanceGeometry.objects.filter(
-                        **{instance_fk_field_name: instance}
-                    ).exclude(
-                        Q(id__in=geometry_ids)
-                        | Q(locked=True)
-                        | ~Q(drawn_by=request.user.id)
-                    )
-                )
+                occurrence_geometry__in=to_delete_qs
             ).values_list("id", flat=True)
         )
 
-    deleted_geometries = (
-        InstanceGeometry.objects.filter(**{instance_fk_field_name: instance})
-        .exclude(Q(id__in=geometry_ids) | Q(locked=True) | ~Q(drawn_by=request.user.id))
-        .delete()
-    )
+        # Delete buffer geometries for parents being deleted
+        buffers_deleted = BufferGeometry.objects.filter(
+            buffered_from_geometry__in=to_delete_qs
+        ).delete()
+        if buffers_deleted[0] > 0:
+            logger.info(
+                f"Deleted {buffers_deleted[0]} buffer geometries for {instance_model_name} {instance} (parent removed)"
+            )
+
+    deleted_geometries = to_delete_qs.delete()
     if deleted_geometries[0] > 0:
         logger.info(
             f"Deleted {instance_model_name} geometries: {deleted_geometries} for {instance}"
