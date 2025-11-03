@@ -632,6 +632,20 @@ def save_geometry(
                 logger.info(
                     f"Creating new geometry for {instance_model_name}: {instance}"
                 )
+                
+                # For fauna occurrences, limit to one geometry per occurrence
+                if instance_fk_field_name == "occurrence":
+                    from boranga.components.species_and_communities.models import GroupType
+                    
+                    if hasattr(instance, 'group_type') and instance.group_type.name == GroupType.GROUP_TYPE_FAUNA:
+                        existing_count = InstanceGeometry.objects.filter(
+                            **{instance_fk_field_name: instance}
+                        ).count()
+                        if existing_count >= 1:
+                            raise serializers.ValidationError(
+                                "Fauna occurrences are limited to one geometry. Please edit the existing geometry instead of creating a new one."
+                            )
+                
                 geometry_data["drawn_by"] = request.user.id
                 geometry_data["last_updated_by"] = request.user.id
                 geometry_data["locked"] = action in ["submit"]
