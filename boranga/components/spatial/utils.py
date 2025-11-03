@@ -214,9 +214,22 @@ def intersect_geometry_with_layer(
                     geom_json = json.loads(row.geom.json)
                 except Exception:
                     geom_json = None
+
+                gid = getattr(row, "gid", None)
+
+                # Extract the layer name (after the colon) to use as the feature ID prefix
+                # e.g., "kaartdijin-boodja-private:LGATE-001" -> "LGATE-001"
+                # or "CPT_CADASTRE_SCDB:cadastre_scdb" -> "cadastre_scdb"
+                layer_name_parts = intersect_layer_name.split(":")
+                layer_suffix = layer_name_parts[-1] if len(layer_name_parts) > 1 else intersect_layer_name
+                
+                # Build feature ID with layer name to match WFS format
+                # e.g., "LGATE-001.12345" or "cadastre_scdb.12345"
+                feature_id = f"{layer_suffix}.{gid}" if gid else None
+
                 features.append(
                     {
-                        "id": getattr(row, "gid", None),
+                        "id": feature_id,
                         "type": "Feature",
                         "properties": {
                             "CAD_OWNER_NAME": getattr(row, "cad_owner_name", None),
@@ -1233,3 +1246,33 @@ def get_geometry_array_from_geojson(
         geoms.append(geom)
 
     return geoms
+
+
+def validate_geometry_within_gis_extent(geometry, verbose_field_name="geometry"):
+    """
+    Ensure the provided geometry lies entirely within the application GIS extent.
+    Expects settings.GIS_EXTENT to be (minx, miny, maxx, maxy). If GIS_EXTENT is
+    not configured the check is skipped.
+
+    Raises rest_framework.serializers.ValidationError when geometry is outside.
+    """
+    gis_extent = getattr(settings, "GIS_EXTENT", None)
+    if not gis_extent:
+        return True
+
+    try:
+        geom_extent = geometry.extent  # (xmin, ymin, xmax, ymax)
+    except Exception:
+        # If we cannot determine the extent, skip validation to avoid blocking saves.
+        return True
+
+    minx, miny, maxx, maxy = gis_extent
+    gxmin, gymin, gxmax, gymax = geom_extent
+
+    # Require the geometry to be completely within the configured extent.
+    if gxmin < minx or gymin < miny or gxmax > maxx or gymax > maxy:
+        raise serializers.ValidationError(
+            f"{verbose_field_name.capitalize()}  is outside the WA boundaries. Please select a Latitude between {miny} and {maxy} and Longitude between {minx} and {maxx}. (Remember to include the negative symbol for Latitude.)"
+        )
+
+    return True

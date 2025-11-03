@@ -29,6 +29,10 @@ def _norm_name(s: str) -> str:
 
 
 class Command(BaseCommand):
+    """
+    Example usage:
+        ./manage.py check_legacy_taxonomy_against_nomos --csv boranga/components/data_migration/legacy_data/TPFL/TPFL_CS_LISTING_NAME_TO_NOMOS_CANONICAL_NAME.csv --errors-only
+    """
     help = "Check TPFL mapping CSV nomos_canonical_name/nomos_taxon_id values against Taxonomy"
 
     def add_arguments(self, parser):
@@ -60,11 +64,29 @@ class Command(BaseCommand):
             default=None,
             help="Optional limit rows to process (for testing)",
         )
+        parser.add_argument(
+            "--errors-only",
+            dest="errors_only",
+            action="store_true",
+            default=False,
+            help="If set, only write rows with errors (non-found) to the output CSV",
+        )
+        parser.add_argument(
+            "--group-type",
+            dest="group_type",
+            default=None,
+            help=(
+                "Optional group type name to filter taxonomy lookups (e.g., flora, fauna, "
+                "community). If omitted, no group-type filter is applied."
+            ),
+        )
 
     def handle(self, *args, **options):
         csv_path = options.get("csv")
         out_path = options.get("out")
         limit = options.get("limit")
+        errors_only = options.get("errors_only", False)
+        group_type = options.get("group_type")
 
         if not os.path.exists(csv_path):
             self.stderr.write(f"CSV not found: {csv_path}")
@@ -83,7 +105,13 @@ class Command(BaseCommand):
             )
             os.makedirs(base_dir, exist_ok=True)
             ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            out_path = os.path.join(base_dir, f"check_tpfl_nomos_results_{ts}.csv")
+            # use the input CSV base name as the prefix for the output file
+            csv_base = os.path.splitext(os.path.basename(csv_path))[0]
+            if errors_only:
+                prefix = f"{csv_base}_errors"
+            else:
+                prefix = f"{csv_base}_results"
+            out_path = os.path.join(base_dir, f"{prefix}_{ts}.csv")
         total = 0
         by_status = {"found": 0, "multiple": 0, "not_found": 0}
         rows_out = []
@@ -109,9 +137,12 @@ class Command(BaseCommand):
                     # first exact match on stored value
                     try:
                         qs_exact = Taxonomy.objects.filter(
-                            kingdom_fk__grouptype__name="flora",
                             scientific_name=nomos_name_norm,
                         )
+                        if group_type:
+                            qs_exact = qs_exact.filter(
+                                kingdom_fk__grouptype__name=group_type
+                            )
                         cnt_exact = qs_exact.count()
                         if cnt_exact == 1:
                             status = "found"
@@ -134,6 +165,10 @@ class Command(BaseCommand):
                         qs_ie = Taxonomy.objects.filter(
                             scientific_name__iexact=nomos_name_norm
                         )
+                        if group_type:
+                            qs_ie = qs_ie.filter(
+                                kingdom_fk__grouptype__name=group_type
+                            )
                         cnt_ie = qs_ie.count()
                         if cnt_ie == 1:
                             status = "found"
@@ -159,18 +194,28 @@ class Command(BaseCommand):
                 rows_out.append((name, nomos_name, nomos_id, status, details))
 
         # write results CSV
+        written_count = 0
         with open(out_path, "w", newline="", encoding="utf-8") as outfh:
             w = csv.writer(outfh)
             w.writerow(
                 ["NAME", "nomos_canonical_name", "nomos_taxon_id", "status", "details"]
             )
             for r in rows_out:
+                # if errors_only is set, skip rows where status is 'found'
+                if errors_only and r[3] == "found":
+                    continue
                 w.writerow(r)
+                written_count += 1
 
         # print summary
         self.stdout.write("\nTPFL nomos check complete")
         self.stdout.write(f"CSV: {csv_path}")
-        self.stdout.write(f"Results written: {out_path}")
+        # include how many rows were written to the output
+        try:
+            self.stdout.write(f"Results written: {out_path} ({written_count} rows)")
+        except Exception:
+            # fallback if written_count not available for any reason
+            self.stdout.write(f"Results written: {out_path}")
         self.stdout.write(f"Total rows processed: {total}")
         self.stdout.write(f"Found by name: {by_status.get('found',0)}")
         self.stdout.write(f"Multiple matches: {by_status.get('multiple',0)}")

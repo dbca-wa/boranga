@@ -1549,6 +1549,12 @@ class OccurrenceReportUserAction(UserAction):
     ACTION_REASSIGN_DRAFT_TO_USER = (
         "Occurrence Report {} (draft) reassigned from {} to {}"
     )
+    ACTION_UPDATE_COMMUNITY_FROM_OCCURRENCE = (
+        "Community changed from {} to {} due to change in related occurrence {}"
+    )
+    ACTION_UPDATE_SPECIES_FROM_OCCURRENCE = (
+        "Species changed from {} to {} due to change in related occurrence {}"
+    )
 
     # Amendment
     ACTION_ID_REQUEST_AMENDMENTS = "Request amendments"
@@ -2806,7 +2812,7 @@ class AssociatedSpeciesTaxonomy(BaseModel):
 
     @property
     def is_current(self):
-        return self.taxonomy.name_currency.lower() == "true"
+        return self.taxonomy.is_current
 
     @property
     def conservation_status(self):
@@ -3956,9 +3962,13 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
         app_label = "boranga"
 
-    def save(self, *args, **kwargs):
+    def save(self, *args, version_user=None, **kwargs):
         # Clear the cache
         cache.delete(settings.CACHE_KEY_MAP_OCCURRENCES)
+
+        # allow caller to pass request for logging
+        request = kwargs.pop("request", None)
+
         if self.occurrence_number == "":
             force_insert = kwargs.pop("force_insert", False)
             super().save(no_revision=True, force_insert=force_insert)
@@ -3966,11 +3976,54 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             self.save(*args, **kwargs)
         else:
             # Take a copy of dirty fields before saving
-            dirty_fields = self.get_dirty_fields()
+            dirty_fields = self.get_dirty_fields(check_relationship=True)
+
+            # Capture old FK values (ids) from dirty_fields, resolve to readable objects if possible
+            old_species = None
+            old_community = None
+            if "species" in dirty_fields:
+                old_val = dirty_fields.get("species")
+                try:
+                    old_species = Species.objects.get(pk=old_val) if old_val is not None else None
+                except Exception:
+                    old_species = old_val
+            if "community" in dirty_fields:
+                old_val = dirty_fields.get("community")
+                try:
+                    old_community = Community.objects.get(pk=old_val) if old_val is not None else None
+                except Exception:
+                    old_community = old_val
+
             super().save(*args, **kwargs)
-            # If the species or community was changed, update the child OCRs
-            if "species" or "community" in dirty_fields:
-                self.update_child_ocrs()
+
+            # If the species or community was changed, update child OCRs and log the change including old -> new
+            if old_species is not None or old_community is not None:               
+                # update child OCRs first
+                self.update_child_ocrs(version_user)
+
+                # Build human readable old/new descriptors
+                if old_species is not None:
+                    old_desc_str = old_species.taxonomy.scientific_name if old_species and hasattr(old_species, 'taxonomy') and old_species.taxonomy else str(old_species)
+                else:
+                    old_desc_str = old_community.taxonomy.community_name if old_community and hasattr(old_community, 'taxonomy') and old_community.taxonomy else str(old_community)
+                
+                if self.species:
+                    new_desc_str = self.species.taxonomy.scientific_name if self.species.taxonomy else str(self.species)
+                    object_type = "species"
+                elif self.community:
+                    new_desc_str = self.community.taxonomy.community_name if self.community.taxonomy else str(self.community)
+                    object_type = "community"
+                else:
+                    new_desc_str = "None"
+                    object_type = "unknown"
+
+                # Log action
+                OccurrenceUserAction.log_action(self,
+                    OccurrenceUserAction.ACTION_CHANGE_SPECIES_COMMUNITY.format(
+                        self.occurrence_number, object_type, old_desc_str, new_desc_str
+                    ),
+                    version_user.id,
+                )
 
     def __str__(self):
         if self.species:
@@ -3980,7 +4033,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         else:
             return f"{self.occurrence_number} - {self.group_type}"
 
-    def update_child_ocrs(self):
+    def update_child_ocrs(self, version_user):
         """Update child occurrence reports with the current species or community
         based on the group type of the occurrence. This is to be called"""
         if not self.occurrence_reports.exists():
@@ -3999,13 +4052,41 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             return
 
         if self.group_type and self.group_type.name == GroupType.GROUP_TYPE_COMMUNITY:
-            self.occurrence_reports.exclude(community=self.community).update(
-                community=self.community
-            )
+            community_occurrence_reports = self.occurrence_reports.exclude(community=self.community)
+            for ocr in community_occurrence_reports:
+                old_community_name = ocr.community.taxonomy.community_name if ocr.community and ocr.community.taxonomy else str(ocr.community)
+                new_community_name = self.community.taxonomy.community_name if self.community and self.community.taxonomy else str(self.community)
+                ocr.community = self.community
+                ocr.save(version_user=version_user)
+
+                # Log the action
+                OccurrenceReportUserAction.log_action(
+                    ocr,
+                    OccurrenceReportUserAction.ACTION_UPDATE_COMMUNITY_FROM_OCCURRENCE.format(
+                        old_community_name,
+                        new_community_name,
+                        self.occurrence_number,
+                    ),
+                    version_user.id
+                )
         else:
-            self.occurrence_reports.exclude(species=self.species).update(
-                species=self.species
-            )
+            species_occurrence_reports = self.occurrence_reports.exclude(species=self.species)
+            for ocr in species_occurrence_reports:
+                old_species_name = ocr.species.taxonomy.scientific_name if ocr.species and ocr.species.taxonomy else str(ocr.species)
+                new_species_name = self.species.taxonomy.scientific_name if self.species and self.species.taxonomy else str(self.species)
+                ocr.species = self.species
+                ocr.save(version_user=version_user)
+
+                # Log the action
+                OccurrenceReportUserAction.log_action(
+                    ocr,
+                    OccurrenceReportUserAction.ACTION_UPDATE_SPECIES_FROM_OCCURRENCE.format(
+                        old_species_name,
+                        new_species_name,
+                        self.occurrence_number,
+                    ),
+                    version_user.id
+                )
 
     @property
     def number_of_reports(self):
@@ -4763,12 +4844,16 @@ class OccurrenceUserAction(UserAction):
     ACTION_UNLOCK_OCCURRENCE = "Unlock occurrence {}"
     ACTION_DEACTIVATE_OCCURRENCE = "Deactivate occurrence {}"
     ACTION_REOPEN_OCCURRENCE = "Reopen occurrence {}"
+    ACTION_CHANGE_SPECIES_COMMUNITY = (
+        "Change occurrence {} {} from {} to {}"
+    )
     ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_SPLIT = (
         "Change occurrence {} species from {} to {} due to split"
     )
     ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_COMBINE = (
         "Change occurrence {} species from {} to {} due to combine"
     )
+
 
     # Document
     ACTION_ADD_DOCUMENT = "Document {} added for occurrence {}"
