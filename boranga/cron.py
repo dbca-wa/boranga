@@ -79,5 +79,5 @@ class CronJobImportCadastreGeoJSONDaily(django_cron.CronJobBase):
 
     def do(self) -> None:
         log.info("Import cadastre GeoJSON cron job triggered, running...")
-        management.call_command("import_cadastre_geojson")
+        management.call_command("import_cadastre_geojson", skip_if_unchanged=True)
         return "Job Completed Successfully"
