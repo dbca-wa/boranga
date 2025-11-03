@@ -1117,6 +1117,10 @@ class SaveCommunityTaxonomySerializer(BaseModelSerializer):
         )
 
     def validate(self, data):
+        # Only run validation for existing records (with pk/id)
+        instance = getattr(self, 'instance', None)
+        if not instance or not getattr(instance, 'pk', None):
+            return data
         # To avoid adding field error with 'community_migrated_id' key
         # Since for the user this field is called 'Community ID'
         community_id = data.get("community_id", None)
