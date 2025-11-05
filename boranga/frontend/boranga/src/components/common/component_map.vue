@@ -3903,6 +3903,25 @@ export default {
                         return;
                     }
 
+                    const isOccurrenceContext =
+                        vm.context?.model_name === 'occurrence';
+                    const isOccurrenceFeature =
+                        isOccurrenceContext &&
+                        (model?.model_name === 'occurrence' ||
+                            (model?.details_url &&
+                                vm.context?.details_url &&
+                                model.details_url === vm.context.details_url) ||
+                            (model?.id &&
+                                vm.context?.id &&
+                                model.id === vm.context.id));
+
+                    if (isOccurrenceFeature) {
+                        vm.redirectingToModelDetails = false;
+                        // Keep the prepare-site flow active without opening a duplicate details page
+                        vm.copyMouseCoordinatesToClipboard();
+                        return;
+                    }
+
                     let model_path = model.details_url;
                     // Remove trailing slash from urls
                     let pathnames = [
