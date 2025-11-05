@@ -555,6 +555,7 @@ export default {
             plausibilityGeometryFeatures: [],
             originalLocation: JSON.stringify(vm.occurrence_obj.location),
             mapIsDirty: false,
+            bufferLayerPending: false,
         };
     },
     computed: {
@@ -967,6 +968,16 @@ export default {
             console.log('Map features loaded.');
             this.mapContainerId = this.$refs.component_map.map_container_id;
             this.mapReady = true;
+            if (this.bufferLayerPending) {
+                const bufferPayload = this.buildBufferLayerPayload();
+                if (bufferPayload.length) {
+                    this.$refs.component_map.loadMapFeatures(
+                        bufferPayload,
+                        this.bufferLayerName
+                    );
+                    this.bufferLayerPending = false;
+                }
+            }
         },
         getMapFeatureById: function (id, layer_name) {
             if (!layer_name) {
@@ -1066,20 +1077,59 @@ export default {
             });
         },
         bufferGeometryHandler: function () {
-            const occurrence_features = this.$refs.component_map
-                .getLayerByName(this.occurrenceLayerName)
-                .getSource()
-                .getFeatures();
+            const payload = this.buildBufferLayerPayload();
+            if (!payload.length) {
+                this.bufferLayerPending = true;
+            }
+            return payload;
+        },
+        buildBufferLayerPayload: function () {
+            const mapComponent = this.$refs.component_map;
+            if (!mapComponent || !mapComponent.map) {
+                console.warn(
+                    'Map component is not ready when deriving buffer geometries.'
+                );
+                return [];
+            }
 
-            const features = [];
-            occurrence_features.forEach((feature) => {
-                features.push(feature.getProperties().buffer_geometry);
-            });
+            const occurrenceLayer = mapComponent.getLayerByName(
+                this.occurrenceLayerName
+            );
+            if (!occurrenceLayer) {
+                console.warn(
+                    'Occurrence layer is unavailable when deriving buffer geometries.'
+                );
+                return [];
+            }
+
+            const source =
+                typeof occurrenceLayer.getSource === 'function'
+                    ? occurrenceLayer.getSource()
+                    : null;
+            if (!source) {
+                console.warn(
+                    'Occurrence layer source is unavailable when deriving buffer geometries.'
+                );
+                return [];
+            }
+
+            const bufferFeatures = source
+                .getFeatures()
+                .map((feature) => feature.getProperties().buffer_geometry)
+                .filter(
+                    (bufferGeometry) =>
+                        bufferGeometry && bufferGeometry.geometry
+                );
+
+            if (!bufferFeatures.length) {
+                return [];
+            }
 
             return [
                 {
                     geometry: {
-                        features: features,
+                        type: 'FeatureCollection',
+                        features: bufferFeatures,
                     },
                 },
             ];
