@@ -149,7 +149,10 @@ class PotentialImpactAdmin(
     ArchivableModelAdminMixin,
     DeleteProtectedModelAdmin,
 ):
-    list_display = ["name"]
+    list_display = [
+        "name",
+        "move_up_down_links",
+    ]
     search_fields = ["name"]
     ordering = ("order",)
 
@@ -161,15 +164,32 @@ class CurrentImpactAdmin(
     ArchivableModelAdminMixin,
     DeleteProtectedModelAdmin,
 ):
-    list_display = ["name"]
+    list_display = [
+        "name",
+        "move_up_down_links",
+    ]
     search_fields = ["name"]
     ordering = ("order",)
+
+
+class DistrictAdmin(
+    CsvExportMixin,
+    ImportMixin,
+    DeleteProtectedModelAdmin,
+):
+    list_display = [
+        "name",
+        "region",
+        "archive_date",
+    ]
+    list_filter = ["region"]
+    search_fields = ["name"]
 
 
 # Each of the following models will be available to Django Admin.
 admin.site.register(GroupType)
 admin.site.register(Region, DeleteProtectedModelAdmin)
-admin.site.register(District, DeleteProtectedModelAdmin)
+admin.site.register(District, DistrictAdmin)
 admin.site.register(DocumentCategory, DocumentCategoryAdmin)
 admin.site.register(ThreatCategory, ThreatCategoryAdmin)
 

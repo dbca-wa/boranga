@@ -1,5 +1,6 @@
 import nested_admin
 from django.contrib.gis import admin, forms
+from import_export.admin import ImportMixin
 from ordered_model.admin import OrderedModelAdmin
 
 from boranga.admin import (
@@ -53,8 +54,6 @@ from boranga.components.occurrence.models import (
     WildStatus,
 )
 from boranga.components.spatial.utils import wkb_to_geojson
-
-from import_export.admin import ImportMixin
 
 
 class GeometryField(forms.GeometryField):
@@ -744,7 +743,7 @@ class ObserverRoleAdmin(
     OrderedModelAdmin,
     DeleteProtectedModelAdmin,
 ):
-    list_display = ["item", "move_up_down_links", "archived"]
+    list_display = ["item", "move_up_down_links"]
     list_filter = ["archived"]
     search_fields = ["item"]
     ordering = ("order",)
@@ -756,7 +755,7 @@ class ObserverCategoryAdmin(
     OrderedModelAdmin,
     DeleteProtectedModelAdmin,
 ):
-    list_display = ["item", "move_up_down_links", "archived"]
+    list_display = ["item", "move_up_down_links"]
     list_filter = ["archived"]
     search_fields = ["item"]
     ordering = ("order",)
