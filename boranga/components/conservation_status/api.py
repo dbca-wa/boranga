@@ -144,8 +144,11 @@ class GetCommunityDisplay(views.APIView):
                 community_id=community_id
             )
             if community_taxon.exists():
+                taxon = community_taxon.first()
                 res_json["id"] = community_id
-                res_json["name"] = community_taxon.first().community_name
+                res_json["name"] = taxon.community_name
+                res_json["community_migrated_id"] = taxon.community_migrated_id
+                res_json["community_taxonomy_id"] = taxon.id
 
         res_json = json.dumps(res_json)
         return HttpResponse(res_json, content_type="application/json")
