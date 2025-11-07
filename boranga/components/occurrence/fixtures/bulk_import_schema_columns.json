@@ -3782,7 +3782,7 @@
       "order": 79,
       "schema": 127,
       "django_import_content_type": ["boranga", "ocranimalobservation"],
-      "django_import_field_name": "death_reason",
+      "django_import_field_name": "death_injury_reason",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFNUM Death Reason",
       "xlsx_data_validation_allow_blank": true,

@@ -1036,12 +1036,16 @@ export default {
                     name: '',
                 }
             );
-            vm.$refs.animalObservationDetail.death_reason_list =
-                vm.listOfValuesDict.death_reason_list;
-            vm.$refs.animalObservationDetail.death_reason_list.splice(0, 0, {
-                id: null,
-                name: null,
-            });
+            vm.$refs.animalObservationDetail.death_injury_reason_list =
+                vm.listOfValuesDict.death_injury_reason_list;
+            vm.$refs.animalObservationDetail.death_injury_reason_list.splice(
+                0,
+                0,
+                {
+                    id: null,
+                    name: null,
+                }
+            );
             vm.$refs.animalObservationDetail.animal_health_list =
                 vm.listOfValuesDict.animal_health_list;
             vm.$refs.animalObservationDetail.animal_health_list.splice(0, 0, {
