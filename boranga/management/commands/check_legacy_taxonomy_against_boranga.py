@@ -32,9 +32,9 @@ def _norm_name(s: str) -> str:
 class Command(BaseCommand):
     """
     Example usage:
-        ./manage.py check_legacy_taxonomy_against_nomos \
+        ./manage.py check_legacy_taxonomy_against_boranga \
         --csv boranga/components/data_migration/legacy_data/TPFL/TPFL_CS_LISTING_NAME_TO_NOMOS_CANONICAL_NAME.csv \
-            --errors-only
+            --group-type flora --errors-only
     """
 
     help = "Check TPFL mapping CSV nomos_canonical_name/nomos_taxon_id values against Taxonomy"
