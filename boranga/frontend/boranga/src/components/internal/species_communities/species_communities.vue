@@ -1266,24 +1266,26 @@ export default {
                 ) {
                     blank_fields.push(' Scientific Name is required');
                 }
-            } else {
-                if (
-                    vm.species_community.taxonomy_details.community_name ==
-                        null ||
-                    vm.species_community.taxonomy_details.community_name == ''
-                ) {
-                    blank_fields.push(' Community Name is required');
-                }
-                if (
-                    vm.species_community.taxonomy_details.community_common_id ==
-                        null ||
-                    vm.species_community.taxonomy_details.community_common_id ==
-                        ''
-                ) {
-                    blank_fields.push(' Community ID is required');
-                }
             }
             if (check_action == 'submit') {
+                if (vm.species_community.group_type == 'community') {
+                    if (
+                        vm.species_community.taxonomy_details.community_name ==
+                            null ||
+                        vm.species_community.taxonomy_details.community_name ==
+                            ''
+                    ) {
+                        blank_fields.push(' Community Name is required');
+                    }
+                    if (
+                        vm.species_community.taxonomy_details
+                            .community_common_id == null ||
+                        vm.species_community.taxonomy_details
+                            .community_common_id == ''
+                    ) {
+                        blank_fields.push(' Community ID is required');
+                    }
+                }
                 if (
                     vm.species_community.distribution.distribution == null ||
                     vm.species_community.distribution.distribution == ''
