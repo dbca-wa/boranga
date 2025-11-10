@@ -13,8 +13,11 @@ APP_LABEL = "boranga"  # all target models live in this app
 class Command(BaseCommand):
     """
     Example command:
-        ./manage.py populate_legacy_value_map boranga/components/data_migration/legacy_data/TPFL/legacy-data-map-TPFL.csv --legacy-system TPFL
+        ./manage.py \
+        populate_legacy_value_map boranga/components/data_migration/legacy_data/TPFL/legacy-data-map-TPFL.csv \
+            --legacy-system TPFL
     """
+
     help = (
         "Import LegacyValueMap rows from CSV. Columns: list_name, legacy_value, "
         "target_model, target_lookup_field_name, target_lookup_field_value, "
@@ -27,6 +30,11 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument(
             "--update", action="store_true", help="update existing rows"
+        )
+        parser.add_argument(
+            "--create-missing-targets",
+            action="store_true",
+            help="create target model records if they don't exist (with warning)",
         )
 
     def _resolve_content_type(self, model_name: str | None) -> ContentType | None:
@@ -43,6 +51,7 @@ class Command(BaseCommand):
         legacy_system = options["legacy_system"]
         dry_run = options["dry_run"]
         do_update = options["update"]
+        create_missing = options["create_missing_targets"]
 
         rows = []
         with open(csvfile, newline="", encoding="utf-8-sig") as fh:
@@ -53,6 +62,7 @@ class Command(BaseCommand):
         created = 0
         updated = 0
         skipped = 0
+        targets_created = 0
         with transaction.atomic():
             for r in rows:
                 legacy_value = (r.get("legacy_value") or r.get("legacy") or "").strip()
@@ -81,82 +91,111 @@ class Command(BaseCommand):
                     "no",
                 )
 
-                # required: model and lookup field/value (we no longer accept target_object_id)
+                # Optional: model and lookup field/value for model-specific mappings
+                # When target_model is absent, this creates a simple value mapping
                 target_model = (
                     r.get("target_model") or r.get("model") or ""
                 ).strip() or None
-                # default lookup field to "name" when the CSV cell is empty
-                lookup_field = (r.get("target_lookup_field_name") or "").strip().lower()
-                if not lookup_field:
-                    lookup_field = "name"
-                lookup_value = (
-                    r.get("target_lookup_field_value") or ""
-                ).strip() or None
 
-                # optional second lookup pair to further filter the target (parent/related)
-                # If provided, this will be added to the queryset filter as an additional key.
-                # Accepts related lookups using Django lookup syntax (e.g. "parent__name").
-                lookup_field_2 = (
-                    r.get("target_lookup_field_name_2") or r.get("lookup_field_2") or ""
-                ).strip() or None
-                lookup_value_2 = (
-                    r.get("target_lookup_field_value_2")
-                    or r.get("lookup_value_2")
-                    or ""
-                ).strip() or None
+                target_id = None
+                ct = None
 
-                if not target_model:
-                    self.stderr.write(
-                        f"Missing target_model; skipping row '{legacy_value}'"
+                # Only perform model lookup if target_model is specified
+                if target_model:
+                    # default lookup field to "name" when the CSV cell is empty
+                    lookup_field = (
+                        (r.get("target_lookup_field_name") or "").strip().lower()
                     )
-                    skipped += 1
-                    continue
-                if not lookup_value:
-                    self.stderr.write(
-                        f"Missing lookup_value for model '{target_model}' (lookup_field='{lookup_field}'); "
-                        f"skipping row '{legacy_value}'"
-                    )
-                    skipped += 1
-                    continue
+                    if not lookup_field:
+                        lookup_field = "name"
+                    lookup_value = (
+                        r.get("target_lookup_field_value") or ""
+                    ).strip() or None
 
-                # Resolve lookup -> target_id
-                try:
-                    model_cls = apps.get_model(APP_LABEL, target_model.strip().lower())
-                except (LookupError, ValueError):
-                    self.stderr.write(
-                        f"Unknown model '{target_model}' in app '{APP_LABEL}'; skipping row '{legacy_value}'"
-                    )
-                    skipped += 1
-                    continue
-                try:
-                    # assemble filter kwargs; include the second lookup if provided
-                    filter_kwargs = {lookup_field: lookup_value}
-                    if lookup_field_2 and lookup_value_2:
-                        filter_kwargs[lookup_field_2] = lookup_value_2
-                    obj = model_cls._default_manager.get(**filter_kwargs)
-                    target_id = str(obj.pk)
-                except model_cls.DoesNotExist:
-                    self.stderr.write(
-                        f"No {target_model} matching {filter_kwargs}; skipping row '{legacy_value}'"
-                    )
-                    skipped += 1
-                    continue
-                except model_cls.MultipleObjectsReturned:
-                    self.stderr.write(
-                        f"Multiple {target_model} matching {filter_kwargs}; skipping row '{legacy_value}'"
-                    )
-                    skipped += 1
-                    continue
+                    # optional second lookup pair to further filter the target (parent/related)
+                    # If provided, this will be added to the queryset filter as an additional key.
+                    # Accepts related lookups using Django lookup syntax (e.g. "parent__name").
+                    lookup_field_2 = (
+                        r.get("target_lookup_field_name_2")
+                        or r.get("lookup_field_2")
+                        or ""
+                    ).strip() or None
+                    lookup_value_2 = (
+                        r.get("target_lookup_field_value_2")
+                        or r.get("lookup_value_2")
+                        or ""
+                    ).strip() or None
 
-                # target_id may be a numeric string or None at this point
+                    if not lookup_value:
+                        self.stderr.write(
+                            f"Missing lookup_value for model '{target_model}' (lookup_field='{lookup_field}'); "
+                            f"skipping row '{legacy_value}'"
+                        )
+                        skipped += 1
+                        continue
 
-                ct = self._resolve_content_type(target_model)
-                if target_model and ct is None:
-                    self.stderr.write(
-                        f"Unknown model '{target_model}' in app '{APP_LABEL}'; skipping row '{legacy_value}'"
-                    )
-                    skipped += 1
-                    continue
+                    # Resolve lookup -> target_id
+                    try:
+                        model_cls = apps.get_model(
+                            APP_LABEL, target_model.strip().lower()
+                        )
+                    except (LookupError, ValueError):
+                        self.stderr.write(
+                            f"Unknown model '{target_model}' in app '{APP_LABEL}'; skipping row '{legacy_value}'"
+                        )
+                        skipped += 1
+                        continue
+                    try:
+                        # assemble filter kwargs; include the second lookup if provided
+                        filter_kwargs = {lookup_field: lookup_value}
+                        if lookup_field_2 and lookup_value_2:
+                            filter_kwargs[lookup_field_2] = lookup_value_2
+                        obj = model_cls._default_manager.get(**filter_kwargs)
+                        target_id = str(obj.pk)
+                    except model_cls.DoesNotExist:
+                        if create_missing:
+                            # Create the target object with a warning
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Creating missing {target_model} with {filter_kwargs} "
+                                    f"for legacy_value '{legacy_value}'"
+                                )
+                            )
+                            try:
+                                # Use a savepoint to prevent transaction pollution
+                                with transaction.atomic():
+                                    obj = model_cls._default_manager.create(
+                                        **filter_kwargs
+                                    )
+                                    target_id = str(obj.pk)
+                                    targets_created += 1
+                            except Exception as e:
+                                self.stderr.write(
+                                    f"Failed to create {target_model} with {filter_kwargs}: "
+                                    f"{e}; skipping row '{legacy_value}'"
+                                )
+                                skipped += 1
+                                continue
+                        else:
+                            self.stderr.write(
+                                f"No {target_model} matching {filter_kwargs}; skipping row '{legacy_value}'"
+                            )
+                            skipped += 1
+                            continue
+                    except model_cls.MultipleObjectsReturned:
+                        self.stderr.write(
+                            f"Multiple {target_model} matching {filter_kwargs}; skipping row '{legacy_value}'"
+                        )
+                        skipped += 1
+                        continue
+
+                    ct = self._resolve_content_type(target_model)
+                    if ct is None:
+                        self.stderr.write(
+                            f"Unknown model '{target_model}' in app '{APP_LABEL}'; skipping row '{legacy_value}'"
+                        )
+                        skipped += 1
+                        continue
 
                 defaults = {
                     "canonical_name": canonical,
@@ -187,5 +226,6 @@ class Command(BaseCommand):
                         updated += 1
 
         self.stdout.write(
-            f"created={created} updated={updated} skipped={skipped} (dry_run={dry_run})"
+            f"created={created} updated={updated} skipped={skipped} "
+            f"targets_created={targets_created} (dry_run={dry_run})"
         )
