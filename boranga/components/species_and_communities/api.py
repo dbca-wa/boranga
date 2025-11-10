@@ -507,14 +507,12 @@ class GetCommunityId(views.APIView):
         search_term = request.GET.get("term", "")
         if search_term:
             community_taxonomies = CommunityTaxonomy.objects.filter(
-                community_migrated_id__icontains=search_term
-            ).values("id", "community_migrated_id", "community_id", "community_name")[
-                :10
-            ]
+                community_common_id__icontains=search_term
+            ).values("id", "community_common_id", "community_id", "community_name")[:10]
             data_transform = [
                 {
                     "id": community_taxonomy["id"],
-                    "text": community_taxonomy["community_migrated_id"],
+                    "text": community_taxonomy["community_common_id"],
                     "community_id": community_taxonomy["community_id"],
                     "community_name": community_taxonomy["community_name"],
                 }
@@ -554,14 +552,14 @@ class GetCommunityName(views.APIView):
             )
 
         community_taxonomies = community_taxonomies.only(
-            "community__id", "community_name", "community_migrated_id"
+            "community__id", "community_name", "community_common_id"
         )[: settings.DEFAULT_SELECT2_RECORDS_LIMIT]
 
         data_transform = [
             {
                 "id": community.community.id,
                 "text": community.community_name,
-                "community_migrated_id": community.community_migrated_id,
+                "community_common_id": community.community_common_id,
             }
             for community in community_taxonomies
         ]
@@ -986,13 +984,13 @@ class CommunitiesFilterBackend(DatatablesFilterBackend):
         if filter_group_type:
             queryset = queryset.filter(group_type__name=filter_group_type)
 
-        # filter_community_migrated_id
-        filter_community_migrated_id = request.GET.get("filter_community_migrated_id")
+        # filter_community_common_id
+        filter_community_common_id = request.GET.get("filter_community_common_id")
         if (
-            filter_community_migrated_id
-            and not filter_community_migrated_id.lower() == "all"
+            filter_community_common_id
+            and not filter_community_common_id.lower() == "all"
         ):
-            queryset = queryset.filter(taxonomy=filter_community_migrated_id)
+            queryset = queryset.filter(taxonomy=filter_community_common_id)
 
         # filter_community_name
         filter_community_name = request.GET.get("filter_community_name")

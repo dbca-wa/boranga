@@ -492,21 +492,21 @@ export default {
                 name: 'community__taxonomy__community_name',
             };
         },
-        column_community_migrated_id: function () {
+        column_community_common_id: function () {
             return {
-                data: 'community_migrated_id',
+                data: 'community_common_id',
                 orderable: true,
                 searchable: true,
                 visible: true,
                 render: function (data, type, full) {
-                    if (full.community_migrated_id) {
-                        let value = full.community_migrated_id;
+                    if (full.community_common_id) {
+                        let value = full.community_common_id;
                         let result = helpers.dtPopover(value, 30, 'hover');
                         return type == 'export' ? value : result;
                     }
                     return '';
                 },
-                name: 'community__taxonomy__community_migrated_id',
+                name: 'community__taxonomy__community_common_id',
             };
         },
         column_observation_date_time: function () {
@@ -632,7 +632,7 @@ export default {
                 vm.column_number,
                 vm.column_occurrence,
                 vm.column_community_name,
-                vm.column_community_migrated_id,
+                vm.column_community_common_id,
                 vm.column_observation_date_time,
                 vm.column_main_observer,
                 vm.column_migrated_from_id,
@@ -674,7 +674,7 @@ export default {
                         d.filter_group_type = vm.group_type_name;
                         d.filter_occurrence = vm.filterOCRCommunityOccurrence;
                         d.filter_community_name = vm.filterOCRCommunityName;
-                        d.filter_community_migrated_id =
+                        d.filter_community_common_id =
                             vm.filterOCRCommunityMigratedId;
                         d.filter_status = vm.filterOCRCommunityStatus;
                         d.filter_observation_from_date =

@@ -360,21 +360,21 @@ export default {
                 },
             };
         },
-        column_community_migrated_id: function () {
+        column_community_common_id: function () {
             return {
-                data: 'community_migrated_id',
+                data: 'community_common_id',
                 orderable: true,
                 searchable: true,
                 visible: true,
                 render: function (data, type, full) {
-                    if (full.community_migrated_id) {
-                        let value = full.community_migrated_id;
+                    if (full.community_common_id) {
+                        let value = full.community_common_id;
                         let result = helpers.dtPopover(value, 30, 'hover');
                         return type == 'export' ? value : result;
                     }
                     return '';
                 },
-                name: 'community__taxonomy__community_migrated_id',
+                name: 'community__taxonomy__community_common_id',
             };
         },
         column_community_name: function () {
@@ -512,7 +512,7 @@ export default {
                     vm.column_community_name,
                     vm.column_wild_status,
                     vm.column_number_of_reports,
-                    vm.column_community_migrated_id,
+                    vm.column_community_common_id,
                     vm.column_migrated_from_id,
                     vm.column_review_due_date,
                     vm.column_status,
@@ -552,7 +552,7 @@ export default {
                     // adding extra GET params for Custom filtering
                     data: function (d) {
                         d.filter_group_type = vm.group_type_name;
-                        d.filter_community_migrated_id =
+                        d.filter_community_common_id =
                             vm.filterOCCCommunityMigratedId;
                         d.filter_occurrence_name =
                             vm.filterOCCCommunityOccurrenceName;

@@ -512,8 +512,8 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
 class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
     scientific_name = serializers.SerializerMethodField()
     community_name = serializers.SerializerMethodField()
-    community_migrated_id = serializers.CharField(
-        source="community.taxonomy.community_migrated_id",
+    community_common_id = serializers.CharField(
+        source="community.taxonomy.community_common_id",
         allow_null=True,
         read_only=True,
     )
@@ -551,7 +551,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             # 'group_type',
             "scientific_name",
             "community_name",
-            "community_migrated_id",
+            "community_common_id",
             "reported_date",
             "lodgement_date",
             "assessor",
@@ -583,7 +583,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "scientific_name",
             "community",
             "community_name",
-            "community_migrated_id",
+            "community_common_id",
             "reported_date",
             "lodgement_date",
             "assessor",
@@ -1272,7 +1272,7 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
     review_due_date = serializers.DateField(format="%Y-%m-%d", allow_null=True)
     community_number = serializers.SerializerMethodField()
     community_name = serializers.SerializerMethodField()
-    community_migrated_id = serializers.SerializerMethodField()
+    community_common_id = serializers.SerializerMethodField()
     wild_status = serializers.CharField(source="wild_status.name", allow_null=True)
     can_user_edit = serializers.SerializerMethodField()
 
@@ -1285,7 +1285,7 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
             "scientific_name",
             "community_number",
             "community_name",
-            "community_migrated_id",
+            "community_common_id",
             "wild_status",
             "group_type",
             "group_type_id",
@@ -1328,14 +1328,14 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
 
         return obj.community.taxonomy.community_name
 
-    def get_community_migrated_id(self, obj):
+    def get_community_common_id(self, obj):
         if not obj.community:
             return ""
 
         if not obj.community.taxonomy:
             return ""
 
-        return obj.community.taxonomy.community_migrated_id
+        return obj.community.taxonomy.community_common_id
 
     def get_conservation_status(self, obj):
         if not obj.community:
@@ -1699,8 +1699,8 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
         source="observation_time.name", allow_null=True
     )
     reported_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
-    community_migrated_id = serializers.CharField(
-        source="community.taxonomy.community_migrated_id", allow_null=True
+    community_common_id = serializers.CharField(
+        source="community.taxonomy.community_common_id", allow_null=True
     )
     occurrence_number = serializers.CharField(
         source="occurrence.occurrence_number", allow_null=True
@@ -1717,7 +1717,7 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
             "species_number",
             "community_number",
             "community_id",
-            "community_migrated_id",
+            "community_common_id",
             "occurrence_report_number",
             "reported_date",
             "lodgement_date",

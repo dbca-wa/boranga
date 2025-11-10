@@ -188,7 +188,7 @@ export default {
             return this.species_community.group_type === 'community'
                 ? this.species_community.taxonomy_details != null
                     ? this.species_community.taxonomy_details
-                          .community_migrated_id
+                          .community_common_id
                     : ''
                 : this.species_community.taxonomy_details != null
                   ? this.species_community.taxonomy_details.scientific_name +

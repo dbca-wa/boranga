@@ -239,7 +239,7 @@ class ListSpeciesSerializer(BaseModelSerializer):
 
 class ListCommunitiesSerializer(BaseModelSerializer):
     group_type = serializers.SerializerMethodField()
-    community_migrated_id = serializers.SerializerMethodField()
+    community_common_id = serializers.SerializerMethodField()
     community_name = serializers.SerializerMethodField()
     regions = serializers.SerializerMethodField()
     districts = serializers.SerializerMethodField()
@@ -260,7 +260,7 @@ class ListCommunitiesSerializer(BaseModelSerializer):
             "id",
             "community_number",
             "group_type",
-            "community_migrated_id",
+            "community_common_id",
             "community_name",
             "regions",
             "districts",
@@ -281,7 +281,7 @@ class ListCommunitiesSerializer(BaseModelSerializer):
             "id",
             "community_number",
             "group_type",
-            "community_migrated_id",
+            "community_common_id",
             "community_name",
             "regions",
             "districts",
@@ -309,10 +309,10 @@ class ListCommunitiesSerializer(BaseModelSerializer):
         except CommunityTaxonomy.DoesNotExist:
             return ""
 
-    def get_community_migrated_id(self, obj):
+    def get_community_common_id(self, obj):
         if not obj.taxonomy:
             return ""
-        return obj.taxonomy.community_migrated_id
+        return obj.taxonomy.community_common_id
 
     def get_regions(self, obj):
         if obj.regions:
@@ -1083,7 +1083,7 @@ class CommunityTaxonomySerializer(BaseModelSerializer):
             "id",
             "text",
             "community_id",
-            "community_migrated_id",
+            "community_common_id",
             "community_name",
             "community_description",
             "previous_name",
@@ -1099,7 +1099,7 @@ class SaveCommunityTaxonomySerializer(BaseModelSerializer):
     community_id = serializers.IntegerField(
         required=False, allow_null=True, write_only=True
     )
-    community_migrated_id = serializers.CharField(
+    community_common_id = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
     )
 
@@ -1108,7 +1108,7 @@ class SaveCommunityTaxonomySerializer(BaseModelSerializer):
         fields = (
             "id",
             "community_id",
-            "community_migrated_id",
+            "community_common_id",
             "community_name",
             "community_description",
             "previous_name",
@@ -1118,16 +1118,18 @@ class SaveCommunityTaxonomySerializer(BaseModelSerializer):
 
     def validate(self, data):
         # Only run validation for existing records (with pk/id)
-        instance = getattr(self, 'instance', None)
-        if not instance or not getattr(instance, 'pk', None):
+        instance = getattr(self, "instance", None)
+        if not instance or not getattr(instance, "pk", None):
             return data
-        # To avoid adding field error with 'community_migrated_id' key
+        # To avoid adding field error with 'community_common_id' key
         # Since for the user this field is called 'Community ID'
         community_id = data.get("community_id", None)
-        community_migrated_id = data.get("community_migrated_id", None)
-        if CommunityTaxonomy.objects.filter(
-            community_migrated_id=community_migrated_id
-        ).exclude(community_id=community_id).exists():
+        community_common_id = data.get("community_common_id", None)
+        if (
+            CommunityTaxonomy.objects.filter(community_common_id=community_common_id)
+            .exclude(community_id=community_id)
+            .exists()
+        ):
             raise serializers.ValidationError(
                 {"community_id": "Community ID must be unique."}
             )
@@ -1346,8 +1348,8 @@ class SimpleCommunityDisplaySerializer(BaseModelSerializer):
     community_name = serializers.CharField(
         source="taxonomy.community_name", read_only=True
     )
-    community_migrated_id = serializers.CharField(
-        source="taxonomy.community_migrated_id", read_only=True
+    community_common_id = serializers.CharField(
+        source="taxonomy.community_common_id", read_only=True
     )
 
     class Meta:
@@ -1356,7 +1358,7 @@ class SimpleCommunityDisplaySerializer(BaseModelSerializer):
             "id",
             "community_number",
             "community_name",
-            "community_migrated_id",
+            "community_common_id",
         )
 
 
@@ -1598,15 +1600,16 @@ class EmptySpeciesSerializer(serializers.Serializer):
 
 
 class SaveCommunitySerializer(BaseCommunitySerializer):
-    community_migrated_id = serializers.CharField(
+    community_common_id = serializers.CharField(
         required=False, allow_null=True, write_only=True
     )
+
     class Meta:
         model = Community
         fields = (
             "id",
             "group_type",
-            "community_migrated_id",
+            "community_common_id",
             "last_data_curation_date",
             "submitter",
             "readonly",
@@ -1629,7 +1632,7 @@ class SaveCommunitySerializer(BaseCommunitySerializer):
 
 class RenameCommunitySerializer(BaseSerializer):
     community_name = serializers.CharField(required=True)
-    community_migrated_id = serializers.CharField(required=True)
+    community_common_id = serializers.CharField(required=True)
     community_description = serializers.CharField(
         required=False, allow_blank=True, allow_null=True
     )

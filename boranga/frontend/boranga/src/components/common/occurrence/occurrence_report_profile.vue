@@ -227,7 +227,7 @@
                     <div
                         v-if="
                             !occurrence_report_obj.community_id ||
-                            occurrence_report_obj.community_migrated_id
+                            occurrence_report_obj.community_common_id
                         "
                         class="row mb-3"
                     >
@@ -252,13 +252,13 @@
                             </template>
                             <template
                                 v-else-if="
-                                    occurrence_report_obj.community_migrated_id
+                                    occurrence_report_obj.community_common_id
                                 "
                             >
                                 <input
-                                    id="community_migrated_id"
+                                    id="community_common_id"
                                     :value="
-                                        occurrence_report_obj.community_migrated_id
+                                        occurrence_report_obj.community_common_id
                                     "
                                     disabled
                                     type="text"
@@ -797,7 +797,7 @@ export default {
                         e.params.data.community_id;
                     vm.occurrence_report_obj.community_name =
                         e.params.data.community_name;
-                    vm.occurrence_report_obj.community_migrated_id =
+                    vm.occurrence_report_obj.community_common_id =
                         e.params.data.text;
                     vm.community_display = e.params.data.community_name;
                     // the select2:select event // Unfortunate to call this twice but the change event on the fieldset fires before
@@ -819,7 +819,7 @@ export default {
                     var selected = $(e.currentTarget);
                     vm.occurrence_report_obj.community_id = null;
                     vm.occurrence_report_obj.community_name = null;
-                    vm.occurrence_report_obj.community_migrated_id = null;
+                    vm.occurrence_report_obj.community_common_id = null;
                     vm.community_display = '';
                     vm.$emit('saveOccurrenceReport');
                 })
@@ -874,8 +874,8 @@ export default {
                 })
                 .on('select2:select', function (e) {
                     vm.occurrence_report_obj.community_id = e.params.data.id;
-                    vm.occurrence_report_obj.community_migrated_id =
-                        e.params.data.community_migrated_id;
+                    vm.occurrence_report_obj.community_common_id =
+                        e.params.data.community_common_id;
                     vm.community_display = e.params.data.text;
                     vm.$emit('saveOccurrenceReport');
                     $(vm.$refs[vm.community_id_lookup]).select2('destroy');
@@ -883,7 +883,7 @@ export default {
                 .on('select2:unselect', function () {
                     vm.occurrence_report_obj.community_id = null;
                     vm.occurrence_report_obj.community_name = null;
-                    vm.occurrence_report_obj.community_migrated_id = null;
+                    vm.occurrence_report_obj.community_common_id = null;
                     vm.community_display = '';
                     vm.$nextTick(() => {
                         vm.initialiseCommunityIDLookup();

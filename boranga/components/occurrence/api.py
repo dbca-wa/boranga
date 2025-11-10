@@ -278,15 +278,13 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
                     community__taxonomy__id=filter_community_name
                 )
 
-            filter_community_migrated_id = request.GET.get(
-                "filter_community_migrated_id"
-            )
+            filter_community_common_id = request.GET.get("filter_community_common_id")
             if (
-                filter_community_migrated_id
-                and not filter_community_migrated_id.lower() == "all"
+                filter_community_common_id
+                and not filter_community_common_id.lower() == "all"
             ):
                 queryset = queryset.filter(
-                    community__taxonomy__id=filter_community_migrated_id
+                    community__taxonomy__id=filter_community_common_id
                 )
 
             filter_status = request.GET.get("filter_status")
@@ -2888,14 +2886,14 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
         if filter_group_type and not filter_group_type.lower() == "all":
             queryset = queryset.filter(group_type__name=filter_group_type)
 
-        filter_community_migrated_id = request.GET.get("filter_community_migrated_id")
+        filter_community_common_id = request.GET.get("filter_community_common_id")
 
         if (
-            filter_community_migrated_id
-            and not filter_community_migrated_id.lower() == "all"
+            filter_community_common_id
+            and not filter_community_common_id.lower() == "all"
         ):
             queryset = queryset.filter(
-                community__taxonomy__id=filter_community_migrated_id
+                community__taxonomy__id=filter_community_common_id
             )
 
         filter_occurrence_name = request.GET.get("filter_occurrence_name")

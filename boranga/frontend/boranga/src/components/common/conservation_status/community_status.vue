@@ -1833,7 +1833,7 @@ export default {
                     const selected = e.params.data;
                     const communityId = selected.id;
                     const communityMigratedId =
-                        selected.community_migrated_id || communityId;
+                        selected.community_common_id || communityId;
                     vm.conservation_status_obj.community_id = communityId;
                     vm.community_display = selected.text;
                     vm.isSyncingCommunitySelects = true;
@@ -1997,7 +1997,7 @@ export default {
                         vm.setSelect2Value(
                             vm.community_id_lookup,
                             community.id,
-                            community.community_migrated_id || community.id
+                            community.community_common_id || community.id
                         );
                         vm.isSyncingCommunitySelects = false;
                     };

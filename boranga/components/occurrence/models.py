@@ -7677,7 +7677,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 and column.django_import_field_name == "community"
             ):
                 species_or_community_identifier = Community.objects.get(
-                    taxonomy__community_migrated_id=sample_value
+                    taxonomy__community_common_id=sample_value
                 )
 
             if (
@@ -8408,7 +8408,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 }
                 if group_type.name == "community":
                     filter_field = {
-                        "community__taxonomy__community_migrated_id": species_or_community_identifier
+                        "community__taxonomy__community_common_id": species_or_community_identifier
                     }
                 if not random_occurrence.filter(**filter_field).exists():
                     error_message = (
