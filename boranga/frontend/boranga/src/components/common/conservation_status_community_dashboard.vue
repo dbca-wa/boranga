@@ -829,7 +829,7 @@ export default {
         },
         column_community_id: function () {
             return {
-                data: 'community_migrated_id',
+                data: 'community_common_id',
                 orderable: true,
                 searchable: true,
                 visible: true,
@@ -837,7 +837,7 @@ export default {
                     let result = helpers.dtPopover(value, 30, 'hover');
                     return type == 'export' ? value : result;
                 },
-                name: 'community__taxonomy__community_migrated_id',
+                name: 'community__taxonomy__community_common_id',
             };
         },
         column_community_name: function () {
@@ -1177,7 +1177,7 @@ export default {
                     },
                     // adding extra params for Custom filtering
                     data: function (d) {
-                        d.filter_community_migrated_id =
+                        d.filter_community_common_id =
                             vm.filterCSCommunityMigratedId;
                         d.filter_community_name = vm.filterCSCommunityName;
                         d.filter_group_type = vm.group_type_name;

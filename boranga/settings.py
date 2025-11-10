@@ -53,7 +53,7 @@ GROUP_NAME_INTERNAL_CONTRIBUTOR = "Internal Contributors"
 GROUP_NAME_OCCURRENCE_APPROVER = "Occurrence Approvers"
 GROUP_NAME_OCCURRENCE_ASSESSOR = "Occurrence Assessors"
 
-GROUP_NAME_READONLY_USER = "Read Only Users"
+GROUP_NAME_READONLY_USER = "Query Users"
 
 GROUP_NAME_SPECIES_COMMUNITIES_APPROVER = "Species and Communities Approvers"
 

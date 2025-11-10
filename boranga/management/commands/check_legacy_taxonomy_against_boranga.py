@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+from collections import defaultdict
 from datetime import datetime
 
 from django.core.management.base import BaseCommand
@@ -31,8 +32,11 @@ def _norm_name(s: str) -> str:
 class Command(BaseCommand):
     """
     Example usage:
-        ./manage.py check_legacy_taxonomy_against_nomos --csv boranga/components/data_migration/legacy_data/TPFL/TPFL_CS_LISTING_NAME_TO_NOMOS_CANONICAL_NAME.csv --errors-only
+        ./manage.py check_legacy_taxonomy_against_boranga \
+        --csv boranga/components/data_migration/legacy_data/TPFL/TPFL_CS_LISTING_NAME_TO_NOMOS_CANONICAL_NAME.csv \
+            --group-type flora --errors-only
     """
+
     help = "Check TPFL mapping CSV nomos_canonical_name/nomos_taxon_id values against Taxonomy"
 
     def add_arguments(self, parser):
@@ -92,6 +96,26 @@ class Command(BaseCommand):
             self.stderr.write(f"CSV not found: {csv_path}")
             return
 
+        # **OPTIMIZATION 1: Build lookup cache upfront**
+        self.stdout.write("Building taxonomy lookup cache...")
+
+        qs = Taxonomy.objects.all()
+        if group_type:
+            qs = qs.filter(kingdom_fk__grouptype__name=group_type)
+
+        # Build indices for fast lookups
+        exact_lookup = defaultdict(list)  # scientific_name -> [Taxonomy objects]
+        iexact_lookup = defaultdict(
+            list
+        )  # scientific_name.lower() -> [Taxonomy objects]
+
+        for tax in qs.iterator(chunk_size=1000):
+            name = tax.scientific_name or ""
+            exact_lookup[name].append(tax)
+            iexact_lookup[name.lower()].append(tax)
+
+        self.stdout.write(f"Cached {len(exact_lookup)} unique taxonomy names")
+
         # prepare output path
         if not out_path:
             base_dir = os.path.join(
@@ -105,13 +129,13 @@ class Command(BaseCommand):
             )
             os.makedirs(base_dir, exist_ok=True)
             ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            # use the input CSV base name as the prefix for the output file
             csv_base = os.path.splitext(os.path.basename(csv_path))[0]
             if errors_only:
                 prefix = f"{csv_base}_errors"
             else:
                 prefix = f"{csv_base}_results"
             out_path = os.path.join(base_dir, f"{prefix}_{ts}.csv")
+
         total = 0
         by_status = {"found": 0, "multiple": 0, "not_found": 0}
         rows_out = []
@@ -123,6 +147,10 @@ class Command(BaseCommand):
                 if limit and total > limit:
                     break
 
+                # Show progress every 1000 rows (moved to top of loop)
+                if total % 1000 == 0:
+                    self.stdout.write(f"Processed {total} rows...")
+
                 name = r.get("NAME")
                 nomos_name = r.get("nomos_canonical_name") or ""
                 nomos_id = r.get("nomos_taxon_id") or ""
@@ -132,55 +160,41 @@ class Command(BaseCommand):
                 status = "not_found"
                 details = ""
 
-                # Try canonical name only (do not attempt nomos_taxon_id lookup)
+                # **OPTIMIZATION 2: Use in-memory lookups instead of DB queries**
                 if nomos_name_norm:
-                    # first exact match on stored value
                     try:
-                        qs_exact = Taxonomy.objects.filter(
-                            scientific_name=nomos_name_norm,
-                        )
-                        if group_type:
-                            qs_exact = qs_exact.filter(
-                                kingdom_fk__grouptype__name=group_type
-                            )
-                        cnt_exact = qs_exact.count()
-                        if cnt_exact == 1:
+                        # Check exact match
+                        exact_matches = exact_lookup.get(nomos_name_norm, [])
+                        if len(exact_matches) == 1:
                             status = "found"
-                            details = f"pk={qs_exact.first().pk} (exact)"
+                            details = f"pk={exact_matches[0].pk} (exact)"
                             by_status["found"] += 1
                             rows_out.append(
                                 (name, nomos_name, nomos_id, status, details)
                             )
                             continue
-                        elif cnt_exact > 1:
+                        elif len(exact_matches) > 1:
                             status = "multiple"
-                            details = f"exact match count={cnt_exact}"
+                            details = f"exact match count={len(exact_matches)}"
                             by_status["multiple"] += 1
                             rows_out.append(
                                 (name, nomos_name, nomos_id, status, details)
                             )
                             continue
 
-                        # try case-insensitive iexact
-                        qs_ie = Taxonomy.objects.filter(
-                            scientific_name__iexact=nomos_name_norm
-                        )
-                        if group_type:
-                            qs_ie = qs_ie.filter(
-                                kingdom_fk__grouptype__name=group_type
-                            )
-                        cnt_ie = qs_ie.count()
-                        if cnt_ie == 1:
+                        # Check case-insensitive match
+                        iexact_matches = iexact_lookup.get(nomos_name_norm.lower(), [])
+                        if len(iexact_matches) == 1:
                             status = "found"
-                            details = f"pk={qs_ie.first().pk} (iexact)"
+                            details = f"pk={iexact_matches[0].pk} (iexact)"
                             by_status["found"] += 1
                             rows_out.append(
                                 (name, nomos_name, nomos_id, status, details)
                             )
                             continue
-                        elif cnt_ie > 1:
+                        elif len(iexact_matches) > 1:
                             status = "multiple"
-                            details = f"iexact match count={cnt_ie}"
+                            details = f"iexact match count={len(iexact_matches)}"
                             by_status["multiple"] += 1
                             rows_out.append(
                                 (name, nomos_name, nomos_id, status, details)
@@ -190,8 +204,11 @@ class Command(BaseCommand):
                         details = f"name lookup error: {e}"
 
                 # nothing matched
-                by_status["not_found"] = by_status.get("not_found", 0) + 1
+                by_status["not_found"] += 1
                 rows_out.append((name, nomos_name, nomos_id, status, details))
+
+        # Show final count after loop
+        self.stdout.write(f"Finished processing {total} rows")
 
         # write results CSV
         written_count = 0
@@ -217,9 +234,9 @@ class Command(BaseCommand):
             # fallback if written_count not available for any reason
             self.stdout.write(f"Results written: {out_path}")
         self.stdout.write(f"Total rows processed: {total}")
-        self.stdout.write(f"Found by name: {by_status.get('found',0)}")
-        self.stdout.write(f"Multiple matches: {by_status.get('multiple',0)}")
-        self.stdout.write(f"Not found: {by_status.get('not_found',0)}")
+        self.stdout.write(f"Found by name: {by_status.get('found', 0)}")
+        self.stdout.write(f"Multiple matches: {by_status.get('multiple', 0)}")
+        self.stdout.write(f"Not found: {by_status.get('not_found', 0)}")
 
         # also emit top 20 unmatched name samples
         not_found_samples = [r for r in rows_out if r[3] == "not_found"]

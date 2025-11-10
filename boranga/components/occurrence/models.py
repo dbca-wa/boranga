@@ -3376,9 +3376,7 @@ class OCRAnimalObservation(BaseModel):
     primary_detection_method = MultiSelectField(
         max_length=250, blank=True, choices=[], null=True
     )
-    secondary_sign = models.ForeignKey(
-        SecondarySign, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    secondary_sign = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
     animal_behaviour = models.ForeignKey(
         AnimalBehaviour, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -3388,7 +3386,7 @@ class OCRAnimalObservation(BaseModel):
     animal_health = models.ForeignKey(
         AnimalHealth, on_delete=models.SET_NULL, null=True, blank=True
     )
-    death_reason = models.ForeignKey(
+    death_injury_reason = models.ForeignKey(
         DeathReason, on_delete=models.SET_NULL, null=True, blank=True
     )
 
@@ -3448,6 +3446,11 @@ class OCRAnimalObservation(BaseModel):
         super().__init__(*args, **kwargs)
         self._meta.get_field("primary_detection_method").choices = tuple(
             PrimaryDetectionMethod.objects.annotate(
+                id_str=Cast("id", CharField()),
+            ).values_list("id_str", "name")
+        )
+        self._meta.get_field("secondary_sign").choices = tuple(
+            SecondarySign.objects.annotate(
                 id_str=Cast("id", CharField()),
             ).values_list("id_str", "name")
         )
@@ -3966,9 +3969,6 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         # Clear the cache
         cache.delete(settings.CACHE_KEY_MAP_OCCURRENCES)
 
-        # allow caller to pass request for logging
-        request = kwargs.pop("request", None)
-
         if self.occurrence_number == "":
             force_insert = kwargs.pop("force_insert", False)
             super().save(no_revision=True, force_insert=force_insert)
@@ -3984,41 +3984,68 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             if "species" in dirty_fields:
                 old_val = dirty_fields.get("species")
                 try:
-                    old_species = Species.objects.get(pk=old_val) if old_val is not None else None
+                    old_species = (
+                        Species.objects.get(pk=old_val) if old_val is not None else None
+                    )
                 except Exception:
                     old_species = old_val
             if "community" in dirty_fields:
                 old_val = dirty_fields.get("community")
                 try:
-                    old_community = Community.objects.get(pk=old_val) if old_val is not None else None
+                    old_community = (
+                        Community.objects.get(pk=old_val)
+                        if old_val is not None
+                        else None
+                    )
                 except Exception:
                     old_community = old_val
 
             super().save(*args, **kwargs)
 
             # If the species or community was changed, update child OCRs and log the change including old -> new
-            if old_species is not None or old_community is not None:               
+            if old_species is not None or old_community is not None:
                 # update child OCRs first
                 self.update_child_ocrs(version_user)
 
                 # Build human readable old/new descriptors
                 if old_species is not None:
-                    old_desc_str = old_species.taxonomy.scientific_name if old_species and hasattr(old_species, 'taxonomy') and old_species.taxonomy else str(old_species)
+                    old_desc_str = (
+                        old_species.taxonomy.scientific_name
+                        if old_species
+                        and hasattr(old_species, "taxonomy")
+                        and old_species.taxonomy
+                        else str(old_species)
+                    )
                 else:
-                    old_desc_str = old_community.taxonomy.community_name if old_community and hasattr(old_community, 'taxonomy') and old_community.taxonomy else str(old_community)
-                
+                    old_desc_str = (
+                        old_community.taxonomy.community_name
+                        if old_community
+                        and hasattr(old_community, "taxonomy")
+                        and old_community.taxonomy
+                        else str(old_community)
+                    )
+
                 if self.species:
-                    new_desc_str = self.species.taxonomy.scientific_name if self.species.taxonomy else str(self.species)
+                    new_desc_str = (
+                        self.species.taxonomy.scientific_name
+                        if self.species.taxonomy
+                        else str(self.species)
+                    )
                     object_type = "species"
                 elif self.community:
-                    new_desc_str = self.community.taxonomy.community_name if self.community.taxonomy else str(self.community)
+                    new_desc_str = (
+                        self.community.taxonomy.community_name
+                        if self.community.taxonomy
+                        else str(self.community)
+                    )
                     object_type = "community"
                 else:
                     new_desc_str = "None"
                     object_type = "unknown"
 
                 # Log action
-                OccurrenceUserAction.log_action(self,
+                OccurrenceUserAction.log_action(
+                    self,
                     OccurrenceUserAction.ACTION_CHANGE_SPECIES_COMMUNITY.format(
                         self.occurrence_number, object_type, old_desc_str, new_desc_str
                     ),
@@ -4052,10 +4079,20 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             return
 
         if self.group_type and self.group_type.name == GroupType.GROUP_TYPE_COMMUNITY:
-            community_occurrence_reports = self.occurrence_reports.exclude(community=self.community)
+            community_occurrence_reports = self.occurrence_reports.exclude(
+                community=self.community
+            )
             for ocr in community_occurrence_reports:
-                old_community_name = ocr.community.taxonomy.community_name if ocr.community and ocr.community.taxonomy else str(ocr.community)
-                new_community_name = self.community.taxonomy.community_name if self.community and self.community.taxonomy else str(self.community)
+                old_community_name = (
+                    ocr.community.taxonomy.community_name
+                    if ocr.community and ocr.community.taxonomy
+                    else str(ocr.community)
+                )
+                new_community_name = (
+                    self.community.taxonomy.community_name
+                    if self.community and self.community.taxonomy
+                    else str(self.community)
+                )
                 ocr.community = self.community
                 ocr.save(version_user=version_user)
 
@@ -4067,13 +4104,23 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                         new_community_name,
                         self.occurrence_number,
                     ),
-                    version_user.id
+                    version_user.id,
                 )
         else:
-            species_occurrence_reports = self.occurrence_reports.exclude(species=self.species)
+            species_occurrence_reports = self.occurrence_reports.exclude(
+                species=self.species
+            )
             for ocr in species_occurrence_reports:
-                old_species_name = ocr.species.taxonomy.scientific_name if ocr.species and ocr.species.taxonomy else str(ocr.species)
-                new_species_name = self.species.taxonomy.scientific_name if self.species and self.species.taxonomy else str(self.species)
+                old_species_name = (
+                    ocr.species.taxonomy.scientific_name
+                    if ocr.species and ocr.species.taxonomy
+                    else str(ocr.species)
+                )
+                new_species_name = (
+                    self.species.taxonomy.scientific_name
+                    if self.species and self.species.taxonomy
+                    else str(self.species)
+                )
                 ocr.species = self.species
                 ocr.save(version_user=version_user)
 
@@ -4085,7 +4132,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                         new_species_name,
                         self.occurrence_number,
                     ),
-                    version_user.id
+                    version_user.id,
                 )
 
     @property
@@ -4844,16 +4891,13 @@ class OccurrenceUserAction(UserAction):
     ACTION_UNLOCK_OCCURRENCE = "Unlock occurrence {}"
     ACTION_DEACTIVATE_OCCURRENCE = "Deactivate occurrence {}"
     ACTION_REOPEN_OCCURRENCE = "Reopen occurrence {}"
-    ACTION_CHANGE_SPECIES_COMMUNITY = (
-        "Change occurrence {} {} from {} to {}"
-    )
+    ACTION_CHANGE_SPECIES_COMMUNITY = "Change occurrence {} {} from {} to {}"
     ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_SPLIT = (
         "Change occurrence {} species from {} to {} due to split"
     )
     ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_COMBINE = (
         "Change occurrence {} species from {} to {} due to combine"
     )
-
 
     # Document
     ACTION_ADD_DOCUMENT = "Document {} added for occurrence {}"
@@ -5579,9 +5623,7 @@ class OCCAnimalObservation(BaseModel):
     primary_detection_method = MultiSelectField(
         max_length=250, blank=True, choices=[], null=True
     )
-    secondary_sign = models.ForeignKey(
-        SecondarySign, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    secondary_sign = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
     animal_behaviour = models.ForeignKey(
         AnimalBehaviour, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -5591,7 +5633,7 @@ class OCCAnimalObservation(BaseModel):
     animal_health = models.ForeignKey(
         AnimalHealth, on_delete=models.SET_NULL, null=True, blank=True
     )
-    death_reason = models.ForeignKey(
+    death_injury_reason = models.ForeignKey(
         DeathReason, on_delete=models.SET_NULL, null=True, blank=True
     )
 
@@ -5650,6 +5692,11 @@ class OCCAnimalObservation(BaseModel):
         super().__init__(*args, **kwargs)
         self._meta.get_field("primary_detection_method").choices = tuple(
             PrimaryDetectionMethod.objects.annotate(
+                id_str=Cast("id", CharField()),
+            ).values_list("id_str", "name")
+        )
+        self._meta.get_field("secondary_sign").choices = tuple(
+            SecondarySign.objects.annotate(
                 id_str=Cast("id", CharField()),
             ).values_list("id_str", "name")
         )
@@ -7274,7 +7321,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         # Create a hidden lookup sheet to store picklist values. Using a
         # sheet-range for validations avoids locale/separator and formula
         # length issues that occur with quoted literal lists.
-        lookup_sheet_name = f"_lk_{getattr(self, 'id', 'schema') }"
+        lookup_sheet_name = f"_lk_{getattr(self, 'id', 'schema')}"
         # Excel sheet names are limited to 31 chars
         if len(lookup_sheet_name) > 31:
             lookup_sheet_name = lookup_sheet_name[:31]
@@ -7630,7 +7677,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 and column.django_import_field_name == "community"
             ):
                 species_or_community_identifier = Community.objects.get(
-                    taxonomy__community_migrated_id=sample_value
+                    taxonomy__community_common_id=sample_value
                 )
 
             if (
@@ -8361,7 +8408,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 }
                 if group_type.name == "community":
                     filter_field = {
-                        "community__taxonomy__community_migrated_id": species_or_community_identifier
+                        "community__taxonomy__community_common_id": species_or_community_identifier
                     }
                 if not random_occurrence.filter(**filter_field).exists():
                     error_message = (

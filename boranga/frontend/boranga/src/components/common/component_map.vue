@@ -3261,9 +3261,41 @@ export default {
             return baseLayers;
         },
         initialiseLayerSwitcher: function (layers) {
+            const targetElement = $('#layer-control').get(0);
+
+            // Remove any existing control before creating a new one to prevent duplicate lists
+            if (this.layerSwitcher) {
+                if (this.map) {
+                    this.map.removeControl(this.layerSwitcher);
+                }
+                if (targetElement) {
+                    targetElement.innerHTML = '';
+                }
+
+                if (this.editableFeatureCollection) {
+                    this.editableFeatureCollection.un(
+                        'add',
+                        this.onFeatureChanged
+                    );
+                    this.editableFeatureCollection.un(
+                        'remove',
+                        this.onFeatureChanged
+                    );
+                    this.editableFeatureCollection.forEach((feature) => {
+                        feature.un('change', this.onFeatureChanged);
+                    });
+                }
+
+                this.layerSwitcher = null;
+            }
+
+            if (targetElement) {
+                targetElement.innerHTML = '';
+            }
+
             // Add layer switcher control inside the map
             const props = {
-                target: $('#layer-control').get(0),
+                target: targetElement,
                 show_progress: true,
                 extent: true,
                 trash: false,
@@ -3431,6 +3463,20 @@ export default {
             );
 
             this.map.addControl(this.layerSwitcher);
+
+            if (targetElement) {
+                // Ensure the menu only contains the most recent LayerSwitcher instance
+                const layerSwitcherContainers = Array.from(
+                    targetElement.children || []
+                ).filter((element) =>
+                    element.classList?.contains('ol-layerswitcher')
+                );
+                if (layerSwitcherContainers.length > 1) {
+                    layerSwitcherContainers
+                        .slice(0, -1)
+                        .forEach((element) => element.remove());
+                }
+            }
         },
         initialiseLayerEvents: function () {
             const editableLayers = this.editableLayers();
@@ -3854,6 +3900,25 @@ export default {
                     let model = feature.getProperties().model;
                     if (!model) {
                         vm.redirectingToModelDetails = false;
+                        return;
+                    }
+
+                    const isOccurrenceContext =
+                        vm.context?.model_name === 'occurrence';
+                    const isOccurrenceFeature =
+                        isOccurrenceContext &&
+                        (model?.model_name === 'occurrence' ||
+                            (model?.details_url &&
+                                vm.context?.details_url &&
+                                model.details_url === vm.context.details_url) ||
+                            (model?.id &&
+                                vm.context?.id &&
+                                model.id === vm.context.id));
+
+                    if (isOccurrenceFeature) {
+                        vm.redirectingToModelDetails = false;
+                        // Keep the prepare-site flow active without opening a duplicate details page
+                        vm.copyMouseCoordinatesToClipboard();
                         return;
                     }
 
@@ -5811,6 +5876,9 @@ export default {
          * @param {String} layer_name The 'name' property of the layer. Corresponds to the 'name' property in the layer definition prop
          */
         getLayerByName: function (layer_name) {
+            if (!this.map) {
+                return null;
+            }
             return this.map
                 .getLayers()
                 .getArray()

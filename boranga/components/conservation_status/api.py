@@ -144,8 +144,11 @@ class GetCommunityDisplay(views.APIView):
                 community_id=community_id
             )
             if community_taxon.exists():
+                taxon = community_taxon.first()
                 res_json["id"] = community_id
-                res_json["name"] = community_taxon.first().community_name
+                res_json["name"] = taxon.community_name
+                res_json["community_common_id"] = taxon.community_common_id
+                res_json["community_taxonomy_id"] = taxon.id
 
         res_json = json.dumps(res_json)
         return HttpResponse(res_json, content_type="application/json")
@@ -613,18 +616,18 @@ class CommunityConservationStatusFilterBackend(DatatablesFilterBackend):
                     conservation_status__application_type__name=filter_group_type
                 )
 
-        filter_community_migrated_id = request.POST.get("filter_community_migrated_id")
+        filter_community_common_id = request.POST.get("filter_community_common_id")
         if (
-            filter_community_migrated_id
-            and not filter_community_migrated_id.lower() == "all"
+            filter_community_common_id
+            and not filter_community_common_id.lower() == "all"
         ):
             if queryset.model is ConservationStatus:
                 queryset = queryset.filter(
-                    community__taxonomy__id=filter_community_migrated_id
+                    community__taxonomy__id=filter_community_common_id
                 )
             elif queryset.model is ConservationStatusReferral:
                 queryset = queryset.filter(
-                    conservation_status__community__taxonomy__id=filter_community_migrated_id
+                    conservation_status__community__taxonomy__id=filter_community_common_id
                 )
 
         filter_community_name = request.POST.get("filter_community_name")
@@ -1005,7 +1008,7 @@ class CommunityConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet)
         allowed_fields = [
             "processing_status",
             "community_number",
-            "community_migrated_id",
+            "community_common_id",
             "community_name",
             "conservation_status_number",
         ]
@@ -2011,7 +2014,7 @@ class ConservationStatusReferralViewSet(
                     community_data_list.append(
                         {
                             "id": name.id,
-                            "community_migrated_id": name.community_migrated_id,
+                            "community_common_id": name.community_common_id,
                             "community_name": name.community_name,
                         }
                     )

@@ -172,17 +172,17 @@
                                         </div>
                                         <div class="row mb-3">
                                             <label
-                                                for="community_migrated_id"
+                                                for="community_common_id"
                                                 class="col-sm-3 control-label"
                                                 >Community ID:
                                             </label>
                                             <div class="col-sm-9">
                                                 <input
-                                                    id="community_migrated_id"
+                                                    id="community_common_id"
                                                     v-model="
                                                         rename_community
                                                             .taxonomy_details
-                                                            .community_migrated_id
+                                                            .community_common_id
                                                     "
                                                     type="text"
                                                     class="form-control"
@@ -300,11 +300,11 @@
                                 >
                                 <div class="col-sm-6">
                                     <input
-                                        id="community_migrated_id"
-                                        ref="community_migrated_id"
+                                        id="community_common_id"
+                                        ref="community_common_id"
                                         v-model="
                                             rename_community.taxonomy_details
-                                                .community_migrated_id
+                                                .community_common_id
                                         "
                                         type="text"
                                         class="form-control"
@@ -484,7 +484,7 @@
                                         !rename_community.taxonomy_details
                                             .community_name ||
                                         !rename_community.taxonomy_details
-                                            .community_migrated_id ||
+                                            .community_common_id ||
                                         !processingStatusForOriginalAfterRename
                                     "
                                     @click.prevent="finaliseRenameCommunity"
@@ -619,7 +619,7 @@ export default {
                     this.rename_community.taxonomy_details.community_id = null;
                     this.rename_community.taxonomy_details.community_name =
                         null;
-                    this.rename_community.taxonomy_details.community_migrated_id =
+                    this.rename_community.taxonomy_details.community_common_id =
                         null;
                     this.rename_community.taxonomy_details.previous_name =
                         this.species_community_original.taxonomy_details.community_name;
@@ -763,7 +763,7 @@ export default {
             this.rename_community.taxonomy_id = null;
             this.rename_community.taxonomy_details = {
                 community_name: '',
-                community_migrated_id: '',
+                community_common_id: '',
                 community_description: '',
                 previous_name:
                     this.species_community_original.taxonomy_details
@@ -778,8 +778,8 @@ export default {
         populateFromOriginalCommunity: function () {
             this.rename_community.taxonomy_details.community_name =
                 this.species_community_original.taxonomy_details.community_name;
-            this.rename_community.taxonomy_details.community_migrated_id =
-                this.species_community_original.taxonomy_details.community_migrated_id;
+            this.rename_community.taxonomy_details.community_common_id =
+                this.species_community_original.taxonomy_details.community_common_id;
             this.rename_community.taxonomy_details.community_description =
                 this.species_community_original.taxonomy_details.community_description;
             this.rename_community.taxonomy_details.previous_name =
@@ -831,9 +831,9 @@ export default {
                 return;
             }
             if (
-                this.rename_community.taxonomy_details.community_migrated_id ===
+                this.rename_community.taxonomy_details.community_common_id ===
                 this.species_community_original.taxonomy_details
-                    .community_migrated_id
+                    .community_common_id
             ) {
                 swal.fire({
                     title: `Community ID must be different from the original community`,
@@ -842,7 +842,7 @@ export default {
                         confirmButton: 'btn btn-primary',
                     },
                     didClose: () => {
-                        vm.$refs.community_migrated_id.focus();
+                        vm.$refs.community_common_id.focus();
                     },
                 });
                 return;

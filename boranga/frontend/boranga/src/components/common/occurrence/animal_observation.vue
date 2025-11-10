@@ -28,52 +28,32 @@
                     >Secondary Signs:</label
                 >
                 <div class="col-sm-9">
-                    <template v-if="!isReadOnly">
-                        <template
-                            v-if="
-                                secondary_sign_list &&
-                                secondary_sign_list.length > 0 &&
-                                animal_observation.secondary_sign &&
-                                !secondary_sign_list
-                                    .map((d) => d.id)
-                                    .includes(animal_observation.secondary_sign)
-                            "
+                    <select
+                        ref="secondary_sign_select"
+                        v-model="animal_observation.secondary_sign"
+                        :disabled="isReadOnly"
+                        class="form-select input-sm"
+                        multiple
+                    >
+                        <option
+                            v-for="secondary_sign in secondary_sign_list"
+                            :key="secondary_sign.id"
+                            :value="secondary_sign.id"
+                            :disabled="secondary_sign.disabled"
                         >
-                            <input
-                                v-if="animal_observation.secondary_sign_name"
-                                type="text"
-                                class="form-control mb-3"
-                                :value="
-                                    animal_observation.secondary_sign_name +
-                                    ' (Now Archived)'
-                                "
-                                disabled
-                            />
-                            <div class="mb-3 text-muted">
-                                Change secondary sign to:
-                            </div>
-                        </template>
-                        <select
-                            v-model="animal_observation.secondary_sign"
-                            class="form-select"
-                        >
-                            <option
-                                v-for="secondary_sign in secondary_sign_list"
-                                :key="secondary_sign.id"
-                                :value="secondary_sign.id"
-                            >
-                                {{ secondary_sign.name }}
-                            </option>
-                        </select>
-                    </template>
-                    <template v-else>
-                        <input
-                            v-model="animal_observation.secondary_sign_name"
-                            class="form-control"
-                            type="text"
-                            :disabled="isReadOnly"
-                        />
-                    </template>
+                            {{ secondary_sign.name }}
+                            <template v-if="secondary_sign.disabled">
+                                (Archived)
+                            </template>
+                        </option>
+                    </select>
+                    <div
+                        v-if="archivedSecondarySignNames.length"
+                        class="mt-2 small text-muted"
+                    >
+                        Archived selections:
+                        {{ archivedSecondarySignNames.join(', ') }}
+                    </div>
                 </div>
             </div>
             <div class="row mb-3">
@@ -208,26 +188,30 @@
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Cause of Death:</label
+                    >Cause of Death/Injury:</label
                 >
                 <div class="col-sm-9">
                     <template v-if="!isReadOnly">
                         <template
                             v-if="
-                                death_reason_list &&
-                                death_reason_list.length > 0 &&
-                                animal_observation.death_reason &&
-                                !death_reason_list
+                                death_injury_reason_list &&
+                                death_injury_reason_list.length > 0 &&
+                                animal_observation.death_injury_reason &&
+                                !death_injury_reason_list
                                     .map((d) => d.id)
-                                    .includes(animal_observation.death_reason)
+                                    .includes(
+                                        animal_observation.death_injury_reason
+                                    )
                             "
                         >
                             <input
-                                v-if="animal_observation.death_reason_name"
+                                v-if="
+                                    animal_observation.death_injury_reason_name
+                                "
                                 type="text"
                                 class="form-control mb-3"
                                 :value="
-                                    animal_observation.death_reason_name +
+                                    animal_observation.death_injury_reason_name +
                                     ' (Now Archived)'
                                 "
                                 disabled
@@ -237,21 +221,23 @@
                             </div>
                         </template>
                         <select
-                            v-model="animal_observation.death_reason"
+                            v-model="animal_observation.death_injury_reason"
                             class="form-select"
                         >
                             <option
-                                v-for="death_reason in death_reason_list"
-                                :key="death_reason.id"
-                                :value="death_reason.id"
+                                v-for="death_injury_reason in death_injury_reason_list"
+                                :key="death_injury_reason.id"
+                                :value="death_injury_reason.id"
                             >
-                                {{ death_reason.name }}
+                                {{ death_injury_reason.name }}
                             </option>
                         </select>
                     </template>
                     <template v-else>
                         <input
-                            v-model="animal_observation.death_reason_name"
+                            v-model="
+                                animal_observation.death_injury_reason_name
+                            "
                             class="form-control"
                             type="text"
                             :disabled="isReadOnly"
@@ -815,7 +801,7 @@ export default {
             secondary_sign_list: [],
             animal_behaviour_list: [],
             reproductive_state_list: [],
-            death_reason_list: [],
+            death_injury_reason_list: [],
             animal_health_list: [],
             updatingAnimalOnservationDetails: false,
             total_seen: 0,
@@ -834,13 +820,47 @@ export default {
         isDirty: function () {
             return this.animalObservationIsDirty;
         },
+        archivedSecondarySignNames: function () {
+            const selected = this.animal_observation.secondary_sign_names || [];
+            if (!selected.length) {
+                return [];
+            }
+
+            const activeIds = new Set(
+                (this.secondary_sign_list || [])
+                    .filter(
+                        (option) =>
+                            option &&
+                            !option.disabled &&
+                            String(option.id).length > 0
+                    )
+                    .map((option) => String(option.id))
+            );
+
+            return selected
+                .filter((item) => {
+                    if (!item) {
+                        return false;
+                    }
+                    const id = String(item.id);
+                    return item.archived || !activeIds.has(id);
+                })
+                .map((item) => item.name)
+                .filter((name) => !!name);
+        },
     },
     watch: {
         animal_observation: function () {
             let vm = this;
+            vm.normaliseMultiSelectFields();
             $(vm.$refs.primary_detection_select)
                 .val(vm.animal_observation.primary_detection_method)
                 .trigger('change.select2');
+            if (vm.$refs.secondary_sign_select) {
+                $(vm.$refs.secondary_sign_select)
+                    .val(vm.animal_observation.secondary_sign)
+                    .trigger('change.select2');
+            }
             $(vm.$refs.reproductive_state_select)
                 .val(vm.animal_observation.reproductive_state)
                 .trigger('change.select2');
@@ -865,11 +885,13 @@ export default {
         vm.primary_detection_method_list.splice(0, 0, {
             id: '',
             name: '',
+            disabled: false,
         });
         vm.secondary_sign_list = vm.listOfAnimalValuesDict.secondary_sign_list;
         vm.secondary_sign_list.splice(0, 0, {
             id: '',
             name: '',
+            disabled: false,
         });
         vm.animal_behaviour_list =
             vm.listOfAnimalValuesDict.animal_behaviour_list;
@@ -883,8 +905,9 @@ export default {
             id: '',
             name: '',
         });
-        vm.death_reason_list = vm.listOfAnimalValuesDict.death_reason_list;
-        vm.death_reason_list.splice(0, 0, {
+        vm.death_injury_reason_list =
+            vm.listOfAnimalValuesDict.death_injury_reason_list;
+        vm.death_injury_reason_list.splice(0, 0, {
             id: null,
             name: null,
         });
@@ -893,6 +916,7 @@ export default {
             id: null,
             name: null,
         });
+        vm.normaliseMultiSelectFields();
     },
     mounted: function () {
         let vm = this;
@@ -902,6 +926,21 @@ export default {
         vm.calculateTotalNumberSeen();
     },
     methods: {
+        normaliseMultiSelectFields: function () {
+            const multiFields = [
+                'primary_detection_method',
+                'secondary_sign',
+                'reproductive_state',
+            ];
+            multiFields.forEach((field) => {
+                let value = this.animal_observation[field];
+                if (value === null || value === undefined || value === '') {
+                    this.animal_observation[field] = [];
+                } else if (!Array.isArray(value)) {
+                    this.animal_observation[field] = [value];
+                }
+            });
+        },
         resetDirtyState: function () {
             this.originalAnimalObservation = JSON.stringify(
                 this.animal_observation
@@ -930,13 +969,15 @@ export default {
                 .on('select2:select', function (e) {
                     var selected = $(e.currentTarget);
                     vm.animal_observation.primary_detection_method =
-                        selected.val();
+                        selected.val() || [];
                 })
                 .on('select2:unselect', function (e) {
                     var selected = $(e.currentTarget);
                     vm.animal_observation.primary_detection_method =
-                        selected.val();
-                });
+                        selected.val() || [];
+                })
+                .val(vm.animal_observation.primary_detection_method)
+                .trigger('change.select2');
         },
         initialiseSecondarySignSelect: function () {
             let vm = this;
@@ -950,12 +991,14 @@ export default {
                 })
                 .on('select2:select', function (e) {
                     var selected = $(e.currentTarget);
-                    vm.animal_observation.secondary_sign = selected.val();
+                    vm.animal_observation.secondary_sign = selected.val() || [];
                 })
                 .on('select2:unselect', function (e) {
                     var selected = $(e.currentTarget);
-                    vm.animal_observation.secondary_sign = selected.val();
-                });
+                    vm.animal_observation.secondary_sign = selected.val() || [];
+                })
+                .val(vm.animal_observation.secondary_sign)
+                .trigger('change.select2');
         },
         initialiseReprodStateSelect: function () {
             let vm = this;
@@ -969,12 +1012,16 @@ export default {
                 })
                 .on('select2:select', function (e) {
                     var selected = $(e.currentTarget);
-                    vm.animal_observation.reproductive_state = selected.val();
+                    vm.animal_observation.reproductive_state =
+                        selected.val() || [];
                 })
                 .on('select2:unselect', function (e) {
                     var selected = $(e.currentTarget);
-                    vm.animal_observation.reproductive_state = selected.val();
-                });
+                    vm.animal_observation.reproductive_state =
+                        selected.val() || [];
+                })
+                .val(vm.animal_observation.reproductive_state)
+                .trigger('change.select2');
         },
         updateAnimalObservationDetails: function () {
             let vm = this;

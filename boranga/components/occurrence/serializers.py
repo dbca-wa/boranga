@@ -80,6 +80,7 @@ from boranga.components.occurrence.models import (
     ReproductiveState,
     SchemaColumnLookupFilter,
     SchemaColumnLookupFilterValue,
+    SecondarySign,
     SoilType,
     SpeciesRole,
 )
@@ -511,8 +512,8 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
 class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
     scientific_name = serializers.SerializerMethodField()
     community_name = serializers.SerializerMethodField()
-    community_migrated_id = serializers.CharField(
-        source="community.taxonomy.community_migrated_id",
+    community_common_id = serializers.CharField(
+        source="community.taxonomy.community_common_id",
         allow_null=True,
         read_only=True,
     )
@@ -550,7 +551,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             # 'group_type',
             "scientific_name",
             "community_name",
-            "community_migrated_id",
+            "community_common_id",
             "reported_date",
             "lodgement_date",
             "assessor",
@@ -582,7 +583,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "scientific_name",
             "community",
             "community_name",
-            "community_migrated_id",
+            "community_common_id",
             "reported_date",
             "lodgement_date",
             "assessor",
@@ -918,9 +919,10 @@ class OCRAnimalObservationSerializer(BaseModelSerializer):
     primary_detection_method = ListMultipleChoiceField(
         choices=[], allow_null=True, allow_blank=True, required=False
     )
-    secondary_sign_name = serializers.CharField(
-        source="secondary_sign.name", allow_null=True
+    secondary_sign = ListMultipleChoiceField(
+        choices=[], allow_null=True, allow_blank=True, required=False
     )
+    secondary_sign_names = serializers.SerializerMethodField()
     animal_behaviour_name = serializers.CharField(
         source="animal_behaviour.name", allow_null=True
     )
@@ -930,8 +932,8 @@ class OCRAnimalObservationSerializer(BaseModelSerializer):
     animal_health_name = serializers.CharField(
         source="animal_health.name", allow_null=True
     )
-    death_reason_name = serializers.CharField(
-        source="death_reason.name", allow_null=True
+    death_injury_reason_name = serializers.CharField(
+        source="death_injury_reason.name", allow_null=True
     )
     obs_date = serializers.DateField(format="%Y-%m-%d", allow_null=True)
 
@@ -942,14 +944,14 @@ class OCRAnimalObservationSerializer(BaseModelSerializer):
             "occurrence_report_id",
             "primary_detection_method",
             "secondary_sign",
-            "secondary_sign_name",
+            "secondary_sign_names",
             "animal_behaviour",
             "animal_behaviour_name",
             "reproductive_state",
             "animal_health",
             "animal_health_name",
-            "death_reason",
-            "death_reason_name",
+            "death_injury_reason",
+            "death_injury_reason_name",
             "total_count",
             "distinctive_feature",
             "action_taken",
@@ -986,9 +988,36 @@ class OCRAnimalObservationSerializer(BaseModelSerializer):
                 id_str=Cast("id", CharField()),
             ).values_list("id_str", "name")
         )
+        self.fields["secondary_sign"].choices = SecondarySign.objects.annotate(
+            id_str=Cast("id", CharField()),
+        ).values_list("id_str", "name")
         self.fields["reproductive_state"].choices = ReproductiveState.objects.annotate(
             id_str=Cast("id", CharField()),
         ).values_list("id_str", "name")
+
+    def get_secondary_sign_names(self, obj):
+        ids = obj.secondary_sign or []
+        if not ids:
+            return []
+
+        values = SecondarySign.objects.filter(id__in=ids).values(
+            "id", "name", "archived"
+        )
+        lookup = {
+            str(item["id"]): {
+                "id": str(item["id"]),
+                "name": item["name"],
+                "archived": item["archived"],
+            }
+            for item in values
+        }
+
+        result = []
+        for secondary_id in ids:
+            entry = lookup.get(str(secondary_id))
+            if entry:
+                result.append(entry)
+        return result
 
 
 class OCRIdentificationSerializer(BaseModelSerializer):
@@ -1243,7 +1272,7 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
     review_due_date = serializers.DateField(format="%Y-%m-%d", allow_null=True)
     community_number = serializers.SerializerMethodField()
     community_name = serializers.SerializerMethodField()
-    community_migrated_id = serializers.SerializerMethodField()
+    community_common_id = serializers.SerializerMethodField()
     wild_status = serializers.CharField(source="wild_status.name", allow_null=True)
     can_user_edit = serializers.SerializerMethodField()
 
@@ -1256,7 +1285,7 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
             "scientific_name",
             "community_number",
             "community_name",
-            "community_migrated_id",
+            "community_common_id",
             "wild_status",
             "group_type",
             "group_type_id",
@@ -1299,14 +1328,14 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
 
         return obj.community.taxonomy.community_name
 
-    def get_community_migrated_id(self, obj):
+    def get_community_common_id(self, obj):
         if not obj.community:
             return ""
 
         if not obj.community.taxonomy:
             return ""
 
-        return obj.community.taxonomy.community_migrated_id
+        return obj.community.taxonomy.community_common_id
 
     def get_conservation_status(self, obj):
         if not obj.community:
@@ -1670,8 +1699,8 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
         source="observation_time.name", allow_null=True
     )
     reported_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
-    community_migrated_id = serializers.CharField(
-        source="community.taxonomy.community_migrated_id", allow_null=True
+    community_common_id = serializers.CharField(
+        source="community.taxonomy.community_common_id", allow_null=True
     )
     occurrence_number = serializers.CharField(
         source="occurrence.occurrence_number", allow_null=True
@@ -1688,7 +1717,7 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
             "species_number",
             "community_number",
             "community_id",
-            "community_migrated_id",
+            "community_common_id",
             "occurrence_report_number",
             "reported_date",
             "lodgement_date",
@@ -2168,6 +2197,9 @@ class SaveOCRAnimalObservationSerializer(
     primary_detection_method = ListMultipleChoiceField(
         choices=[], allow_null=True, allow_blank=True, required=False
     )
+    secondary_sign = ListMultipleChoiceField(
+        choices=[], allow_null=True, allow_blank=True, required=False
+    )
     reproductive_state = ListMultipleChoiceField(
         choices=[], allow_null=True, allow_blank=True, required=False
     )
@@ -2183,7 +2215,7 @@ class SaveOCRAnimalObservationSerializer(
             "animal_behaviour",
             "reproductive_state",
             "animal_health",
-            "death_reason",
+            "death_injury_reason",
             "total_count",
             "distinctive_feature",
             "action_taken",
@@ -2220,6 +2252,9 @@ class SaveOCRAnimalObservationSerializer(
                 id_str=Cast("id", CharField()),
             ).values_list("id_str", "name")
         )
+        self.fields["secondary_sign"].choices = SecondarySign.objects.annotate(
+            id_str=Cast("id", CharField()),
+        ).values_list("id_str", "name")
         self.fields["reproductive_state"].choices = ReproductiveState.objects.annotate(
             id_str=Cast("id", CharField()),
         ).values_list("id_str", "name")
@@ -2961,19 +2996,19 @@ class SaveOccurrenceSerializer(BaseModelSerializer):
         so dirty_fields tracking works correctly.
         """
         # Get version_user from the save() call (not from validated_data)
-        request = self.context.get('request')
+        request = self.context.get("request")
         version_user = request.user if request else None
 
         # Apply validated_data to instance (don't save yet)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        
+
         # Now save with version_user while fields are still dirty
         if version_user is not None:
             instance.save(version_user=version_user)
         else:
             instance.save()
-        
+
         return instance
 
     def validate(self, data):
@@ -3285,9 +3320,10 @@ class OCCAnimalObservationSerializer(BaseModelSerializer):
     primary_detection_method = ListMultipleChoiceField(
         choices=[], allow_null=True, allow_blank=True, required=False
     )
-    secondary_sign_name = serializers.CharField(
-        source="secondary_sign.name", allow_null=True
+    secondary_sign = ListMultipleChoiceField(
+        choices=[], allow_null=True, allow_blank=True, required=False
     )
+    secondary_sign_names = serializers.SerializerMethodField()
     animal_behaviour_name = serializers.CharField(
         source="animal_behaviour.name", allow_null=True
     )
@@ -3297,8 +3333,8 @@ class OCCAnimalObservationSerializer(BaseModelSerializer):
     animal_health_name = serializers.CharField(
         source="animal_health.name", allow_null=True
     )
-    death_reason_name = serializers.CharField(
-        source="death_reason.name", allow_null=True
+    death_injury_reason_name = serializers.CharField(
+        source="death_injury_reason.name", allow_null=True
     )
     obs_date = serializers.DateField(format="%Y-%m-%d", allow_null=True)
     copied_ocr = serializers.SerializerMethodField()
@@ -3311,14 +3347,14 @@ class OCCAnimalObservationSerializer(BaseModelSerializer):
             "copied_ocr",
             "primary_detection_method",
             "secondary_sign",
-            "secondary_sign_name",
+            "secondary_sign_names",
             "animal_behaviour",
             "animal_behaviour_name",
             "reproductive_state",
             "animal_health",
             "animal_health_name",
-            "death_reason",
-            "death_reason_name",
+            "death_injury_reason",
+            "death_injury_reason_name",
             "total_count",
             "distinctive_feature",
             "action_taken",
@@ -3355,9 +3391,36 @@ class OCCAnimalObservationSerializer(BaseModelSerializer):
                 id_str=Cast("id", CharField()),
             ).values_list("id_str", "name")
         )
+        self.fields["secondary_sign"].choices = SecondarySign.objects.annotate(
+            id_str=Cast("id", CharField()),
+        ).values_list("id_str", "name")
         self.fields["reproductive_state"].choices = ReproductiveState.objects.annotate(
             id_str=Cast("id", CharField()),
         ).values_list("id_str", "name")
+
+    def get_secondary_sign_names(self, obj):
+        ids = obj.secondary_sign or []
+        if not ids:
+            return []
+
+        values = SecondarySign.objects.filter(id__in=ids).values(
+            "id", "name", "archived"
+        )
+        lookup = {
+            str(item["id"]): {
+                "id": str(item["id"]),
+                "name": item["name"],
+                "archived": item["archived"],
+            }
+            for item in values
+        }
+
+        result = []
+        for secondary_id in ids:
+            entry = lookup.get(str(secondary_id))
+            if entry:
+                result.append(entry)
+        return result
 
     def get_copied_ocr(self, obj):
         if obj.copied_ocr_animal_observation:
@@ -3439,8 +3502,8 @@ class OCCContactDetailSerializer(BaseModelSerializer):
                     and field_name not in self.Meta.read_only_fields
                 ):
                     setattr(instance, field_name, validated_data[field_name])
-            instance.save(*args, **kwargs)
-            return instance
+        instance.save(*args, **kwargs)
+        return instance
 
 
 class SaveOCCHabitatCompositionSerializer(BaseModelSerializer):
@@ -3505,12 +3568,10 @@ class SaveOCCHabitatConditionSerializer(BaseModelSerializer):
 
 
 class SaveOCCFireHistorySerializer(BaseModelSerializer):
-    # occurrence_id = serializers.IntegerField(required=False, allow_null=True, write_only= True)
-    # write_only removed from below as the serializer will not return that field in serializer.data
+    occurrence_id = serializers.IntegerField(required=False, allow_null=True)
     last_fire_estimate = serializers.DateField(
         format="%Y-%m", input_formats=["%Y-%m"], required=False, allow_null=True
     )
-    occurrence_id = serializers.IntegerField(required=False, allow_null=True)
     intensity_id = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
@@ -3610,6 +3671,9 @@ class SaveOCCAnimalObservationSerializer(
     primary_detection_method = ListMultipleChoiceField(
         choices=[], allow_null=True, allow_blank=True, required=False
     )
+    secondary_sign = ListMultipleChoiceField(
+        choices=[], allow_null=True, allow_blank=True, required=False
+    )
     reproductive_state = ListMultipleChoiceField(
         choices=[], allow_null=True, allow_blank=True, required=False
     )
@@ -3627,7 +3691,7 @@ class SaveOCCAnimalObservationSerializer(
             "animal_behaviour",
             "reproductive_state",
             "animal_health",
-            "death_reason",
+            "death_injury_reason",
             "total_count",
             "distinctive_feature",
             "action_taken",
@@ -3664,6 +3728,9 @@ class SaveOCCAnimalObservationSerializer(
                 id_str=Cast("id", CharField()),
             ).values_list("id_str", "name")
         )
+        self.fields["secondary_sign"].choices = SecondarySign.objects.annotate(
+            id_str=Cast("id", CharField()),
+        ).values_list("id_str", "name")
         self.fields["reproductive_state"].choices = ReproductiveState.objects.annotate(
             id_str=Cast("id", CharField()),
         ).values_list("id_str", "name")

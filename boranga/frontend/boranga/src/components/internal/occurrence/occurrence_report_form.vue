@@ -872,7 +872,7 @@ export default {
             return this.occurrence_report.group_type === 'community'
                 ? this.occurrence_report.taxonomy_details != null
                     ? this.occurrence_report.taxonomy_details
-                          .community_migrated_id
+                          .community_common_id
                     : ''
                 : this.occurrence_report.taxonomy_details != null
                   ? this.occurrence_report.taxonomy_details.scientific_name +

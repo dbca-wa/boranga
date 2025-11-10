@@ -23,9 +23,6 @@ stages:
         pool:
           vmImage: ubuntu-latest
         steps:
-          - script: echo "Build.SourceVersion=$(Build.SourceVersion)"
-            displayName: "Show Build.SourceVersion for debugging"
-
           - task: Docker@2
             displayName: Build image
             inputs:

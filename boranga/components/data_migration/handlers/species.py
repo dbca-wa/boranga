@@ -402,8 +402,7 @@ class SpeciesImporter(BaseSheetImporter):
         if errors_details:
             # allow override via options, otherwise write to
             # <cwd>/boranga/components/data_migration/handlers/handler_output with timestamp
-            get_opt = getattr(options, "get", None)
-            csv_path = get_opt("error_csv") if callable(get_opt) else None
+            csv_path = options.get("error_csv")
             if csv_path:
                 csv_path = os.path.abspath(csv_path)
             else:

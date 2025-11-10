@@ -2215,7 +2215,7 @@ class CommunityTaxonomy(BaseModel):
     community = models.OneToOneField(
         Community, on_delete=models.CASCADE, null=True, related_name="taxonomy"
     )
-    community_migrated_id = models.CharField(
+    community_common_id = models.CharField(
         max_length=200, null=True, blank=True, unique=True
     )
     community_name = models.CharField(

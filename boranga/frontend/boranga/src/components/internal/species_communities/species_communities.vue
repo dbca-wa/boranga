@@ -683,7 +683,7 @@ export default {
             return this.species_community.group_type === 'community'
                 ? this.species_community.taxonomy_details != null
                     ? this.species_community.taxonomy_details
-                          .community_migrated_id
+                          .community_common_id
                     : ''
                 : this.species_community.taxonomy_details != null
                   ? this.species_community.taxonomy_details.scientific_name +
@@ -1275,10 +1275,10 @@ export default {
                     blank_fields.push(' Community Name is required');
                 }
                 if (
-                    vm.species_community.taxonomy_details
-                        .community_migrated_id == null ||
-                    vm.species_community.taxonomy_details
-                        .community_migrated_id == ''
+                    vm.species_community.taxonomy_details.community_common_id ==
+                        null ||
+                    vm.species_community.taxonomy_details.community_common_id ==
+                        ''
                 ) {
                     blank_fields.push(' Community ID is required');
                 }

@@ -23,11 +23,21 @@ class Command(BaseCommand):
         p_run.add_argument("slug", help="Importer slug")
         p_run.add_argument("path", help="Spreadsheet path")
         p_run.add_argument("--dry-run", action="store_true")
+        p_run.add_argument(
+            "--error-csv",
+            type=str,
+            help="Path to write error details CSV (default: auto-generated in handler_output/)",
+        )
 
         p_multi = sub.add_parser("runmany", help="Run multiple importers sequentially")
         p_multi.add_argument("path", help="Spreadsheet path (shared)")
         p_multi.add_argument("--only", nargs="+", help="Subset of slugs")
         p_multi.add_argument("--dry-run", action="store_true")
+        p_multi.add_argument(
+            "--error-csv",
+            type=str,
+            help="Path to write error details CSV (default: auto-generated in handler_output/)",
+        )
 
         # Importer-specific options only relevant to run / runmany
         for imp_cls in all_importers():

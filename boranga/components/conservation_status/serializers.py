@@ -383,7 +383,7 @@ class ListSpeciesConservationStatusSerializer(BaseModelSerializer):
 class ListCommunityConservationStatusSerializer(BaseModelSerializer):
     group_type = serializers.SerializerMethodField()
     community_number = serializers.SerializerMethodField()
-    community_migrated_id = serializers.SerializerMethodField()
+    community_common_id = serializers.SerializerMethodField()
     community_name = serializers.SerializerMethodField()
     processing_status = serializers.CharField(source="get_processing_status_display")
     regions = serializers.SerializerMethodField()
@@ -431,7 +431,7 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
             "conservation_status_number",
             "group_type",
             "community_number",
-            "community_migrated_id",
+            "community_common_id",
             "community_name",
             "regions",
             "districts",
@@ -468,7 +468,7 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
             "conservation_status_number",
             "community_number",
             "group_type",
-            "community_migrated_id",
+            "community_common_id",
             "community_name",
             "regions",
             "districts",
@@ -514,11 +514,11 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
             return obj.community.community_number
         return ""
 
-    def get_community_migrated_id(self, obj):
+    def get_community_common_id(self, obj):
         if obj.community:
             try:
                 taxonomy = CommunityTaxonomy.objects.get(community=obj.community)
-                return taxonomy.community_migrated_id
+                return taxonomy.community_common_id
             except CommunityTaxonomy.DoesNotExist:
                 return ""
         return ""
@@ -1515,7 +1515,7 @@ class DTConservationStatusReferralSerializer(BaseModelSerializer):
     scientific_name = serializers.SerializerMethodField()
     common_name = serializers.SerializerMethodField()
     community_number = serializers.SerializerMethodField()
-    community_migrated_id = serializers.SerializerMethodField()
+    community_common_id = serializers.SerializerMethodField()
     community_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -1538,7 +1538,7 @@ class DTConservationStatusReferralSerializer(BaseModelSerializer):
             "scientific_name",
             "common_name",
             "community_number",
-            "community_migrated_id",
+            "community_common_id",
             "community_name",
         )
         datatables_always_serialize = (
@@ -1603,12 +1603,12 @@ class DTConservationStatusReferralSerializer(BaseModelSerializer):
             return obj.conservation_status.community.community_number
         return ""
 
-    def get_community_migrated_id(self, obj):
+    def get_community_common_id(self, obj):
         try:
             taxonomy = CommunityTaxonomy.objects.get(
                 community=obj.conservation_status.community
             )
-            return taxonomy.community_migrated_id
+            return taxonomy.community_common_id
         except CommunityTaxonomy.DoesNotExist:
             return ""
 

@@ -34,6 +34,20 @@
                         />
                     </div>
                 </div>
+                <div class="row mb-3">
+                    <label for="" class="col-sm-4 control-label fw-bold"
+                        >Community ID: <span class="text-danger">*</span></label
+                    >
+                    <div :id="select_community_id" class="col-sm-8">
+                        <select
+                            :id="community_id_lookup"
+                            :ref="community_id_lookup"
+                            :disabled="isCommunityNameReadOnly"
+                            :name="community_id_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
                 <template v-if="show_administrative_information">
                     <div class="row mb-3 border-top pt-3">
                         <h5 class="text-muted mb-4">
@@ -1530,7 +1544,9 @@ export default {
     data: function () {
         return {
             community_name_lookup: 'community_name_lookup' + uuid(),
+            community_id_lookup: 'community_id_lookup' + uuid(),
             select_community_name: 'select_community_name' + uuid(),
+            select_community_id: 'select_community_id' + uuid(),
             isShowComment: false,
             cs_profile_dict: {},
             wa_legislative_lists: [],
@@ -1545,6 +1561,7 @@ export default {
             referral_comments_boxes: [],
             other_conservation_assessments: [],
             community_display: '',
+            isSyncingCommunitySelects: false,
         };
     },
     computed: {
@@ -1779,6 +1796,7 @@ export default {
         let vm = this;
         this.$nextTick(() => {
             vm.initialiseCommunityNameLookup();
+            vm.initialiseCommunityIDLookup();
         });
     },
     methods: {
@@ -1808,14 +1826,50 @@ export default {
                     },
                 })
                 .on('select2:select', function (e) {
-                    let data = e.params.data.id;
-                    vm.conservation_status_obj.community_id = data;
-                    vm.community_display = e.params.data.text;
+                    if (vm.isSyncingCommunitySelects) {
+                        vm.isSyncingCommunitySelects = false;
+                        return;
+                    }
+                    const selected = e.params.data;
+                    const communityId = selected.id;
+                    const communityMigratedId =
+                        selected.community_common_id || communityId;
+                    vm.conservation_status_obj.community_id = communityId;
+                    vm.community_display = selected.text;
+                    vm.isSyncingCommunitySelects = true;
+                    vm.setSelect2Value(
+                        vm.community_id_lookup,
+                        communityId,
+                        communityMigratedId
+                    );
                     vm.$emit('saveConservationStatus');
+                    setTimeout(() => {
+                        vm.isSyncingCommunitySelects = false;
+                    }, 0);
                 })
-                .on('select2:unselect', function () {
+                .on('select2:clear', function () {
+                    vm.isSyncingCommunitySelects = true;
+                    vm.clearSelect2Value(vm.community_id_lookup);
                     vm.conservation_status_obj.community_id = null;
                     vm.community_display = '';
+                    vm.$emit('saveConservationStatus');
+                    setTimeout(() => {
+                        vm.isSyncingCommunitySelects = false;
+                    }, 0);
+                })
+                .on('select2:unselect', function () {
+                    if (vm.isSyncingCommunitySelects) {
+                        vm.isSyncingCommunitySelects = false;
+                        return;
+                    }
+                    vm.isSyncingCommunitySelects = true;
+                    vm.clearSelect2Value(vm.community_id_lookup);
+                    vm.conservation_status_obj.community_id = null;
+                    vm.community_display = '';
+                    vm.$emit('saveConservationStatus');
+                    setTimeout(() => {
+                        vm.isSyncingCommunitySelects = false;
+                    }, 0);
                 })
                 .on('select2:open', function () {
                     const searchField = $(
@@ -1830,20 +1884,200 @@ export default {
                 $(vm.$refs[vm.community_name_lookup]).select2('open');
             }
         },
+        initialiseCommunityIDLookup: function () {
+            let vm = this;
+            $(vm.$refs[vm.community_id_lookup])
+                .select2({
+                    minimumInputLength: 2,
+                    dropdownParent: $('#' + vm.select_community_id),
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Community ID',
+                    ajax: {
+                        url: api_endpoints.community_id_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                                cs_community: true,
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    if (vm.isSyncingCommunitySelects) {
+                        vm.isSyncingCommunitySelects = false;
+                        return;
+                    }
+                    const selected = e.params.data;
+                    const communityId = selected.community_id || selected.id;
+                    const migratedId = selected.text || communityId;
+                    const communityName =
+                        selected.community_name || selected.text || '';
+                    vm.conservation_status_obj.community_id = communityId;
+                    vm.community_display =
+                        communityName || vm.community_display || '';
+                    vm.isSyncingCommunitySelects = true;
+                    vm.setSelect2Value(
+                        vm.community_id_lookup,
+                        communityId,
+                        migratedId
+                    );
+                    if (communityName) {
+                        vm.setSelect2Value(
+                            vm.community_name_lookup,
+                            communityId,
+                            communityName
+                        );
+                    } else {
+                        vm.clearSelect2Value(vm.community_name_lookup);
+                    }
+                    vm.$emit('saveConservationStatus');
+                    setTimeout(() => {
+                        vm.isSyncingCommunitySelects = false;
+                    }, 0);
+                })
+                .on('select2:clear', function () {
+                    vm.isSyncingCommunitySelects = true;
+                    vm.clearSelect2Value(vm.community_name_lookup);
+                    vm.conservation_status_obj.community_id = null;
+                    vm.community_display = '';
+                    vm.$emit('saveConservationStatus');
+                    setTimeout(() => {
+                        vm.isSyncingCommunitySelects = false;
+                    }, 0);
+                })
+                .on('select2:unselect', function () {
+                    if (vm.isSyncingCommunitySelects) {
+                        vm.isSyncingCommunitySelects = false;
+                        return;
+                    }
+                    vm.isSyncingCommunitySelects = true;
+                    vm.clearSelect2Value(vm.community_name_lookup);
+                    vm.conservation_status_obj.community_id = null;
+                    vm.community_display = '';
+                    vm.$emit('saveConservationStatus');
+                    setTimeout(() => {
+                        vm.isSyncingCommunitySelects = false;
+                    }, 0);
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-' +
+                            vm.community_id_lookup +
+                            '-results"]'
+                    );
+                    searchField[0].focus();
+                });
+        },
         getCommunityDisplay: function () {
             let vm = this;
-            if (vm.conservation_status_obj?.community_id) {
-                let community_display_url =
-                    api_endpoints.community_display +
-                    '?community_id=' +
-                    vm.conservation_status_obj.community_id;
-                fetch(community_display_url).then(async (response) => {
-                    const data = await response.json();
-                    var newOption = new Option(data.name, data.id, false, true);
-                    $('#' + vm.community_name_lookup).append(newOption);
-                    vm.community_display = data.name;
-                });
+            const communityId = vm.conservation_status_obj?.community_id;
+            if (!communityId) {
+                return;
             }
+
+            vm.isSyncingCommunitySelects = true;
+            vm.fetchCommunityDetails(communityId)
+                .then((community) => {
+                    if (!community) {
+                        return;
+                    }
+
+                    const applySelections = () => {
+                        vm.isSyncingCommunitySelects = true;
+                        vm.community_display = community.name;
+                        vm.setSelect2Value(
+                            vm.community_name_lookup,
+                            community.id,
+                            community.name
+                        );
+                        vm.setSelect2Value(
+                            vm.community_id_lookup,
+                            community.id,
+                            community.community_common_id || community.id
+                        );
+                        vm.isSyncingCommunitySelects = false;
+                    };
+
+                    if (
+                        vm.$refs[vm.community_name_lookup] &&
+                        vm.$refs[vm.community_id_lookup]
+                    ) {
+                        applySelections();
+                    } else {
+                        vm.$nextTick(applySelections);
+                    }
+                })
+                .catch((error) => {
+                    console.log(error);
+                })
+                .finally(() => {
+                    vm.isSyncingCommunitySelects = false;
+                });
+        },
+        setSelect2Value: function (refKey, value, label) {
+            const selectEl = this.$refs[refKey];
+            if (!selectEl) {
+                return;
+            }
+
+            const optionValue =
+                value === undefined || value === null ? '' : value.toString();
+            const optionLabel =
+                label === undefined || label === null
+                    ? optionValue
+                    : label.toString();
+
+            let option = Array.from(selectEl.options || []).find((opt) => {
+                return opt.value === optionValue;
+            });
+
+            if (!option) {
+                option = new Option(optionLabel, optionValue, true, true);
+                selectEl.add(option);
+            } else {
+                option.selected = true;
+                option.text = optionLabel;
+            }
+
+            selectEl.value = optionValue;
+            $(selectEl).trigger('change');
+        },
+        clearSelect2Value: function (refKey) {
+            const selectEl = this.$refs[refKey];
+            if (!selectEl) {
+                return;
+            }
+
+            selectEl.value = '';
+            $(selectEl).val(null).trigger('change');
+        },
+        fetchCommunityDetails: function (communityId) {
+            if (!communityId) {
+                return Promise.resolve(null);
+            }
+
+            const url =
+                api_endpoints.community_display +
+                '?community_id=' +
+                communityId;
+
+            return fetch(url)
+                .then((response) => {
+                    if (!response.ok) {
+                        throw response;
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    if (!data || !data.id) {
+                        return null;
+                    }
+                    return data;
+                });
         },
         filterWALegislativeCategories: function (event) {
             this.$nextTick(() => {
@@ -1905,6 +2139,9 @@ export default {
             this.isShowComment = updatedShowComment;
         },
         saveConservationStatus: function (e) {
+            if (this.isSyncingCommunitySelects) {
+                return;
+            }
             if (e.target.classList.contains('input.select2-search__field')) {
                 // We will emit this save from the select 2 event instead
                 // as it requires some time to populate the selected value

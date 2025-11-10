@@ -111,10 +111,10 @@
                     >
                     <div class="col-sm-9">
                         <input
-                            id="community_migrated_id"
+                            id="community_common_id"
                             v-model="
                                 species_community.taxonomy_details
-                                    .community_migrated_id
+                                    .community_common_id
                             "
                             :disabled="isReadOnly"
                             type="text"
