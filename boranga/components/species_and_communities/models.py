@@ -62,16 +62,26 @@ def _sum_area_of_occupancy_m2(obj, owner_field: str):
     """
     Sum area (in metres squared) for occurrence geometries related to an object.
 
+    Note: Since fauna are based on points (which have no area), the front end option to auto
+    calculate area of occupancy has been hidden for fauna species.
+
     owner_field: 'species' or 'community' - used to build filters for Occurrence relations.
     Returns 0 when no area can be determined.
     """
     from django.db.models import F, Func
 
-    from boranga.components.occurrence.models import (
-        BufferGeometry,
-        Occurrence,
-        OccurrenceGeometry,
-    )
+    from boranga.components.occurrence.models import Occurrence, OccurrenceGeometry
+
+    # Fauna uses buffered geometries for area calculation
+    if (
+        getattr(obj, "group_type", None)
+        and obj.group_type.name == GroupType.GROUP_TYPE_FAUNA
+    ):
+        logger.warning(
+            "_sum_area_of_occupancy_m2 called for fauna species which doesn't make sense as "
+            "they are point based. Returnning 0."
+        )
+        return 0
 
     base_filter = {
         f"occurrence__{owner_field}": obj,
@@ -79,19 +89,6 @@ def _sum_area_of_occupancy_m2(obj, owner_field: str):
     }
 
     qs = OccurrenceGeometry.objects.filter(**base_filter)
-
-    # Fauna uses buffered geometries for area calculation
-    if (
-        getattr(obj, "group_type", None)
-        and obj.group_type.name == GroupType.GROUP_TYPE_FAUNA
-    ):
-        buffer_filter = {
-            f"buffered_from_geometry__occurrence__{owner_field}": obj,
-            "buffered_from_geometry__occurrence__processing_status__in": [
-                Occurrence.PROCESSING_STATUS_ACTIVE
-            ],
-        }
-        qs = BufferGeometry.objects.filter(**buffer_filter)
 
     # Use PostGIS to sum areas in the DB (geometry::geography to get metres)
     # SUM(ST_Area(geometry::geography)) per-row area aggregation

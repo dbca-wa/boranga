@@ -458,6 +458,7 @@ export default {
     data: function () {
         let vm = this;
         return {
+            uuid_component_map: uuid(),
             uuid: null,
             constants: constants,
             isShowComment: false,
@@ -495,6 +496,9 @@ export default {
         };
     },
     computed: {
+        componentMapKey: function () {
+            return `component-map-${this.uuid_component_map}`;
+        },
         assessorCommentVisibility: function () {
             return this.occurrence_report_obj.assessor_mode.assessor_box_view;
         },
@@ -546,9 +550,6 @@ export default {
         },
         isReadOnly: function () {
             return this.occurrence_report_obj.readonly;
-        },
-        componentMapKey: function () {
-            return `component-map-${this.uuid}`;
         },
         csrf_token: function () {
             return helpers.getCookie('csrftoken');
@@ -770,6 +771,12 @@ export default {
                     vm.$refs.component_map.setLoadingMap(false);
                 }
             );
+        },
+        incrementComponentMapKey: function () {
+            this.uuid_component_map = uuid();
+            this.$nextTick(() => {
+                this.mapContainerId = this.$refs.component_map.map_container_id;
+            });
         },
         searchForCRS: function (search, loading) {
             const vm = this;
