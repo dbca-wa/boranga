@@ -360,15 +360,29 @@ class OccurrenceTenureAdmin(nested_admin.NestedModelAdmin):
 @admin.register(OccurrenceTenurePurpose)
 class OccurrenceTenurePurposeAdmin(
     CsvExportMixin,
+    ImportMixin,
+    ArchivableModelAdminMixin,
     OrderedModelAdmin,
     DeleteProtectedModelAdmin,
 ):
-    pass
+    list_display = ["code", "label", "move_up_down_links"]
+    list_filter = ["archived"]
+    search_fields = ["code", "label"]
+    ordering = ("order",)
 
 
 @admin.register(OccurrenceTenureVesting)
-class OccurrenceTenureVestingAdmin(admin.ModelAdmin):
-    pass
+class OccurrenceTenureVestingAdmin(
+    CsvExportMixin,
+    ImportMixin,
+    ArchivableModelAdminMixin,
+    OrderedModelAdmin,
+    DeleteProtectedModelAdmin,
+):
+    list_display = ["code", "label", "move_up_down_links"]
+    list_filter = ["archived"]
+    search_fields = ["code", "label"]
+    ordering = ("order",)
 
 
 class AnimalBehaviourAdmin(
