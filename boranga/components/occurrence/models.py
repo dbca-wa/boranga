@@ -1298,7 +1298,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         ocr_copy.occurrence_report_number = ""
         ocr_copy.lodgement_date = None
         ocr_copy.observation_date = None
-        ocr_copy.comments = None
+        ocr_copy.comments = ""
         ocr_copy.assigned_officer = None
         ocr_copy.assigned_approver = None
         ocr_copy.approved_by = None

@@ -2586,7 +2586,9 @@ export default {
         onFeaturesLoaded: function (event) {
             let vm = this;
             if (event.details.loaded == true) {
-                vm.$emit('features-loaded');
+                // Pass the event to parent components so they can identify which layer triggered the event
+                // This is needed to prevent infinite recursion in handlers that reload derived layers
+                vm.$emit('features-loaded', event);
 
                 vm.initialiseUndoRedos();
 
@@ -4593,10 +4595,13 @@ export default {
                     layer.setOpacity(opacities[0]);
                 }
             }
+            // Include the layer name in the event details so parent components can identify
+            // which layer triggered the event (used to prevent infinite recursion in handlers)
             vm.map.dispatchEvent({
                 type: 'features-loaded',
                 details: {
                     loaded: true,
+                    layerName: toSource,
                 },
             });
         },

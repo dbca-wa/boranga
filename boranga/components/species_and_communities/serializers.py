@@ -1125,8 +1125,12 @@ class SaveCommunityTaxonomySerializer(BaseModelSerializer):
         # Since for the user this field is called 'Community ID'
         community_id = data.get("community_id", None)
         community_common_id = data.get("community_common_id", None)
+
         if (
-            CommunityTaxonomy.objects.filter(community_common_id=community_common_id)
+            community_common_id
+            and CommunityTaxonomy.objects.filter(
+                community_common_id=community_common_id
+            )
             .exclude(community_id=community_id)
             .exists()
         ):

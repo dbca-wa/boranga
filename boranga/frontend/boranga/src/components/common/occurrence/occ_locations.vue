@@ -964,10 +964,22 @@ export default {
                     loading(false);
                 });
         },
-        mapFeaturesLoaded: function () {
-            console.log('Map features loaded.');
+        mapFeaturesLoaded: function (event) {
             this.mapContainerId = this.$refs.component_map.map_container_id;
             this.mapReady = true;
+
+            // Prevent infinite recursion: don't reload buffer geometries when the buffer layer itself was just loaded
+            // The issue occurs because:
+            // 1. Occurrence geometries load -> triggers 'features-loaded' event
+            // 2. This handler loads buffer geometries from the occurrence features
+            // 3. Loading buffer geometries -> triggers another 'features-loaded' event
+            // 4. Without this check, step 2 repeats infinitely
+            // Solution: Check if the event was triggered by the buffer layer and skip reloading if so
+            const layerName = event?.details?.layerName;
+            if (layerName === this.bufferLayerName) {
+                return;
+            }
+
             if (this.bufferLayerPending) {
                 const bufferPayload = this.buildBufferLayerPayload();
                 if (bufferPayload.length) {
