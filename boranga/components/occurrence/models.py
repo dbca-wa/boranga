@@ -1143,6 +1143,20 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             occurrence.occurrence_source = Occurrence.OCCURRENCE_CHOICE_OCR
             occurrence.save(version_user=request.user)
 
+            # Log the creation of the new occurrence
+            occurrence.log_user_action(
+                OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
+                    occurrence.occurrence_number
+                ),
+                request,
+            )
+            request.user.log_user_action(
+                OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
+                    occurrence.occurrence_number
+                ),
+                request,
+            )
+
         self.occurrence = occurrence
         self.save(version_user=request.user)
 
@@ -1583,6 +1597,7 @@ class OccurrenceReportLogDocument(Document):
 
 class OccurrenceReportUserAction(UserAction):
     # OccurrenceReport Proposal
+    ACTION_CREATE_OCCURRENCE_REPORT = "Create occurrence report {}"
     ACTION_EDIT_OCCURRENCE_REPORT = "Edit occurrence report {}"
     ACTION_LODGE_PROPOSAL = "Lodge occurrence report {}"
     ACTION_SAVE_APPLICATION = "Save occurrence report {}"
@@ -4936,6 +4951,7 @@ class OccurrenceLogDocument(Document):
 
 
 class OccurrenceUserAction(UserAction):
+    ACTION_CREATE_OCCURRENCE = "Create occurrence {}"
     ACTION_VIEW_OCCURRENCE = "View occurrence {}"
     ACTION_SAVE_OCCURRENCE = "Save occurrence {}"
     ACTION_EDIT_OCCURRENCE = "Edit occurrence {}"
