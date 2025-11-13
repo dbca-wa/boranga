@@ -113,6 +113,7 @@ from boranga.helpers import (
     get_mock_request,
     get_openpyxl_data_validation_type_for_django_field,
     is_django_admin,
+    is_internal_by_user_id,
     is_occurrence_approver,
     is_occurrence_assessor,
     is_occurrence_report_referee,
@@ -770,6 +771,15 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             )
 
         previous_submitter = EmailUser.objects.get(id=self.submitter)
+
+        # Check if we're transitioning between internal and external users
+        previous_is_internal = is_internal_by_user_id(self.submitter)
+        new_is_internal = is_internal_by_user_id(user_id)
+
+        # If transitioning between internal and external, flip the internal_application flag
+        if previous_is_internal != new_is_internal:
+            self.internal_application = not self.internal_application
+
         self.submitter = new_submitter.id
         old_submitter_information = SubmitterInformation.objects.filter(
             id=self.submitter_information_id
