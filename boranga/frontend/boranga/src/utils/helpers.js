@@ -387,11 +387,13 @@ export default {
      * @param {Object} event - The event object.
      * @param {HTMLElement} selector - The selector for the element to change.
      * @param {string=} type - The type of change (species or community).
+     * @param {boolean=} hasRelatedReports - Whether the occurrence has related occurrence reports.
      */
     confirmChangeOfSpeciesOrCommunityName: function (
         event,
         selector,
-        type = ''
+        type = '',
+        hasRelatedReports = true
     ) {
         // Prevent firing select/unselect events, we do that ourselves below
         event.preventDefault();
@@ -403,6 +405,40 @@ export default {
             // Unselecting means no new value
         }
         console.log(`Changing to ${newData?.id}`);
+
+        const applyChange = () => {
+            $(selector).trigger({
+                type: `select2:${newData === null ? 'un' : ''}select`,
+                params: {
+                    data: newData,
+                },
+            });
+
+            const optionExists =
+                $(`#${selector.id} option`).filter(
+                    (_, option) => option.value === String(newData?.id)
+                ).length > 0;
+
+            if (newData && !optionExists) {
+                const newOption = new Option(
+                    newData.text,
+                    newData.id,
+                    true,
+                    true
+                );
+                $(selector).append(newOption);
+            }
+
+            $(selector)
+                .val(newData?.id ? newData.id : null)
+                .trigger('change');
+        };
+
+        // Skip confirmation if occurrence is new or has no related reports
+        if (!hasRelatedReports) {
+            applyChange();
+            return;
+        }
 
         const typeCapitalized = type.charAt(0).toUpperCase() + type.slice(1);
         swal.fire({
@@ -418,31 +454,7 @@ export default {
             },
         }).then((result) => {
             if (result.isConfirmed) {
-                $(selector).trigger({
-                    type: `select2:${newData === null ? 'un' : ''}select`,
-                    params: {
-                        data: newData,
-                    },
-                });
-
-                const optionExists =
-                    $(`#${selector.id} option`).filter(
-                        (_, option) => option.value === String(newData?.id)
-                    ).length > 0;
-
-                if (newData && !optionExists) {
-                    const newOption = new Option(
-                        newData.text,
-                        newData.id,
-                        true,
-                        true
-                    );
-                    $(selector).append(newOption);
-                }
-
-                $(selector)
-                    .val(newData?.id ? newData.id : null)
-                    .trigger('change');
+                applyChange();
             } else {
                 // User cancelled the change
             }

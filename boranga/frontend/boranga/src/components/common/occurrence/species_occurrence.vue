@@ -296,10 +296,15 @@ export default {
                     searchField[0].focus();
                 })
                 .on('select2:selecting select2:unselecting', function (e) {
+                    const hasRelatedReports =
+                        vm.occurrence_obj.id &&
+                        vm.occurrence_obj.occurrence_reports &&
+                        vm.occurrence_obj.occurrence_reports.length > 0;
                     helpers.confirmChangeOfSpeciesOrCommunityName(
                         e,
                         vm.$refs[vm.scientific_name_lookup],
-                        'species'
+                        'species',
+                        hasRelatedReports
                     );
                 });
         },
