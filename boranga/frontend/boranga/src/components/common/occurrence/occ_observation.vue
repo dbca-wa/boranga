@@ -754,12 +754,8 @@ export default {
             plantCountBody: 'plantCountBody' + uuid(),
             animalObsBody: 'animalObsBody' + uuid(),
             identificationBody: 'identificationBody' + uuid(),
-            originalObservationDetail: JSON.stringify(
-                vm.occurrence_obj.observation_detail
-            ),
-            originalIdentification: JSON.stringify(
-                vm.occurrence_obj.identification
-            ),
+            originalObservationDetail: null,
+            originalIdentification: null,
             plantCountIsDirty: false,
             animalObservationIsDirty: false,
             //---to show fields related to Fauna
@@ -783,6 +779,9 @@ export default {
         },
         observationDetailIsDirty: function () {
             let vm = this;
+            if (vm.originalObservationDetail === null) {
+                return false;
+            }
             return (
                 JSON.stringify(vm.occurrence_obj.observation_detail) !==
                 vm.originalObservationDetail
@@ -790,6 +789,9 @@ export default {
         },
         identificationIsDirty: function () {
             let vm = this;
+            if (vm.originalIdentification === null) {
+                return false;
+            }
             return (
                 JSON.stringify(vm.occurrence_obj.identification) !==
                 vm.originalIdentification
@@ -852,6 +854,13 @@ export default {
         vm.permit_type_list.splice(0, 0, {
             id: null,
             name: null,
+        });
+    },
+    mounted: function () {
+        let vm = this;
+        // Capture original state after Vue has fully processed the component
+        vm.$nextTick(() => {
+            vm.resetDirtyState();
         });
     },
     methods: {
