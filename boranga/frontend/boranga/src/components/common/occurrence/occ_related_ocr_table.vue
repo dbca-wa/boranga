@@ -199,7 +199,8 @@ export default {
                         }
                     }
                     links += `<a href='#' data-view-section='${full.id}'>View Section</a><br>`;
-                    if (vm.allowCopySectionData) {
+                    // Check the current value of isReadOnly and allowCopySectionData at render time
+                    if (!vm.isReadOnly && vm.allowCopySectionData) {
                         links += `<a href='#' data-replace-section='${full.id}'>Copy Section Data</a><br>`;
                     }
                     return links;
@@ -209,8 +210,9 @@ export default {
         datatable_options: function () {
             let vm = this;
 
+            // Always use column_copy_action for sections - it will check isReadOnly internally
             let action = vm.column_action;
-            if (vm.section_type !== '' && !vm.isReadOnly) {
+            if (vm.section_type !== '') {
                 action = vm.column_copy_action;
             }
 
@@ -295,6 +297,21 @@ export default {
                 helpers.enablePopovers,
                 false
             );
+        },
+        'occurrence_obj.can_user_edit': function (newVal, oldVal) {
+            // When can_user_edit changes (e.g., after unlock), reload the table
+            // The render function will check the current isReadOnly value
+            if (
+                newVal !== oldVal &&
+                this.$refs.related_ocr_datatable?.vmDataTable
+            ) {
+                // Reload the table data - this will re-execute the render functions
+                // with the current isReadOnly value
+                this.$refs.related_ocr_datatable.vmDataTable.ajax.reload(
+                    null,
+                    false
+                );
+            }
         },
     },
     methods: {
@@ -395,6 +412,9 @@ export default {
         },
         addEventListeners: function () {
             let vm = this;
+            if (!vm.$refs.related_ocr_datatable?.vmDataTable) {
+                return;
+            }
             vm.$refs.related_ocr_datatable.vmDataTable.on(
                 'click',
                 'a[data-view-section]',

@@ -169,8 +169,12 @@
                             </div>
                             <div class="row mb-3">
                                 <div class="col-sm-3">
-                                    <label class="control-label pull-left"
-                                        >Significant to Occurrence</label
+                                    <label
+                                        class="control-label pull-left fw-bold"
+                                        >Significant to Occurrence
+                                        <span class="text-danger"
+                                            >*</span
+                                        ></label
                                     >
                                 </div>
                                 <div class="col-sm-3">

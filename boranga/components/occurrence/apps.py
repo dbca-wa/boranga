@@ -16,6 +16,8 @@ class OccurrenceConfig(AppConfig):
                 "update_occurrence_report_referral_doc_filename",
                 "update_occurrence_report_amendment_request_doc_filename",
                 "update_occurrence_comms_log_filename",
+                # NOTE: update_occurrence_report_shapefile_doc_filename is NOT wrapped
+                # because it needs to preserve base filenames for shapefile components
             ]
 
             for fname in functions_to_wrap:

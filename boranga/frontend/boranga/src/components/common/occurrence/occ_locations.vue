@@ -553,7 +553,7 @@ export default {
             occurrenceLayerName: 'occurrence_layer',
             bufferLayerName: 'buffer_layer',
             plausibilityGeometryFeatures: [],
-            originalLocation: JSON.stringify(vm.occurrence_obj.location),
+            originalLocation: null,
             mapIsDirty: false,
             bufferLayerPending: false,
         };
@@ -665,6 +665,9 @@ export default {
             return this.mapContainerId;
         },
         locationIsDirty: function () {
+            if (this.originalLocation === null) {
+                return false;
+            }
             return (
                 JSON.stringify(this.occurrence_obj.location) !=
                 this.originalLocation
@@ -782,6 +785,13 @@ export default {
 
         // Make sure the datatables have access to the map container id to have the page scroll to the map anchor
         this.refreshDatatables();
+    },
+    mounted: function () {
+        let vm = this;
+        // Capture original state after Vue has fully processed the component
+        vm.$nextTick(() => {
+            vm.resetDirtyState();
+        });
     },
     methods: {
         resetDirtyState: function () {

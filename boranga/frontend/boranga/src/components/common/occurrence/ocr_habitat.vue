@@ -1090,21 +1090,11 @@ export default {
             vegetationStructureBody: 'vegetationStructureBody' + uuid(),
             fireHistoryBody: 'fireHistoryBody' + uuid(),
             associatedSpeciesBody: 'associatedSpeciesBody' + uuid(),
-            originalHabitatComposition: JSON.stringify(
-                vm.occurrence_report_obj.habitat_composition
-            ),
-            originalHabitatCondition: JSON.stringify(
-                vm.occurrence_report_obj.habitat_condition
-            ),
-            originalVegetationStructure: JSON.stringify(
-                vm.occurrence_report_obj.vegetation_structure
-            ),
-            originalFireHistory: JSON.stringify(
-                vm.occurrence_report_obj.fire_history
-            ),
-            originalAssociatedSpecies: JSON.stringify(
-                vm.occurrence_report_obj.associated_species
-            ),
+            originalHabitatComposition: null,
+            originalHabitatCondition: null,
+            originalVegetationStructure: null,
+            originalFireHistory: null,
+            originalAssociatedSpecies: null,
             //---to show fields related to Fauna
             isFauna:
                 vm.occurrence_report_obj.group_type === 'fauna' ? true : false,
@@ -1149,6 +1139,9 @@ export default {
             ).toFixed(2);
         },
         habitatCompositionIsDirty: function () {
+            if (this.originalHabitatComposition === null) {
+                return false;
+            }
             return (
                 JSON.stringify(
                     this.occurrence_report_obj.habitat_composition
@@ -1156,12 +1149,18 @@ export default {
             );
         },
         habitatConditionIsDirty: function () {
+            if (this.originalHabitatCondition === null) {
+                return false;
+            }
             return (
                 JSON.stringify(this.occurrence_report_obj.habitat_condition) !=
                 this.originalHabitatCondition
             );
         },
         vegetationStructureIsDirty: function () {
+            if (this.originalVegetationStructure === null) {
+                return false;
+            }
             return (
                 JSON.stringify(
                     this.occurrence_report_obj.vegetation_structure
@@ -1169,12 +1168,18 @@ export default {
             );
         },
         fireHistoryIsDirty: function () {
+            if (this.originalFireHistory === null) {
+                return false;
+            }
             return (
                 JSON.stringify(this.occurrence_report_obj.fire_history) !=
                 this.originalFireHistory
             );
         },
         associatedSpeciesIsDirty: function () {
+            if (this.originalAssociatedSpecies === null) {
+                return false;
+            }
             return (
                 JSON.stringify(this.occurrence_report_obj.associated_species) !=
                 this.originalAssociatedSpecies
@@ -1250,6 +1255,12 @@ export default {
         vm.eventListeners();
         vm.initialiseLandFormSelect();
         vm.initialiseSoilTypeSelect();
+
+        // Capture original state after Vue has fully processed the component
+        // This prevents false "unsaved changes" warnings on new records
+        vm.$nextTick(() => {
+            vm.resetDirtyState();
+        });
     },
     methods: {
         resetDirtyState: function () {

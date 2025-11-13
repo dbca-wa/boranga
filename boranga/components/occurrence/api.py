@@ -581,6 +581,20 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
+        # Log the creation of the new occurrence report
+        new_instance.log_user_action(
+            OccurrenceReportUserAction.ACTION_CREATE_OCCURRENCE_REPORT.format(
+                new_instance.occurrence_report_number
+            ),
+            request,
+        )
+        request.user.log_user_action(
+            OccurrenceReportUserAction.ACTION_CREATE_OCCURRENCE_REPORT.format(
+                new_instance.occurrence_report_number
+            ),
+            request,
+        )
+
         serialized_obj = CreateOccurrenceReportSerializer(new_instance)
         return Response(serialized_obj.data)
 
@@ -3788,6 +3802,20 @@ class OccurrenceViewSet(
         serializer = SaveOCCIdentificationSerializer(data=data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        # Log the creation of the new occurrence
+        new_instance.log_user_action(
+            OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
+                new_instance.occurrence_number
+            ),
+            request,
+        )
+        request.user.log_user_action(
+            OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
+                new_instance.occurrence_number
+            ),
+            request,
+        )
 
         serialized_obj = CreateOccurrenceSerializer(new_instance)
         return Response(serialized_obj.data)

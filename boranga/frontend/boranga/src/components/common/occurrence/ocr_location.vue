@@ -471,7 +471,7 @@ export default {
                     : false,
             //----list of values dictionary
 
-            originalLocation: JSON.stringify(vm.occurrence_report_obj.location),
+            originalLocation: null,
             mapIsDirty: false,
             region_list: [],
             district_list: [],
@@ -586,6 +586,9 @@ export default {
             return displayMap;
         },
         locationIsDirty: function () {
+            if (this.originalLocation === null) {
+                return false;
+            }
             return (
                 JSON.stringify(this.occurrence_report_obj.location) !=
                 this.originalLocation
@@ -655,6 +658,8 @@ export default {
         let vm = this;
         this.$nextTick(() => {
             vm.eventListeners();
+            // Capture original state after Vue has fully processed the component
+            vm.resetDirtyState();
         });
     },
     methods: {

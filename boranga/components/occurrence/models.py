@@ -113,6 +113,7 @@ from boranga.helpers import (
     get_mock_request,
     get_openpyxl_data_validation_type_for_django_field,
     is_django_admin,
+    is_internal_by_user_id,
     is_occurrence_approver,
     is_occurrence_assessor,
     is_occurrence_report_referee,
@@ -143,8 +144,54 @@ def update_occurrence_report_doc_filename(instance, filename):
     return f"{settings.MEDIA_APP_DIR}/occurrence_report/{instance.occurrence_report.id}/documents/{filename}"
 
 
+def update_occurrence_report_shapefile_doc_filename(instance, filename):
+    """
+    Custom upload function for shapefile components that preserves the original
+    base filename while adding a UUID prefix for security. This ensures all
+    shapefile components (.shp, .shx, .dbf, .prj) maintain the same base name
+    which is required by GeoPandas to read shapefiles correctly.
+
+    Example:
+        - myfile.shp -> {uuid}_myfile.shp
+        - myfile.shx -> {uuid}_myfile.shx
+        - myfile.dbf -> {uuid}_myfile.dbf
+
+    The UUID is generated per-occurrence_report so all files get the same prefix.
+    """
+    from uuid import NAMESPACE_DNS, uuid5
+
+    # Generate a consistent UUID based on the occurrence_report ID
+    # This ensures all files for the same report get the same prefix
+    uuid_prefix = uuid5(
+        NAMESPACE_DNS, f"occurrence_report_{instance.occurrence_report.id}"
+    ).hex[:12]
+
+    # Preserve the original filename with UUID prefix
+    safe_filename = f"{uuid_prefix}_{filename}"
+
+    return f"{settings.MEDIA_APP_DIR}/occurrence_report/{instance.occurrence_report.id}/documents/{safe_filename}"
+
+
 def update_occurrence_doc_filename(instance, filename):
     return f"{settings.MEDIA_APP_DIR}/occurrence/{instance.occurrence.id}/documents/{filename}"
+
+
+def update_occurrence_shapefile_doc_filename(instance, filename):
+    """
+    Custom upload function for occurrence shapefile components that preserves the original
+    base filename while adding a UUID prefix for security. This ensures all
+    shapefile components (.shp, .shx, .dbf, .prj) maintain the same base name
+    which is required by GeoPandas to read shapefiles correctly.
+    """
+    from uuid import NAMESPACE_DNS, uuid5
+
+    # Generate a consistent UUID based on the occurrence ID
+    uuid_prefix = uuid5(NAMESPACE_DNS, f"occurrence_{instance.occurrence.id}").hex[:12]
+
+    # Preserve the original filename with UUID prefix
+    safe_filename = f"{uuid_prefix}_{filename}"
+
+    return f"{settings.MEDIA_APP_DIR}/occurrence/{instance.occurrence.id}/documents/{safe_filename}"
 
 
 class OccurrenceReportManager(models.Manager):
@@ -724,6 +771,15 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             )
 
         previous_submitter = EmailUser.objects.get(id=self.submitter)
+
+        # Check if we're transitioning between internal and external users
+        previous_is_internal = is_internal_by_user_id(self.submitter)
+        new_is_internal = is_internal_by_user_id(user_id)
+
+        # If transitioning between internal and external, flip the internal_application flag
+        if previous_is_internal != new_is_internal:
+            self.internal_application = not self.internal_application
+
         self.submitter = new_submitter.id
         old_submitter_information = SubmitterInformation.objects.filter(
             id=self.submitter_information_id
@@ -1086,6 +1142,20 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             occurrence.occurrence_name = self.approval_details.new_occurrence_name
             occurrence.occurrence_source = Occurrence.OCCURRENCE_CHOICE_OCR
             occurrence.save(version_user=request.user)
+
+            # Log the creation of the new occurrence
+            occurrence.log_user_action(
+                OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
+                    occurrence.occurrence_number
+                ),
+                request,
+            )
+            request.user.log_user_action(
+                OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
+                    occurrence.occurrence_number
+                ),
+                request,
+            )
 
         self.occurrence = occurrence
         self.save(version_user=request.user)
@@ -1527,6 +1597,7 @@ class OccurrenceReportLogDocument(Document):
 
 class OccurrenceReportUserAction(UserAction):
     # OccurrenceReport Proposal
+    ACTION_CREATE_OCCURRENCE_REPORT = "Create occurrence report {}"
     ACTION_EDIT_OCCURRENCE_REPORT = "Edit occurrence report {}"
     ACTION_LODGE_PROPOSAL = "Lodge occurrence report {}"
     ACTION_SAVE_APPLICATION = "Save occurrence report {}"
@@ -3734,7 +3805,7 @@ class OccurrenceReportShapefileDocument(Document):
         "OccurrenceReport", related_name="shapefile_documents", on_delete=models.CASCADE
     )
     _file = models.FileField(
-        upload_to=update_occurrence_report_doc_filename,
+        upload_to=update_occurrence_report_shapefile_doc_filename,
         max_length=512,
         storage=private_storage,
     )
@@ -4880,6 +4951,7 @@ class OccurrenceLogDocument(Document):
 
 
 class OccurrenceUserAction(UserAction):
+    ACTION_CREATE_OCCURRENCE = "Create occurrence {}"
     ACTION_VIEW_OCCURRENCE = "View occurrence {}"
     ACTION_SAVE_OCCURRENCE = "Save occurrence {}"
     ACTION_EDIT_OCCURRENCE = "Edit occurrence {}"
@@ -6143,7 +6215,7 @@ class OccurrenceShapefileDocument(Document):
         "Occurrence", related_name="shapefile_documents", on_delete=models.CASCADE
     )
     _file = models.FileField(
-        upload_to=update_occurrence_doc_filename,
+        upload_to=update_occurrence_shapefile_doc_filename,
         max_length=512,
         storage=private_storage,
     )
