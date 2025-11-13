@@ -357,6 +357,7 @@
                             name="start_date"
                             :max="new Date().toISOString().slice(0, 10)"
                             min="1990-01-01"
+                            @change.stop
                             @blur="checkObservationDate"
                         />
                     </div>
@@ -922,6 +923,7 @@ export default {
         checkObservationDate: function () {
             if (this.occurrence_report_obj.observation_date === '') {
                 this.occurrence_report_obj.observation_date = null;
+                this.$emit('saveOccurrenceReport');
                 return;
             }
             if (
@@ -970,6 +972,8 @@ export default {
                     },
                 });
             }
+            // Save after validation
+            this.$emit('saveOccurrenceReport');
         },
         has_comment_value: function () {
             let has_value = false;
