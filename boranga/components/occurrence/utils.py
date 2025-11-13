@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib.gis.gdal import SpatialReference
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -152,17 +153,26 @@ def extract_attached_archives(instance, foreign_key_field=None):
         z.extractall(archive_path)
 
         for zipped_file in z.filelist:
+            extracted_file_path = os.path.join(archive_path, zipped_file.filename)
             shapefile_model = apps.get_model(
                 "boranga", f"{instance_name}ShapefileDocument"
             )
-            shapefile_model.objects.create(
-                **{
-                    foreign_key_field: instance,
-                    "name": zipped_file.filename,
-                    "input_name": "shapefile_document",
-                    "_file": f"{archive_path}/{zipped_file.filename}",
-                }
-            )
+
+            # Open the extracted file and create a Django File object
+            with open(extracted_file_path, "rb") as f:
+                django_file = File(f, name=zipped_file.filename)
+                shapefile_model.objects.create(
+                    **{
+                        foreign_key_field: instance,
+                        "name": zipped_file.filename,
+                        "input_name": "shapefile_document",
+                        "_file": django_file,
+                    }
+                )
+
+            # Remove the temporary extracted file since it's now in Django's storage
+            if os.path.exists(extracted_file_path):
+                os.remove(extracted_file_path)
 
     return archive_files_qs
 

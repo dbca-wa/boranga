@@ -143,8 +143,54 @@ def update_occurrence_report_doc_filename(instance, filename):
     return f"{settings.MEDIA_APP_DIR}/occurrence_report/{instance.occurrence_report.id}/documents/{filename}"
 
 
+def update_occurrence_report_shapefile_doc_filename(instance, filename):
+    """
+    Custom upload function for shapefile components that preserves the original
+    base filename while adding a UUID prefix for security. This ensures all
+    shapefile components (.shp, .shx, .dbf, .prj) maintain the same base name
+    which is required by GeoPandas to read shapefiles correctly.
+
+    Example:
+        - myfile.shp -> {uuid}_myfile.shp
+        - myfile.shx -> {uuid}_myfile.shx
+        - myfile.dbf -> {uuid}_myfile.dbf
+
+    The UUID is generated per-occurrence_report so all files get the same prefix.
+    """
+    from uuid import NAMESPACE_DNS, uuid5
+
+    # Generate a consistent UUID based on the occurrence_report ID
+    # This ensures all files for the same report get the same prefix
+    uuid_prefix = uuid5(
+        NAMESPACE_DNS, f"occurrence_report_{instance.occurrence_report.id}"
+    ).hex[:12]
+
+    # Preserve the original filename with UUID prefix
+    safe_filename = f"{uuid_prefix}_{filename}"
+
+    return f"{settings.MEDIA_APP_DIR}/occurrence_report/{instance.occurrence_report.id}/documents/{safe_filename}"
+
+
 def update_occurrence_doc_filename(instance, filename):
     return f"{settings.MEDIA_APP_DIR}/occurrence/{instance.occurrence.id}/documents/{filename}"
+
+
+def update_occurrence_shapefile_doc_filename(instance, filename):
+    """
+    Custom upload function for occurrence shapefile components that preserves the original
+    base filename while adding a UUID prefix for security. This ensures all
+    shapefile components (.shp, .shx, .dbf, .prj) maintain the same base name
+    which is required by GeoPandas to read shapefiles correctly.
+    """
+    from uuid import NAMESPACE_DNS, uuid5
+
+    # Generate a consistent UUID based on the occurrence ID
+    uuid_prefix = uuid5(NAMESPACE_DNS, f"occurrence_{instance.occurrence.id}").hex[:12]
+
+    # Preserve the original filename with UUID prefix
+    safe_filename = f"{uuid_prefix}_{filename}"
+
+    return f"{settings.MEDIA_APP_DIR}/occurrence/{instance.occurrence.id}/documents/{safe_filename}"
 
 
 class OccurrenceReportManager(models.Manager):
@@ -3734,7 +3780,7 @@ class OccurrenceReportShapefileDocument(Document):
         "OccurrenceReport", related_name="shapefile_documents", on_delete=models.CASCADE
     )
     _file = models.FileField(
-        upload_to=update_occurrence_report_doc_filename,
+        upload_to=update_occurrence_report_shapefile_doc_filename,
         max_length=512,
         storage=private_storage,
     )
@@ -6143,7 +6189,7 @@ class OccurrenceShapefileDocument(Document):
         "Occurrence", related_name="shapefile_documents", on_delete=models.CASCADE
     )
     _file = models.FileField(
-        upload_to=update_occurrence_doc_filename,
+        upload_to=update_occurrence_shapefile_doc_filename,
         max_length=512,
         storage=private_storage,
     )
