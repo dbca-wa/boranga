@@ -437,6 +437,7 @@ export default {
         // Skip confirmation if occurrence is new or has no related reports
         if (!hasRelatedReports) {
             applyChange();
+            $(selector).select2('close'); // Close the dropdown
             return;
         }
 
