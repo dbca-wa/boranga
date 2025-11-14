@@ -746,15 +746,23 @@ class OCRHabitatCompositionSerializer(BaseModelSerializer):
         ).choices
 
     def get_land_form_names(self, obj):
+        # Filter out empty strings from MultiSelectField values
+        land_form_ids = [id for id in obj.land_form if id]
+        if not land_form_ids:
+            return []
         return [
             lf
-            for lf in LandForm.objects.filter(id__in=obj.land_form).values("id", "name")
+            for lf in LandForm.objects.filter(id__in=land_form_ids).values("id", "name")
         ]
 
     def get_soil_type_names(self, obj):
+        # Filter out empty strings from MultiSelectField values
+        soil_type_ids = [id for id in obj.soil_type if id]
+        if not soil_type_ids:
+            return []
         return [
             st
-            for st in SoilType.objects.filter(id__in=obj.soil_type).values("id", "name")
+            for st in SoilType.objects.filter(id__in=soil_type_ids).values("id", "name")
         ]
 
 
@@ -996,7 +1004,8 @@ class OCRAnimalObservationSerializer(BaseModelSerializer):
         ).values_list("id_str", "name")
 
     def get_secondary_sign_names(self, obj):
-        ids = obj.secondary_sign or []
+        # Filter out empty strings from MultiSelectField values
+        ids = [id for id in (obj.secondary_sign or []) if id]
         if not ids:
             return []
 
@@ -3399,7 +3408,8 @@ class OCCAnimalObservationSerializer(BaseModelSerializer):
         ).values_list("id_str", "name")
 
     def get_secondary_sign_names(self, obj):
-        ids = obj.secondary_sign or []
+        # Filter out empty strings from MultiSelectField values
+        ids = [id for id in (obj.secondary_sign or []) if id]
         if not ids:
             return []
 
