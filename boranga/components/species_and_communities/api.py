@@ -1446,7 +1446,7 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         return Response(serializer.data)
 
-    @detail_route(methods=["post"], detail=True)
+    @detail_route(methods=["patch"], detail=True)
     @renderer_classes((JSONRenderer,))
     @transaction.atomic
     def update_publishing_status(self, request, *args, **kwargs):
@@ -2596,7 +2596,7 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         return Response(serializer.data)
 
-    @detail_route(methods=["post"], detail=True)
+    @detail_route(methods=["patch"], detail=True)
     @renderer_classes((JSONRenderer,))
     @transaction.atomic
     def update_publishing_status(self, request, *args, **kwargs):
