@@ -133,12 +133,15 @@
             </form>
         </FormSection>
         <FormSection
-            v-if="is_internal"
+            v-if="showOccurrenceThreats"
             :form-collapse="false"
             label="Occurrence Threats"
             :Index="occThreatBody"
         >
-            <CommunityOCCThreats :community_obj="species_community" />
+            <CommunityOCCThreats
+                :community_obj="species_community"
+                :is_internal="is_internal"
+            />
         </FormSection>
 
         <ThreatDetail
@@ -200,7 +203,7 @@ export default {
             );
         } else {
             url = helpers.add_endpoint_json(
-                '/api/external_community/',
+                api_endpoints.external_community,
                 vm.species_community.id + '/threats'
             );
         }
@@ -458,6 +461,21 @@ export default {
             } else {
                 return true;
             }
+        },
+        showOccurrenceThreats: function () {
+            if (this.is_internal) {
+                return true;
+            }
+            const publishingStatus =
+                this.species_community &&
+                this.species_community.publishing_status;
+            if (!publishingStatus) {
+                return false;
+            }
+            return (
+                publishingStatus.community_public &&
+                publishingStatus.threats_public
+            );
         },
     },
     watch: {

@@ -925,6 +925,57 @@ class SpeciesFilterBackend(DatatablesFilterBackend):
         return queryset
 
 
+def _species_occurrence_threat_queryset(species_instance, visible_only=False):
+    occurrences = Occurrence.objects.filter(species=species_instance).values_list(
+        "id", flat=True
+    )
+    threats = OCCConservationThreat.objects.filter(occurrence_id__in=occurrences)
+    if visible_only:
+        threats = threats.filter(visible=True)
+    return threats
+
+
+def _community_occurrence_threat_queryset(community_instance, visible_only=False):
+    occurrences = Occurrence.objects.filter(community=community_instance).values_list(
+        "id", flat=True
+    )
+    threats = OCCConservationThreat.objects.filter(occurrence_id__in=occurrences)
+    if visible_only:
+        threats = threats.filter(visible=True)
+    return threats
+
+
+def _serialize_occurrence_threats(threats_queryset, request, view):
+    filter_backend = OCCConservationThreatFilterBackend()
+    threats = filter_backend.filter_queryset(request, threats_queryset, view)
+    serializer = OCCConservationThreatSerializer(
+        threats, many=True, context={"request": request}
+    )
+    return serializer.data
+
+
+def _build_occurrence_threat_source_list(threats_queryset):
+    data = []
+    distinct_occ = threats_queryset.filter(occurrence_report_threat=None).distinct(
+        "occurrence"
+    )
+    data.extend(threat.occurrence.occurrence_number for threat in distinct_occ)
+
+    distinct_ocr = threats_queryset.exclude(occurrence_report_threat=None).distinct(
+        "occurrence_report_threat__occurrence_report"
+    )
+    for threat in distinct_ocr:
+        if (
+            threat.occurrence_report_threat
+            and threat.occurrence_report_threat.occurrence_report
+        ):
+            data.append(
+                threat.occurrence_report_threat.occurrence_report.occurrence_report_number
+            )
+
+    return data
+
+
 class SpeciesPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = (SpeciesFilterBackend,)
     pagination_class = DatatablesPageNumberPagination
@@ -1147,7 +1198,7 @@ class CommunitiesPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = (
-        Community.objects.select_related("group_type")
+        Community.objects.select_related("group_type", "community_publishing_status")
         .filter(processing_status=Species.PROCESSING_STATUS_ACTIVE)
         .filter(community_publishing_status__community_public=True)
     )
@@ -1176,6 +1227,39 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
             qs, many=True, context={"request": request}
         )
         return Response(serializer.data)
+
+    @detail_route(
+        methods=[
+            "GET",
+        ],
+        detail=True,
+    )
+    def occurrence_threats(self, request, *args, **kwargs):
+        instance = self.get_object()
+        publishing_status = instance.community_publishing_status
+        if not publishing_status.threats_public:
+            raise serializers.ValidationError(
+                "Threats are not publicly visible for this record"
+            )
+        qs = _community_occurrence_threat_queryset(instance, visible_only=True)
+        data = _serialize_occurrence_threats(qs, request, self)
+        return Response(data)
+
+    @detail_route(
+        methods=[
+            "GET",
+        ],
+        detail=True,
+    )
+    def occurrence_threat_source_list(self, request, *args, **kwargs):
+        instance = self.get_object()
+        publishing_status = instance.community_publishing_status
+        if not publishing_status.threats_public:
+            raise serializers.ValidationError(
+                "Threats are not publicly visible for this record"
+            )
+        qs = _community_occurrence_threat_queryset(instance, visible_only=True)
+        return Response(_build_occurrence_threat_source_list(qs))
 
     @detail_route(
         methods=[
@@ -1248,6 +1332,39 @@ class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
             qs, many=True, context={"request": request}
         )
         return Response(serializer.data)
+
+    @detail_route(
+        methods=[
+            "GET",
+        ],
+        detail=True,
+    )
+    def occurrence_threats(self, request, *args, **kwargs):
+        instance = self.get_object()
+        publishing_status = instance.species_publishing_status
+        if not publishing_status.threats_public:
+            raise serializers.ValidationError(
+                "Threats are not publicly visible for this record"
+            )
+        qs = _species_occurrence_threat_queryset(instance, visible_only=True)
+        data = _serialize_occurrence_threats(qs, request, self)
+        return Response(data)
+
+    @detail_route(
+        methods=[
+            "GET",
+        ],
+        detail=True,
+    )
+    def occurrence_threat_source_list(self, request, *args, **kwargs):
+        instance = self.get_object()
+        publishing_status = instance.species_publishing_status
+        if not publishing_status.threats_public:
+            raise serializers.ValidationError(
+                "Threats are not publicly visible for this record"
+            )
+        qs = _species_occurrence_threat_queryset(instance, visible_only=True)
+        return Response(_build_occurrence_threat_source_list(qs))
 
     @detail_route(
         methods=[

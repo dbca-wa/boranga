@@ -167,9 +167,16 @@ export default {
             type: Object,
             required: true,
         },
+        is_internal: {
+            type: Boolean,
+            default: false,
+        },
     },
     data: function () {
         let vm = this;
+        const communityEndpointBase = vm.is_internal
+            ? api_endpoints.community
+            : api_endpoints.external_community;
         return {
             uuid: 0,
             occConservationThreatHistoryId: null,
@@ -178,6 +185,7 @@ export default {
             panelBody: 'community-threats-' + uuid(),
             values: null,
             occ_threat_url: api_endpoints.occ_threat,
+            community_occurrence_endpoint_base: communityEndpointBase,
 
             filterThreatSource: 'all',
             filterThreatCategory: 'all',
@@ -223,7 +231,7 @@ export default {
                 ],
                 ajax: {
                     url: helpers.add_endpoint_json(
-                        api_endpoints.community,
+                        communityEndpointBase,
                         vm.community_obj.id + '/occurrence_threats'
                     ),
                     dataSrc: '',
@@ -488,7 +496,7 @@ export default {
             //Threat Source filter list (specific to instance)
             fetch(
                 helpers.add_endpoint_json(
-                    api_endpoints.community,
+                    vm.community_occurrence_endpoint_base,
                     vm.community_obj.id + '/occurrence_threat_source_list'
                 )
             ).then(

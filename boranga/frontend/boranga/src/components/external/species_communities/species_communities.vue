@@ -111,6 +111,7 @@
 </template>
 <script>
 import ProposalSpeciesCommunities from '@/components/form_species_communities.vue';
+import { api_endpoints } from '@/utils/hooks';
 
 export default {
     name: 'ExternalSpeciesCommunity',
@@ -123,8 +124,7 @@ export default {
             to.query.group_type_name === 'flora' ||
             to.query.group_type_name === 'fauna'
         ) {
-            const speciesUrl =
-                '/api/external_species/' + to.params.species_community_id + '/';
+            const speciesUrl = `${api_endpoints.external_species}/${to.params.species_community_id}/`;
             fetch(speciesUrl).then(
                 async (response) => {
                     next(async (vm) => {
@@ -141,10 +141,7 @@ export default {
         }
         //------get community object if received community id
         else {
-            const communityUrl =
-                '/api/external_community/' +
-                to.params.species_community_id +
-                '/';
+            const communityUrl = `${api_endpoints.external_community}/${to.params.species_community_id}/`;
             fetch(communityUrl).then(
                 async (response) => {
                     next(async (vm) => {
@@ -199,8 +196,8 @@ export default {
         },
         image_url: function () {
             return this.species_community.group_type === 'community'
-                ? `/api/external_community/${this.species_community.id}/public_image/`
-                : `/api/external_species/${this.species_community.id}/public_image/`;
+                ? `${api_endpoints.external_community}/${this.species_community.id}/public_image/`
+                : `${api_endpoints.external_species}/${this.species_community.id}/public_image/`;
         },
     },
     methods: {
