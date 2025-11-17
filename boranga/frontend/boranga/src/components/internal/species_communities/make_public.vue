@@ -269,7 +269,7 @@ export default {
                     vm.species_community.id + '/update_publishing_status'
                 ),
                 {
-                    method: 'POST',
+                    method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
                     },

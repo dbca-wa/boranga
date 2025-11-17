@@ -27,7 +27,7 @@
                     ></a>
                 </div>
             </div>
-            <fieldset disabled>
+            <fieldset v-if="showConservationStatusFields" disabled>
                 <div class="row mb-3">
                     <label
                         for="wa_legislative_list"
@@ -138,18 +138,21 @@
                         />
                     </div>
                 </div>
-                <div class="row mt-3 mb-1">
-                    <label for="" class="col-sm-4 col-form-label"
-                        >Conservation Status under review?</label
-                    >
-                    <div class="col-sm-8 d-flex align-items-center">
-                        <template v-if="conservation_status?.under_review"
-                            >Yes</template
-                        >
-                        <template v-else> No </template>
-                    </div>
-                </div>
             </fieldset>
+            <div
+                class="row mb-1"
+                :class="showConservationStatusFields ? 'mt-3' : ''"
+            >
+                <label for="" class="col-sm-4 col-form-label"
+                    >Conservation Status under review?</label
+                >
+                <div class="col-sm-8 d-flex align-items-center">
+                    <template v-if="conservation_status?.under_review"
+                        >Yes</template
+                    >
+                    <template v-else> No </template>
+                </div>
+            </div>
         </form>
     </FormSection>
 </template>
@@ -182,6 +185,9 @@ export default {
                 !this.conservation_status ||
                 (!this.isConservationStatusPublic && !this.is_internal)
             );
+        },
+        showConservationStatusFields() {
+            return this.is_internal || this.isConservationStatusPublic;
         },
     },
 };

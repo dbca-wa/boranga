@@ -1555,7 +1555,7 @@ export default {
                                 '/update_publishing_status'
                         ),
                         {
-                            method: 'POST',
+                            method: 'PATCH',
                             body: data,
                             headers: {
                                 'Content-Type': 'application/json',
