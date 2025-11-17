@@ -787,7 +787,7 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
-                name: 'fauna_group',
+                name: 'fauna_group__name',
             };
         },
         column_fauna_sub_group: function () {
@@ -796,7 +796,7 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
-                name: 'fauna_sub_group',
+                name: 'fauna_sub_group__name',
             };
         },
         column_family: function () {
