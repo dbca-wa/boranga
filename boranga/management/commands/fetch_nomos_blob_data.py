@@ -278,6 +278,133 @@ class Command(BaseCommand):
         )
         logger.info(msg)
 
+        # --- BEGIN: Track missing Taxonomy records ---
+        try:
+            nomos_taxon_name_ids = set()
+            for t in taxon:
+                tid = t.get("taxon_name_id")
+                if tid is not None:
+                    nomos_taxon_name_ids.add(tid)
+            from boranga.components.species_and_communities.models import Taxonomy
+
+            missing_taxonomies = Taxonomy.objects.filter(
+                is_current=True, archived=False
+            ).exclude(taxon_name_id__in=nomos_taxon_name_ids)
+            to_set_current_false = []
+            to_set_archived_true = []
+
+            # Import related models we want to treat as blocking archiving
+            from boranga.components.conservation_status.models import ConservationStatus
+            from boranga.components.occurrence.models import (
+                AssociatedSpeciesTaxonomy,
+                Occurrence,
+                OccurrenceReport,
+            )
+            from boranga.components.species_and_communities.models import Species
+
+            for taxonomy in missing_taxonomies.iterator():
+                # Check direct Species relation
+                try:
+                    has_species = Species.objects.filter(taxonomy=taxonomy).exists()
+                except Exception:
+                    has_species = False
+
+                # ConservationStatus may reference taxonomy directly (species_taxonomy)
+                try:
+                    has_conservation_status_direct = ConservationStatus.objects.filter(
+                        species_taxonomy=taxonomy
+                    ).exists()
+                except Exception:
+                    has_conservation_status_direct = False
+
+                # ConservationStatus may reference taxonomy via a linked Species
+                try:
+                    has_conservation_status_via_species = (
+                        ConservationStatus.objects.filter(
+                            species__taxonomy=taxonomy
+                        ).exists()
+                    )
+                except Exception:
+                    has_conservation_status_via_species = False
+
+                # Occurrence referencing a Species that has this taxonomy
+                try:
+                    has_occurrence_via_species = Occurrence.objects.filter(
+                        species__taxonomy=taxonomy
+                    ).exists()
+                except Exception:
+                    has_occurrence_via_species = False
+
+                # OccurrenceReport referencing a Species that has this taxonomy
+                try:
+                    has_occurrence_report_via_species = OccurrenceReport.objects.filter(
+                        species__taxonomy=taxonomy
+                    ).exists()
+                except Exception:
+                    has_occurrence_report_via_species = False
+
+                # OccurrenceReport may link to associated species taxonomies (M2M)
+                try:
+                    has_occurrence_report_via_associated = (
+                        OccurrenceReport.objects.filter(
+                            associated_species__related_species__taxonomy=taxonomy
+                        ).exists()
+                    )
+                except Exception:
+                    has_occurrence_report_via_associated = False
+
+                # AssociatedSpeciesTaxonomy direct reference
+                try:
+                    has_associated_species_taxonomy = (
+                        AssociatedSpeciesTaxonomy.objects.filter(
+                            taxonomy=taxonomy
+                        ).exists()
+                    )
+                except Exception:
+                    has_associated_species_taxonomy = False
+
+                has_relations = any(
+                    [
+                        has_species,
+                        has_conservation_status_direct,
+                        has_conservation_status_via_species,
+                        has_occurrence_via_species,
+                        has_occurrence_report_via_species,
+                        has_occurrence_report_via_associated,
+                        has_associated_species_taxonomy,
+                    ]
+                )
+
+                if has_relations:
+                    # Taxonomy is referenced by other records: mark as not current
+                    to_set_current_false.append(taxonomy.id)
+                else:
+                    # No references: archive and ensure it is not marked current
+                    to_set_archived_true.append(taxonomy.id)
+
+            from django.db import transaction
+
+            with transaction.atomic():
+                if to_set_current_false:
+                    Taxonomy.objects.filter(id__in=to_set_current_false).update(
+                        is_current=False
+                    )
+                if to_set_archived_true:
+                    # When archiving we also clear is_current to avoid inconsistent state
+                    Taxonomy.objects.filter(id__in=to_set_archived_true).update(
+                        archived=True, is_current=False
+                    )
+
+            logger.info(
+                f"Set is_current=False for {len(to_set_current_false)} missing Taxonomy records."
+            )
+            logger.info(
+                f"Set archived=True for {len(to_set_archived_true)} missing Taxonomy records."
+            )
+        except Exception as e:
+            logger.error(f"Error updating missing Taxonomy records: {str(e)}")
+        # --- END: Track missing Taxonomy records ---
         if len(errors) > 0:
             # send email notification
             send_nomos_script_failed(errors)
+        # Optionally: print summary of missing Taxonomy handling
