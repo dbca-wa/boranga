@@ -167,7 +167,11 @@ class GetSpecies(views.APIView):
             dumped_species = cache.get("get_species_data")
             species_data_cache = None
             if dumped_species is None:
-                species_data_cache = Species.objects.all()
+                # Cache only species whose taxonomy is not archived so cached lookups
+                # cannot surface archived Taxonomy scientific names.
+                species_data_cache = Species.objects.select_related("taxonomy").filter(
+                    taxonomy__archived=False
+                )
                 cache.set("get_species_data", species_data_cache, 86400)
             else:
                 species_data_cache = dumped_species
