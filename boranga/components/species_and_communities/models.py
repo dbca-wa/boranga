@@ -297,6 +297,17 @@ class TaxonomyRank(BaseModel):
         return str(self.rank_name)
 
 
+# --- Custom Taxonomy QuerySet and Manager ---
+class TaxonomyQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(archived=False)
+
+
+class TaxonomyManager(models.Manager):
+    def get_queryset(self):
+        return TaxonomyQuerySet(self.model, using=self._db).active()
+
+
 class Taxonomy(BaseModel):
     """
     Description from wacensus, to get the main name then fill in everything else
@@ -307,6 +318,10 @@ class Taxonomy(BaseModel):
     Is:
     - Table
     """
+
+    # Manager setup: `objects` excludes archived records by default; use `all_objects` to include archived
+    objects = TaxonomyManager()
+    all_objects = models.Manager()
 
     taxon_name_id = models.IntegerField(null=True, blank=True, unique=True)
     scientific_name = models.CharField(max_length=512, null=True, blank=True)

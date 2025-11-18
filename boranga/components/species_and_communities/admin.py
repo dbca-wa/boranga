@@ -275,6 +275,10 @@ class TaxonomyAdmin(admin.ModelAdmin):
     search_fields = ("taxon_name_id", "scientific_name")
     actions = None
 
+    def get_queryset(self, request):
+        # Use the all_objects manager so admin can view archived records
+        return Taxonomy.all_objects.all()
+
     def get_readonly_fields(self, request, obj=None):
         return [f.name for f in obj._meta.fields]
 
