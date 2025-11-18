@@ -346,6 +346,8 @@ class Taxonomy(BaseModel):
         verbose_name_plural = "Taxonomies"
         indexes = [
             models.Index(fields=["kingdom_id"], name="idx_taxonomy_kingdom_id"),
+            models.Index(fields=["is_current"], name="idx_taxonomy_is_current"),
+            models.Index(fields=["archived"], name="idx_taxonomy_archived"),
         ]
 
     def __str__(self):
