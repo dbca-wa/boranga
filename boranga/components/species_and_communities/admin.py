@@ -265,11 +265,13 @@ class TaxonomyAdmin(admin.ModelAdmin):
         "kingdom_name",
         "grouptype__name",
         "is_current",
+        "archived",
     )
     list_filter = [
         "kingdom_fk__kingdom_name",
         "kingdom_fk__grouptype__name",
         "is_current",
+        "archived",
     ]
     inlines = [TaxonVernacularInline, TaxonPreviousNameInline, InformalGroupInline]
     search_fields = ("taxon_name_id", "scientific_name")
