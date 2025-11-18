@@ -102,6 +102,7 @@ class Command(BaseCommand):
                             "family_name": t.get("family_canonical_name"),
                             "genera_id": t.get("genus_id"),
                             "genera_name": t.get("genus_canonical_name"),
+                            "archived": False,  # In case a previously archived record is re-introduced
                         }
 
                         try:
@@ -285,8 +286,6 @@ class Command(BaseCommand):
                 tid = t.get("taxon_name_id")
                 if tid is not None:
                     nomos_taxon_name_ids.add(tid)
-            from boranga.components.species_and_communities.models import Taxonomy
-
             missing_taxonomies = Taxonomy.objects.filter(
                 is_current=True, archived=False
             ).exclude(taxon_name_id__in=nomos_taxon_name_ids)
