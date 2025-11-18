@@ -265,7 +265,6 @@ class TaxonomyAdmin(admin.ModelAdmin):
         "kingdom_name",
         "grouptype__name",
         "is_current",
-        "archived",
     )
     list_filter = [
         "kingdom_fk__kingdom_name",
@@ -298,6 +297,17 @@ class TaxonomyAdmin(admin.ModelAdmin):
             return ""
         else:
             return obj.kingdom_fk.grouptype.name
+
+    def get_list_display(self, request):
+        list_display = super().get_list_display(request)
+        if type(list_display) is tuple:
+            list_display = list(list_display)
+        return list_display + ["achived_list_view_display"]
+
+    def achived_list_view_display(self, obj):
+        return "Yes" if obj.archived else "No"
+
+    achived_list_view_display.short_description = "Archived"
 
 
 @admin.register(TaxonomyRank)
