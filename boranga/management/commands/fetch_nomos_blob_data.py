@@ -335,14 +335,6 @@ class Command(BaseCommand):
                 except Exception:
                     has_occurrence_via_species = False
 
-                # Occurrence may link to associated species taxonomies (M2M)
-                try:
-                    has_occurrence_via_associated = Occurrence.objects.filter(
-                        associated_species__related_species__taxonomy=taxonomy
-                    ).exists()
-                except Exception:
-                    has_occurrence_via_associated = False
-
                 # OccurrenceReport referencing a Species that has this taxonomy
                 try:
                     has_occurrence_report_via_species = OccurrenceReport.objects.filter(
@@ -350,16 +342,6 @@ class Command(BaseCommand):
                     ).exists()
                 except Exception:
                     has_occurrence_report_via_species = False
-
-                # OccurrenceReport may link to associated species taxonomies (M2M)
-                try:
-                    has_occurrence_report_via_associated = (
-                        OccurrenceReport.objects.filter(
-                            associated_species__related_species__taxonomy=taxonomy
-                        ).exists()
-                    )
-                except Exception:
-                    has_occurrence_report_via_associated = False
 
                 # AssociatedSpeciesTaxonomy direct reference
                 try:
@@ -371,15 +353,18 @@ class Command(BaseCommand):
                 except Exception:
                     has_associated_species_taxonomy = False
 
+                # Note: an Occurrence/OccurrenceReport linking to an
+                # AssociatedSpeciesTaxonomy implies an AssociatedSpeciesTaxonomy
+                # record exists referencing this taxonomy, therefore the two
+                # M2M checks are redundant and omitted here in favour of the
+                # direct AssociatedSpeciesTaxonomy existence check.
                 has_relations = any(
                     [
                         has_species,
                         has_conservation_status_direct,
                         has_conservation_status_via_species,
                         has_occurrence_via_species,
-                        has_occurrence_via_associated,
                         has_occurrence_report_via_species,
-                        has_occurrence_report_via_associated,
                         has_associated_species_taxonomy,
                     ]
                 )
