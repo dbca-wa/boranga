@@ -297,6 +297,17 @@ class TaxonomyRank(BaseModel):
         return str(self.rank_name)
 
 
+# --- Custom Taxonomy QuerySet and Manager ---
+class TaxonomyQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(archived=False)
+
+
+class TaxonomyManager(models.Manager):
+    def get_queryset(self):
+        return TaxonomyQuerySet(self.model, using=self._db).active()
+
+
 class Taxonomy(BaseModel):
     """
     Description from wacensus, to get the main name then fill in everything else
@@ -307,6 +318,10 @@ class Taxonomy(BaseModel):
     Is:
     - Table
     """
+
+    # Manager setup: `objects` excludes archived records by default; use `all_objects` to include archived
+    objects = TaxonomyManager()
+    all_objects = models.Manager()
 
     taxon_name_id = models.IntegerField(null=True, blank=True, unique=True)
     scientific_name = models.CharField(max_length=512, null=True, blank=True)
@@ -337,6 +352,8 @@ class Taxonomy(BaseModel):
     datetime_created = models.DateTimeField(auto_now_add=True)
     datetime_updated = models.DateTimeField(auto_now=True)
 
+    archived = models.BooleanField(default=False)
+
     class Meta:
         app_label = "boranga"
         ordering = ["scientific_name"]
@@ -344,6 +361,8 @@ class Taxonomy(BaseModel):
         verbose_name_plural = "Taxonomies"
         indexes = [
             models.Index(fields=["kingdom_id"], name="idx_taxonomy_kingdom_id"),
+            models.Index(fields=["is_current"], name="idx_taxonomy_is_current"),
+            models.Index(fields=["archived"], name="idx_taxonomy_archived"),
         ]
 
     def __str__(self):

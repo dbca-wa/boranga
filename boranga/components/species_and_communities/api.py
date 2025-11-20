@@ -167,7 +167,11 @@ class GetSpecies(views.APIView):
             dumped_species = cache.get("get_species_data")
             species_data_cache = None
             if dumped_species is None:
-                species_data_cache = Species.objects.all()
+                # Cache only species whose taxonomy is not archived so cached lookups
+                # cannot surface archived Taxonomy scientific names.
+                species_data_cache = Species.objects.select_related("taxonomy").filter(
+                    taxonomy__archived=False
+                )
                 cache.set("get_species_data", species_data_cache, 86400)
             else:
                 species_data_cache = dumped_species
@@ -234,7 +238,7 @@ class GetScientificName(views.APIView):
         if not search_term:
             return Response({"results": []})
 
-        taxonomies = Taxonomy.objects.all()
+        taxonomies = Taxonomy.objects.filter(archived=False)
 
         if species_profile:
             taxonomies = taxonomies.filter(species=None)
@@ -314,7 +318,9 @@ class GetScientificNameByGroup(views.APIView):
         search_term = request.GET.get("term", "")
         if search_term:
             group_type_id = request.GET.get("group_type_id", "")
-            queryset = Taxonomy.objects.values_list("scientific_name", flat=True)
+            queryset = Taxonomy.objects.filter(archived=False).values_list(
+                "scientific_name", flat=True
+            )
             queryset = (
                 queryset.filter(
                     scientific_name__icontains=search_term,
@@ -411,6 +417,7 @@ class GetCommonNameOCRSelect(views.APIView):
         )
         taxonomies = Taxonomy.objects.filter(
             id__in=taxonomy_ids,
+            archived=False,
         )
         serializer = CommonNameTaxonomySerializer(
             taxonomies[: settings.DEFAULT_SELECT2_RECORDS_LIMIT],
@@ -432,6 +439,7 @@ class GetFamily(views.APIView):
                     ~Q(family_id=None),
                     family_name__icontains=search_term,
                     kingdom_fk__grouptype=group_type_id,
+                    archived=False,
                 )
                 .order_by("family_name")
                 .values("family_id", "family_name")
@@ -457,6 +465,7 @@ class GetGenera(views.APIView):
                     ~Q(genera_id=None),
                     genera_name__icontains=search_term,
                     kingdom_fk__grouptype=group_type_id,
+                    archived=False,
                 )
                 .order_by("genera_name")
                 .values("genera_id", "genera_name")

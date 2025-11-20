@@ -270,10 +270,15 @@ class TaxonomyAdmin(admin.ModelAdmin):
         "kingdom_fk__kingdom_name",
         "kingdom_fk__grouptype__name",
         "is_current",
+        "archived",
     ]
     inlines = [TaxonVernacularInline, TaxonPreviousNameInline, InformalGroupInline]
     search_fields = ("taxon_name_id", "scientific_name")
     actions = None
+
+    def get_queryset(self, request):
+        # Use the all_objects manager so admin can view archived records
+        return Taxonomy.all_objects.all()
 
     def get_readonly_fields(self, request, obj=None):
         return [f.name for f in obj._meta.fields]
@@ -292,6 +297,17 @@ class TaxonomyAdmin(admin.ModelAdmin):
             return ""
         else:
             return obj.kingdom_fk.grouptype.name
+
+    def get_list_display(self, request):
+        list_display = super().get_list_display(request)
+        if type(list_display) is tuple:
+            list_display = list(list_display)
+        return list_display + ["achived_list_view_display"]
+
+    def achived_list_view_display(self, obj):
+        return "Yes" if obj.archived else "No"
+
+    achived_list_view_display.short_description = "Archived"
 
 
 @admin.register(TaxonomyRank)
