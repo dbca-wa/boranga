@@ -335,6 +335,14 @@ class Command(BaseCommand):
                 except Exception:
                     has_occurrence_via_species = False
 
+                # Occurrence may link to associated species taxonomies (M2M)
+                try:
+                    has_occurrence_via_associated = Occurrence.objects.filter(
+                        associated_species__related_species__taxonomy=taxonomy
+                    ).exists()
+                except Exception:
+                    has_occurrence_via_associated = False
+
                 # OccurrenceReport referencing a Species that has this taxonomy
                 try:
                     has_occurrence_report_via_species = OccurrenceReport.objects.filter(
@@ -369,6 +377,7 @@ class Command(BaseCommand):
                         has_conservation_status_direct,
                         has_conservation_status_via_species,
                         has_occurrence_via_species,
+                        has_occurrence_via_associated,
                         has_occurrence_report_via_species,
                         has_occurrence_report_via_associated,
                         has_associated_species_taxonomy,
