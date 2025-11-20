@@ -1355,6 +1355,12 @@ export default {
             $(vm.$refs.land_form_select)
                 .val(vm.occurrence_obj.habitat_composition.land_form)
                 .trigger('change.select2');
+            // Update soil type select2 so the UI shows copied values immediately
+            if (vm.$refs.soil_type_select) {
+                $(vm.$refs.soil_type_select)
+                    .val(vm.occurrence_obj.habitat_composition.soil_type)
+                    .trigger('change.select2');
+            }
             vm.$refs.related_species.reload();
         },
         updateHabitatCompositionDetails: function () {

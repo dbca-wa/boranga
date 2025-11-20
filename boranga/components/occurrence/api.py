@@ -899,11 +899,23 @@ class OccurrenceReportViewSet(
                 elif isinstance(i, MultiSelectField):
                     if i.choices:
                         choice_dict = dict(i.choices)
+                        # normalise choice keys to strings so we can match numeric and string keys
+                        choice_dict_str = {str(k): v for k, v in choice_dict.items()}
                         id_list = getattr(section_value, i.name)
                         values_list = []
-                        for id in id_list:
-                            if id.isdigit() and int(id) in choice_dict:
-                                values_list.append(choice_dict[int(id)])
+                        # support both list-like and comma-separated string storage
+                        if isinstance(id_list, str):
+                            id_iter = [s for s in id_list.split(",") if s != ""]
+                        else:
+                            id_iter = id_list
+
+                        for val in id_iter:
+                            key = str(val)
+                            if key in choice_dict_str:
+                                values_list.append(choice_dict_str[key])
+                            else:
+                                # fallback to the raw value
+                                values_list.append(key)
                         res_json[i.name] = values_list
                     else:
                         res_json[i.name] = getattr(section_value, i.name)
@@ -3876,11 +3888,20 @@ class OccurrenceViewSet(
                 elif isinstance(i, MultiSelectField):
                     if i.choices:
                         choice_dict = dict(i.choices)
+                        choice_dict_str = {str(k): v for k, v in choice_dict.items()}
                         id_list = getattr(section_value, i.name)
                         values_list = []
-                        for id in id_list:
-                            if id.isdigit() and int(id) in choice_dict:
-                                values_list.append(choice_dict[int(id)])
+                        if isinstance(id_list, str):
+                            id_iter = [s for s in id_list.split(",") if s != ""]
+                        else:
+                            id_iter = id_list
+
+                        for val in id_iter:
+                            key = str(val)
+                            if key in choice_dict_str:
+                                values_list.append(choice_dict_str[key])
+                            else:
+                                values_list.append(key)
                         res_json[i.name] = values_list
                     else:
                         res_json[i.name] = getattr(section_value, i.name)

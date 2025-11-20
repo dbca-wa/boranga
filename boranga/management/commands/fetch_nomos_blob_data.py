@@ -3,6 +3,7 @@ import logging
 import requests
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db.models.functions import Now
 
 from boranga.components.species_and_communities.email import send_nomos_script_failed
 from boranga.components.species_and_communities.models import (
@@ -342,16 +343,6 @@ class Command(BaseCommand):
                 except Exception:
                     has_occurrence_report_via_species = False
 
-                # OccurrenceReport may link to associated species taxonomies (M2M)
-                try:
-                    has_occurrence_report_via_associated = (
-                        OccurrenceReport.objects.filter(
-                            associated_species__related_species__taxonomy=taxonomy
-                        ).exists()
-                    )
-                except Exception:
-                    has_occurrence_report_via_associated = False
-
                 # AssociatedSpeciesTaxonomy direct reference
                 try:
                     has_associated_species_taxonomy = (
@@ -362,6 +353,11 @@ class Command(BaseCommand):
                 except Exception:
                     has_associated_species_taxonomy = False
 
+                # Note: an Occurrence/OccurrenceReport linking to an
+                # AssociatedSpeciesTaxonomy implies an AssociatedSpeciesTaxonomy
+                # record exists referencing this taxonomy, therefore the two
+                # M2M checks are redundant and omitted here in favour of the
+                # direct AssociatedSpeciesTaxonomy existence check.
                 has_relations = any(
                     [
                         has_species,
@@ -369,7 +365,6 @@ class Command(BaseCommand):
                         has_conservation_status_via_species,
                         has_occurrence_via_species,
                         has_occurrence_report_via_species,
-                        has_occurrence_report_via_associated,
                         has_associated_species_taxonomy,
                     ]
                 )
@@ -386,12 +381,12 @@ class Command(BaseCommand):
             with transaction.atomic():
                 if to_set_current_false:
                     Taxonomy.objects.filter(id__in=to_set_current_false).update(
-                        is_current=False
+                        is_current=False, datetime_updated=Now()
                     )
                 if to_set_archived_true:
                     # When archiving we also clear is_current to avoid inconsistent state
                     Taxonomy.objects.filter(id__in=to_set_archived_true).update(
-                        archived=True, is_current=False
+                        archived=True, is_current=False, datetime_updated=Now()
                     )
 
             logger.info(
