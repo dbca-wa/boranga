@@ -696,3 +696,39 @@ class LegacyUsernameEmailuserMapping(models.Model):
 
     def __str__(self):
         return f"{self.legacy_username} -> {self.emailuser_id}"
+
+
+class LegacyTaxonomyMapping(models.Model):
+    """
+    Mapping model for legacy taxonomy canonical names to taxon_name_id and
+    optional resolved `Taxonomy` FK (populated later by import script).
+
+    Fields:
+      - list_name: name of the list/context (e.g. 'taxon')
+      - legacy_canonical_name: canonical string from legacy data
+      - taxon_name_id: numeric ID from external taxonomy source (required)
+      - taxonomy: optional FK to `Taxonomy` to be populated after import
+    """
+
+    list_name = models.CharField(max_length=50)
+    legacy_canonical_name = models.CharField(max_length=255)
+    taxon_name_id = models.PositiveIntegerField()
+    taxonomy = models.ForeignKey(
+        "boranga.Taxonomy",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="legacy_mappings",
+    )
+
+    class Meta:
+        app_label = "boranga"
+        unique_together = (("list_name", "legacy_canonical_name"),)
+        indexes = [
+            models.Index(fields=["list_name"], name="idx_legacytax_listname"),
+            models.Index(fields=["taxon_name_id"], name="idx_legacytax_taxonid"),
+        ]
+
+    def __str__(self):
+        tgt = self.taxonomy or self.taxon_name_id
+        return f"{self.list_name}:{self.legacy_canonical_name} -> {tgt}"
