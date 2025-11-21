@@ -12,7 +12,9 @@ class Command(BaseCommand):
     Populate LegacyTaxonomyMapping from a CSV file.
 
         Usage:
-            ./manage.py populate_legacy_taxonomy_mapping <csvfile> [--dry-run] [--list-name LIST]
+            ./manage.py populate_legacy_taxonomy_mapping \
+                private-media/legacy_data/TPFL/tpfl-legacy-name-to-taxon-name-id.csv \
+                --dry-run [--list-name TPFL]
 
     Expected CSV columns (headers case-insensitive):
     - list_name (required unless overridden with `--list-name`)
