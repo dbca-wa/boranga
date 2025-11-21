@@ -425,6 +425,16 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     # A hash of the import row data to allow for duplicate detection
     import_hash = models.CharField(max_length=64, null=True, blank=True)
 
+    # Track which data-migration run created/modified this record (nullable)
+    migration_run = models.ForeignKey(
+        "boranga.MigrationRun",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="occurrence_reports",
+        db_index=True,
+    )
+
     class Meta:
         app_label = "boranga"
         ordering = ["-id"]
@@ -3950,6 +3960,16 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     # Field to use when importing data from the legacy system
     migrated_from_id = models.CharField(
         max_length=50, blank=True, null=True, unique=True
+    )
+
+    # Track which data-migration run created/modified this record (nullable)
+    migration_run = models.ForeignKey(
+        "boranga.MigrationRun",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="occurrences",
+        db_index=True,
     )
 
     occurrence_name = models.CharField(max_length=250, blank=True, null=True)

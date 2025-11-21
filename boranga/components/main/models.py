@@ -503,6 +503,25 @@ class LockableModel(BaseModel):
 # ---------------- Models used for data migration only ----------------------------
 
 
+class MigrationRun(models.Model):
+    """Represents a single data-migration run invoked via management commands.
+
+    This model is minimal by design: it records who started the run (if any),
+    when it started, an optional name, and any arbitrary options used.
+    """
+
+    name = models.CharField(max_length=255, null=True, blank=True)
+    started_by = models.IntegerField(null=True, blank=True)
+    started_at = models.DateTimeField(default=timezone.now)
+    options = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        app_label = "boranga"
+
+    def __str__(self):
+        return f"MigrationRun {self.id} - {self.name or self.started_at}"
+
+
 class LegacyValueMap(models.Model):
     """
     Maps a legacy enumerated value to a target Django object (any model) or a
