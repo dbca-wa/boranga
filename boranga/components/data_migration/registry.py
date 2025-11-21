@@ -784,6 +784,140 @@ def _load_tpfl_name_to_nomos() -> dict:
     return _tpfl_name_to_nomos
 
 
+# Cache for LegacyTaxonomyMapping list -> {normalized_legacy_canonical_name: {taxonomy_id, taxon_name_id}}
+_legacy_taxonomy_mappings_cache: dict[str, dict] = {}
+
+
+def _norm_legacy_canonical_name(val: str) -> str | None:
+    if val is None:
+        return None
+    s = str(val)
+
+    # Attempt to fix common mojibake artifacts where UTF-8 bytes were
+    # incorrectly decoded as Latin-1/Windows-1252 (e.g. sequences like
+    # 'Ã‚Â' that commonly represent a non-breaking space). Try a best-effort
+    # re-decode; on failure fall back to a conservative replacement of
+    # the most common artefacts.
+    try:
+        if "Ã" in s or "Â" in s or "Ã‚" in s:
+            try:
+                s = s.encode("latin-1").decode("utf-8")
+            except Exception:
+                # fallback replacements for common mojibake tokens
+                s = s.replace("Ã‚Â", " ").replace("Ã‚", " ").replace("Â", " ")
+    except Exception:
+        # if anything odd happens, continue with best-effort normalisation
+        pass
+
+    # normalise non-breaking spaces and narrow NBSPs to plain spaces
+    s = s.replace("\u00a0", " ").replace("\u202f", " ")
+    try:
+        s = neutralise_html(s) or s
+    except Exception:
+        # best-effort: fall back to the cleaned whitespace form
+        pass
+
+    # collapse multiple whitespace (including accidental double-spaces from
+    # NBSP substitutions or HTML neutralisation) into a single space, then strip
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
+    """Load and cache LegacyTaxonomyMapping rows for `list_name`.
+
+    Returns a dict keyed by a normalised legacy_canonical_name (and its casefold
+    variant) mapping to a dict with keys `taxonomy_id` and `taxon_name_id`.
+    """
+    if list_name in _legacy_taxonomy_mappings_cache:
+        return _legacy_taxonomy_mappings_cache[list_name]
+
+    mapping: dict = {}
+    try:
+        from boranga.components.main.models import LegacyTaxonomyMapping
+
+        qs = LegacyTaxonomyMapping.objects.filter(list_name=list_name)
+        for rec in qs.only("legacy_canonical_name", "taxonomy_id", "taxon_name_id"):
+            key = _norm_legacy_canonical_name(rec.legacy_canonical_name)
+            if not key:
+                continue
+            entry = {"taxonomy_id": rec.taxonomy_id, "taxon_name_id": rec.taxon_name_id}
+            # store both the canonical key and a casefold variant for case-insensitive lookups
+            mapping.setdefault(key, entry)
+            kcf = key.casefold()
+            mapping.setdefault(kcf, entry)
+    except Exception:
+        logger.exception("Failed to load LegacyTaxonomyMapping for list %s", list_name)
+        mapping = {}
+
+    _legacy_taxonomy_mappings_cache[list_name] = mapping
+    return mapping
+
+
+def taxonom_lookup_legacy_mapping(list_name: str) -> str:
+    """Register and return a transform name that resolves a legacy canonical name
+    (from `LegacyTaxonomyMapping`) to a taxonomy id.
+
+    Behaviour:
+      - normalises incoming value (NBSPs, HTML neutralisation, strip)
+      - looks up the normalised key (case-insensitive)
+      - returns the `taxonomy_id` if present, else falls back to `taxon_name_id`
+      - on missing mapping returns an error TransformIssue
+    """
+    if not list_name:
+        raise ValueError("list_name must be provided")
+
+    key_repr = f"taxonom_lookup_legacy:{list_name}"
+    name = "taxonom_lookup_legacy_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(None)
+
+        table = _load_legacy_taxonomy_mappings(list_name)
+        if not table:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"No LegacyTaxonomyMapping entries loaded for list '{list_name}'",
+                ),
+            )
+
+        norm = _norm_legacy_canonical_name(value)
+        if norm is None:
+            return _result(
+                value, TransformIssue("error", f"Invalid legacy name: {value!r}")
+            )
+
+        entry = table.get(norm) or table.get(norm.casefold())
+        if entry:
+            # prefer resolved taxonomy FK id when available, else fall back to external taxon_name_id
+            tax_id = entry.get("taxonomy_id") or entry.get("taxon_name_id")
+            if tax_id is None:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error",
+                        f"LegacyTaxonomyMapping for '{value}' has no taxonomy or taxon_name_id",
+                    ),
+                )
+            return _result(tax_id)
+
+        return _result(
+            value,
+            TransformIssue(
+                "error",
+                f"LegacyTaxonomyMapping for '{value}' not found in list '{list_name}'",
+            ),
+        )
+
+    registry._fns[name] = _inner
+    return name
+
+
 @registry.register("upper")
 def t_upper(value, ctx):
     return _result(value.upper() if isinstance(value, str) else value)
