@@ -4,6 +4,7 @@ import os
 from django.core.management.base import BaseCommand, CommandError
 
 from boranga.components.data_migration.registry import ImportContext, all_importers, get
+from boranga.components.main.models import MigrationRun
 
 
 class Command(BaseCommand):
@@ -83,6 +84,24 @@ class Command(BaseCommand):
             except KeyError as e:
                 raise CommandError(str(e))
             ctx = ImportContext(dry_run=opts["dry_run"])
+            # Create a MigrationRun record for this import (unless dry-run)
+            if not ctx.dry_run:
+                try:
+                    run_opts = {k: v for k, v in opts.items() if k != "path"}
+                    migration_run = MigrationRun.objects.create(
+                        name=imp_cls.slug,
+                        started_by=None,
+                        options=run_opts,
+                    )
+                    ctx.migration_run = migration_run
+                except Exception:
+                    # Be conservative: do not fail the whole CLI if creating the
+                    # MigrationRun record fails; log to stdout and continue without it.
+                    self.stdout.write(
+                        self.style.WARNING(
+                            "Warning: failed to create MigrationRun record; continuing without it."
+                        )
+                    )
             self.stdout.write(f"== {imp_cls.slug} ==")
             # Optionally clear target data for this importer before running
             if opts.get("wipe_targets"):
@@ -134,6 +153,22 @@ class Command(BaseCommand):
                     raise CommandError(f"Unknown importer(s): {', '.join(unknown)}")
             importers = [i for i in all_importers() if not wanted or i.slug in wanted]
             ctx = ImportContext(dry_run=opts["dry_run"])
+            # Create a single MigrationRun for the whole runmany operation (unless dry-run)
+            if not ctx.dry_run:
+                try:
+                    run_opts = {k: v for k, v in opts.items() if k != "path"}
+                    migration_run = MigrationRun.objects.create(
+                        name="runmany",
+                        started_by=None,
+                        options={**run_opts, "importers": [i.slug for i in importers]},
+                    )
+                    ctx.migration_run = migration_run
+                except Exception:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            "Warning: failed to create MigrationRun record for runmany; continuing without it."
+                        )
+                    )
             # If requested, wipe targets for all importers first (deletes targets and children)
             if opts.get("wipe_targets"):
                 if ctx.dry_run:

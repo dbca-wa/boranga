@@ -308,6 +308,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
                 if created_flag:
                     created += 1
+                    if getattr(ctx, "migration_run", None) is not None:
+                        try:
+                            OccurrenceReport.objects.filter(pk=obj.pk).update(
+                                migration_run=ctx.migration_run
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to attach migration_run to OccurrenceReport %s",
+                                obj.pk,
+                            )
                 else:
                     updated += 1
 

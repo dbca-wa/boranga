@@ -25,6 +25,7 @@ from boranga.components.data_migration import mappings as dm_mappings
 from boranga.components.main.models import (
     LegacyUsernameEmailuserMapping,
     LegacyValueMap,
+    MigrationRun,
     neutralise_html,
 )
 from boranga.components.species_and_communities.models import (
@@ -1375,6 +1376,7 @@ class ImportContext:
     dry_run: bool
     user_id: int | None = None
     stats: dict = None
+    migration_run: MigrationRun | None = None
 
     def __post_init__(self):
         if self.stats is None:
