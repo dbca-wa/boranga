@@ -1402,6 +1402,20 @@ class BaseSheetImporter:
     def run(self, path: str, ctx: ImportContext, **options):
         raise NotImplementedError
 
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """
+        Optional hook to delete target model data prior to running an importer.
+
+        - `include_children`: when True (used for runmany wipe), implementations may also
+          delete dependent/child tables. Default False for single-run wipe.
+        - `ctx.dry_run` should be respected by implementations (no-op on dry-run).
+
+        Default implementation is a no-op (importer may override).
+        """
+        return None
+
 
 # Internal storage
 _importer_registry: dict[str, type[BaseSheetImporter]] = {}

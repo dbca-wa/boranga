@@ -42,6 +42,36 @@ class SpeciesImporter(BaseSheetImporter):
     slug = "species_legacy"
     description = "Import species data from legacy TEC / TFAUNA / TPFL sources"
 
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """Delete species target data. Respects `ctx.dry_run` (no-op when True).
+
+        When called with `include_children=True` importer may opt to also clear
+        related child tables; this implementation clears obvious related tables.
+        """
+        if ctx.dry_run:
+            logger.info("SpeciesImporter.clear_targets: dry-run, skipping delete")
+            return
+
+        logger.warning("SpeciesImporter: deleting Species and related data...")
+        from django.db import transaction
+
+        with transaction.atomic():
+            try:
+                # delete child tables first where applicable
+                SpeciesPublishingStatus.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete SpeciesPublishingStatus")
+            try:
+                SpeciesDistribution.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete SpeciesDistribution")
+            try:
+                Species.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete Species")
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--sources",

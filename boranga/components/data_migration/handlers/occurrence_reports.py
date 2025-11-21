@@ -40,6 +40,35 @@ class OccurrenceReportImporter(BaseSheetImporter):
     slug = "occurrence_report_legacy"
     description = "Import occurrence reports from legacy sources (TPFL etc)"
 
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """Delete OccurrenceReport target data and its child tables. Respect `ctx.dry_run`."""
+        if ctx.dry_run:
+            logger.info(
+                "OccurrenceReportImporter.clear_targets: dry-run, skipping delete"
+            )
+            return
+
+        logger.warning(
+            "OccurrenceReportImporter: deleting OccurrenceReport and related data..."
+        )
+        from django.db import transaction
+
+        with transaction.atomic():
+            try:
+                OCRObserverDetail.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete OCRObserverDetail")
+            try:
+                OCRHabitatComposition.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete OCRHabitatComposition")
+            try:
+                OccurrenceReport.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete OccurrenceReport")
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--sources",

@@ -40,6 +40,27 @@ class OccurrenceImporter(BaseSheetImporter):
     slug = "occurrence_legacy"
     description = "Import occurrence data from legacy TEC / TFAUNA / TPFL sources"
 
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """Delete Occurrence target data and obvious children. Respect `ctx.dry_run`."""
+        if ctx.dry_run:
+            logger.info("OccurrenceImporter.clear_targets: dry-run, skipping delete")
+            return
+
+        logger.warning("OccurrenceImporter: deleting Occurrence and related data...")
+        from django.db import transaction
+
+        with transaction.atomic():
+            try:
+                OCCContactDetail.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete OCCContactDetail")
+            try:
+                Occurrence.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete Occurrence")
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--sources",

@@ -31,6 +31,27 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
         "Import occurrence child documents from legacy TPFL/TEC/TFAUNA sources"
     )
 
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """Delete OccurrenceDocument target data. Respect `ctx.dry_run`."""
+        if ctx.dry_run:
+            return
+
+        logger = __import__("logging").getLogger(__name__)
+        logger.warning(
+            "OccurrenceDocumentImporter: deleting OccurrenceDocument data..."
+        )
+        from django.apps import apps
+        from django.db import transaction
+
+        with transaction.atomic():
+            try:
+                OccurrenceDocument = apps.get_model("occurrence", "OccurrenceDocument")
+                OccurrenceDocument.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete OccurrenceDocument")
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--sources",

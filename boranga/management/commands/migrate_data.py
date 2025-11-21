@@ -9,8 +9,10 @@ from boranga.components.data_migration.registry import ImportContext, all_import
 class Command(BaseCommand):
     """
     Example command:
-        ./manage.py migrate_data run species_legacy ./boranga/components/data_migration/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv --dry-run
+        ./manage.py migrate_data run species_legacy \
+            ./boranga/components/data_migration/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv --dry-run
     """
+
     help = "Import spreadsheets (list, run one, or run multiple)"
 
     def add_arguments(self, parser):
@@ -23,6 +25,11 @@ class Command(BaseCommand):
         p_run.add_argument("slug", help="Importer slug")
         p_run.add_argument("path", help="Spreadsheet path")
         p_run.add_argument("--dry-run", action="store_true")
+        p_run.add_argument(
+            "--wipe-targets",
+            action="store_true",
+            help="If set, delete target model data for this importer before running (no-op in dry-run).",
+        )
         p_run.add_argument(
             "--error-csv",
             type=str,
@@ -37,6 +44,11 @@ class Command(BaseCommand):
             "--error-csv",
             type=str,
             help="Path to write error details CSV (default: auto-generated in handler_output/)",
+        )
+        p_multi.add_argument(
+            "--wipe-targets",
+            action="store_true",
+            help="If set, delete target model data for all importers before running (no-op in dry-run).",
         )
 
         # Importer-specific options only relevant to run / runmany
@@ -72,6 +84,38 @@ class Command(BaseCommand):
                 raise CommandError(str(e))
             ctx = ImportContext(dry_run=opts["dry_run"])
             self.stdout.write(f"== {imp_cls.slug} ==")
+            # Optionally clear target data for this importer before running
+            if opts.get("wipe_targets"):
+                if ctx.dry_run:
+                    self.stdout.write(
+                        self.style.WARNING("dry-run: would wipe targets (skipped).")
+                    )
+                else:
+                    importer = imp_cls()
+                    clear_fn = getattr(importer, "clear_targets", None)
+                    if callable(clear_fn):
+                        self.stdout.write(
+                            self.style.WARNING(
+                                "Wiping target data for importer %s" % imp_cls.slug
+                            )
+                        )
+                        try:
+                            clear_fn(
+                                ctx=ctx,
+                                include_children=False,
+                                **{k: v for k, v in opts.items() if k not in ("path",)},
+                            )
+                        except Exception as e:
+                            raise CommandError(
+                                f"Failed to wipe targets for {imp_cls.slug}: {e}"
+                            )
+                    else:
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f"Importer {imp_cls.slug} has no clear_targets() method; skipping wipe."
+                            )
+                        )
+
             opts_no_path = {k: v for k, v in opts.items() if k != "path"}
             stats = imp_cls().run(opts["path"], ctx, **opts_no_path)
             self.stdout.write(f"{imp_cls.slug} stats: {stats}")
@@ -90,6 +134,41 @@ class Command(BaseCommand):
                     raise CommandError(f"Unknown importer(s): {', '.join(unknown)}")
             importers = [i for i in all_importers() if not wanted or i.slug in wanted]
             ctx = ImportContext(dry_run=opts["dry_run"])
+            # If requested, wipe targets for all importers first (deletes targets and children)
+            if opts.get("wipe_targets"):
+                if ctx.dry_run:
+                    self.stdout.write(
+                        self.style.WARNING(
+                            "dry-run: would wipe all importer targets (skipped)."
+                        )
+                    )
+                else:
+                    for imp_cls in importers:
+                        importer = imp_cls()
+                        clear_fn = getattr(importer, "clear_targets", None)
+                        if callable(clear_fn):
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Wiping target data for importer {imp_cls.slug}"
+                                )
+                            )
+                            try:
+                                clear_fn(
+                                    ctx=ctx,
+                                    include_children=True,
+                                    **{k: v for k, v in opts.items() if k != "path"},
+                                )
+                            except Exception as e:
+                                raise CommandError(
+                                    f"Failed to wipe targets for {imp_cls.slug}: {e}"
+                                )
+                        else:
+                            self.stdout.write(
+                                self.style.WARNING(
+                                    f"Importer {imp_cls.slug} has no clear_targets() method; skipping wipe."
+                                )
+                            )
+
             for imp_cls in importers:
                 self.stdout.write(f"== {imp_cls.slug} ==")
                 opts_no_path = {k: v for k, v in opts.items() if k != "path"}
