@@ -257,6 +257,7 @@ class SpeciesImporter(BaseSheetImporter):
                 continue
 
             defaults = {
+                "migrated_from_id": merged.get("migrated_from_id"),
                 "group_type_id": merged.get("group_type_id"),
                 "taxonomy_id": merged.get("taxonomy_id"),
                 "comment": merged.get("comment"),
@@ -272,9 +273,11 @@ class SpeciesImporter(BaseSheetImporter):
             }
 
             if ctx.dry_run:
-                pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
+                # Show the full merged row (all data fields) during dry-run so
+                # callers can inspect everything, not just the limited `defaults` subset.
+                pretty = json.dumps(merged, default=str, indent=2, sort_keys=True)
                 logger.debug(
-                    "SpeciesImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
+                    "SpeciesImporter %s dry-run: would persist migrated_from_id=%s merged (full row):\n%s",
                     self.slug,
                     migrated_from_id,
                     pretty,
