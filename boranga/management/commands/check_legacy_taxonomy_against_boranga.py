@@ -111,8 +111,18 @@ class Command(BaseCommand):
 
         for tax in qs.iterator(chunk_size=1000):
             name = tax.scientific_name or ""
-            exact_lookup[name].append(tax)
-            iexact_lookup[name.lower()].append(tax)
+            # normalize stored taxonomy names for lookup (preserve original and a
+            # variant that replaces Unicode multiplication sign '×' with ASCII 'x')
+            name_key = _norm_name(name)
+            exact_lookup[name_key].append(tax)
+            iexact_lookup[name_key.lower()].append(tax)
+
+            # Add hybrid-marker variant so '×' vs 'x' differences don't prevent matches
+            if "×" in name_key:
+                alt = name_key.replace("×", "x")
+                if alt != name_key:
+                    exact_lookup[alt].append(tax)
+                    iexact_lookup[alt.lower()].append(tax)
 
         self.stdout.write(f"Cached {len(exact_lookup)} unique taxonomy names")
 
@@ -234,6 +244,83 @@ class Command(BaseCommand):
                                 (name, nomos_name, nomos_id, status, details)
                             )
                             continue
+                    except Exception as e:
+                        details = f"name lookup error: {e}"
+
+                # If nomos_canonical_name was empty, fall back to trying the CSV `NAME`
+                # (some rows only have NAME populated). This tries full-name exact/iexact
+                # matches before attempting the special ' PN' suffix strip below.
+                if status != "found" and not nomos_name_norm and name:
+                    try:
+                        name_candidate = _norm_name(name)
+                        if name_candidate:
+                            # Check exact match using NAME
+                            exact_matches = exact_lookup.get(name_candidate, [])
+                            if len(exact_matches) == 1:
+                                status = "found"
+                                details = f"pk={exact_matches[0].pk} (NAME exact)"
+                                by_status["found"] += 1
+                                rows_out.append(
+                                    (name, nomos_name, nomos_id, status, details)
+                                )
+                                continue
+                            elif len(exact_matches) > 1:
+                                current_matches = [
+                                    t
+                                    for t in exact_matches
+                                    if getattr(t, "is_current", False)
+                                ]
+                                if len(current_matches) == 1:
+                                    status = "found"
+                                    details = f"pk={current_matches[0].pk} (NAME exact, is_current)"
+                                    by_status["found"] += 1
+                                    rows_out.append(
+                                        (name, nomos_name, nomos_id, status, details)
+                                    )
+                                    continue
+                                status = "multiple"
+                                details = f"NAME exact match count={len(exact_matches)}"
+                                by_status["multiple"] += 1
+                                rows_out.append(
+                                    (name, nomos_name, nomos_id, status, details)
+                                )
+                                continue
+
+                            # Check case-insensitive match for NAME
+                            iexact_matches = iexact_lookup.get(
+                                name_candidate.lower(), []
+                            )
+                            if len(iexact_matches) == 1:
+                                status = "found"
+                                details = f"pk={iexact_matches[0].pk} (NAME iexact)"
+                                by_status["found"] += 1
+                                rows_out.append(
+                                    (name, nomos_name, nomos_id, status, details)
+                                )
+                                continue
+                            elif len(iexact_matches) > 1:
+                                current_matches = [
+                                    t
+                                    for t in iexact_matches
+                                    if getattr(t, "is_current", False)
+                                ]
+                                if len(current_matches) == 1:
+                                    status = "found"
+                                    details = f"pk={current_matches[0].pk} (NAME iexact, is_current)"
+                                    by_status["found"] += 1
+                                    rows_out.append(
+                                        (name, nomos_name, nomos_id, status, details)
+                                    )
+                                    continue
+                                status = "multiple"
+                                details = (
+                                    f"NAME iexact match count={len(iexact_matches)}"
+                                )
+                                by_status["multiple"] += 1
+                                rows_out.append(
+                                    (name, nomos_name, nomos_id, status, details)
+                                )
+                                continue
                     except Exception as e:
                         details = f"name lookup error: {e}"
 
