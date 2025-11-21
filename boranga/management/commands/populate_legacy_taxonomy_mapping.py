@@ -11,11 +11,11 @@ class Command(BaseCommand):
     """
     Populate LegacyTaxonomyMapping from a CSV file.
 
-    Usage:
-      ./manage.py populate_legacy_taxonomy_mapping <csvfile> [--dry-run]
+        Usage:
+            ./manage.py populate_legacy_taxonomy_mapping <csvfile> [--dry-run] [--list-name LIST]
 
     Expected CSV columns (headers case-insensitive):
-      - list_name (required)
+    - list_name (required unless overridden with `--list-name`)
       - legacy_canonical_name (required)
       - taxon_name_id (required)
 
@@ -32,6 +32,13 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("csvfile", type=str)
+        parser.add_argument(
+            "--list-name",
+            dest="list_name",
+            type=str,
+            help="Optional: override the CSV 'list_name' for all rows",
+            default=None,
+        )
         parser.add_argument("--dry-run", action="store_true")
 
     def _get_field(self, row: dict, *keys):
@@ -47,6 +54,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         csvfile = options["csvfile"]
         dry_run = options["dry_run"]
+        # If provided, this will be used for every row instead of the CSV `list_name` value
+        list_name_override = options.get("list_name")
 
         rows = []
         with open(csvfile, newline="", encoding="utf-8-sig") as fh:
@@ -61,16 +70,20 @@ class Command(BaseCommand):
 
         with transaction.atomic():
             for r in rows:
-                list_name = self._get_field(r, "list_name", "list")
+                # Use the CLI override if provided, otherwise read from CSV
+                list_name = list_name_override or self._get_field(
+                    r, "list_name", "list"
+                )
                 legacy_name = self._get_field(
                     r,
                     "legacy_canonical_name",
                     "legacy_canonical",
                     "legacy_name",
                     "legacy",
+                    "NAME",
                 )
                 taxon_name_id_raw = self._get_field(
-                    r, "taxon_name_id", "taxon_id", "taxonnameid"
+                    r, "taxon_name_id", "taxon_id", "taxonnameid", "nomos_taxon_id"
                 )
 
                 if not (list_name and legacy_name and taxon_name_id_raw):
