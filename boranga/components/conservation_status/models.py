@@ -657,6 +657,14 @@ class ConservationStatus(
     datetime_created = models.DateTimeField(auto_now_add=True)
     datetime_updated = models.DateTimeField(auto_now=True)
 
+    migration_run = models.ForeignKey(
+        "boranga.MigrationRun",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="conservation_statuses",
+    )
+
     class Meta:
         app_label = "boranga"
 
