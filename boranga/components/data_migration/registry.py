@@ -792,6 +792,20 @@ def _norm_legacy_canonical_name(val: str) -> str | None:
     if val is None:
         return None
     s = str(val)
+    # Try to use ftfy to fix mojibake/encoding artefacts when available.
+    try:
+        import ftfy
+
+        try:
+            fixed = ftfy.fix_text(s)
+            if fixed:
+                s = fixed
+        except Exception:
+            # fall through to conservative heuristics below
+            pass
+    except Exception:
+        # ftfy not installed or import failed; fall back to heuristics below
+        pass
 
     # Attempt to fix common mojibake artifacts where UTF-8 bytes were
     # incorrectly decoded as Latin-1/Windows-1252 (e.g. sequences like
