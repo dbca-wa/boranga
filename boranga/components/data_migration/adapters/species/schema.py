@@ -7,16 +7,12 @@ from boranga.components.data_migration.adapters.schema_base import Schema
 from boranga.components.data_migration.registry import (
     choices_transform,
     emailuser_by_legacy_username_factory,
-    taxonomy_lookup,
+    taxonom_lookup_legacy_mapping,
 )
 from boranga.components.species_and_communities.models import Species
 
-# Legacy → target FK / lookup transforms (require LegacyValueMap data)
-TAXONOMY_TRANSFORM = taxonomy_lookup(
-    group_type_name="flora",
-    lookup_field="scientific_name",
-    source_key="TPFL",
-)
+# Fast, in-memory transform of legacy canonical name to taxonomy id
+TAXONOMY_TRANSFORM = taxonom_lookup_legacy_mapping("TPFL")
 
 SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
