@@ -1383,6 +1383,7 @@ class ImportContext:
     dry_run: bool
     user_id: int | None = None
     stats: dict = None
+    limit: int | None = None
     migration_run: MigrationRun | None = None
 
     def __post_init__(self):

@@ -227,6 +227,14 @@ class SpeciesImporter(BaseSheetImporter):
                 r["_source"] = src
             all_rows.extend(result.rows)
 
+        # Apply optional global per-importer limit (ctx.limit) after extraction
+        limit = getattr(ctx, "limit", None)
+        if limit:
+            try:
+                all_rows = all_rows[: int(limit)]
+            except Exception:
+                pass
+
         # 2. Build pipelines per source by merging base schema pipelines with
         # any adapter-provided `PIPELINES`. This keeps source-specific
         # transform bindings next to the adapter while still allowing the

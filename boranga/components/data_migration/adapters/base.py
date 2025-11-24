@@ -34,7 +34,7 @@ class SourceAdapter:
         raise NotImplementedError
 
     def read_table(
-        self, path: str, *, encoding: str = "utf-8"
+        self, path: str, *, encoding: str = "utf-8", **options
     ) -> tuple[list[dict], list["ExtractionWarning"]]:
         """
         Read a flat table file into a list[dict] using pandas (assumed available).
@@ -52,6 +52,26 @@ class SourceAdapter:
                 df = pd.read_csv(path, dtype=str, encoding=encoding)
             df = df.fillna("")
             rows = df.to_dict(orient="records")
+            # Apply optional row-limit for faster testing. Priority:
+            # 1. explicit `limit` in options
+            # 2. DATA_MIGRATION_LIMIT env var
+            limit = None
+            if options is not None:
+                try:
+                    limit_option = options.get("limit")
+                    if limit_option is not None:
+                        limit = int(limit_option)
+                except Exception:
+                    limit = None
+            if limit is None:
+                try:
+                    env = os.environ.get("DATA_MIGRATION_LIMIT")
+                    if env:
+                        limit = int(env)
+                except Exception:
+                    limit = None
+            if limit and isinstance(rows, list):
+                rows = rows[: int(limit)]
         except Exception as e:
             warnings.append(ExtractionWarning(f"Failed reading file with pandas: {e}"))
         return rows, warnings

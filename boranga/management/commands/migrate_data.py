@@ -36,6 +36,12 @@ class Command(BaseCommand):
             type=str,
             help="Path to write error details CSV (default: auto-generated in handler_output/)",
         )
+        p_run.add_argument(
+            "--limit",
+            type=int,
+            default=None,
+            help="Optional limit of rows to process (for testing)",
+        )
 
         p_multi = sub.add_parser("runmany", help="Run multiple importers sequentially")
         p_multi.add_argument("path", help="Spreadsheet path (shared)")
@@ -50,6 +56,12 @@ class Command(BaseCommand):
             "--wipe-targets",
             action="store_true",
             help="If set, delete target model data for all importers before running (no-op in dry-run).",
+        )
+        p_multi.add_argument(
+            "--limit",
+            type=int,
+            default=None,
+            help="Optional limit of rows to process (for testing)",
         )
 
         # Importer-specific options only relevant to run / runmany
@@ -83,7 +95,12 @@ class Command(BaseCommand):
                 imp_cls = get(slug)
             except KeyError as e:
                 raise CommandError(str(e))
-            ctx = ImportContext(dry_run=opts["dry_run"])
+            ctx = ImportContext(dry_run=opts["dry_run"], limit=opts.get("limit"))
+            # Support adapters/readers that do not accept a limit option by
+            # exposing an env var fallback that `SourceAdapter.read_table` honours.
+            limit_val = opts.get("limit")
+            if limit_val:
+                os.environ["DATA_MIGRATION_LIMIT"] = str(limit_val)
             # Create a MigrationRun record for this import (unless dry-run)
             if not ctx.dry_run:
                 try:
@@ -137,6 +154,12 @@ class Command(BaseCommand):
 
             opts_no_path = {k: v for k, v in opts.items() if k != "path"}
             stats = imp_cls().run(opts["path"], ctx, **opts_no_path)
+            # Cleanup env var set for limiting rows during this run
+            if limit_val and os.environ.get("DATA_MIGRATION_LIMIT") == str(limit_val):
+                try:
+                    del os.environ["DATA_MIGRATION_LIMIT"]
+                except Exception:
+                    pass
             self.stdout.write(f"{imp_cls.slug} stats: {stats}")
             self.stdout.write(self.style.SUCCESS("Done."))
             return
@@ -152,7 +175,11 @@ class Command(BaseCommand):
                 if unknown:
                     raise CommandError(f"Unknown importer(s): {', '.join(unknown)}")
             importers = [i for i in all_importers() if not wanted or i.slug in wanted]
-            ctx = ImportContext(dry_run=opts["dry_run"])
+            ctx = ImportContext(dry_run=opts["dry_run"], limit=opts.get("limit"))
+            # Expose env var fallback for adapters/readers that don't accept limit
+            multi_limit = opts.get("limit")
+            if multi_limit:
+                os.environ["DATA_MIGRATION_LIMIT"] = str(multi_limit)
             # Create a single MigrationRun for the whole runmany operation (unless dry-run)
             if not ctx.dry_run:
                 try:
@@ -209,6 +236,14 @@ class Command(BaseCommand):
                 opts_no_path = {k: v for k, v in opts.items() if k != "path"}
                 stats = imp_cls().run(opts["path"], ctx, **opts_no_path)
                 self.stdout.write(f"{imp_cls.slug} stats: {stats}")
+            # Cleanup env var used for limiting rows across runmany
+            if multi_limit and os.environ.get("DATA_MIGRATION_LIMIT") == str(
+                multi_limit
+            ):
+                try:
+                    del os.environ["DATA_MIGRATION_LIMIT"]
+                except Exception:
+                    pass
             self.stdout.write(self.style.SUCCESS(f"All done: {ctx.stats}"))
             return
 
