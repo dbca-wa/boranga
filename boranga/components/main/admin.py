@@ -92,7 +92,7 @@ class LegacyValueMapAdmin(admin.ModelAdmin):
         "target_object_id",
     ]
     list_filter = ["legacy_system", "list_name"]
-    search_fields = ["legacy_value", "new_value"]
+    search_fields = ["list_name", "legacy_value", "canonical_name"]
 
 
 class OccToOcrSectionMappingAdmin(admin.ModelAdmin):
