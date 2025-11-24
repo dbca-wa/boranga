@@ -276,13 +276,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 combined_issues.extend(iss)
             return merged, combined_issues
 
-        # Persist merged rows
+        # Persist merged rows in two phases to avoid N per-row DB ops (bulk_create/bulk_update)
+        ops = []
         persisted = 0
         for migrated_from_id, entries in groups.items():
             persisted += 1
             if persisted % 500 == 0:
                 logger.info(
-                    "OccurrenceReportImporter %s: persisted %d groups so far",
+                    "OccurrenceReportImporter %s: prepared %d groups so far",
                     self.slug,
                     persisted,
                 )
@@ -299,7 +300,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 report_row = schema.OccurrenceReportRow.from_dict(merged)
                 validation_issues = report_row.validate()
             except Exception as e:
-                # treat construction/parsing errors as a validation error so the row is skipped
                 validation_issues = [("error", f"row_dataclass_error: {e}")]
 
             if validation_issues:
@@ -322,9 +322,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     )
                     continue
 
-            # At this point report_row is guaranteed to exist
             defaults = report_row.to_model_defaults()
-            # add any extra adapter-supplied metadata (e.g. legacy source)
             involved_sources = sorted({src for _, src, _ in entries})
             defaults["legacy_source"] = ",".join(involved_sources)
 
@@ -338,42 +336,250 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
                 continue
 
-            with transaction.atomic():
-                obj, created_flag = OccurrenceReport.objects.update_or_create(
-                    migrated_from_id=migrated_from_id, defaults=defaults
-                )
-                if created_flag:
-                    created += 1
-                    if getattr(ctx, "migration_run", None) is not None:
+            # capture related small extras for later (observer + habitat)
+            habitat_loose = merged.get("OCRHabitatComposition__loose_rock_percent")
+            ops.append(
+                {
+                    "migrated_from_id": migrated_from_id,
+                    "defaults": defaults,
+                    "merged": merged,
+                    "habitat_loose": habitat_loose,
+                }
+            )
+
+        # Prefetch existing OccurrenceReports to decide create vs update
+        migrated_keys = [o["migrated_from_id"] for o in ops]
+        existing_by_migrated = {
+            s.migrated_from_id: s
+            for s in OccurrenceReport.objects.filter(migrated_from_id__in=migrated_keys)
+        }
+
+        # Prepare lists for bulk ops
+        to_create = []
+        create_meta = []
+        to_update = []
+        BATCH = 1000
+
+        for op in ops:
+            migrated_from_id = op["migrated_from_id"]
+            defaults = op["defaults"]
+            habitat_loose = op.get("habitat_loose")
+
+            obj = existing_by_migrated.get(migrated_from_id)
+            if obj:
+                # apply defaults to instance for later bulk_update
+                for k, v in defaults.items():
+                    setattr(obj, k, v)
+                to_update.append((obj, habitat_loose))
+                continue
+
+            # create new instance (bulk_create later)
+            create_kwargs = dict(defaults)
+            create_kwargs["migrated_from_id"] = migrated_from_id
+            if getattr(ctx, "migration_run", None) is not None:
+                create_kwargs["migration_run"] = ctx.migration_run
+            inst = OccurrenceReport(**create_kwargs)
+            to_create.append(inst)
+            create_meta.append((migrated_from_id, habitat_loose))
+
+        # Bulk create new OccurrenceReports
+        created_map = {}
+        if to_create:
+            logger.info(
+                "OccurrenceReportImporter: bulk-creating %d new OccurrenceReports",
+                len(to_create),
+            )
+            for i in range(0, len(to_create), BATCH):
+                chunk = to_create[i : i + BATCH]
+                with transaction.atomic():
+                    OccurrenceReport.objects.bulk_create(chunk, batch_size=BATCH)
+
+        # Refresh created objects to get PKs
+        if create_meta:
+            created_keys = [m[0] for m in create_meta]
+            for s in OccurrenceReport.objects.filter(migrated_from_id__in=created_keys):
+                created_map[s.migrated_from_id] = s
+
+        # Populate occurrence_report_number for newly-created objects (bulk_update)
+        if created_map:
+            occs_to_update = []
+            for mig, s in created_map.items():
+                if not s.occurrence_report_number:
+                    s.occurrence_report_number = f"{s.MODEL_PREFIX}{s.pk}"
+                    occs_to_update.append(s)
+            if occs_to_update:
+                try:
+                    OccurrenceReport.objects.bulk_update(
+                        occs_to_update, ["occurrence_report_number"], batch_size=BATCH
+                    )
+                except Exception:
+                    for s in occs_to_update:
                         try:
-                            OccurrenceReport.objects.filter(pk=obj.pk).update(
-                                migration_run=ctx.migration_run
-                            )
+                            s.save()
                         except Exception:
                             logger.exception(
-                                "Failed to attach migration_run to OccurrenceReport %s",
-                                obj.pk,
+                                "Failed to populate occurrence_report_number for created OccurrenceReport %s",
+                                getattr(s, "pk", None),
                             )
-                else:
-                    updated += 1
 
-            # no per-row related models here by default; adapters/schemas can populate extras
-            # (e.g. contact records) via merged fields if needed
+        # Bulk update existing objects
+        if to_update:
+            logger.info(
+                "OccurrenceReportImporter: bulk-updating %d existing OccurrenceReports",
+                len(to_update),
+            )
+            update_instances = [t[0] for t in to_update]
+            # determine fields to update from defaults keys (take union)
+            fields = set()
+            for inst, _ in to_update:
+                fields.update(
+                    [
+                        f.name
+                        for f in inst._meta.fields
+                        if getattr(inst, f.name, None) is not None
+                    ]
+                )
+            # ensure migrated_from_id not touched here
+            try:
+                OccurrenceReport.objects.bulk_update(
+                    update_instances, list(fields), batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OccurrenceReport; falling back to individual saves"
+                )
+                for inst in update_instances:
+                    try:
+                        inst.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OccurrenceReport %s",
+                            getattr(inst, "pk", None),
+                        )
 
-            # OCRObserverDetail
-            OCRObserverDetail.objects.get_or_create(
-                occurrence_report=obj,
-                main_observer=True,
+        # Now handle related models in bulk for both created and updated occurrence reports
+        # Prepare target occurrence_report ids
+        target_mig_ids = [o["migrated_from_id"] for o in ops]
+        target_occs = list(
+            OccurrenceReport.objects.filter(migrated_from_id__in=target_mig_ids)
+        )
+        target_map = {o.migrated_from_id: o for o in target_occs}
+
+        # OCRObserverDetail: ensure a main observer exists for each occurrence_report
+        want_obs_create = []
+        existing_obs = set(
+            OCRObserverDetail.objects.filter(
+                occurrence_report__in=target_occs, main_observer=True
+            ).values_list("occurrence_report_id", flat=True)
+        )
+        for mig in target_mig_ids:
+            occ = target_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_obs:
+                # already has main observer
+                continue
+            want_obs_create.append(
+                OCRObserverDetail(
+                    occurrence_report=occ, main_observer=True, visible=True
+                )
             )
 
-            # OCRHabitatComposition
-            OCRHabitatComposition.objects.get_or_create(
-                occurrence_report=obj,
-                # TODO add more fields here as needed
-                loose_rock_percent=merged.get(
-                    "OCRHabitatComposition__loose_rock_percent"
-                ),
+        if want_obs_create:
+            try:
+                OCRObserverDetail.objects.bulk_create(want_obs_create, batch_size=BATCH)
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRObserverDetail; falling back to individual creates"
+                )
+                for obj in want_obs_create:
+                    try:
+                        obj.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRObserverDetail for occurrence_report %s",
+                            getattr(obj.occurrence_report, "pk", None),
+                        )
+
+        # OCRHabitatComposition: OneToOne - create or update loose_rock_percent
+        # Fetch existing habitat comps
+        existing_habs = {
+            h.occurrence_report_id: h
+            for h in OCRHabitatComposition.objects.filter(
+                occurrence_report__in=target_occs
             )
+        }
+        habs_to_create = []
+        habs_to_update = []
+        for up in to_update:
+            inst, habitat_loose = up
+            hid = inst.pk
+            if hid in existing_habs:
+                h = existing_habs[hid]
+                h.loose_rock_percent = habitat_loose
+                habs_to_update.append(h)
+            else:
+                habs_to_create.append(
+                    OCRHabitatComposition(
+                        occurrence_report_id=hid, loose_rock_percent=habitat_loose
+                    )
+                )
+
+        # Handle created ones
+        for mig, habitat_loose in create_meta:
+            occ = created_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_habs:
+                h = existing_habs[occ.pk]
+                h.loose_rock_percent = habitat_loose
+                habs_to_update.append(h)
+            else:
+                habs_to_create.append(
+                    OCRHabitatComposition(
+                        occurrence_report=occ, loose_rock_percent=habitat_loose
+                    )
+                )
+
+        if habs_to_create:
+            try:
+                OCRHabitatComposition.objects.bulk_create(
+                    habs_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRHabitatComposition; falling back to individual creates"
+                )
+                for h in habs_to_create:
+                    try:
+                        h.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRHabitatComposition for occurrence_report %s",
+                            getattr(h.occurrence_report, "pk", None),
+                        )
+
+        if habs_to_update:
+            try:
+                OCRHabitatComposition.objects.bulk_update(
+                    habs_to_update, ["loose_rock_percent"], batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRHabitatComposition; falling back to individual saves"
+                )
+                for h in habs_to_update:
+                    try:
+                        h.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRHabitatComposition %s",
+                            getattr(h, "pk", None),
+                        )
+
+        # Update stats counts for created/updated based on performed ops
+        created += len(created_map)
+        updated += len(to_update)
 
         stats.update(
             processed=processed,
