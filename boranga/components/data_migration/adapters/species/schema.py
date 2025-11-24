@@ -4,19 +4,11 @@ from dataclasses import dataclass
 from datetime import date, datetime
 
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.registry import (
-    choices_transform,
-    emailuser_by_legacy_username_factory,
-    taxonom_lookup_legacy_mapping,
-)
 from boranga.components.species_and_communities.models import Species
 
-# Fast, in-memory transform of legacy canonical name to taxonomy id
-TAXONOMY_TRANSFORM = taxonom_lookup_legacy_mapping("TPFL")
-
-SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
-
-PROCESSING_STATUS = choices_transform([c[0] for c in Species.PROCESSING_STATUS_CHOICES])
+# Note: source-specific pipeline/transform bindings (eg. TPFL) are defined
+# on the adapter module (e.g. `tpfl.py`). The schema defines the canonical
+# column map and shared validation only.
 
 COLUMN_MAP = {
     "TXN_LIST_ID": "migrated_from_id",
@@ -39,32 +31,10 @@ REQUIRED_COLUMNS = [
     "taxonomy_id",
     "processing_status",
 ]
-
-PIPELINES = {
-    "migrated_from_id": ["strip", "required"],
-    "taxonomy_id": ["strip", "blank_to_none", "required", TAXONOMY_TRANSFORM],
-    "comment": ["strip", "blank_to_none"],
-    # normalize & format RP_EXP_DATE to "dd/mm/YYYY"
-    "RP_EXP_DATE": [
-        "strip",
-        "blank_to_none",
-        "date_from_datetime_iso",
-        "format_date_dmy",
-    ],
-    "conservation_plan_exists": ["strip", "blank_to_none", "is_present"],
-    "department_file_numbers": ["strip", "blank_to_none"],
-    "last_data_curation_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
-    "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
-    "processing_status": [
-        "strip",
-        "blank_to_none",
-        "required",
-        "Y_to_active_else_historical",
-        PROCESSING_STATUS,
-    ],
-    "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
-    "distribution": ["strip", "blank_to_none"],
-}
+# No source-specific pipelines defined here. Adapters may supply their own
+# pipeline mapping (module-level `PIPELINES`) which will be merged by the
+# importer at runtime.
+PIPELINES: dict[str, list[str]] = {}
 
 SCHEMA = Schema(
     column_map=COLUMN_MAP,
