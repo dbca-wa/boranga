@@ -34,27 +34,7 @@ REQUIRED_COLUMNS = [
     "processing_status",
 ]
 
-PIPELINES = {
-    "migrated_from_id": ["strip", "required"],
-    "community_number": ["strip", "blank_to_none"],
-    "group_type": ["strip", "blank_to_none", "group_type_by_name", "required"],
-    # taxonomy/community name -> create/lookup CommunityTaxonomy
-    # species list: split multiselect and resolve to species ids (implement split/validate in registry)
-    "species": [
-        "strip",
-        "blank_to_none",
-        "split_multiselect_species",  # placeholder: split on ',' or ';'
-        "validate_species_list",  # placeholder: resolve/validate each entry with SPECIES_TRANSFORM
-    ],
-    "submitter": ["strip", "blank_to_none"],
-    "processing_status": ["strip", "required", PROCESSING_STATUS],
-    "lodgement_date": ["strip", "blank_to_none", "date_iso"],
-    "last_data_curation_date": ["strip", "blank_to_none", "date_iso"],
-    "conservation_plan_exists": ["strip", "blank_to_none", "bool"],
-    "conservation_plan_reference": ["strip", "blank_to_none"],
-    "comment": ["strip", "blank_to_none"],
-    "department_file_numbers": ["strip", "blank_to_none"],
-}
+PIPELINES: dict[str, list[str]] = {}
 
 SCHEMA = Schema(
     column_map=COLUMN_MAP,

@@ -114,14 +114,36 @@ class OccurrenceImporter(BaseSheetImporter):
                 r["_source"] = src
             all_rows.extend(result.rows)
 
-        # 2. Build pipelines / same as before
-        pipelines = {}
-        for col, names in schema.COLUMN_PIPELINES.items():
-            from boranga.components.data_migration.registry import (
-                registry as transform_registry,
-            )
+        # 2. Build pipelines per-source by merging base schema pipelines with
+        # any adapter-provided `PIPELINES`. This allows adapters to own
+        # source-specific transform bindings while the importer runs them
+        # uniformly.
+        from boranga.components.data_migration.registry import (
+            registry as transform_registry,
+        )
 
-            pipelines[col] = transform_registry.build_pipeline(names)
+        base_column_names = schema.COLUMN_PIPELINES or {}
+        pipelines_by_source: dict[str, dict] = {}
+        for src_key, adapter in SOURCE_ADAPTERS.items():
+            src_column_names = dict(base_column_names)
+            adapter_pipes = getattr(adapter, "PIPELINES", None)
+            if adapter_pipes:
+                src_column_names.update(adapter_pipes)
+
+            built: dict[str, list] = {}
+            for col, names in src_column_names.items():
+                built[col] = transform_registry.build_pipeline(names)
+            pipelines_by_source[src_key] = built
+
+        # Build a `pipelines` mapping (keys only) used by merge_group to know
+        # which canonical columns to consider when merging entries. Use the
+        # union of columns across all source-specific pipelines.
+        all_columns = set()
+        for built in pipelines_by_source.values():
+            all_columns.update(built.keys())
+        if not all_columns and schema.COLUMN_PIPELINES:
+            all_columns.update(schema.COLUMN_PIPELINES.keys())
+        pipelines = {col: None for col in sorted(all_columns)}
 
         processed = 0
         errors = 0
@@ -149,7 +171,12 @@ class OccurrenceImporter(BaseSheetImporter):
             issues = []
             transformed = {}
             has_error = False
-            for col, pipeline in pipelines.items():
+            # Choose pipeline map based on the row source (fallback to base)
+            src = row.get("_source")
+            pipeline_map = pipelines_by_source.get(
+                src, pipelines_by_source.get(None, {})
+            )
+            for col, pipeline in pipeline_map.items():
                 raw_val = row.get(col)
                 res = run_pipeline(pipeline, raw_val, tcx)
                 transformed[col] = res.value

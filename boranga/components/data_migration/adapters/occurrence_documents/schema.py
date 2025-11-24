@@ -4,18 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.registry import (
-    emailuser_by_legacy_username_factory,
-    fk_lookup,
-)
-from boranga.components.occurrence.models import Occurrence
-
-OCCURRENCE_ID_TRANSFORM = fk_lookup(
-    Occurrence,
-    lookup_field="migrated_from_id",
-)
-
-UPLOADED_BY_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
 COLUMN_MAP = {
     "POP_ID": "occurrence_id",
@@ -29,11 +17,7 @@ REQUIRED_COLUMNS = [
     "uploaded_date",
 ]
 
-PIPELINES = {
-    "occurrence_id": ["strip", "required", OCCURRENCE_ID_TRANSFORM],
-    "uploaded_by": ["strip", "required", UPLOADED_BY_TRANSFORM],
-    "uploaded_date": ["strip", "required", "datetime_iso"],
-}
+PIPELINES: dict[str, list[str]] = {}
 
 SCHEMA = Schema(
     column_map=COLUMN_MAP,
