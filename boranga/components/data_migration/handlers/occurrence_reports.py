@@ -220,7 +220,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 skipped += 1
                 errors += 1
                 errors_details.append(
-                    {"reason": "missing_migrated_from_id", "row": transformed}
+                    {
+                        "reason": "missing_migrated_from_id",
+                        "message": "missing_migrated_from_id",
+                        "row": transformed,
+                    }
                 )
                 continue
             groups[key].append((transformed, row.get("_source"), issues))
@@ -296,7 +300,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "migrated_from_id": merged.get("migrated_from_id"),
                         "reason": "validation",
                         "level": level,
-                        "message": msg,
+                        "message": str(msg),
                         "row": merged,
                     }
                     if level == "error":
