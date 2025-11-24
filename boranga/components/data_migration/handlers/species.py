@@ -305,12 +305,10 @@ class SpeciesImporter(BaseSheetImporter):
             if ctx.dry_run:
                 # Show the full merged row (all data fields) during dry-run so
                 # callers can inspect everything, not just the limited `defaults` subset.
-                pretty = json.dumps(merged, default=str, indent=2, sort_keys=True)
                 logger.debug(
-                    "SpeciesImporter %s dry-run: would persist migrated_from_id=%s merged (full row):\n%s",
+                    "SpeciesImporter %s dry-run: would persist migrated_from_id=%s ",
                     self.slug,
                     migrated_from_id,
-                    pretty,
                 )
                 continue
 
