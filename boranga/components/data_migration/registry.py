@@ -858,12 +858,32 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
     try:
         from boranga.components.main.models import LegacyTaxonomyMapping
 
+        # import Species lazily to optionally resolve species_id (avoid circular import)
+        try:
+            from boranga.components.species_and_communities.models import Species
+        except Exception:
+            Species = None
+
         qs = LegacyTaxonomyMapping.objects.filter(list_name=list_name)
         for rec in qs.only("legacy_canonical_name", "taxonomy_id", "taxon_name_id"):
             key = _norm_legacy_canonical_name(rec.legacy_canonical_name)
             if not key:
                 continue
             entry = {"taxonomy_id": rec.taxonomy_id, "taxon_name_id": rec.taxon_name_id}
+            # If possible, resolve a linked Species id so lookups can be answered
+            # from memory without further DB queries during import pipelines.
+            try:
+                if Species and rec.taxonomy_id:
+                    sp_id = (
+                        Species.objects.filter(taxonomy_id=rec.taxonomy_id)
+                        .values_list("id", flat=True)
+                        .first()
+                    )
+                    if sp_id:
+                        entry["species_id"] = sp_id
+            except Exception:
+                # be conservative: ignore errors resolving species and continue
+                pass
             # store both the canonical key and a casefold variant for case-insensitive lookups
             mapping.setdefault(key, entry)
             kcf = key.casefold()
@@ -916,7 +936,9 @@ def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
 
         entry = table.get(norm) or table.get(norm.casefold())
         if entry:
-            # prefer resolved taxonomy FK id when available, else fall back to external taxon_name_id
+            # Return the taxonomy id when available, otherwise fall back to taxon_name_id.
+            # Do NOT return species_id here — this transform is expected to resolve
+            # to a taxonomy/taxon_name identifier (numeric) used by downstream logic.
             tax_id = entry.get("taxonomy_id") or entry.get("taxon_name_id")
             if tax_id is None:
                 return _result(
@@ -935,6 +957,151 @@ def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
                 f"LegacyTaxonomyMapping for '{value}' not found in list '{list_name}'",
             ),
         )
+
+    registry._fns[name] = _inner
+    return name
+
+
+def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
+    """Register and return a transform name that resolves a legacy canonical name
+    (from `LegacyTaxonomyMapping`) to a Species id.
+
+    Behaviour:
+      - normalises incoming value (NBSPs, HTML neutralisation, strip)
+      - looks up the normalised key (case-insensitive)
+      - prefers to resolve a linked `taxonomy` -> `Species` and return that `Species.id`
+      - if linked `Species` cannot be found, will attempt to resolve via `taxon_name_id`
+        (finding the Taxonomy then its Species)
+      - on missing mapping or missing species returns an error TransformIssue
+    """
+    if not list_name:
+        raise ValueError("list_name must be provided")
+
+    key_repr = f"taxonom_lookup_legacy_species:{list_name}"
+    name = (
+        "taxonom_lookup_legacy_species_"
+        + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    )
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(None)
+
+        table = _load_legacy_taxonomy_mappings(list_name)
+        if not table:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"No LegacyTaxonomyMapping entries loaded for list '{list_name}'",
+                ),
+            )
+
+        norm = _norm_legacy_canonical_name(value)
+        if norm is None:
+            return _result(
+                value, TransformIssue("error", f"Invalid legacy name: {value!r}")
+            )
+
+        entry = table.get(norm) or table.get(norm.casefold())
+        if not entry:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"LegacyTaxonomyMapping for '{value}' not found in list '{list_name}'",
+                ),
+            )
+
+        # Prefer a cached species_id if present (no DB query)
+        species_id = entry.get("species_id")
+        if species_id is not None:
+            return _result(species_id)
+
+        # Otherwise fall back to attempting to resolve via Taxonomy/TaxonName
+        tax_id = entry.get("taxonomy_id")
+        tnid = entry.get("taxon_name_id")
+
+        try:
+            # local imports to avoid circular import issues
+            from boranga.components.species_and_communities.models import (
+                Species,
+                Taxonomy,
+            )
+
+            if tax_id:
+                try:
+                    sp = Species.objects.get(taxonomy_id=tax_id)
+                    return _result(sp.pk)
+                except Species.DoesNotExist:
+                    # fall through to try via taxon_name_id
+                    pass
+                except Species.MultipleObjectsReturned:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Species linked to taxonomy_id={tax_id} for '{value}'",
+                        ),
+                    )
+
+            if tnid:
+                try:
+                    tax = Taxonomy.all_objects.get(taxon_name_id=tnid)
+                except Taxonomy.DoesNotExist:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Taxonomy with taxon_name_id={tnid} not found for '{value}'",
+                        ),
+                    )
+                except Taxonomy.MultipleObjectsReturned:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Taxonomy entries with taxon_name_id={tnid} found for '{value}'",
+                        ),
+                    )
+
+                try:
+                    sp = Species.objects.get(taxonomy=tax)
+                    return _result(sp.pk)
+                except Species.DoesNotExist:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"LegacyTaxonomyMapping for '{value}' maps to taxonomy "
+                            f"(taxon_name_id={tnid}) but no Species found",
+                        ),
+                    )
+                except Species.MultipleObjectsReturned:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Species linked to taxon_name_id={tnid} for '{value}'",
+                        ),
+                    )
+
+            # If we reach here, we had a mapping but could not resolve to a Species
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"LegacyTaxonomyMapping for '{value}' has no linked Species for list '{list_name}'",
+                ),
+            )
+
+        except Exception as e:
+            logger.exception(
+                "taxonomy_lookup_legacy_mapping_species lookup failed: %s", e
+            )
+            return _result(value, TransformIssue("error", f"lookup error: {e}"))
 
     registry._fns[name] = _inner
     return name
