@@ -29,6 +29,14 @@ COLUMN_MAP = {
     "OBS_NAME": "OCRObserverDetail__observer_name",
     # OCRHabitatComposition fields
     "GRAVEL": "OCRHabitatComposition__loose_rock_percent",
+    # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
+    "PURPOSE1": "PURPOSE1",
+    "PURPOSE2": "PURPOSE2",
+    "VESTING": "VESTING",
+    "FENCING_STATUS": "FENCING_STATUS",
+    "FENCING_COMMENTS": "FENCING_COMMENTS",
+    "ROADSIDE_MARKER_STATUS": "ROADSIDE_MARKER_STATUS",
+    "RDSIDE_MKR_COMMENTS": "RDSIDE_MKR_COMMENTS",
 }
 
 REQUIRED_COLUMNS = [
