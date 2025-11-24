@@ -25,8 +25,8 @@ def _norm(s: Any) -> str:
 
 
 def preload_map(legacy_system: str, list_name: str, active_only: bool = True):
-    key = (legacy_system, list_name)
-    if key in _CACHE:
+    cache_key = (legacy_system, list_name)
+    if cache_key in _CACHE:
         return
     qs = LegacyValueMap.objects.filter(
         legacy_system=legacy_system,
@@ -39,9 +39,9 @@ def preload_map(legacy_system: str, list_name: str, active_only: bool = True):
         # Preserve intentional ignore sentinel entries in the map so callers
         # can detect and silently ignore them.
         canon = (row.canonical_name or "").strip()
-        key = _norm(row.legacy_value)
+        value_key = _norm(row.legacy_value)
         if canon.casefold() == IGNORE_SENTINEL.casefold():
-            data[key] = {
+            data[value_key] = {
                 "target_id": None,
                 "content_type_id": None,
                 "canonical": None,
@@ -49,14 +49,14 @@ def preload_map(legacy_system: str, list_name: str, active_only: bool = True):
                 "ignored": True,
             }
         else:
-            data[key] = {
+            data[value_key] = {
                 "target_id": row.target_object_id,
                 "content_type_id": row.target_content_type_id,
                 "canonical": row.canonical_name,
                 "raw": row.legacy_value,
                 "ignored": False,
             }
-    _CACHE[key] = data
+    _CACHE[cache_key] = data
 
 
 ReturnMode = Literal["id", "canonical", "both"]
