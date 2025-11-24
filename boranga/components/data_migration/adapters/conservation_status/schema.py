@@ -2,42 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from boranga.components.conservation_status.models import ConservationStatus
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.registry import choices_transform
-
-# Choice enums based on model choices (examples mirror model constants)
-CUSTOMER_STATUS_CHOICES = [
-    "draft",
-    "with_assessor",
-    "ready_for_agenda",
-    "approved",
-    "declined",
-    "discarded",
-    "closed",
-]
-PROCESSING_STATUS_CHOICES = [
-    "draft",
-    "discarded",
-    "with_assessor",
-    "with_referral",
-    "deferred",
-    "proposed_for_agenda",
-    "ready_for_agenda",
-    "on_agenda",
-    "with_approver",
-    "approved",
-    "declined",
-    "delisted",
-    "closed",
-]
-
-CUSTOMER_STATUS = choices_transform(
-    [c[0] for c in ConservationStatus.CUSTOMER_STATUS_CHOICES]
-)
-PROCESSING_STATUS = choices_transform(
-    [c[0] for c in ConservationStatus.PROCESSING_STATUS_CHOICES]
-)
 
 # Column header → canonical key map (adjust headers to match CSV)
 COLUMN_MAP = {
