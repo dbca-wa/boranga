@@ -48,29 +48,113 @@ class SpeciesImporter(BaseSheetImporter):
         """Delete species target data. Respects `ctx.dry_run` (no-op when True).
 
         When called with `include_children=True` importer may opt to also clear
-        related child tables; this implementation clears obvious related tables.
+        related child tables; this implementation clears obvious related tables
+        and works around PROTECT constraints by nullifying FKs where possible
+        before deleting parent rows.
         """
         if ctx.dry_run:
             logger.info("SpeciesImporter.clear_targets: dry-run, skipping delete")
             return
 
         logger.warning("SpeciesImporter: deleting Species and related data...")
-        from django.db import transaction
 
-        with transaction.atomic():
+        # Perform deletes in an autocommit block so they are committed
+        # immediately. This avoids the case where clear_targets runs inside a
+        # larger transaction that later rolls back leaving the wipe undone.
+        from django.db import connections
+
+        conn = connections["default"]
+        was_autocommit = conn.get_autocommit()
+        if not was_autocommit:
+            conn.set_autocommit(True)
+        try:
+            # Import models lazily to avoid circular imports at module load
+            from boranga.components.conservation_status.models import ConservationStatus
+            from boranga.components.occurrence.models import (
+                Occurrence,
+                OccurrenceReport,
+                OccurrenceReportApprovalDetails,
+            )
+
+            # 1) Handle Occurrences -> must remove/clear PROTECT references first
+            occ_qs = Occurrence.objects.all()
+            if occ_qs.exists():
+                occ_ids = list(occ_qs.values_list("id", flat=True))
+
+                # Nullify approval details that point to these occurrences
+                if OccurrenceReportApprovalDetails is not None:
+                    try:
+                        (
+                            OccurrenceReportApprovalDetails.objects.filter(
+                                occurrence_id__in=occ_ids
+                            ).update(occurrence=None)
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to nullify OccurrenceReportApprovalDetails.occurrence"
+                        )
+                        raise
+
+                # Nullify occurrence FK on OccurrenceReport
+                try:
+                    OccurrenceReport.objects.filter(occurrence_id__in=occ_ids).update(
+                        occurrence=None
+                    )
+                except Exception:
+                    logger.exception("Failed to nullify OccurrenceReport.occurrence")
+                    raise
+
+                # Clear combined_occurrence references pointing to these occurrences
+                try:
+                    Occurrence.objects.filter(
+                        combined_occurrence_id__in=occ_ids
+                    ).update(combined_occurrence=None)
+                except Exception:
+                    logger.exception(
+                        "Failed to clear Occurrence.combined_occurrence references"
+                    )
+                    raise
+
+                # Now safe to delete the occurrence rows
+                try:
+                    occ_qs.delete()
+                except Exception:
+                    logger.exception("Failed to delete Occurrence objects")
+                    raise
+
+            # 2) Delete any remaining OccurrenceReport objects that reference Species
             try:
-                # delete child tables first where applicable
+                OccurrenceReport.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete OccurrenceReport objects")
+                raise
+
+            # 3) Delete ConservationStatus that reference Species
+            try:
+                ConservationStatus.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete ConservationStatus")
+                raise
+
+            # 4) Delete species-related helper tables and species
+            try:
                 SpeciesPublishingStatus.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete SpeciesPublishingStatus")
+                raise
             try:
                 SpeciesDistribution.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete SpeciesDistribution")
+                raise
             try:
                 Species.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete Species")
+                raise
+        finally:
+            if not was_autocommit:
+                conn.set_autocommit(False)
 
     def add_arguments(self, parser):
         parser.add_argument(
