@@ -150,6 +150,7 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 ocr_for_occ_number = f"{SHEET_POP_NUMBER}{SHEET_SUBPOP_CODE}"
             canonical["ocr_for_occ_name"] = ocr_for_occ_number
             canonical["OCRObserverDetail__main_observer"] = True
+            canonical["internal_application"] = True
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)
 
