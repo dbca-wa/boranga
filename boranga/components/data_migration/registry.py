@@ -395,16 +395,26 @@ def t_date_from_datetime_iso(value, ctx):
 
 @registry.register("ocr_comments_transform")
 def t_ocr_comments_transform(value, ctx):
-    PURPOSE1 = ctx.row.get("PURPOSE1", "").strip()
-    PURPOSE2 = ctx.row.get("PURPOSE2", "").strip()
-    VESTING = ctx.row.get("VESTING", "").strip()
-    FENCING_STATUS = ctx.row.get("FENCING_STATUS", "").strip()
-    FENCING_COMMENTS = ctx.row.get("FENCING_COMMENTS", "").strip()
-    ROADSIDE_MARKER_STATUS = ctx.row.get("ROADSIDE_MARKER_STATUS", "").strip()
-    RDSIDE_MKR_COMMENTS = ctx.row.get("RDSIDE_MKR_COMMENTS", "").strip()
+    PURPOSE1 = (ctx.row.get("PURPOSE1") or "").strip()
+    PURPOSE2 = (ctx.row.get("PURPOSE2") or "").strip()
+    VESTING = (ctx.row.get("VESTING") or "").strip()
+    FENCING_STATUS = (ctx.row.get("FENCING_STATUS") or "").strip()
+    FENCING_COMMENTS = (ctx.row.get("FENCING_COMMENTS") or "").strip()
+    ROADSIDE_MARKER_STATUS = (ctx.row.get("ROADSIDE_MARKER_STATUS") or "").strip()
+    RDSIDE_MKR_COMMENTS = (ctx.row.get("RDSIDE_MKR_COMMENTS") or "").strip()
 
     comments = None
-    transform_issues = []
+    transform_issues: list[TransformIssue] = []
+
+    # Helper to append parts safely (skips falsy parts and avoids None concatenation)
+    def _append_part(part: str | None):
+        nonlocal comments
+        if not part:
+            return
+        if comments:
+            comments += ", " + part
+        else:
+            comments = part
 
     if PURPOSE1:
         purpose1 = LegacyValueMap.get_target(
@@ -416,9 +426,11 @@ def t_ocr_comments_transform(value, ctx):
         if not purpose1:
             transform_issues.append(
                 TransformIssue(
-                    "error", f"No Purpose found that maps to legacy value: {value!r}"
+                    "error", f"No Purpose found that maps to legacy value: {PURPOSE1!r}"
                 )
             )
+        else:
+            _append_part(purpose1)
 
     if PURPOSE2:
         purpose2 = LegacyValueMap.get_target(
@@ -430,9 +442,11 @@ def t_ocr_comments_transform(value, ctx):
         if not purpose2:
             transform_issues.append(
                 TransformIssue(
-                    "error", f"No Purpose found that maps to legacy value: {value!r}"
+                    "error", f"No Purpose found that maps to legacy value: {PURPOSE2!r}"
                 )
             )
+        else:
+            _append_part(purpose2)
 
     if VESTING:
         vesting = LegacyValueMap.get_target(
@@ -444,39 +458,24 @@ def t_ocr_comments_transform(value, ctx):
         if not vesting:
             transform_issues.append(
                 TransformIssue(
-                    "error", f"No Vesting found that maps to legacy value: {value!r}"
+                    "error", f"No Vesting found that maps to legacy value: {VESTING!r}"
                 )
             )
+        else:
+            _append_part(f"Vesting: {vesting}")
 
-    if PURPOSE1:
-        comments = purpose1.current_value
-
-    if PURPOSE2:
-        if comments:
-            comments += ", "
-        comments += purpose2.current_value
-
-    if VESTING:
-        if comments:
-            comments += ", "
-        comments += f"Vesting: {vesting.current_value}"
-
-    if FENCING_STATUS:
-        if comments:
-            comments += ", "
-        comments = f"Fencing Status: {FENCING_STATUS}"
-    if FENCING_COMMENTS:
-        if comments:
-            comments += ", "
-        comments += f"Fencing Comments: {FENCING_COMMENTS}"
-    if ROADSIDE_MARKER_STATUS:
-        if comments:
-            comments += ", "
-        comments += f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}"
-    if RDSIDE_MKR_COMMENTS:
-        if comments:
-            comments += ", "
-        comments += f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}"
+    _append_part(f"Fencing Status: {FENCING_STATUS}" if FENCING_STATUS else None)
+    _append_part(f"Fencing Comments: {FENCING_COMMENTS}" if FENCING_COMMENTS else None)
+    _append_part(
+        f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}"
+        if ROADSIDE_MARKER_STATUS
+        else None
+    )
+    _append_part(
+        f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}"
+        if RDSIDE_MKR_COMMENTS
+        else None
+    )
 
     return _result(comments, *transform_issues)
 
