@@ -8,15 +8,11 @@ from boranga.components.data_migration.registry import (
     emailuser_by_legacy_username_factory,
     fk_lookup,
     pluck_attribute_factory,
-    taxonomy_lookup,
+    taxonomy_lookup_legacy_mapping_species,
     to_int_trailing_factory,
 )
 from boranga.components.occurrence.models import OccurrenceReport
-from boranga.components.species_and_communities.models import (
-    Community,
-    GroupType,
-    Species,
-)
+from boranga.components.species_and_communities.models import Community, GroupType
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
@@ -32,13 +28,7 @@ POP_ID_FROM_SHEETNO = dependent_from_column_factory(
     default=None,
 )
 
-TAXONOMY_TRANSFORM = taxonomy_lookup(
-    group_type_name="flora",
-    lookup_field="scientific_name",
-    source_key="TPFL",
-)
-
-SPECIES_TRANSFORM = fk_lookup(model=Species, lookup_field="taxonomy_id")
+SPECIES_TRANSFORM = taxonomy_lookup_legacy_mapping_species("TPFL")
 
 COMMUNITY_TRANSFORM = fk_lookup(model=Community, lookup_field="community_name")
 
@@ -101,7 +91,7 @@ GRAVEL_TRAILING_INT = to_int_trailing_factory(prefix="GRVL_", required=True)
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     "Occurrence__migrated_from_id": [POP_ID_FROM_SHEETNO],
-    "species_id": ["strip", "blank_to_none", TAXONOMY_TRANSFORM, SPECIES_TRANSFORM],
+    "species_id": ["strip", "blank_to_none", SPECIES_TRANSFORM],
     "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
     "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
     "observation_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
