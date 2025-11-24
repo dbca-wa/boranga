@@ -404,7 +404,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
     proposed_decline_status = models.BooleanField(default=False)
     assessor_data = models.TextField(blank=True, default="")  # assessor comment
-    approver_comment = models.TextField(blank=True)
     internal_application = models.BooleanField(default=False)
     site = models.TextField(blank=True, default="")
     record_source = models.TextField(blank=True, default="")
@@ -937,7 +936,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         )
 
         self.proposed_decline_status = True
-        self.approver_comment = ""
         OccurrenceReportApprovalDetails.objects.filter(occurrence_report=self).delete()
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER
         self.save(version_user=request.user)
@@ -1086,7 +1084,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             },
         )
 
-        self.approver_comment = ""
         self.proposed_decline_status = False
         OccurrenceReportDeclinedDetails.objects.filter(occurrence_report=self).delete()
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER
