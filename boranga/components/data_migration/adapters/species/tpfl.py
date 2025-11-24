@@ -2,7 +2,7 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     choices_transform,
     emailuser_by_legacy_username_factory,
-    taxonom_lookup_legacy_mapping,
+    taxonomy_lookup_legacy_mapping,
 )
 from boranga.components.species_and_communities.models import GroupType, Species
 
@@ -15,7 +15,7 @@ from . import schema
 # so pipelines remain source-local.
 
 
-TAXONOMY_TRANSFORM = taxonom_lookup_legacy_mapping("TPFL")
+TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
 
 SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 

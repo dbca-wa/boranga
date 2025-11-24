@@ -876,7 +876,7 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
     return mapping
 
 
-def taxonom_lookup_legacy_mapping(list_name: str) -> str:
+def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
     """Register and return a transform name that resolves a legacy canonical name
     (from `LegacyTaxonomyMapping`) to a taxonomy id.
 
