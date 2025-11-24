@@ -152,6 +152,23 @@ class SpeciesImporter(BaseSheetImporter):
             except Exception:
                 logger.exception("Failed to delete Species")
                 raise
+            # Reset the primary key sequence for Species when using PostgreSQL.
+            # This ensures that after a full wipe the next created Species will
+            # start with a low/consistent PK (and hence predictable `species_number`).
+            try:
+                # `conn` is a DatabaseWrapper obtained above (connections['default']).
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = Species._meta.db_table
+                    with conn.cursor() as cur:
+                        # Use pg_get_serial_sequence so we don't need to know
+                        # the exact sequence name (works for serial/identity).
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                    logger.info("Reset primary key sequence for table %s", table)
+            except Exception:
+                logger.exception("Failed to reset Species primary key sequence")
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
