@@ -336,14 +336,16 @@ class SpeciesImporter(BaseSheetImporter):
                 combined_issues.extend(iss)
             return merged, combined_issues
 
-        # Persist merged rows
+        # Persist merged rows in two phases to reduce per-row DB operations:
+        # 1) Collect all entries and prepare create/update operations
+        # 2) Bulk create new Species and bulk create related one-to-one rows where possible
+        ops = []
         persisted = 0
         for migrated_from_id, entries in groups.items():
             persisted += 1
-            # progress every 500 persisted groups as well
             if persisted % 500 == 0:
                 logger.info(
-                    "SpeciesImporter %s: persisted %d groups so far",
+                    "SpeciesImporter %s: prepared %d groups so far",
                     self.slug,
                     persisted,
                 )
@@ -358,7 +360,6 @@ class SpeciesImporter(BaseSheetImporter):
             if valerrs:
                 errors += len(valerrs)
                 skipped += 1
-                # record validation error details
                 for ve in valerrs:
                     errors_details.append(
                         {
@@ -387,8 +388,6 @@ class SpeciesImporter(BaseSheetImporter):
             }
 
             if ctx.dry_run:
-                # Show the full merged row (all data fields) during dry-run so
-                # callers can inspect everything, not just the limited `defaults` subset.
                 logger.debug(
                     "SpeciesImporter %s dry-run: would persist migrated_from_id=%s ",
                     self.slug,
@@ -396,148 +395,577 @@ class SpeciesImporter(BaseSheetImporter):
                 )
                 continue
 
-            with transaction.atomic():
-                # Prefer to find by migrated_from_id. If not found, but a
-                # taxonomy_id is present in defaults, attempt to locate an
-                # existing Species that already references that taxonomy and
-                # update it instead of attempting to create a new one which
-                # would violate the OneToOne constraint on `taxonomy`.
-                try:
-                    obj = Species.objects.get(migrated_from_id=migrated_from_id)
-                    created_flag = False
-                    for k, v in defaults.items():
+            # capture relevant M2M district data for later processing
+            districts_raw = merged.get("districts") or species_to_district_keys.get(
+                migrated_from_id
+            )
+
+            ops.append(
+                {
+                    "migrated_from_id": migrated_from_id,
+                    "defaults": defaults,
+                    "merged": merged,
+                    "districts_raw": districts_raw,
+                }
+            )
+
+        # Prefetch existing Species by migrated_from_id and taxonomy_id to avoid N queries
+        migrated_keys = [o["migrated_from_id"] for o in ops]
+        taxonomy_ids = [
+            o["defaults"].get("taxonomy_id")
+            for o in ops
+            if o["defaults"].get("taxonomy_id")
+        ]
+        existing_by_migrated = {
+            s.migrated_from_id: s
+            for s in Species.objects.filter(migrated_from_id__in=migrated_keys)
+        }
+        existing_by_taxonomy = {}
+        if taxonomy_ids:
+            existing_by_taxonomy = {
+                s.taxonomy_id: s
+                for s in Species.objects.filter(taxonomy_id__in=taxonomy_ids)
+            }
+
+        # Prepare lists for bulk operations
+        to_create = []  # Species instances to bulk_create
+        create_meta = []  # parallel metadata to handle related rows after creation
+        to_update = []  # existing Species instances to bulk_update
+        # Handle duplicate taxonomy_id values across ops to avoid unique constraint
+        tax_seen = {}  # taxonomy_id -> canonical migrated_from_id
+        pending_updates = (
+            {}
+        )  # canonical_migrated -> list of (migrated_from_id, defaults, merged, districts_raw)
+
+        for op in ops:
+            migrated_from_id = op["migrated_from_id"]
+            defaults = op["defaults"]
+            merged = op["merged"]
+            districts_raw = op.get("districts_raw")
+
+            obj = existing_by_migrated.get(migrated_from_id)
+            if obj:
+                # update existing
+                for k, v in defaults.items():
+                    setattr(obj, k, v)
+                to_update.append((obj, merged, districts_raw))
+                continue
+
+            taxonomy_id = defaults.get("taxonomy_id")
+            existing = None
+            if taxonomy_id:
+                existing = existing_by_taxonomy.get(taxonomy_id)
+
+            if existing:
+                # update existing species rather than creating new
+                for k, v in defaults.items():
+                    setattr(existing, k, v)
+                existing.migrated_from_id = migrated_from_id
+                to_update.append((existing, merged, districts_raw))
+            elif taxonomy_id and taxonomy_id in tax_seen:
+                # Another op in this run has already claimed this taxonomy_id.
+                # Defer applying this op as an update to the canonical record after it's created.
+                canonical = tax_seen[taxonomy_id]
+                logger.info(
+                    "SpeciesImporter: taxonomy collision detected for taxonomy_id=%s; "
+                    "deferring migrated_from_id=%s to canonical migrated_from_id=%s",
+                    taxonomy_id,
+                    migrated_from_id,
+                    canonical,
+                )
+                pending_updates.setdefault(canonical, []).append(
+                    (migrated_from_id, defaults, merged, districts_raw)
+                )
+            elif taxonomy_id:
+                # First time we see this taxonomy_id and it doesn't exist in DB.
+                # Claim it as canonical and create one instance for it.
+                tax_seen[taxonomy_id] = migrated_from_id
+                logger.debug(
+                    "SpeciesImporter: claiming taxonomy_id=%s for migrated_from_id=%s",
+                    taxonomy_id,
+                    migrated_from_id,
+                )
+                create_kwargs = dict(defaults)
+                create_kwargs["migrated_from_id"] = migrated_from_id
+                if getattr(ctx, "migration_run", None) is not None:
+                    create_kwargs["migration_run"] = ctx.migration_run
+                inst = Species(**create_kwargs)
+                to_create.append(inst)
+                create_meta.append((migrated_from_id, merged, districts_raw))
+            else:
+                # No taxonomy_id: safe to create a separate Species
+                create_kwargs = dict(defaults)
+                create_kwargs["migrated_from_id"] = migrated_from_id
+                if getattr(ctx, "migration_run", None) is not None:
+                    create_kwargs["migration_run"] = ctx.migration_run
+                inst = Species(**create_kwargs)
+                to_create.append(inst)
+                create_meta.append((migrated_from_id, merged, districts_raw))
+
+        # Bulk create new Species in chunks
+        BATCH = 1000
+        created_map = {}  # migrated_from_id -> Species instance (with pk)
+        if to_create:
+            logger.info("SpeciesImporter: bulk-creating %d new Species", len(to_create))
+            for i in range(0, len(to_create), BATCH):
+                chunk = to_create[i : i + BATCH]
+                with transaction.atomic():
+                    Species.objects.bulk_create(chunk, batch_size=BATCH)
+
+        # Refresh created objects: query DB for all migrated_from_ids we just created
+        if create_meta:
+            created_keys = [m[0] for m in create_meta]
+            for s in Species.objects.filter(migrated_from_id__in=created_keys):
+                created_map[s.migrated_from_id] = s
+
+        # Apply any pending updates that were deferred because they shared a taxonomy_id
+        if "pending_updates" in locals() and pending_updates:
+            # build reverse map so we can log taxonomy_id for a canonical migrated key
+            canonical_to_tax = (
+                {v: k for k, v in tax_seen.items()} if "tax_seen" in locals() else {}
+            )
+            for canonical_mig, pendings in pending_updates.items():
+                taxonomy_id_for_canonical = canonical_to_tax.get(canonical_mig)
+                # canonical may be in created_map (newly created) or existing_by_migrated
+                obj = created_map.get(canonical_mig) or existing_by_migrated.get(
+                    canonical_mig
+                )
+                if not obj:
+                    logger.warning(
+                        "SpeciesImporter: canonical object for taxonomy pending_updates not found: %s",
+                        canonical_mig,
+                    )
+                    continue
+                # Log what we're about to merge for auditing
+                pending_ids = [p[0] for p in pendings]
+                logger.info(
+                    "SpeciesImporter: applying %d pending updates to canonical migrated_from_id=%s "
+                    "(taxonomy_id=%s): %s",
+                    len(pendings),
+                    canonical_mig,
+                    taxonomy_id_for_canonical,
+                    pending_ids,
+                )
+                # Apply each pending update in order; later pendings overwrite earlier
+                for pending in pendings:
+                    pending_mig, pending_defaults, pending_merged, pending_districts = (
+                        pending
+                    )
+                    for k, v in pending_defaults.items():
                         setattr(obj, k, v)
-                    obj.save()
-                except Species.DoesNotExist:
-                    taxonomy_id = defaults.get("taxonomy_id")
-                    if taxonomy_id:
-                        existing = Species.objects.filter(
-                            taxonomy_id=taxonomy_id
-                        ).first()
-                        if existing:
-                            # Update the existing species rather than creating a new one
-                            obj = existing
-                            created_flag = False
-                            for k, v in defaults.items():
-                                setattr(obj, k, v)
-                            # also set migrated_from_id so subsequent runs will match
-                            obj.migrated_from_id = migrated_from_id
-                            obj.save()
-                        else:
-                            create_kwargs = dict(defaults)
-                            create_kwargs["migrated_from_id"] = migrated_from_id
-                            obj = Species.objects.create(**create_kwargs)
-                            created_flag = True
-                    else:
-                        create_kwargs = dict(defaults)
-                        create_kwargs["migrated_from_id"] = migrated_from_id
-                        obj = Species.objects.create(**create_kwargs)
-                        created_flag = True
-                if created_flag:
-                    created += 1
-                    # attach migration_run if present
-                    if getattr(ctx, "migration_run", None) is not None:
-                        try:
-                            Species.objects.filter(pk=obj.pk).update(
-                                migration_run=ctx.migration_run
-                            )
-                        except Exception:
-                            logger.exception(
-                                "Failed to attach migration_run to Species %s",
-                                obj.pk,
-                            )
+                    # set migrated_from_id to the pending migrated id to match original behavior
+                    obj.migrated_from_id = pending_mig
+                    to_update.append((obj, pending_merged, pending_districts))
+
+        # Bulk update existing objects collected in to_update
+        if to_update:
+            logger.info(
+                "SpeciesImporter: bulk-updating %d existing Species", len(to_update)
+            )
+            # extract instances and update fields en-masse
+            update_instances = [t[0] for t in to_update]
+            # determine fields to update from defaults keys
+            if update_instances:
+                fields = list(op["defaults"].keys())
+                # ensure migrated_from_id included if we set it
+                if "migrated_from_id" not in fields:
+                    fields.append("migrated_from_id")
+                Species.objects.bulk_update(update_instances, fields, batch_size=BATCH)
+
+        # Now handle related one-to-one models and M2Ms for created and updated species
+        # We'll batch SpeciesDistribution and SpeciesPublishingStatus updates/creates
+        # and perform M2M assignments via through models to avoid per-object queries.
+        dist_to_create = []
+        dist_to_update = []
+        publish_to_create = []
+        publish_to_update = []
+
+        # Collect desired M2M pairs (species_id, district_id) and (species_id, region_id)
+        desired_district_pairs = set()
+        desired_region_pairs = set()
+
+        # helper to normalize district raw values into a list of district PKs
+        from boranga.components.species_and_communities.models import District
+
+        def parse_district_keys(raw):
+            if not raw:
+                return [], []
+            if isinstance(raw, str):
+                keys = [k.strip() for k in raw.split(";") if k.strip()]
+            elif isinstance(raw, (list, tuple)):
+                keys = [str(k).strip() for k in raw if k not in (None, "")]
+            else:
+                keys = [str(raw)]
+            district_ids = []
+            missing = []
+            for legacy_key in keys:
+                pk = district_map.get(legacy_key)
+                if pk:
+                    district_ids.append(pk)
                 else:
-                    updated += 1
+                    missing.append(legacy_key)
+            return district_ids, missing
 
-                # --- create 1-to-1 related ---
+        # Process updates: collect distributions/publishing updates and desired M2M pairs
+        updated_species_ids = []
+        for existing_tuple in to_update:
+            obj, merged, districts_raw = existing_tuple
+            updated += 1
+            updated_species_ids.append(obj.pk)
 
+            # prepare distribution update/create
+            distribution = merged.get("distribution", None)
+            dist_to_update.append((obj.pk, distribution))
+
+            processing_status_is_active = (
+                merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
+            )
+            publish_to_update.append((obj.pk, processing_status_is_active))
+
+            # collect desired district/region pairs for this species
+            district_ids, missing = parse_district_keys(districts_raw)
+            if missing:
+                warn_count += 1
+                warnings.append(
+                    f"{obj.migrated_from_id}: unknown district keys {missing}"
+                )
+                warnings_details.append(
+                    {
+                        "migrated_from_id": obj.migrated_from_id,
+                        "missing_districts": missing,
+                    }
+                )
+            for did in district_ids:
+                desired_district_pairs.add((obj.pk, did))
+
+        # Process created instances similarly
+        created_species_ids = []
+        if create_meta:
+            for migrated_from_id, merged, districts_raw in create_meta:
+                obj = created_map.get(migrated_from_id)
+                if not obj:
+                    logger.warning(
+                        "Created Species not found for migrated_from_id=%s",
+                        migrated_from_id,
+                    )
+                    continue
+                created += 1
+                created_species_ids.append(obj.pk)
                 distribution = merged.get("distribution", None)
-
-                SpeciesDistribution.objects.update_or_create(
-                    species=obj,
-                    defaults={
-                        "aoo_actual_auto": False,
-                        "distribution": distribution,
-                    },
+                dist_to_create.append(
+                    SpeciesDistribution(
+                        species=obj, aoo_actual_auto=False, distribution=distribution
+                    )
                 )
 
                 processing_status_is_active = (
                     merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
                 )
-
-                SpeciesPublishingStatus.objects.update_or_create(
-                    species=obj,
-                    defaults={
-                        "conservation_status_public": processing_status_is_active,
-                        "distribution_public": processing_status_is_active,
-                        "species_public": processing_status_is_active,
-                        "threats_public": processing_status_is_active,
-                    },
+                publish_to_create.append(
+                    SpeciesPublishingStatus(
+                        species=obj,
+                        conservation_status_public=processing_status_is_active,
+                        distribution_public=processing_status_is_active,
+                        species_public=processing_status_is_active,
+                        threats_public=processing_status_is_active,
+                    )
                 )
 
-                # --- attach M2M regions ---
+                district_ids, missing = parse_district_keys(districts_raw)
+                if missing:
+                    warn_count += 1
+                    warnings.append(
+                        f"{migrated_from_id}: unknown district keys {missing}"
+                    )
+                    warnings_details.append(
+                        {
+                            "migrated_from_id": migrated_from_id,
+                            "missing_districts": missing,
+                        }
+                    )
+                for did in district_ids:
+                    desired_district_pairs.add((obj.pk, did))
 
-                if not merged.get("districts"):
-                    # prefer explicit districts from species row; fallback to links from separate file
-                    merged["districts"] = species_to_district_keys.get(migrated_from_id)
-
-                # now merged["districts"] may be a list or delimited string — same normalization as earlier
-                raw_districts = merged.get("districts")
-                if raw_districts:
-                    # normalize to list of legacy keys
-                    if isinstance(raw_districts, str):
-                        keys = [
-                            k.strip() for k in raw_districts.split(";") if k.strip()
-                        ]
-                    elif isinstance(raw_districts, (list, tuple)):
-                        keys = [
-                            str(k).strip() for k in raw_districts if k not in (None, "")
-                        ]
-                    else:
-                        keys = [str(raw_districts)]
-
-                    district_ids = []
-                    missing = []
-                    for legacy_key in keys:
-                        pk = district_map.get(legacy_key)
-                        if pk:
-                            district_ids.append(pk)
-                        else:
-                            missing.append(legacy_key)
-
-                    if district_ids:
-                        # idempotent: replace existing relations with the resolved set
-                        obj.districts.set(district_ids)
-
-                    # For each district, check if its region is already linked; if not, add it
-                    existing_region_ids = set(obj.regions.values_list("id", flat=True))
-                    districts = obj.districts.select_related("region").all()
-                    for district in districts:
-                        if (
-                            district.region_id
-                            and district.region_id not in existing_region_ids
-                        ):
-                            obj.regions.add(district.region_id)
-                            existing_region_ids.add(district.region_id)
-
-                    if existing_region_ids:
-                        # idempotent: replace existing relations with the resolved set
-                        obj.regions.set(existing_region_ids)
-
-                    if missing:
-                        # record a warning (or TransformIssue earlier); keep lightweight here
-                        warn_count += 1
-                        warnings.append(
-                            f"{migrated_from_id}: unknown district keys {missing}"
+        # Bulk create distributions and publishing statuses for created species
+        if dist_to_create:
+            try:
+                SpeciesDistribution.objects.bulk_create(
+                    dist_to_create, batch_size=BATCH
+                )
+            except Exception as e:
+                # Record the failure so it's surfaced in stats/errors_details
+                errors += 1
+                errors_details.append(
+                    {
+                        "reason": "bulk_create_speciesdistribution_failed",
+                        "message": str(e),
+                        "species_ids": [
+                            getattr(d.species, "pk", None) for d in dist_to_create
+                        ],
+                    }
+                )
+                logger.exception(
+                    "Failed to bulk_create SpeciesDistribution; falling back to individual creates"
+                )
+                for d in dist_to_create:
+                    try:
+                        SpeciesDistribution.objects.update_or_create(
+                            species=d.species,
+                            defaults={
+                                "aoo_actual_auto": d.aoo_actual_auto,
+                                "distribution": d.distribution,
+                            },
                         )
-                        warnings_details.append(
-                            {
-                                "migrated_from_id": migrated_from_id,
-                                "missing_districts": missing,
-                            }
+                    except Exception:
+                        logger.exception(
+                            "Failed to create SpeciesDistribution for %s", d.species.pk
                         )
 
-                # --- end M2M attach ---
+        if publish_to_create:
+            try:
+                SpeciesPublishingStatus.objects.bulk_create(
+                    publish_to_create, batch_size=BATCH
+                )
+            except Exception as e:
+                errors += 1
+                errors_details.append(
+                    {
+                        "reason": "bulk_create_speciespublishing_failed",
+                        "message": str(e),
+                        "species_ids": [
+                            getattr(p.species, "pk", None) for p in publish_to_create
+                        ],
+                    }
+                )
+                logger.exception(
+                    "Failed to bulk_create SpeciesPublishingStatus; falling back to individual creates"
+                )
+                for p in publish_to_create:
+                    try:
+                        SpeciesPublishingStatus.objects.update_or_create(
+                            species=p.species,
+                            defaults={
+                                "conservation_status_public": p.conservation_status_public,
+                                "distribution_public": p.distribution_public,
+                                "species_public": p.species_public,
+                                "threats_public": p.threats_public,
+                            },
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to create SpeciesPublishingStatus for %s",
+                            p.species.pk,
+                        )
+
+        # Handle updates for SpeciesDistribution and SpeciesPublishingStatus in bulk
+        # Distributions: fetch existing for updated species and update or create as needed
+        if dist_to_update:
+            species_ids = [sid for sid, _ in dist_to_update]
+            existing_dists = {
+                d.species_id: d
+                for d in SpeciesDistribution.objects.filter(species_id__in=species_ids)
+            }
+            to_create_dists = []
+            to_update_dists = []
+            for sid, distribution in dist_to_update:
+                if sid in existing_dists:
+                    inst = existing_dists[sid]
+                    inst.distribution = distribution
+                    inst.aoo_actual_auto = False
+                    to_update_dists.append(inst)
+                else:
+                    # species instance available in DB
+                    to_create_dists.append(
+                        SpeciesDistribution(
+                            species_id=sid,
+                            aoo_actual_auto=False,
+                            distribution=distribution,
+                        )
+                    )
+
+            if to_update_dists:
+                try:
+                    SpeciesDistribution.objects.bulk_update(
+                        to_update_dists,
+                        ["distribution", "aoo_actual_auto"],
+                        batch_size=BATCH,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_update SpeciesDistribution; will fallback to individual saves"
+                    )
+                    for inst in to_update_dists:
+                        try:
+                            inst.save()
+                        except Exception:
+                            logger.exception(
+                                "Failed to save SpeciesDistribution for %s",
+                                inst.species_id,
+                            )
+
+            if to_create_dists:
+                try:
+                    SpeciesDistribution.objects.bulk_create(
+                        to_create_dists, batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_create SpeciesDistribution (creates); falling back to individual creates"
+                    )
+                    for inst in to_create_dists:
+                        try:
+                            inst.save()
+                        except Exception:
+                            logger.exception(
+                                "Failed to create SpeciesDistribution for %s",
+                                inst.species_id,
+                            )
+
+        # Publishing statuses: similar approach
+        if publish_to_update:
+            species_ids = [sid for sid, _ in publish_to_update]
+            existing_pubs = {
+                p.species_id: p
+                for p in SpeciesPublishingStatus.objects.filter(
+                    species_id__in=species_ids
+                )
+            }
+            to_create_pubs = []
+            to_update_pubs = []
+            for sid, active in publish_to_update:
+                if sid in existing_pubs:
+                    inst = existing_pubs[sid]
+                    inst.conservation_status_public = active
+                    inst.distribution_public = active
+                    inst.species_public = active
+                    inst.threats_public = active
+                    to_update_pubs.append(inst)
+                else:
+                    to_create_pubs.append(
+                        SpeciesPublishingStatus(
+                            species_id=sid,
+                            conservation_status_public=active,
+                            distribution_public=active,
+                            species_public=active,
+                            threats_public=active,
+                        )
+                    )
+
+            if to_update_pubs:
+                try:
+                    SpeciesPublishingStatus.objects.bulk_update(
+                        to_update_pubs,
+                        [
+                            "conservation_status_public",
+                            "distribution_public",
+                            "species_public",
+                            "threats_public",
+                        ],
+                        batch_size=BATCH,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_update SpeciesPublishingStatus; will fallback to individual saves"
+                    )
+                    for inst in to_update_pubs:
+                        try:
+                            inst.save()
+                        except Exception:
+                            logger.exception(
+                                "Failed to save SpeciesPublishingStatus for %s",
+                                inst.species_id,
+                            )
+
+            if to_create_pubs:
+                try:
+                    SpeciesPublishingStatus.objects.bulk_create(
+                        to_create_pubs, batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_create SpeciesPublishingStatus (creates); falling back to individual creates"
+                    )
+                    for inst in to_create_pubs:
+                        try:
+                            inst.save()
+                        except Exception:
+                            logger.exception(
+                                "Failed to create SpeciesPublishingStatus for %s",
+                                inst.species_id,
+                            )
+
+        # Now handle M2M assignments using through models for performance
+        if desired_district_pairs:
+            # collect all species ids and district ids involved
+            all_species_ids = {sid for sid, _ in desired_district_pairs}
+            all_district_ids = {did for _, did in desired_district_pairs}
+
+            # map district -> region
+            district_region_map = dict(
+                District.objects.filter(id__in=all_district_ids).values_list(
+                    "id", "region_id"
+                )
+            )
+
+            # build desired region pairs from desired_district_pairs
+            for sid, did in list(desired_district_pairs):
+                region_id = district_region_map.get(did)
+                if region_id:
+                    desired_region_pairs.add((sid, region_id))
+
+            # through models
+            DistrictThrough = Species.districts.through
+            RegionThrough = Species.regions.through
+
+            # Delete existing m2m links for these species and bulk create desired ones
+            try:
+                with transaction.atomic():
+                    DistrictThrough.objects.filter(
+                        species_id__in=all_species_ids
+                    ).delete()
+                    RegionThrough.objects.filter(
+                        species_id__in=all_species_ids
+                    ).delete()
+
+                    # bulk create district links
+                    district_objs = [
+                        DistrictThrough(species_id=sid, district_id=did)
+                        for sid, did in desired_district_pairs
+                    ]
+                    if district_objs:
+                        DistrictThrough.objects.bulk_create(
+                            district_objs, batch_size=BATCH
+                        )
+
+                    # bulk create region links
+                    region_objs = [
+                        RegionThrough(species_id=sid, region_id=rid)
+                        for sid, rid in desired_region_pairs
+                    ]
+                    if region_objs:
+                        RegionThrough.objects.bulk_create(region_objs, batch_size=BATCH)
+            except Exception:
+                logger.exception(
+                    "Failed to bulk update M2M district/region links; falling back to per-object sets"
+                )
+                # fallback to previous safe behavior
+                for sid in all_species_ids:
+                    try:
+                        species_obj = Species.objects.get(pk=sid)
+                        # compute district ids for this species from desired_district_pairs
+                        dids = [did for s, did in desired_district_pairs if s == sid]
+                        if dids:
+                            species_obj.districts.set(dids)
+                        # compute region ids
+                        rids = {
+                            district_region_map.get(did)
+                            for did in dids
+                            if district_region_map.get(did)
+                        }
+                        if rids:
+                            species_obj.regions.set(list(rids))
+                    except Exception:
+                        logger.exception("Fallback M2M set failed for species %s", sid)
 
         stats.update(
             processed=processed,
