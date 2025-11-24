@@ -410,7 +410,7 @@ def t_ocr_comments_transform(value, ctx):
         purpose1 = LegacyValueMap.get_target(
             legacy_system="TPFL",
             list_name="PURPOSE (DRF_LOV_PURPOSE_VWS)",
-            value=PURPOSE1,
+            legacy_value=PURPOSE1,
             use_cache=True,
         )
         if not purpose1:
@@ -424,7 +424,7 @@ def t_ocr_comments_transform(value, ctx):
         purpose2 = LegacyValueMap.get_target(
             legacy_system="TPFL",
             list_name="PURPOSE (DRF_LOV_PURPOSE_VWS)",
-            value=PURPOSE2,
+            legacy_value=PURPOSE2,
             use_cache=True,
         )
         if not purpose2:
@@ -438,7 +438,7 @@ def t_ocr_comments_transform(value, ctx):
         vesting = LegacyValueMap.get_target(
             legacy_system="TPFL",
             list_name="VESTING (DRF_LOV_VESTING_VWS)",
-            value=VESTING,
+            legacy_value=VESTING,
             use_cache=True,
         )
         if not vesting:
