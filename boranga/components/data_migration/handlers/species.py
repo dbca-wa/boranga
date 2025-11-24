@@ -424,14 +424,14 @@ class SpeciesImporter(BaseSheetImporter):
                             obj.migrated_from_id = migrated_from_id
                             obj.save()
                         else:
-                            obj = Species.objects.create(
-                                migrated_from_id=migrated_from_id, **defaults
-                            )
+                            create_kwargs = dict(defaults)
+                            create_kwargs["migrated_from_id"] = migrated_from_id
+                            obj = Species.objects.create(**create_kwargs)
                             created_flag = True
                     else:
-                        obj = Species.objects.create(
-                            migrated_from_id=migrated_from_id, **defaults
-                        )
+                        create_kwargs = dict(defaults)
+                        create_kwargs["migrated_from_id"] = migrated_from_id
+                        obj = Species.objects.create(**create_kwargs)
                         created_flag = True
                 if created_flag:
                     created += 1
