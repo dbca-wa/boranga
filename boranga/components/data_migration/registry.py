@@ -121,6 +121,13 @@ def t_strip(value, ctx):
     return _result(str(value).strip())
 
 
+@registry.register("normalise_whitespace")
+def t_normalise_whitespace(value, ctx):
+    if value is None:
+        return _result(None)
+    return _result(re.sub(r"\s+", " ", str(value)).strip())
+
+
 @registry.register("blank_to_none")
 def t_blank_to_none(value, ctx):
     if isinstance(value, str) and value.strip() == "":
