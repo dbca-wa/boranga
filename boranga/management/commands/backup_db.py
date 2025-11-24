@@ -9,7 +9,39 @@ from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
-    help = "Create a gzipped SQL dump of the configured Django database in .db-backups"
+    """Management command to create a gzipped custom-format database dump.
+
+    The dump files are written to `.db-backups/<dbname>_<timestamp>.dump.gz` and
+    are created with `pg_dump -F c -b` (custom format with blobs), which is
+    recommended for PostGIS-enabled databases.
+
+    Example restore (recommended):
+
+    - Streamed restore into an existing database named `mydb`:
+
+        ```bash
+        export PGPASSWORD='your_db_password'
+        gunzip -c .db-backups/<dbname>_<timestamp>.dump.gz | pg_restore -d mydb --no-owner --no-privileges
+        ```
+
+    - Alternatively, uncompress then use `pg_restore` directly:
+
+        ```bash
+        gunzip .db-backups/<dbname>_<timestamp>.dump.gz
+        pg_restore -d mydb --no-owner --no-privileges .db-backups/<dbname>_<timestamp>.dump
+        ```
+
+    Notes:
+    - `PGPASSWORD` or `~/.pgpass` may be used to provide credentials to `pg_restore`.
+    - The `--no-owner --no-privileges` flags are useful when restoring to
+        a different cluster or user to avoid ownership/privilege conflicts.
+
+    """
+
+    help = (
+        "Create a gzipped SQL dump (or custom dump) of the configured Django "
+        "database in .db-backups (supports PostGIS)"
+    )
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -27,9 +59,10 @@ class Command(BaseCommand):
             raise CommandError(f"Database settings for '{db_alias}' not found")
 
         engine = db.get("ENGINE", "")
-        if "postgres" not in engine:
+        # Accept both the standard PostgreSQL and the GeoDjango/PostGIS backends
+        if not any(x in engine for x in ("postgres", "postgis")):
             raise CommandError(
-                "This command currently supports PostgreSQL only (postgresql backend)"
+                "This command currently supports PostgreSQL/PostGIS only (postgresql/postgis backend)"
             )
 
         name = db.get("NAME")
@@ -44,7 +77,8 @@ class Command(BaseCommand):
 
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         prefix = name or "database"
-        filename = f"{prefix}_{timestamp}.sql.gz"
+        # Use a .dump.gz suffix because we'll use pg_dump's custom format (-F c)
+        filename = f"{prefix}_{timestamp}.dump.gz"
         path = os.path.join(backups_dir, filename)
 
         pg_dump_path = shutil.which("pg_dump")
@@ -61,18 +95,12 @@ class Command(BaseCommand):
         if password:
             env["PGPASSWORD"] = password
 
-        cmd = [
-            pg_dump_path,
-            "-h",
-            host,
-            "-p",
-            str(port),
-            "-U",
-            user,
-            "-F",
-            "p",
-            name,
-        ]
+        # Build pg_dump command. Use custom format (-F c) which handles PostGIS objects
+        # and include blobs (-b). Only include -U if a user is provided.
+        cmd = [pg_dump_path, "-h", host, "-p", str(port), "-F", "c", "-b", name]
+        if user:
+            # insert -U <user> before the db name
+            cmd[5:5] = ["-U", user]
 
         # Stream pg_dump stdout into a gzip file to avoid shell usage and large memory use
         try:
