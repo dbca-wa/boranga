@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from boranga.components.data_migration import utils
 from boranga.components.data_migration.adapters.schema_base import Schema
+from boranga.components.species_and_communities.models import GroupType
 
 # Header → canonical key
 COLUMN_MAP = {
@@ -82,3 +84,92 @@ class OccurrenceReportRow:
 
     # OCRHabitatComposition fields
     OCRHabitatComposition__loose_rock_percent: int | None = None
+
+    @classmethod
+    def from_dict(cls, d: dict) -> OccurrenceReportRow:
+        """
+        Build OccurrenceReportRow from pipeline output. Coerce simple types.
+        """
+        # lodgement_date and reported_date are datetimes; observation_date is date
+        lodgement_dt = utils.parse_date_iso(d.get("lodgement_date"))
+        reported_dt = utils.parse_date_iso(d.get("reported_date"))
+        obs_dt = utils.parse_date_iso(d.get("observation_date"))
+        obs_date = obs_dt.date() if obs_dt is not None else None
+
+        return cls(
+            migrated_from_id=str(d["migrated_from_id"]),
+            Occurrence__migrated_from_id=d.get("Occurrence__migrated_from_id"),
+            group_type_id=utils.to_int_maybe(d.get("group_type_id")),
+            species_id=utils.to_int_maybe(d.get("species_id")),
+            community_id=utils.to_int_maybe(d.get("community_id")),
+            processing_status=utils.safe_strip(d.get("processing_status")),
+            customer_status=utils.safe_strip(d.get("customer_status")),
+            observation_date=obs_date,
+            record_source=utils.safe_strip(d.get("record_source")),
+            comments=utils.safe_strip(d.get("comments")),
+            ocr_for_occ_number=utils.safe_strip(d.get("ocr_for_occ_number")),
+            ocr_for_occ_name=utils.safe_strip(d.get("ocr_for_occ_name")),
+            approver_comment=utils.safe_strip(d.get("approver_comment")),
+            assessor_data=utils.safe_strip(d.get("assessor_data")),
+            reported_date=reported_dt,
+            lodgement_date=lodgement_dt,
+            approved_by=utils.to_int_maybe(d.get("approved_by")),
+            submitter=utils.to_int_maybe(d.get("submitter")),
+            OCRObserverDetail__role=utils.safe_strip(d.get("OCRObserverDetail__role")),
+            OCRHabitatComposition__loose_rock_percent=utils.to_int_maybe(
+                d.get("OCRHabitatComposition__loose_rock_percent")
+            ),
+        )
+
+    def validate(self, source: str | None = None) -> list[tuple[str, str]]:
+        """
+        Return list of (level, message). Basic business rules enforced here.
+        """
+        issues: list[tuple[str, str]] = []
+
+        if not self.migrated_from_id:
+            issues.append(("error", "migrated_from_id is required"))
+
+        if not self.processing_status:
+            issues.append(("error", "processing_status is required"))
+
+        if self.group_type_id is not None:
+            # for flora/fauna require species; for community require community
+            if str(self.group_type_id).lower() in [
+                GroupType.GROUP_TYPE_FLORA,
+                GroupType.GROUP_TYPE_FAUNA,
+            ]:
+                if not self.species_id:
+                    issues.append(("error", "species_id is required for flora/fauna"))
+            elif (
+                str(self.group_type_id).lower()
+                == str(GroupType.GROUP_TYPE_COMMUNITY).lower()
+            ):
+                if not self.community_id:
+                    issues.append(("error", "community_id is required for community"))
+
+        # source-specific examples could be added here using `source`
+        return issues
+
+    def to_model_defaults(self) -> dict:
+        """
+        Return dict ready for ORM update/create defaults.
+        """
+        return {
+            "group_type_id": self.group_type_id,
+            "species_id": self.species_id,
+            "community_id": self.community_id,
+            "processing_status": self.processing_status,
+            "customer_status": self.customer_status,
+            "observation_date": self.observation_date,
+            "record_source": self.record_source,
+            "comments": self.comments or "",
+            "ocr_for_occ_number": self.ocr_for_occ_number or "",
+            "ocr_for_occ_name": self.ocr_for_occ_name or "",
+            "approver_comment": self.approver_comment or "",
+            "assessor_data": self.assessor_data or "",
+            "reported_date": self.reported_date,
+            "lodgement_date": self.lodgement_date,
+            "approved_by": self.approved_by,
+            "submitter": self.submitter,
+        }
