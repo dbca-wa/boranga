@@ -61,7 +61,7 @@ MAP_FORM_STATUS_CODE_TO_CUSTOMER_STATUS = map_form_status_code_to_customer_statu
 
 
 CUSTOMER_STATUS_FROM_FORM_STATUS_CODE = dependent_from_column_factory(
-    "FORM_STATUS_CODE",
+    "processing_status",
     mapper=lambda dep_val, ctx: MAP_FORM_STATUS_CODE_TO_CUSTOMER_STATUS(dep_val, ctx),
     default=None,
 )
