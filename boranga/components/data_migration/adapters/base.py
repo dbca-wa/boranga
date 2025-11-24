@@ -46,23 +46,15 @@ class SourceAdapter:
             import pandas as pd
 
             ext = os.path.splitext(path)[1].lower()
-            if ext in (".xls", ".xlsx"):
-                df = pd.read_excel(path, dtype=str)
-            else:
-                df = pd.read_csv(path, dtype=str, encoding=encoding)
-            df = df.fillna("")
-            rows = df.to_dict(orient="records")
-            # Apply optional row-limit for faster testing. Priority:
-            # 1. explicit `limit` in options
-            # 2. DATA_MIGRATION_LIMIT env var
+            # Determine optional limit (priority: explicit option, then env var)
             limit = None
-            if options is not None:
-                try:
+            try:
+                if options is not None:
                     limit_option = options.get("limit")
                     if limit_option is not None:
                         limit = int(limit_option)
-                except Exception:
-                    limit = None
+            except Exception:
+                limit = None
             if limit is None:
                 try:
                     env = os.environ.get("DATA_MIGRATION_LIMIT")
@@ -70,8 +62,42 @@ class SourceAdapter:
                         limit = int(env)
                 except Exception:
                     limit = None
-            if limit and isinstance(rows, list):
-                rows = rows[: int(limit)]
+
+            # For Excel files we rely on pandas' read_excel (no streaming support here).
+            if ext in (".xls", ".xlsx"):
+                df = pd.read_excel(path, dtype=str)
+                df = df.fillna("")
+                rows = df.to_dict(orient="records")
+                if limit and isinstance(rows, list):
+                    rows = rows[: int(limit)]
+                return rows, warnings
+
+            # For CSV-like files: if a limit is provided, stream only enough rows
+            # instead of loading the entire file into memory.
+            if limit and limit > 0:
+                try:
+                    # Use chunksize equal to the requested limit and read only first chunk
+                    it = pd.read_csv(
+                        path, dtype=str, encoding=encoding, chunksize=int(limit)
+                    )
+                    try:
+                        df = next(it)
+                    except StopIteration:
+                        df = pd.DataFrame()
+                    df = df.fillna("")
+                    rows = df.to_dict(orient="records")
+                    # If the chunk produced more rows than limit (unlikely), slice
+                    if len(rows) > int(limit):
+                        rows = rows[: int(limit)]
+                    return rows, warnings
+                except Exception:
+                    # Fall back to full read if chunked read fails for any reason
+                    pass
+
+            # Default (no limit): read whole CSV into memory as before
+            df = pd.read_csv(path, dtype=str, encoding=encoding)
+            df = df.fillna("")
+            rows = df.to_dict(orient="records")
         except Exception as e:
             warnings.append(ExtractionWarning(f"Failed reading file with pandas: {e}"))
         return rows, warnings
