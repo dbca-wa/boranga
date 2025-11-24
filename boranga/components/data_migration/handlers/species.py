@@ -518,6 +518,32 @@ class SpeciesImporter(BaseSheetImporter):
             for s in Species.objects.filter(migrated_from_id__in=created_keys):
                 created_map[s.migrated_from_id] = s
 
+        # bulk_create bypasses model .save() so any logic in save() (such as
+        # generating `species_number` from the PK) won't have run. Ensure
+        # newly-created Species have their `species_number` populated so
+        # downstream code (logs, references) can rely on it.
+        if created_map:
+            species_to_update = []
+            for mig, s in created_map.items():
+                if not s.species_number:
+                    s.species_number = f"S{str(s.pk)}"
+                    species_to_update.append(s)
+            if species_to_update:
+                try:
+                    Species.objects.bulk_update(
+                        species_to_update, ["species_number"], batch_size=BATCH
+                    )
+                except Exception:
+                    # Fall back to individual saves if bulk_update fails
+                    for s in species_to_update:
+                        try:
+                            s.save()
+                        except Exception:
+                            logger.exception(
+                                "Failed to populate species_number for created Species %s",
+                                getattr(s, "pk", None),
+                            )
+
         # Apply any pending updates that were deferred because they shared a taxonomy_id
         if "pending_updates" in locals() and pending_updates:
             # build reverse map so we can log taxonomy_id for a canonical migrated key
