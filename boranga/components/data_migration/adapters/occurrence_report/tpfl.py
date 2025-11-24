@@ -82,7 +82,7 @@ SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
 ROLE_TRANSFORM = build_legacy_map_transform(
     "TPFL",
-    "ROLE (DRF_LOV_ROLE_VWS)",
+    "OBS_ROLE_CODE (DRF_LOV_ROLE_VWS)",
     required=False,
 )
 
