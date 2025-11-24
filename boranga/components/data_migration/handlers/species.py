@@ -397,9 +397,42 @@ class SpeciesImporter(BaseSheetImporter):
                 continue
 
             with transaction.atomic():
-                obj, created_flag = Species.objects.update_or_create(
-                    migrated_from_id=migrated_from_id, defaults=defaults
-                )
+                # Prefer to find by migrated_from_id. If not found, but a
+                # taxonomy_id is present in defaults, attempt to locate an
+                # existing Species that already references that taxonomy and
+                # update it instead of attempting to create a new one which
+                # would violate the OneToOne constraint on `taxonomy`.
+                try:
+                    obj = Species.objects.get(migrated_from_id=migrated_from_id)
+                    created_flag = False
+                    for k, v in defaults.items():
+                        setattr(obj, k, v)
+                    obj.save()
+                except Species.DoesNotExist:
+                    taxonomy_id = defaults.get("taxonomy_id")
+                    if taxonomy_id:
+                        existing = Species.objects.filter(
+                            taxonomy_id=taxonomy_id
+                        ).first()
+                        if existing:
+                            # Update the existing species rather than creating a new one
+                            obj = existing
+                            created_flag = False
+                            for k, v in defaults.items():
+                                setattr(obj, k, v)
+                            # also set migrated_from_id so subsequent runs will match
+                            obj.migrated_from_id = migrated_from_id
+                            obj.save()
+                        else:
+                            obj = Species.objects.create(
+                                migrated_from_id=migrated_from_id, **defaults
+                            )
+                            created_flag = True
+                    else:
+                        obj = Species.objects.create(
+                            migrated_from_id=migrated_from_id, **defaults
+                        )
+                        created_flag = True
                 if created_flag:
                     created += 1
                     # attach migration_run if present
