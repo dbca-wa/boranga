@@ -327,23 +327,29 @@ class OccurrenceReportImporter(BaseSheetImporter):
             defaults["legacy_source"] = ",".join(involved_sources)
 
             if ctx.dry_run:
-                pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
-                logger.debug(
-                    "OccurrenceReportImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
-                    self.slug,
-                    migrated_from_id,
-                    pretty,
-                )
+                # pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
+                # logger.debug(
+                #     "OccurrenceReportImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
+                #     self.slug,
+                #     migrated_from_id,
+                #     pretty,
+                # )
                 continue
 
             # capture related small extras for later (observer + habitat)
-            habitat_loose = merged.get("OCRHabitatComposition__loose_rock_percent")
+            # collect all OCRHabitatComposition__* keys into a habitat_data dict
+            habitat_data = {}
+            for k, v in merged.items():
+                if k.startswith("OCRHabitatComposition__"):
+                    short = k.split("OCRHabitatComposition__", 1)[1]
+                    habitat_data[short] = v
+
             ops.append(
                 {
                     "migrated_from_id": migrated_from_id,
                     "defaults": defaults,
                     "merged": merged,
-                    "habitat_loose": habitat_loose,
+                    "habitat_data": habitat_data,
                 }
             )
 
@@ -363,14 +369,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
         for op in ops:
             migrated_from_id = op["migrated_from_id"]
             defaults = op["defaults"]
-            habitat_loose = op.get("habitat_loose")
+            habitat_data = op.get("habitat_data") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
                 # apply defaults to instance for later bulk_update
                 for k, v in defaults.items():
                     setattr(obj, k, v)
-                to_update.append((obj, habitat_loose))
+                to_update.append((obj, habitat_data))
                 continue
 
             # create new instance (bulk_create later)
@@ -380,7 +386,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 create_kwargs["migration_run"] = ctx.migration_run
             inst = OccurrenceReport(**create_kwargs)
             to_create.append(inst)
-            create_meta.append((migrated_from_id, habitat_loose))
+            create_meta.append((migrated_from_id, habitat_data))
 
         # Bulk create new OccurrenceReports
         created_map = {}
@@ -512,34 +518,53 @@ class OccurrenceReportImporter(BaseSheetImporter):
         habs_to_create = []
         habs_to_update = []
         for up in to_update:
-            inst, habitat_loose = up
+            inst, habitat_data = up
             hid = inst.pk
+            hd = habitat_data or {}
             if hid in existing_habs:
                 h = existing_habs[hid]
-                h.loose_rock_percent = habitat_loose
+                # apply available habitat fields only if they are real model fields
+                valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
+                for field_name, val in hd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fields:
+                        setattr(h, field_name, val)
                 habs_to_update.append(h)
             else:
-                habs_to_create.append(
-                    OCRHabitatComposition(
-                        occurrence_report_id=hid, loose_rock_percent=habitat_loose
-                    )
-                )
+                create_kwargs = {"occurrence_report_id": hid}
+                valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
+                for field_name, val in hd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fields:
+                        create_kwargs[field_name] = val
+                habs_to_create.append(OCRHabitatComposition(**create_kwargs))
 
         # Handle created ones
-        for mig, habitat_loose in create_meta:
+        for mig, habitat_data in create_meta:
             occ = created_map.get(mig)
             if not occ:
                 continue
+            hd = habitat_data or {}
             if occ.pk in existing_habs:
                 h = existing_habs[occ.pk]
-                h.loose_rock_percent = habitat_loose
+                valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
+                for field_name, val in hd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fields:
+                        setattr(h, field_name, val)
                 habs_to_update.append(h)
             else:
-                habs_to_create.append(
-                    OCRHabitatComposition(
-                        occurrence_report=occ, loose_rock_percent=habitat_loose
-                    )
-                )
+                create_kwargs = {"occurrence_report": occ}
+                valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
+                for field_name, val in hd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fields:
+                        create_kwargs[field_name] = val
+                habs_to_create.append(OCRHabitatComposition(**create_kwargs))
 
         if habs_to_create:
             try:

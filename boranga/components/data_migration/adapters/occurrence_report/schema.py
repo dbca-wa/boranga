@@ -28,7 +28,17 @@ COLUMN_MAP = {
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
     "OBS_NAME": "OCRObserverDetail__observer_name",
     # OCRHabitatComposition fields
+    "ROCK_TYPE": "OCRHabitatComposition__rock_type",
     "GRAVEL": "OCRHabitatComposition__loose_rock_percent",
+    "DRAINAGE": "OCRHabitatComposition__drainage",
+    # Habitat composition extras
+    "HABITAT_NOTES": "OCRHabitatComposition__habitat_notes",
+    "ASPECT": "ASPECT",
+    "SV_VEGETATION_CONDITION": "OCRHabitatComposition__vegetation_condition",
+    "SOIL_COLOR": "OCRHabitatComposition__soil_colour",
+    "SOIL_CONDITION": "OCRHabitatComposition__soil_condition",
+    "LANDFORM": "OCRHabitatComposition__land_form",
+    "SOIL_TYPE": "OCRHabitatComposition__soil_type",
     # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
     "PURPOSE1": "PURPOSE1",
     "PURPOSE2": "PURPOSE2",
@@ -91,7 +101,15 @@ class OccurrenceReportRow:
     OCRObserverDetail__role: str | None = None
 
     # OCRHabitatComposition fields
+    OCRHabitatComposition__rock_type: str | None = None
     OCRHabitatComposition__loose_rock_percent: int | None = None
+    OCRHabitatComposition__drainage: str | None = None
+    OCRHabitatComposition__habitat_notes: str | None = None
+    OCRHabitatComposition__vegetation_condition: str | None = None
+    OCRHabitatComposition__soil_colour: str | None = None
+    OCRHabitatComposition__soil_condition: str | None = None
+    OCRHabitatComposition__land_form: str | None = None
+    OCRHabitatComposition__soil_type: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
@@ -126,6 +144,24 @@ class OccurrenceReportRow:
             OCRObserverDetail__role=utils.safe_strip(d.get("OCRObserverDetail__role")),
             OCRHabitatComposition__loose_rock_percent=utils.to_int_maybe(
                 d.get("OCRHabitatComposition__loose_rock_percent")
+            ),
+            OCRHabitatComposition__habitat_notes=utils.safe_strip(
+                d.get("OCRHabitatComposition__habitat_notes")
+            ),
+            OCRHabitatComposition__vegetation_condition=utils.safe_strip(
+                d.get("OCRHabitatComposition__vegetation_condition")
+            ),
+            OCRHabitatComposition__soil_colour=utils.safe_strip(
+                d.get("OCRHabitatComposition__soil_colour")
+            ),
+            OCRHabitatComposition__soil_condition=utils.safe_strip(
+                d.get("OCRHabitatComposition__soil_condition")
+            ),
+            OCRHabitatComposition__land_form=utils.safe_strip(
+                d.get("OCRHabitatComposition__land_form")
+            ),
+            OCRHabitatComposition__soil_type=utils.safe_strip(
+                d.get("OCRHabitatComposition__soil_type")
             ),
         )
 
