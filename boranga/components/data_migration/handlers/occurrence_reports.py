@@ -16,6 +16,10 @@ from boranga.components.data_migration.adapters.occurrence_report.tpfl import (
     OccurrenceReportTpflAdapter,
 )
 from boranga.components.data_migration.adapters.sources import Source
+from boranga.components.data_migration.handlers.helpers import (
+    apply_value_to_instance,
+    normalize_create_kwargs,
+)
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -155,90 +159,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
             all_columns.update(schema.COLUMN_PIPELINES.keys())
         pipelines = {col: None for col in sorted(all_columns)}
 
-        # Helper to normalize kwargs for creating model instances: if a field
-        # is a ForeignKey and the value is an id (int/str), emit '<field>_id'
-        # instead of the relation attribute so Django accepts it without a
-        # model instance. Also helper to apply values to existing instances.
-        def normalize_create_kwargs(model_cls, kwargs: dict) -> dict:
-            out = {}
-            # attempt to import MultiSelectField class if available
-            try:
-                from multiselectfield.db.fields import MultiSelectField
-
-                _MSF = MultiSelectField
-            except Exception:
-                _MSF = None
-            for k, v in (kwargs or {}).items():
-                # If caller already provided a '<field>_id' key, keep it as-is
-                if k.endswith("_id"):
-                    out[k] = v
-                    continue
-                try:
-                    f = model_cls._meta.get_field(k)
-                except FieldDoesNotExist:
-                    out[k] = v
-                    continue
-                if isinstance(f, dj_models.ForeignKey):
-                    # map FK field name -> '<field>_id' so Django accepts the id
-                    # If caller passed a model instance, unwrap to its PK.
-                    out_val = getattr(v, "pk", v)
-                    out[f"{k}_id"] = out_val
-                else:
-                    # Coerce MultiSelectField values: if field expects a
-                    # multiselect and we received a scalar/string, convert
-                    # to an iterable list. This avoids DB errors when the
-                    # multiselect field tries to join a non-iterable.
-                    if _MSF is not None and isinstance(f, _MSF):
-                        if v is None:
-                            out[k] = v
-                        elif isinstance(v, str):
-                            # split comma-separated string into list
-                            out[k] = [s.strip() for s in v.split(",") if s.strip()]
-                        elif isinstance(v, (list, tuple, set)):
-                            out[k] = [str(x) for x in v]
-                        else:
-                            out[k] = [str(v)]
-                    else:
-                        out[k] = v
-            return out
-
-        def apply_value_to_instance(inst, field_name: str, val: Any):
-            try:
-                f = inst._meta.get_field(field_name)
-            except FieldDoesNotExist:
-                # If field_name ends with '_id' or field not found, set attribute directly
-                setattr(inst, field_name, val)
-                return
-            # attempt to import MultiSelectField class if available
-            try:
-                from multiselectfield.db.fields import MultiSelectField
-
-                _MSF = MultiSelectField
-            except Exception:
-                _MSF = None
-            # If caller passed '<field>_id', set that attribute directly
-            if field_name.endswith("_id"):
-                setattr(inst, field_name, getattr(val, "pk", val))
-                return
-            if isinstance(f, dj_models.ForeignKey):
-                setattr(inst, f"{field_name}_id", getattr(val, "pk", val))
-            else:
-                # For MultiSelectField, ensure the value is iterable (list)
-                if _MSF is not None and isinstance(f, _MSF):
-                    if val is None:
-                        setattr(inst, field_name, val)
-                        return
-                    if isinstance(val, str):
-                        val_list = [s.strip() for s in val.split(",") if s.strip()]
-                        setattr(inst, field_name, val_list)
-                        return
-                    if isinstance(val, (list, tuple, set)):
-                        setattr(inst, field_name, [str(x) for x in val])
-                        return
-                    # scalar -> wrap in list and coerce to str
-                    setattr(inst, field_name, [str(val)])
-                    return
-                setattr(inst, field_name, val)
+        # normalize_create_kwargs and apply_value_to_instance are provided
+        # by the shared helpers module to avoid duplication across handlers.
 
         processed = 0
         errors = 0
