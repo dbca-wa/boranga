@@ -25,6 +25,7 @@ from boranga.components.occurrence.models import (
     OccurrenceReport,
     OCRHabitatComposition,
     OCRHabitatCondition,
+    OCRIdentification,
     OCRObserverDetail,
 )
 
@@ -340,6 +341,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # capture related small extras for later (observer + habitat)
             # collect all OCRHabitatComposition__* keys into a habitat_data dict
             habitat_data = {}
+            identification_data = {}
             habitat_condition = {}
             for k, v in merged.items():
                 if k.startswith("OCRHabitatComposition__"):
@@ -348,6 +350,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OCRHabitatCondition__"):
                     short = k.split("OCRHabitatCondition__", 1)[1]
                     habitat_condition[short] = v
+                if k.startswith("OCRIdentification__"):
+                    short = k.split("OCRIdentification__", 1)[1]
+                    identification_data[short] = v
 
             ops.append(
                 {
@@ -356,6 +361,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "merged": merged,
                     "habitat_data": habitat_data,
                     "habitat_condition": habitat_condition,
+                    "identification_data": identification_data,
                 }
             )
 
@@ -529,13 +535,23 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 occurrence_report__in=target_occs
             )
         }
+        # Fetch existing identifications
+        existing_idents = {
+            it.occurrence_report_id: it
+            for it in OCRIdentification.objects.filter(
+                occurrence_report__in=target_occs
+            )
+        }
         habs_to_create = []
         habs_to_update = []
         conds_to_create = []
         conds_to_update = []
+        idents_to_create = []
+        idents_to_update = []
         for up in to_update:
             inst, habitat_data, habitat_condition = up
             hid = inst.pk
+            # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
             hd = habitat_data or {}
             hc = habitat_condition or {}
             if hid in existing_habs:
@@ -576,6 +592,39 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_c_fields:
                         cond_create[field_name] = val
                 conds_to_create.append(OCRHabitatCondition(**cond_create))
+            # OCRIdentification handling for updates: try to pull identification_data from op mapping created earlier
+            # find corresponding op by migrated_from_id -> inst.migrated_from_id is not stored on inst;
+            # instead use target_map reverse lookup
+            try:
+                mig_key = inst.migrated_from_id
+            except Exception:
+                mig_key = None
+            ident_data = {}
+            if mig_key:
+                # find op entry for this migrated_from_id
+                for o in ops:
+                    if o.get("migrated_from_id") == mig_key:
+                        ident_data = o.get("identification_data") or {}
+                        break
+
+            if hid in existing_idents:
+                id_obj = existing_idents[hid]
+                valid_i_fields = {f.name for f in OCRIdentification._meta.fields}
+                for field_name, val in (ident_data or {}).items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_i_fields:
+                        setattr(id_obj, field_name, val)
+                idents_to_update.append(id_obj)
+            else:
+                create_kwargs = {"occurrence_report_id": hid}
+                valid_i_fields = {f.name for f in OCRIdentification._meta.fields}
+                for field_name, val in (ident_data or {}).items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_i_fields:
+                        create_kwargs[field_name] = val
+                idents_to_create.append(OCRIdentification(**create_kwargs))
 
         # Handle created ones
         for mig, habitat_data in create_meta:
@@ -583,6 +632,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if not occ:
                 continue
             hd = habitat_data or {}
+            # also pull identification_data from create_meta mapping (create_meta entries are tuples of
+            # (migrated_from_id, habitat_data, habitat_condition, identification_data) )
+            # but create_meta was appended as (migrated_from_id, habitat_data, habitat_condition) earlier;
+            # we need to find the op to get identification_data
+            ident_data = {}
+            for o in ops:
+                if o.get("migrated_from_id") == mig:
+                    ident_data = o.get("identification_data") or {}
+                    break
             if occ.pk in existing_habs:
                 h = existing_habs[occ.pk]
                 valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
@@ -601,6 +659,25 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_fields:
                         create_kwargs[field_name] = val
                 habs_to_create.append(OCRHabitatComposition(**create_kwargs))
+            # identification create for newly created occ
+            if occ.pk in existing_idents:
+                id_obj = existing_idents[occ.pk]
+                valid_i_fields = {f.name for f in OCRIdentification._meta.fields}
+                for field_name, val in ident_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_i_fields:
+                        setattr(id_obj, field_name, val)
+                idents_to_update.append(id_obj)
+            else:
+                create_kwargs = {"occurrence_report": occ}
+                valid_i_fields = {f.name for f in OCRIdentification._meta.fields}
+                for field_name, val in ident_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_i_fields:
+                        create_kwargs[field_name] = val
+                idents_to_create.append(OCRIdentification(**create_kwargs))
 
         if habs_to_create:
             try:
@@ -690,6 +767,59 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         logger.exception(
                             "Failed to save OCRHabitatCondition %s",
                             getattr(c, "pk", None),
+                        )
+
+        # OCRIdentification: OneToOne - create or update identification records
+        if idents_to_create:
+            try:
+                OCRIdentification.objects.bulk_create(
+                    idents_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRIdentification; falling back to individual creates"
+                )
+                for i in idents_to_create:
+                    try:
+                        i.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRIdentification for occurrence_report %s",
+                            getattr(i.occurrence_report, "pk", None),
+                        )
+
+        if idents_to_update:
+            try:
+                ident_fields = set()
+                for inst in idents_to_update:
+                    ident_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                ident_fields = {
+                    f
+                    for f in ident_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if ident_fields:
+                    OCRIdentification.objects.bulk_update(
+                        idents_to_update, list(ident_fields), batch_size=BATCH
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRIdentification; falling back to individual saves"
+                )
+                for i in idents_to_update:
+                    try:
+                        i.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRIdentification %s",
+                            getattr(i, "pk", None),
                         )
 
         # Update stats counts for created/updated based on performed ops

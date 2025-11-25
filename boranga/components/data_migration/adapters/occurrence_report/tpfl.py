@@ -11,7 +11,10 @@ from boranga.components.data_migration.registry import (
     taxonomy_lookup_legacy_mapping_species,
     to_int_trailing_factory,
 )
-from boranga.components.occurrence.models import OccurrenceReport
+from boranga.components.occurrence.models import (
+    IdentificationCertainty,
+    OccurrenceReport,
+)
 from boranga.components.species_and_communities.models import Community, GroupType
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
@@ -117,6 +120,33 @@ SOIL_TYPE_TRANSFORM = build_legacy_map_transform(
     "TPFL", "SOIL_TYPE (DRF_LOV_SOIL_TYPE_VWS)", required=False
 )
 
+# Identification closed-list / default transforms
+SAMPLE_DEST_TRANSFORM = build_legacy_map_transform(
+    "TPFL", "VOUCHER_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)", required=False
+)
+
+
+def identification_certainty_default_transform(value: str, ctx=None):
+    """If incoming value blank, default to IdentificationCertainty 'High',
+    otherwise try to lookup by name (case-insensitive) and return its id."""
+    # prefer provided value when present
+    try:
+        if value not in (None, ""):
+            v = str(value).strip()
+            if not v:
+                raise ValueError("blank")
+            obj = IdentificationCertainty.objects.filter(name__iexact=v).first()
+            return _result(obj.pk if obj else None)
+    except Exception:
+        pass
+
+    # fallback default -> 'High'
+    try:
+        default = IdentificationCertainty.objects.filter(name__iexact="High").first()
+        return _result(default.pk if default else None)
+    except Exception:
+        return _result(None)
+
 
 def veg_condition_prefix_transform(value: str, ctx=None) -> str | None:
     """Prefix vegetation condition values for habitat notes."""
@@ -174,6 +204,21 @@ PIPELINES = {
     ],
     "OCRHabitatComposition__land_form": ["strip", "blank_to_none", LANDFORM_TRANSFORM],
     "OCRHabitatComposition__soil_type": ["strip", "blank_to_none", SOIL_TYPE_TRANSFORM],
+    # Identification pipelines
+    "OCRIdentification__barcode_number": ["strip", "blank_to_none"],
+    "OCRIdentification__collector_number": ["strip", "blank_to_none"],
+    "OCRIdentification__permit_id": ["strip", "blank_to_none"],
+    "OCRIdentification__sample_destination": [
+        "strip",
+        "blank_to_none",
+        SAMPLE_DEST_TRANSFORM,
+    ],
+    "OCRIdentification__identification_certainty": [
+        "strip",
+        "blank_to_none",
+        identification_certainty_default_transform,
+    ],
+    "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
 }
 
 
@@ -298,6 +343,51 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 canonical["OCRHabitatComposition__soil_type"] = canonical.get(
                     "SOIL_TYPE"
                 )
+
+            # Identification: copy simple fields through so pipelines can map them
+            if canonical.get("BARCODE"):
+                canonical["OCRIdentification__barcode_number"] = canonical.get(
+                    "BARCODE"
+                )
+            if canonical.get("COLLECTOR_NO"):
+                canonical["OCRIdentification__collector_number"] = canonical.get(
+                    "COLLECTOR_NO"
+                )
+            if canonical.get("LICENCE"):
+                canonical["OCRIdentification__permit_id"] = canonical.get("LICENCE")
+
+            # Identification comment composition: map and prefix VCHR_STATUS_CODE & DUPVOUCH_LOCATION
+            try:
+                from boranga.components.main.models import LegacyValueMap
+
+                idc_parts = []
+                VCHR = canonical.get("VCHR_STATUS_CODE", "")
+                if VCHR:
+                    mapped = LegacyValueMap.get_target(
+                        legacy_system="TPFL",
+                        list_name="VCHR_STATUS_CODE (DRF_LOV_VOUCHER_STAT_VWS)",
+                        legacy_value=VCHR,
+                    )
+                    if mapped:
+                        idc_parts.append(f"Specimen Status: {mapped}")
+
+                DUPV = canonical.get("DUPVOUCH_LOCATION", "")
+                if DUPV:
+                    mapped2 = LegacyValueMap.get_target(
+                        legacy_system="TPFL",
+                        list_name="DUPVOUCH_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)",
+                        legacy_value=DUPV,
+                    )
+                    if mapped2:
+                        idc_parts.append(f"Duplicate Voucher Location: {mapped2}")
+
+                if idc_parts:
+                    canonical["OCRIdentification__identification_comment"] = "; ".join(
+                        idc_parts
+                    )
+            except Exception:
+                # non-fatal: continue without identification comment
+                pass
 
             # If an explicit occurrence id is present in the source we do not assign
             # it here; the importer will link habitat to the parent OccurrenceReport

@@ -40,6 +40,15 @@ COLUMN_MAP = {
     "SOIL_CONDITION": "OCRHabitatComposition__soil_condition",
     "LANDFORM": "OCRHabitatComposition__land_form",
     "SOIL_TYPE": "OCRHabitatComposition__soil_type",
+    # Identification fields
+    "BARCODE": "OCRIdentification__barcode_number",
+    "COLLECTOR_NO": "OCRIdentification__collector_number",
+    "LICENCE": "OCRIdentification__permit_id",
+    # Identification comment composition parts (preserve raw so adapter can map+prefix)
+    "VCHR_STATUS_CODE": "VCHR_STATUS_CODE",
+    "DUPVOUCH_LOCATION": "DUPVOUCH_LOCATION",
+    # Voucher location (sample destination) closed-list mapping
+    "VOUCHER_LOCATION": "OCRIdentification__sample_destination",
     # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
     "PURPOSE1": "PURPOSE1",
     "PURPOSE2": "PURPOSE2",
@@ -163,6 +172,24 @@ class OccurrenceReportRow:
             ),
             OCRHabitatComposition__soil_type=utils.safe_strip(
                 d.get("OCRHabitatComposition__soil_type")
+            ),
+            OCRIdentification__barcode_number=utils.safe_strip(
+                d.get("OCRIdentification__barcode_number")
+            ),
+            OCRIdentification__collector_number=utils.safe_strip(
+                d.get("OCRIdentification__collector_number")
+            ),
+            OCRIdentification__permit_id=utils.safe_strip(
+                d.get("OCRIdentification__permit_id")
+            ),
+            OCRIdentification__identification_comment=utils.safe_strip(
+                d.get("OCRIdentification__identification_comment")
+            ),
+            OCRIdentification__identification_certainty=utils.to_int_maybe(
+                d.get("OCRIdentification__identification_certainty")
+            ),
+            OCRIdentification__sample_destination=utils.to_int_maybe(
+                d.get("OCRIdentification__sample_destination")
             ),
         )
 
