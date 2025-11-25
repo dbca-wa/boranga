@@ -24,6 +24,7 @@ from boranga.components.data_migration.registry import (
 from boranga.components.occurrence.models import (
     OccurrenceReport,
     OCRHabitatComposition,
+    OCRHabitatCondition,
     OCRObserverDetail,
 )
 
@@ -339,10 +340,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # capture related small extras for later (observer + habitat)
             # collect all OCRHabitatComposition__* keys into a habitat_data dict
             habitat_data = {}
+            habitat_condition = {}
             for k, v in merged.items():
                 if k.startswith("OCRHabitatComposition__"):
                     short = k.split("OCRHabitatComposition__", 1)[1]
                     habitat_data[short] = v
+                if k.startswith("OCRHabitatCondition__"):
+                    short = k.split("OCRHabitatCondition__", 1)[1]
+                    habitat_condition[short] = v
 
             ops.append(
                 {
@@ -350,6 +355,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "defaults": defaults,
                     "merged": merged,
                     "habitat_data": habitat_data,
+                    "habitat_condition": habitat_condition,
                 }
             )
 
@@ -370,13 +376,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
             migrated_from_id = op["migrated_from_id"]
             defaults = op["defaults"]
             habitat_data = op.get("habitat_data") or {}
+            habitat_condition = op.get("habitat_condition") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
                 # apply defaults to instance for later bulk_update
                 for k, v in defaults.items():
                     setattr(obj, k, v)
-                to_update.append((obj, habitat_data))
+                to_update.append((obj, habitat_data, habitat_condition))
                 continue
 
             # create new instance (bulk_create later)
@@ -386,7 +393,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 create_kwargs["migration_run"] = ctx.migration_run
             inst = OccurrenceReport(**create_kwargs)
             to_create.append(inst)
-            create_meta.append((migrated_from_id, habitat_data))
+            create_meta.append((migrated_from_id, habitat_data, habitat_condition))
 
         # Bulk create new OccurrenceReports
         created_map = {}
@@ -515,12 +522,22 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 occurrence_report__in=target_occs
             )
         }
+        # Fetch existing habitat conditions
+        existing_conds = {
+            c.occurrence_report_id: c
+            for c in OCRHabitatCondition.objects.filter(
+                occurrence_report__in=target_occs
+            )
+        }
         habs_to_create = []
         habs_to_update = []
+        conds_to_create = []
+        conds_to_update = []
         for up in to_update:
-            inst, habitat_data = up
+            inst, habitat_data, habitat_condition = up
             hid = inst.pk
             hd = habitat_data or {}
+            hc = habitat_condition or {}
             if hid in existing_habs:
                 h = existing_habs[hid]
                 # apply available habitat fields only if they are real model fields
@@ -540,6 +557,25 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_fields:
                         create_kwargs[field_name] = val
                 habs_to_create.append(OCRHabitatComposition(**create_kwargs))
+            # OCRHabitatCondition handling for updates
+            if hid in existing_conds:
+                c = existing_conds[hid]
+                valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
+                for field_name, val in hc.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_c_fields:
+                        setattr(c, field_name, val)
+                conds_to_update.append(c)
+            else:
+                cond_create = {"occurrence_report_id": hid}
+                valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
+                for field_name, val in hc.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_c_fields:
+                        cond_create[field_name] = val
+                conds_to_create.append(OCRHabitatCondition(**cond_create))
 
         # Handle created ones
         for mig, habitat_data in create_meta:
@@ -600,6 +636,60 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         logger.exception(
                             "Failed to save OCRHabitatComposition %s",
                             getattr(h, "pk", None),
+                        )
+
+        # OCRHabitatCondition: OneToOne - create or update percentage flags
+        if conds_to_create:
+            try:
+                OCRHabitatCondition.objects.bulk_create(
+                    conds_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRHabitatCondition; falling back to individual creates"
+                )
+                for c in conds_to_create:
+                    try:
+                        c.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRHabitatCondition for occurrence_report %s",
+                            getattr(c.occurrence_report, "pk", None),
+                        )
+
+        if conds_to_update:
+            try:
+                # determine fields to update from condition instances
+                cond_fields = set()
+                for inst in conds_to_update:
+                    cond_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # ensure occurrence_report_id or id not included
+                cond_fields = {
+                    f
+                    for f in cond_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if cond_fields:
+                    OCRHabitatCondition.objects.bulk_update(
+                        conds_to_update, list(cond_fields), batch_size=BATCH
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRHabitatCondition; falling back to individual saves"
+                )
+                for c in conds_to_update:
+                    try:
+                        c.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRHabitatCondition %s",
+                            getattr(c, "pk", None),
                         )
 
         # Update stats counts for created/updated based on performed ops

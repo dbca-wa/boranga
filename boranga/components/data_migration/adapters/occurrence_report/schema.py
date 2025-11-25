@@ -34,6 +34,7 @@ COLUMN_MAP = {
     # Habitat composition extras
     "HABITAT_NOTES": "OCRHabitatComposition__habitat_notes",
     "ASPECT": "ASPECT",
+    "HABITAT_CONDITION": "HABITAT_CONDITION",
     "SV_VEGETATION_CONDITION": "OCRHabitatComposition__vegetation_condition",
     "SOIL_COLOR": "OCRHabitatComposition__soil_colour",
     "SOIL_CONDITION": "OCRHabitatComposition__soil_condition",

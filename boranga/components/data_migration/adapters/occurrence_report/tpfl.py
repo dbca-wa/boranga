@@ -239,6 +239,48 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                     hab_notes_parts
                 )
 
+                # HABITAT_CONDITION => populate OCRHabitatCondition flags per task rules
+                hc_raw = canonical.get("HABITAT_CONDITION", "")
+                hc = hc_raw.strip().upper() if hc_raw else ""
+                # default all zeros
+                canonical["OCRHabitatCondition__pristine"] = (
+                    100 if hc in ("PRISTINE",) else 0
+                )
+                canonical["OCRHabitatCondition__excellent"] = (
+                    100
+                    if hc
+                    in (
+                        "EXCELENT",
+                        "EXCELLENT",
+                    )
+                    else 0
+                )
+                canonical["OCRHabitatCondition__very_good"] = (
+                    100
+                    if hc
+                    in (
+                        "VRY_GOOD",
+                        "VRYGOOD",
+                        "VERY_GOOD",
+                        "VERYGOOD",
+                    )
+                    else 0
+                )
+                canonical["OCRHabitatCondition__good"] = 100 if hc in ("GOOD",) else 0
+                canonical["OCRHabitatCondition__degraded"] = (
+                    100 if hc in ("DEGRADED",) else 0
+                )
+                canonical["OCRHabitatCondition__completely_degraded"] = (
+                    100
+                    if hc
+                    in (
+                        "COM_DEGR",
+                        "COMPLETELY_DEGRADED",
+                        "COM_DEG",
+                    )
+                    else 0
+                )
+
             # copy through simple habitat fields if present
             if canonical.get("SOIL_COLOR"):
                 canonical["OCRHabitatComposition__soil_colour"] = canonical.get(
