@@ -121,6 +121,14 @@ class OccurrenceReportRow:
     OCRHabitatComposition__land_form: str | None = None
     OCRHabitatComposition__soil_type: str | None = None
 
+    # OCRIdentification fields
+    OCRIdentification__barcode_number: str | None = None
+    OCRIdentification__collector_number: str | None = None
+    OCRIdentification__permit_id: str | None = None
+    OCRIdentification__identification_comment: str | None = None
+    OCRIdentification__identification_certainty: int | None = None
+    OCRIdentification__sample_destination: int | None = None
+
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
         """
