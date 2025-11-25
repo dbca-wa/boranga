@@ -311,6 +311,32 @@ class OccurrenceImporter(BaseSheetImporter):
                     )
                     continue
 
+            # QA check: occurrence_name must be unique for the same species
+            if occ_row.occurrence_name and occ_row.species_id:
+                dup_exists = (
+                    Occurrence.objects.filter(
+                        species_id=occ_row.species_id,
+                        occurrence_name=occ_row.occurrence_name,
+                    )
+                    .exclude(migrated_from_id=migrated_from_id)
+                    .exists()
+                )
+                if dup_exists:
+                    rec = {
+                        "migrated_from_id": merged.get("migrated_from_id"),
+                        "reason": "duplicate_occurrence_name",
+                        "level": "error",
+                        "message": (
+                            f"occurrence_name '{occ_row.occurrence_name}' "
+                            f"already exists for species {occ_row.species_id}"
+                        ),
+                        "row": merged,
+                    }
+                    errors_details.append(rec)
+                    skipped += 1
+                    errors += 1
+                    continue
+
             defaults = occ_row.to_model_defaults()
             defaults["lodgement_date"] = merged.get("datetime_created")
             if merged.get("locked") is not None:
