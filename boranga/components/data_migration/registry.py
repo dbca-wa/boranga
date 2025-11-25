@@ -1523,6 +1523,14 @@ def run_pipeline(
     current = TransformResult(value)
     for fn in pipeline:
         step_res = fn(current.value, ctx)
+        # Some transform callables may return raw values or None instead of
+        # a TransformResult. Normalize to TransformResult for safety.
+        if step_res is None:
+            step_res = TransformResult(None, [])
+        elif not isinstance(step_res, TransformResult):
+            # wrap raw return value with empty issues
+            step_res = TransformResult(step_res, [])
+
         # Accumulate issues
         current = TransformResult(step_res.value, current.issues + step_res.issues)
         # Stop further transforms on error (optional policy)
