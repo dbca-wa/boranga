@@ -6,6 +6,8 @@ import os
 from collections import defaultdict
 from typing import Any
 
+from django.core.exceptions import FieldDoesNotExist
+from django.db import models as dj_models
 from django.db import transaction
 from django.utils import timezone
 
@@ -325,6 +327,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     continue
 
             defaults = report_row.to_model_defaults()
+
+            # If transforms produced None for fields that have model defaults
+            # (for example CharFields with default=''), prefer the model's
+            # default value. This keeps transforms simple (they can return
+            # None) while avoiding validation failures for non-nullable
+            # fields that expect a non-None default like an empty string.
+            for k, v in list(defaults.items()):
+                if v is not None:
+                    continue
+                try:
+                    field = OccurrenceReport._meta.get_field(k)
+                except FieldDoesNotExist:
+                    continue
+                # Prefer explicit field default (handles callables)
+                field_default = field.get_default()
+                if field_default is not None:
+                    defaults[k] = field_default
+                    continue
+                # Fallback: for non-nullable text fields, prefer empty string
+                if not getattr(field, "null", False) and isinstance(
+                    field, (dj_models.CharField, dj_models.TextField)
+                ):
+                    defaults[k] = ""
+                    continue
             involved_sources = sorted({src for _, src, _ in entries})
             defaults["legacy_source"] = ",".join(involved_sources)
 
