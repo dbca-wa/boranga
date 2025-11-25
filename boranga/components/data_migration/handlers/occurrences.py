@@ -280,7 +280,7 @@ class OccurrenceImporter(BaseSheetImporter):
                 skipped += 1
                 continue
 
-            # build defaults/payload; set legacy_source as joined sources involved
+            # build defaults/payload
             involved_sources = sorted({src for _, src, _ in entries})
             # validate merged business rules using schema's OccurrenceRow
             occ_row = schema.OccurrenceRow.from_dict(merged)
@@ -312,8 +312,6 @@ class OccurrenceImporter(BaseSheetImporter):
 
             defaults = occ_row.to_model_defaults()
             defaults["lodgement_date"] = merged.get("datetime_created")
-            # include legacy source info
-            defaults["legacy_source"] = ",".join(involved_sources)
             # include locked if present in merged payload
             if merged.get("locked") is not None:
                 defaults["locked"] = merged.get("locked")
