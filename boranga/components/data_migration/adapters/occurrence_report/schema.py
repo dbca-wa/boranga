@@ -27,6 +27,7 @@ COLUMN_MAP = {
     "OBS_ROLE_CODE": "OCRObserverDetail__role",
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
     "OBS_NAME": "OCRObserverDetail__observer_name",
+    "OBSERVER_CODE": "OBSERVER_CODE",
     # OCRHabitatComposition fields
     "ROCK_TYPE": "OCRHabitatComposition__rock_type",
     "GRAVEL": "OCRHabitatComposition__loose_rock_percent",
