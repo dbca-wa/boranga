@@ -100,7 +100,6 @@ class OccurrenceReportRow:
     comments: str | None = None
     ocr_for_occ_number: str | None = None
     ocr_for_occ_name: str | None = None
-    approver_comment: str | None = None
     assessor_data: str | None = None
     reported_date: date | None = None  # copy of lodgement_date
     lodgement_date: date | None = None
@@ -153,7 +152,6 @@ class OccurrenceReportRow:
             comments=utils.safe_strip(d.get("comments")),
             ocr_for_occ_number=utils.safe_strip(d.get("ocr_for_occ_number")),
             ocr_for_occ_name=utils.safe_strip(d.get("ocr_for_occ_name")),
-            approver_comment=utils.safe_strip(d.get("approver_comment")),
             assessor_data=utils.safe_strip(d.get("assessor_data")),
             reported_date=reported_dt,
             lodgement_date=lodgement_dt,
@@ -246,7 +244,6 @@ class OccurrenceReportRow:
             "comments": self.comments or "",
             "ocr_for_occ_number": self.ocr_for_occ_number or "",
             "ocr_for_occ_name": self.ocr_for_occ_name or "",
-            "approver_comment": self.approver_comment or "",
             "assessor_data": self.assessor_data or "",
             "reported_date": self.reported_date,
             "lodgement_date": self.lodgement_date,
