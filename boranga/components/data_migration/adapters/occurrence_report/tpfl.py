@@ -126,6 +126,37 @@ SAMPLE_DEST_TRANSFORM = build_legacy_map_transform(
 )
 
 
+def observer_name_fallback_transform(value: str, ctx=None):
+    """If observer name is missing, try to use OBSERVER_CODE from the raw row.
+
+    Behaviour:
+    - If `value` is present -> return it unchanged.
+    - Otherwise try to read `OBSERVER_CODE` from the transform context row and
+      return that (stripped) when present.
+    - Leave as `None` when no fallback found (pipeline should include `required`
+      to fail in that case).
+    """
+    # prefer provided value when present
+    if value not in (None, ""):
+        return _result(value)
+
+    # ctx may be a TransformContext or a plain dict; obtain the row dict
+    row = getattr(ctx, "row", None) if ctx is not None else None
+    if row is None and isinstance(ctx, dict):
+        row = ctx.get("row") or ctx
+
+    if isinstance(row, dict):
+        obs_code = row.get("OBSERVER_CODE")
+        if obs_code not in (None, ""):
+            try:
+                return _result(str(obs_code).strip())
+            except Exception:
+                return _result(obs_code)
+
+    # no fallback found
+    return _result(None)
+
+
 def identification_certainty_default_transform(value: str, ctx=None):
     """If incoming value blank, default to IdentificationCertainty 'High',
     otherwise try to lookup by name (case-insensitive) and return its id."""
@@ -177,7 +208,12 @@ PIPELINES = {
     ],
     "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
     "OCRObserverDetail__role": ["strip", "blank_to_none", ROLE_TRANSFORM],
-    "OCRObserverDetail__observer_name": ["strip", "blank_to_none"],
+    "OCRObserverDetail__observer_name": [
+        "strip",
+        "blank_to_none",
+        observer_name_fallback_transform,
+        "required",
+    ],
     "OCRHabitatComposition__loose_rock_percent": [
         "strip",
         "blank_to_none",
