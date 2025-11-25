@@ -601,22 +601,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if occ.pk in existing_obs:
                 # already has main observer
                 continue
-            # find merged data for this migrated id to populate observer_name
+            # find merged data for this migrated id to populate name and role
             observer_name = None
+            observer_role = None
             for o in ops:
                 if o.get("migrated_from_id") == mig:
                     merged = o.get("merged") or {}
                     observer_name = merged.get("OCRObserverDetail__observer_name")
+                    observer_role = merged.get("OCRObserverDetail__role")
                     break
 
-            want_obs_create.append(
-                OCRObserverDetail(
-                    occurrence_report=occ,
-                    observer_name=observer_name,
-                    main_observer=True,
-                    visible=True,
-                )
+            # create observer instance after searching ops so the variables
+            # `observer_name` and `observer_role` are defined regardless of
+            # whether the loop hit the break path
+            ocr_observer_detail_instance = OCRObserverDetail(
+                occurrence_report=occ,
+                main_observer=True,
+                visible=True,
             )
+            apply_value_to_instance(
+                ocr_observer_detail_instance, "observer_name", observer_name
+            )
+            apply_value_to_instance(ocr_observer_detail_instance, "role", observer_role)
+
+            want_obs_create.append(ocr_observer_detail_instance)
 
         if want_obs_create:
             try:
