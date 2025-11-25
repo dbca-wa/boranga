@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 from collections import defaultdict
@@ -15,6 +16,10 @@ from boranga.components.data_migration.adapters.occurrence.tpfl import (
     OccurrenceTpflAdapter,
 )
 from boranga.components.data_migration.adapters.sources import Source
+from boranga.components.data_migration.handlers.helpers import (
+    apply_value_to_instance,
+    normalize_create_kwargs,
+)
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -25,7 +30,6 @@ from boranga.components.data_migration.registry import (
 from boranga.components.occurrence.models import OCCContactDetail, Occurrence
 
 logger = logging.getLogger(__name__)
-
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OccurrenceTpflAdapter(),
@@ -272,7 +276,8 @@ class OccurrenceImporter(BaseSheetImporter):
                 combined_issues.extend(iss)
             return merged, combined_issues
 
-        # Persist merged rows
+        # Persist merged rows in bulk where possible (prepare ops then create/update)
+        ops = []
         for migrated_from_id, entries in groups.items():
             merged, combined_issues = merge_group(entries, sources)
             # if any error in combined_issues => skip
@@ -280,17 +285,13 @@ class OccurrenceImporter(BaseSheetImporter):
                 skipped += 1
                 continue
 
-            # build defaults/payload
             involved_sources = sorted({src for _, src, _ in entries})
-            # validate merged business rules using schema's OccurrenceRow
             occ_row = schema.OccurrenceRow.from_dict(merged)
-            # if a single source involved, pass it to validate (helps source-specific rules)
             source_for_validation = (
                 involved_sources[0] if len(involved_sources) == 1 else None
             )
             validation_issues = occ_row.validate(source=source_for_validation)
             if validation_issues:
-                # record validation issues and count errors
                 for level, msg in validation_issues:
                     rec = {
                         "migrated_from_id": merged.get("migrated_from_id"),
@@ -312,54 +313,216 @@ class OccurrenceImporter(BaseSheetImporter):
 
             defaults = occ_row.to_model_defaults()
             defaults["lodgement_date"] = merged.get("datetime_created")
-            # include locked if present in merged payload
             if merged.get("locked") is not None:
                 defaults["locked"] = merged.get("locked")
 
-            if ctx.dry_run:
-                # pretty print defaults on dry-run for easier debugging
-                pretty = __import__("json").dumps(
-                    defaults, default=str, indent=2, sort_keys=True
+            ops.append(
+                {
+                    "migrated_from_id": migrated_from_id,
+                    "defaults": defaults,
+                    "merged": merged,
+                }
+            )
+
+        # If dry-run, pretty-print planned defaults and exit before DB work
+        if ctx.dry_run:
+            for op in ops:
+                pretty = json.dumps(
+                    op["defaults"], default=str, indent=2, sort_keys=True
                 )
                 logger.debug(
                     "OccurrenceImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
                     self.slug,
-                    migrated_from_id,
+                    op["migrated_from_id"],
                     pretty,
                 )
+            # nothing persisted in dry-run
+            stats.update(
+                processed=processed,
+                created=0,
+                updated=0,
+                skipped=skipped,
+                errors=errors,
+                warnings=warn_count,
+            )
+            elapsed = timezone.now() - start_time
+            stats["time_taken"] = str(elapsed)
+            return stats
+
+        # Determine existing occurrences and plan create vs update
+        migrated_keys = [o["migrated_from_id"] for o in ops]
+        existing_by_migrated = {
+            s.migrated_from_id: s
+            for s in Occurrence.objects.filter(migrated_from_id__in=migrated_keys)
+        }
+
+        to_create = []
+        create_meta = []
+        to_update = []
+        BATCH = 1000
+
+        for op in ops:
+            migrated_from_id = op["migrated_from_id"]
+            defaults = op["defaults"]
+            merged = op.get("merged") or {}
+
+            obj = existing_by_migrated.get(migrated_from_id)
+            if obj:
+                for k, v in defaults.items():
+                    apply_value_to_instance(obj, k, v)
+                to_update.append(obj)
                 continue
 
-            with transaction.atomic():
-                obj, created_flag = Occurrence.objects.update_or_create(
-                    migrated_from_id=migrated_from_id, defaults=defaults
+            create_kwargs = dict(defaults)
+            create_kwargs["migrated_from_id"] = migrated_from_id
+            if getattr(ctx, "migration_run", None) is not None:
+                create_kwargs["migration_run"] = ctx.migration_run
+            inst = Occurrence(**normalize_create_kwargs(Occurrence, create_kwargs))
+            to_create.append(inst)
+            create_meta.append(
+                (
+                    migrated_from_id,
+                    merged.get("contact"),
+                    merged.get("contact_name"),
+                    merged.get("notes"),
                 )
-                if created_flag:
-                    created += 1
-                    if getattr(ctx, "migration_run", None) is not None:
-                        try:
-                            Occurrence.objects.filter(pk=obj.pk).update(
-                                migration_run=ctx.migration_run
-                            )
-                        except Exception:
-                            logger.exception(
-                                "Failed to attach migration_run to Occurrence %s",
-                                obj.pk,
-                            )
-                else:
-                    updated += 1
+            )
 
-                # Create OCCContactDetail
-                if (
-                    merged.get("contact")
-                    or merged.get("contact_name")
-                    or merged.get("notes")
-                ):
-                    OCCContactDetail.objects.get_or_create(
-                        occurrence=obj,
+        # Bulk create new Occurrences
+        created_map = {}
+        if to_create:
+            logger.info(
+                "OccurrenceImporter: bulk-creating %d new Occurrences",
+                len(to_create),
+            )
+            for i in range(0, len(to_create), BATCH):
+                chunk = to_create[i : i + BATCH]
+                with transaction.atomic():
+                    Occurrence.objects.bulk_create(chunk, batch_size=BATCH)
+
+        # Refresh created objects to get PKs
+        if create_meta:
+            created_keys = [m[0] for m in create_meta]
+            for s in Occurrence.objects.filter(migrated_from_id__in=created_keys):
+                created_map[s.migrated_from_id] = s
+
+        # If migration_run present, ensure it's attached to created objects
+        if created_map and getattr(ctx, "migration_run", None) is not None:
+            try:
+                Occurrence.objects.filter(
+                    migrated_from_id__in=list(created_map.keys())
+                ).update(migration_run=ctx.migration_run)
+            except Exception:
+                logger.exception(
+                    "Failed to attach migration_run to some created Occurrence(s)"
+                )
+
+        # Bulk update existing objects
+        if to_update:
+            logger.info(
+                "OccurrenceImporter: bulk-updating %d existing Occurrences",
+                len(to_update),
+            )
+            update_instances = to_update
+            fields = set()
+            for inst in update_instances:
+                fields.update(
+                    [
+                        f.name
+                        for f in inst._meta.fields
+                        if getattr(inst, f.name, None) is not None
+                    ]
+                )
+            try:
+                Occurrence.objects.bulk_update(
+                    update_instances, list(fields), batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update Occurrence; falling back to individual saves"
+                )
+                for inst in update_instances:
+                    try:
+                        inst.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save Occurrence %s", getattr(inst, "pk", None)
+                        )
+
+        # Now create contact details for created/updated occurrences when provided
+        target_mig_ids = [o["migrated_from_id"] for o in ops]
+        target_occs = list(
+            Occurrence.objects.filter(migrated_from_id__in=target_mig_ids)
+        )
+        target_map = {o.migrated_from_id: o for o in target_occs}
+
+        existing_contacts = set(
+            OCCContactDetail.objects.filter(occurrence__in=target_occs).values_list(
+                "occurrence_id", flat=True
+            )
+        )
+        want_contact_create = []
+        # created_meta contains tuples for created ones; for updates use merged from ops
+        for mig, contact, contact_name, notes in create_meta:
+            occ = created_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_contacts:
+                continue
+            if contact or contact_name or notes:
+                want_contact_create.append(
+                    OCCContactDetail(
+                        occurrence=occ,
+                        contact=contact,
+                        contact_name=contact_name,
+                        notes=notes,
+                    )
+                )
+
+        # also handle updates (ops where occurrence existed)
+        for op in ops:
+            mig = op["migrated_from_id"]
+            merged = op.get("merged") or {}
+            occ = target_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_contacts:
+                continue
+            if (
+                merged.get("contact")
+                or merged.get("contact_name")
+                or merged.get("notes")
+            ):
+                want_contact_create.append(
+                    OCCContactDetail(
+                        occurrence=occ,
                         contact=merged.get("contact"),
                         contact_name=merged.get("contact_name"),
                         notes=merged.get("notes"),
                     )
+                )
+
+        if want_contact_create:
+            try:
+                OCCContactDetail.objects.bulk_create(
+                    want_contact_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCCContactDetail; falling back to individual creates"
+                )
+                for obj in want_contact_create:
+                    try:
+                        obj.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCCContactDetail for occurrence %s",
+                            getattr(obj.occurrence, "pk", None),
+                        )
+
+        # Update stats counts for created/updated based on performed ops
+        created += len(created_map)
+        updated += len(to_update)
 
         stats.update(
             processed=processed,
