@@ -61,14 +61,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         with transaction.atomic():
             try:
-                OCRObserverDetail.objects.all().delete()
-            except Exception:
-                logger.exception("Failed to delete OCRObserverDetail")
-            try:
-                OCRHabitatComposition.objects.all().delete()
-            except Exception:
-                logger.exception("Failed to delete OCRHabitatComposition")
-            try:
                 OccurrenceReport.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OccurrenceReport")
@@ -162,6 +154,91 @@ class OccurrenceReportImporter(BaseSheetImporter):
         if not all_columns and schema.COLUMN_PIPELINES:
             all_columns.update(schema.COLUMN_PIPELINES.keys())
         pipelines = {col: None for col in sorted(all_columns)}
+
+        # Helper to normalize kwargs for creating model instances: if a field
+        # is a ForeignKey and the value is an id (int/str), emit '<field>_id'
+        # instead of the relation attribute so Django accepts it without a
+        # model instance. Also helper to apply values to existing instances.
+        def normalize_create_kwargs(model_cls, kwargs: dict) -> dict:
+            out = {}
+            # attempt to import MultiSelectField class if available
+            try:
+                from multiselectfield.db.fields import MultiSelectField
+
+                _MSF = MultiSelectField
+            except Exception:
+                _MSF = None
+            for k, v in (kwargs or {}).items():
+                # If caller already provided a '<field>_id' key, keep it as-is
+                if k.endswith("_id"):
+                    out[k] = v
+                    continue
+                try:
+                    f = model_cls._meta.get_field(k)
+                except FieldDoesNotExist:
+                    out[k] = v
+                    continue
+                if isinstance(f, dj_models.ForeignKey):
+                    # map FK field name -> '<field>_id' so Django accepts the id
+                    # If caller passed a model instance, unwrap to its PK.
+                    out_val = getattr(v, "pk", v)
+                    out[f"{k}_id"] = out_val
+                else:
+                    # Coerce MultiSelectField values: if field expects a
+                    # multiselect and we received a scalar/string, convert
+                    # to an iterable list. This avoids DB errors when the
+                    # multiselect field tries to join a non-iterable.
+                    if _MSF is not None and isinstance(f, _MSF):
+                        if v is None:
+                            out[k] = v
+                        elif isinstance(v, str):
+                            # split comma-separated string into list
+                            out[k] = [s.strip() for s in v.split(",") if s.strip()]
+                        elif isinstance(v, (list, tuple, set)):
+                            out[k] = [str(x) for x in v]
+                        else:
+                            out[k] = [str(v)]
+                    else:
+                        out[k] = v
+            return out
+
+        def apply_value_to_instance(inst, field_name: str, val: Any):
+            try:
+                f = inst._meta.get_field(field_name)
+            except FieldDoesNotExist:
+                # If field_name ends with '_id' or field not found, set attribute directly
+                setattr(inst, field_name, val)
+                return
+            # attempt to import MultiSelectField class if available
+            try:
+                from multiselectfield.db.fields import MultiSelectField
+
+                _MSF = MultiSelectField
+            except Exception:
+                _MSF = None
+            # If caller passed '<field>_id', set that attribute directly
+            if field_name.endswith("_id"):
+                setattr(inst, field_name, getattr(val, "pk", val))
+                return
+            if isinstance(f, dj_models.ForeignKey):
+                setattr(inst, f"{field_name}_id", getattr(val, "pk", val))
+            else:
+                # For MultiSelectField, ensure the value is iterable (list)
+                if _MSF is not None and isinstance(f, _MSF):
+                    if val is None:
+                        setattr(inst, field_name, val)
+                        return
+                    if isinstance(val, str):
+                        val_list = [s.strip() for s in val.split(",") if s.strip()]
+                        setattr(inst, field_name, val_list)
+                        return
+                    if isinstance(val, (list, tuple, set)):
+                        setattr(inst, field_name, [str(x) for x in val])
+                        return
+                    # scalar -> wrap in list and coerce to str
+                    setattr(inst, field_name, [str(val)])
+                    return
+                setattr(inst, field_name, val)
 
         processed = 0
         errors = 0
@@ -351,17 +428,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 ):
                     defaults[k] = ""
                     continue
-            involved_sources = sorted({src for _, src, _ in entries})
-            defaults["legacy_source"] = ",".join(involved_sources)
 
             if ctx.dry_run:
-                # pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
-                # logger.debug(
-                #     "OccurrenceReportImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
-                #     self.slug,
-                #     migrated_from_id,
-                #     pretty,
-                # )
+                pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
+                logger.debug(
+                    "OccurrenceReportImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
+                    self.slug,
+                    migrated_from_id,
+                    pretty,
+                )
                 continue
 
             # capture related small extras for later (observer + habitat)
@@ -414,7 +489,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if obj:
                 # apply defaults to instance for later bulk_update
                 for k, v in defaults.items():
-                    setattr(obj, k, v)
+                    apply_value_to_instance(obj, k, v)
                 to_update.append((obj, habitat_data, habitat_condition))
                 continue
 
@@ -423,7 +498,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
             create_kwargs["migrated_from_id"] = migrated_from_id
             if getattr(ctx, "migration_run", None) is not None:
                 create_kwargs["migration_run"] = ctx.migration_run
-            inst = OccurrenceReport(**create_kwargs)
+            inst = OccurrenceReport(
+                **normalize_create_kwargs(OccurrenceReport, create_kwargs)
+            )
             to_create.append(inst)
             create_meta.append((migrated_from_id, habitat_data, habitat_condition))
 
@@ -580,44 +657,56 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
             hd = habitat_data or {}
             hc = habitat_condition or {}
-            if hid in existing_habs:
-                h = existing_habs[hid]
-                # apply available habitat fields only if they are real model fields
+            if occ.pk in existing_habs:
+                h = existing_habs[occ.pk]
                 valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
                 for field_name, val in hd.items():
                     if field_name == "occurrence_report":
                         continue
                     if val is not None and field_name in valid_fields:
-                        setattr(h, field_name, val)
+                        apply_value_to_instance(h, field_name, val)
                 habs_to_update.append(h)
             else:
-                create_kwargs = {"occurrence_report_id": hid}
+                create_kwargs = {"occurrence_report": occ}
                 valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
                 for field_name, val in hd.items():
                     if field_name == "occurrence_report":
                         continue
                     if val is not None and field_name in valid_fields:
                         create_kwargs[field_name] = val
-                habs_to_create.append(OCRHabitatComposition(**create_kwargs))
+                habs_to_create.append(
+                    OCRHabitatComposition(
+                        **normalize_create_kwargs(OCRHabitatComposition, create_kwargs)
+                    )
+                )
+                habs_to_create.append(
+                    OCRHabitatComposition(
+                        **normalize_create_kwargs(OCRHabitatComposition, create_kwargs)
+                    )
+                )
             # OCRHabitatCondition handling for updates
-            if hid in existing_conds:
-                c = existing_conds[hid]
+            if occ.pk in existing_conds:
+                c = existing_conds[occ.pk]
                 valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
                 for field_name, val in hc.items():
                     if field_name == "occurrence_report":
                         continue
                     if val is not None and field_name in valid_c_fields:
-                        setattr(c, field_name, val)
+                        apply_value_to_instance(c, field_name, val)
                 conds_to_update.append(c)
             else:
-                cond_create = {"occurrence_report_id": hid}
+                cond_create = {"occurrence_report": occ}
                 valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
                 for field_name, val in hc.items():
                     if field_name == "occurrence_report":
                         continue
                     if val is not None and field_name in valid_c_fields:
                         cond_create[field_name] = val
-                conds_to_create.append(OCRHabitatCondition(**cond_create))
+                conds_to_create.append(
+                    OCRHabitatCondition(
+                        **normalize_create_kwargs(OCRHabitatCondition, cond_create)
+                    )
+                )
             # OCRIdentification handling for updates: try to pull identification_data from op mapping created earlier
             # find corresponding op by migrated_from_id -> inst.migrated_from_id is not stored on inst;
             # instead use target_map reverse lookup
@@ -640,7 +729,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if field_name == "occurrence_report":
                         continue
                     if val is not None and field_name in valid_i_fields:
-                        setattr(id_obj, field_name, val)
+                        apply_value_to_instance(id_obj, field_name, val)
                 idents_to_update.append(id_obj)
             else:
                 create_kwargs = {"occurrence_report_id": hid}
@@ -650,14 +739,19 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_i_fields:
                         create_kwargs[field_name] = val
-                idents_to_create.append(OCRIdentification(**create_kwargs))
+                idents_to_create.append(
+                    OCRIdentification(
+                        **normalize_create_kwargs(OCRIdentification, create_kwargs)
+                    )
+                )
 
         # Handle created ones
-        for mig, habitat_data in create_meta:
+        for mig, habitat_data, habitat_condition in create_meta:
             occ = created_map.get(mig)
             if not occ:
                 continue
             hd = habitat_data or {}
+            hc = habitat_condition or {}
             # also pull identification_data from create_meta mapping (create_meta entries are tuples of
             # (migrated_from_id, habitat_data, habitat_condition, identification_data) )
             # but create_meta was appended as (migrated_from_id, habitat_data, habitat_condition) earlier;
@@ -674,7 +768,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if field_name == "occurrence_report":
                         continue
                     if val is not None and field_name in valid_fields:
-                        setattr(h, field_name, val)
+                        apply_value_to_instance(h, field_name, val)
                 habs_to_update.append(h)
             else:
                 create_kwargs = {"occurrence_report": occ}
@@ -684,7 +778,34 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_fields:
                         create_kwargs[field_name] = val
-                habs_to_create.append(OCRHabitatComposition(**create_kwargs))
+                habs_to_create.append(
+                    OCRHabitatComposition(
+                        **normalize_create_kwargs(OCRHabitatComposition, create_kwargs)
+                    )
+                )
+            # OCRHabitatCondition create/update for newly created occ
+            if occ.pk in existing_conds:
+                c = existing_conds[occ.pk]
+                valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
+                for field_name, val in hc.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_c_fields:
+                        apply_value_to_instance(c, field_name, val)
+                conds_to_update.append(c)
+            else:
+                cond_create = {"occurrence_report": occ}
+                valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
+                for field_name, val in hc.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_c_fields:
+                        cond_create[field_name] = val
+                conds_to_create.append(
+                    OCRHabitatCondition(
+                        **normalize_create_kwargs(OCRHabitatCondition, cond_create)
+                    )
+                )
             # identification create for newly created occ
             if occ.pk in existing_idents:
                 id_obj = existing_idents[occ.pk]
@@ -693,7 +814,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if field_name == "occurrence_report":
                         continue
                     if val is not None and field_name in valid_i_fields:
-                        setattr(id_obj, field_name, val)
+                        apply_value_to_instance(id_obj, field_name, val)
                 idents_to_update.append(id_obj)
             else:
                 create_kwargs = {"occurrence_report": occ}
@@ -703,7 +824,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_i_fields:
                         create_kwargs[field_name] = val
-                idents_to_create.append(OCRIdentification(**create_kwargs))
+                idents_to_create.append(
+                    OCRIdentification(
+                        **normalize_create_kwargs(OCRIdentification, create_kwargs)
+                    )
+                )
 
         if habs_to_create:
             try:
