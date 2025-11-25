@@ -1,3 +1,6 @@
+import re
+from datetime import datetime
+
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
@@ -31,6 +34,13 @@ COMMUNITY_TRANSFORM = fk_lookup(
 
 WILD_STATUS_TRANSFORM = fk_lookup(model=WildStatus, lookup_field="name")
 
+# Legacy mapping for STATUS closed list -> WildStatus name
+LEGACY_WILD_STATUS_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "STATUS (DRF_LOV_POP_STATUS_VWS)",
+    required=False,
+)
+
 PROCESSING_STATUS = choices_transform(
     [c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES]
 )
@@ -58,7 +68,12 @@ PIPELINES = {
         SPECIES_TRANSFORM,
     ],
     "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
-    "wild_status_id": ["strip", "blank_to_none", WILD_STATUS_TRANSFORM],
+    "wild_status_id": [
+        "strip",
+        "blank_to_none",
+        LEGACY_WILD_STATUS_TRANSFORM,
+        WILD_STATUS_TRANSFORM,
+    ],
     "comment": ["strip", "blank_to_none"],
     "datetime_created": ["strip", "blank_to_none", "datetime_iso"],
     "datetime_updated": ["strip", "blank_to_none", "datetime_iso"],
@@ -87,11 +102,49 @@ class OccurrenceTpflAdapter(SourceAdapter):
         raw_rows, read_warnings = self.read_table(path)
         warnings.extend(read_warnings)
 
+        def _format_date_ddmmyyyy(val: str) -> str:
+            if not val:
+                return ""
+            v = str(val).strip()
+            # already in d/m/yyyy or dd/mm/yyyy -> normalise to dd/mm/YYYY
+            m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", v)
+            if m:
+                day, mon, year = m.groups()
+                return f"{int(day):02d}/{int(mon):02d}/{year}"
+            # handle ISO-ish formats, adjust timezone format if needed
+            try:
+                vv = v
+                if vv.endswith("Z"):
+                    vv = vv.replace("Z", "+00:00")
+                # convert +HHMM to +HH:MM for fromisoformat
+                tz_match = re.search(r"([+-]\d{4})$", vv)
+                if tz_match:
+                    tz = tz_match.group(1)
+                    vv = vv[:-5] + tz[:3] + ":" + tz[3:]
+                dt = datetime.fromisoformat(vv)
+                return dt.strftime("%d/%m/%Y")
+            except Exception:
+                pass
+            # try common fallbacks
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%m-%Y"):
+                try:
+                    dt = datetime.strptime(v, fmt)
+                    return dt.strftime("%d/%m/%Y")
+                except Exception:
+                    continue
+            # fallback: return raw value
+            return v
+
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
-            canonical["occurrence_name"] = (
-                f"{canonical.get('POP_NUMBER', '').strip()} {canonical.get('SUBPOP_CODE', '').strip()}".strip()
-            )
+            # Build occurrence_name: concat POP_NUMBER + SUBPOP_CODE (no space)
+            pop = str(canonical.get("POP_NUMBER", "") or "").strip()
+            sub = str(canonical.get("SUBPOP_CODE", "") or "").strip()
+            occ_name = (pop + sub).strip()
+            # If only a single digit (e.g. "1"), pad with leading zero -> "01"
+            if occ_name and len(occ_name) == 1 and occ_name.isdigit():
+                occ_name = occ_name.zfill(2)
+            canonical["occurrence_name"] = occ_name if occ_name else None
             canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
             canonical["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
             canonical["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
@@ -99,16 +152,15 @@ class OccurrenceTpflAdapter(SourceAdapter):
             POP_COMMENTS = canonical.get("POP_COMMENTS", "")
             REASON_DEACTIVATED = canonical.get("REASON_DEACTIVATED", "")
             DEACTIVATED_DATE = canonical.get("DEACTIVATED_DATE", "")
-            comment = POP_COMMENTS
+            parts = []
+            if POP_COMMENTS:
+                parts.append(str(POP_COMMENTS).strip())
             if REASON_DEACTIVATED:
-                if comment:
-                    comment += "\n\n"
-                comment += f"Reason Deactivated: {REASON_DEACTIVATED}"
+                parts.append(f"Reason Deactivated: {str(REASON_DEACTIVATED).strip()}")
             if DEACTIVATED_DATE:
-                if comment:
-                    comment += "\n\n"
-                comment += f"Date Deactivated: {DEACTIVATED_DATE}"
-            canonical["comment"] = comment if comment else None
+                dd = _format_date_ddmmyyyy(DEACTIVATED_DATE)
+                parts.append(f"Date Deactivated: {dd}")
+            canonical["comment"] = "; ".join(parts) if parts else None
             LAND_MGR_ADDRESS = canonical.get("LAND_MGR_ADDRESS", "")
             LAND_MGR_PHONE = canonical.get("LAND_MGR_PHONE", "")
             contact = LAND_MGR_ADDRESS
