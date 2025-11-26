@@ -333,6 +333,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             defaults = report_row.to_model_defaults()
 
+            # Ensure `reported_date` is populated when missing by copying
+            # from `lodgement_date`. The schema treats `reported_date` as a
+            # copy of `lodgement_date` but the TPFL pipelines only produce
+            # `lodgement_date`, so fill it here to avoid NULLs for the
+            # model's non-nullable `reported_date` field.
+            if (
+                defaults.get("reported_date") is None
+                and defaults.get("lodgement_date") is not None
+            ):
+                defaults["reported_date"] = defaults.get("lodgement_date")
+
             # If transforms produced None for fields that have model defaults
             # (for example CharFields with default=''), prefer the model's
             # default value. This keeps transforms simple (they can return
