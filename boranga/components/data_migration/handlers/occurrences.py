@@ -342,6 +342,17 @@ class OccurrenceImporter(BaseSheetImporter):
             if merged.get("locked") is not None:
                 defaults["locked"] = merged.get("locked")
 
+            # If dry-run, log planned defaults and skip adding to ops so no DB work
+            if ctx.dry_run:
+                pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
+                logger.debug(
+                    "OccurrenceImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
+                    self.slug,
+                    migrated_from_id,
+                    pretty,
+                )
+                continue
+
             ops.append(
                 {
                     "migrated_from_id": migrated_from_id,
@@ -350,30 +361,7 @@ class OccurrenceImporter(BaseSheetImporter):
                 }
             )
 
-        # If dry-run, pretty-print planned defaults and exit before DB work
-        if ctx.dry_run:
-            for op in ops:
-                pretty = json.dumps(
-                    op["defaults"], default=str, indent=2, sort_keys=True
-                )
-                logger.debug(
-                    "OccurrenceImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
-                    self.slug,
-                    op["migrated_from_id"],
-                    pretty,
-                )
-            # nothing persisted in dry-run
-            stats.update(
-                processed=processed,
-                created=0,
-                updated=0,
-                skipped=skipped,
-                errors=errors,
-                warnings=warn_count,
-            )
-            elapsed = timezone.now() - start_time
-            stats["time_taken"] = str(elapsed)
-            return stats
+        # Note: do not exit early on dry-run here — continue so error CSV is generated
 
         # Determine existing occurrences and plan create vs update
         migrated_keys = [o["migrated_from_id"] for o in ops]
@@ -568,9 +556,7 @@ class OccurrenceImporter(BaseSheetImporter):
         stats["time_taken"] = str(elapsed)
 
         if errors_details:
-            # allow override via options, otherwise write to handler_output
-            get_opt = getattr(options, "get", None)
-            csv_path = get_opt("error_csv") if callable(get_opt) else None
+            csv_path = options.get("error_csv")
             if csv_path:
                 csv_path = os.path.abspath(csv_path)
             else:
@@ -582,8 +568,6 @@ class OccurrenceImporter(BaseSheetImporter):
                 )
             try:
                 os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-                import csv
-
                 with open(csv_path, "w", newline="", encoding="utf-8") as fh:
                     fieldnames = [
                         "migrated_from_id",
@@ -595,6 +579,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         "row_json",
                         "timestamp",
                     ]
+                    import csv
+
                     writer = csv.DictWriter(fh, fieldnames=fieldnames)
                     writer.writeheader()
                     for rec in errors_details:
@@ -606,9 +592,7 @@ class OccurrenceImporter(BaseSheetImporter):
                                 "message": rec.get("message"),
                                 "raw_value": rec.get("raw_value"),
                                 "reason": rec.get("reason"),
-                                "row_json": __import__("json").dumps(
-                                    rec.get("row", ""), default=str
-                                ),
+                                "row_json": json.dumps(rec.get("row", ""), default=str),
                                 "timestamp": timezone.now().isoformat(),
                             }
                         )
