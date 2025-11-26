@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
 
@@ -372,3 +373,57 @@ def get_sheetno_for_pop_id(
     key = str(legacy_system or "TPFL")
     preload_sheetno_pop_map(legacy_system=legacy_system, path=path)
     return _POP_SHEET_CACHE.get(key, {}).get(str(pop_id).strip())
+
+
+def load_sheet_associated_species_names(
+    path: str | None = None,
+    filename: str = "DRF_SHEET_VEG_CLASSES_Ass_species.csv",
+    max_lines: int | None = None,
+) -> dict[str, list[str]]:
+    """
+    Load the legacy associated-species mapping CSV and return an in-memory map of
+    SHEETNO -> list of species name strings. If `path` is provided and is a
+    directory the function will look for `filename` inside it. If `path` is a
+    file path, the function will look for `filename` alongside that file. When
+    `path` is omitted a default path under `legacy_data/TPFL/` is used.
+    """
+    mapping: dict[str, list[str]] = defaultdict(list)
+
+    base_dir = Path(__file__).resolve().parent
+    if path:
+        p = Path(path)
+        if p.suffix and p.suffix.lower() == ".csv":
+            # look alongside provided file
+            resolved = p.parent / filename
+        else:
+            # treat as directory
+            resolved = p / filename
+    else:
+        resolved = base_dir / "legacy_data" / "TPFL" / filename
+
+    try:
+        with open(resolved, newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            if not reader.fieldnames:
+                logger.debug("Associated-species CSV %s has no headers", resolved)
+                return {}
+            count = 0
+            for row in reader:
+                if max_lines is not None and count >= max_lines:
+                    break
+                sheet = row.get("SHEETNO") or row.get("sheetno")
+                name = row.get("VEG_CLASS_DOM") or row.get("veg_class_dom")
+                if not sheet or not name:
+                    continue
+                sheet = str(sheet).strip()
+                name = str(name).strip()
+                if sheet and name:
+                    mapping[sheet].append(name)
+                count += 1
+        return mapping
+    except FileNotFoundError:
+        logger.debug("Associated-species CSV not found: %s", resolved)
+        return {}
+    except Exception as exc:
+        logger.exception("Error reading associated-species CSV %s: %s", resolved, exc)
+        return {}
