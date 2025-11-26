@@ -12,9 +12,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.occurrence_report import schema
-from boranga.components.data_migration.adapters.occurrence_report.tpfl import (
-    OccurrenceReportTpflAdapter,
-)
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.handlers.helpers import (
     apply_value_to_instance,
@@ -43,8 +40,17 @@ from boranga.components.species_and_communities.models import Taxonomy, TaxonVer
 
 logger = logging.getLogger(__name__)
 
+# Map adapter keys to adapter classes (not instances) so we can lazily
+# instantiate adapters after import-time. Some adapters perform expensive
+# setup in their constructor which can block the management command
+# startup and hide early logs. We instantiate them lazily in `run()`
+# just before calling `extract()` and cache the instance back into this
+# dict for subsequent use.
 SOURCE_ADAPTERS = {
-    Source.TPFL.value: OccurrenceReportTpflAdapter(),
+    # Use dotted path so the adapter module isn't imported at module import
+    # time. We'll import the class lazily inside `run()` after emitting
+    # initial logs to avoid long silent startup delays.
+    Source.TPFL.value: "boranga.components.data_migration.adapters.occurrence_report.tpfl.OccurrenceReportTpflAdapter",
     # add other adapters when available
 }
 
@@ -144,16 +150,57 @@ class OccurrenceReportImporter(BaseSheetImporter):
         errors_details = []
         warnings_details = []
 
-        # 1. Extract
+        # 1. Extract -- iterate adapters and accumulate rows while
+        # emitting periodic progress so long-running extraction is visible.
+        extracted = 0
+        from django.utils.module_loading import import_string
+
         for src in sources:
             adapter = SOURCE_ADAPTERS[src]
             src_path = path_map.get(src, path)
+            # adapter.extract may be expensive; log when each adapter completes
+            logger.info(
+                "OccurrenceReportImporter %s: extracting rows from source %s",
+                self.slug,
+                src,
+            )
+            # Lazily import the adapter class if it's a dotted path string.
+            try:
+                if isinstance(adapter, str):
+                    adapter_cls = import_string(adapter)
+                    # cache the class for later use (PIPELINES lookup)
+                    SOURCE_ADAPTERS[src] = adapter_cls
+                    adapter = adapter_cls
+                # If we have a class, instantiate and cache the instance.
+                if isinstance(adapter, type):
+                    adapter_instance = adapter()
+                    SOURCE_ADAPTERS[src] = adapter_instance
+                    adapter = adapter_instance
+            except Exception:
+                logger.exception("Failed to prepare adapter for source %s", src)
+                raise
             result = adapter.extract(src_path, **options)
             for w in result.warnings:
                 warnings.append(f"{src}: {w.message}")
+            # append rows one-by-one so we can log progress every N rows
             for r in result.rows:
                 r["_source"] = src
-            all_rows.extend(result.rows)
+                all_rows.append(r)
+                extracted += 1
+                if extracted % 500 == 0:
+                    logger.info(
+                        "OccurrenceReportImporter %s: extracted %d rows so far",
+                        self.slug,
+                        extracted,
+                    )
+        extract_end = timezone.now()
+        extract_duration = extract_end - start_time
+        logger.info(
+            "OccurrenceReportImporter %s: extraction complete: %d rows extracted in %s",
+            self.slug,
+            extracted,
+            str(extract_duration),
+        )
 
         # Apply optional global per-importer limit (ctx.limit) after extraction
         limit = getattr(ctx, "limit", None)
@@ -195,6 +242,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # by the shared helpers module to avoid duplication across handlers.
 
         processed = 0
+        transform_start = timezone.now()
         errors = 0
         created = 0
         updated = 0
@@ -476,20 +524,63 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             migrated_from_id,
                         )
                     else:
+                        # Bulk-resolve the small sample of names to avoid per-name
+                        # DB queries. Mirrors the bulk-resolution logic used later.
                         assoc_lines = []
-                        for n in names[:20]:
-                            tax = Taxonomy.objects.filter(
-                                scientific_name__iexact=n
-                            ).first()
-                            if not tax:
-                                tv = (
-                                    TaxonVernacular.objects.filter(
-                                        vernacular_name__iexact=n
-                                    )
-                                    .select_related("taxonomy")
-                                    .first()
+                        sample_names = [n for n in names[:200] if n]
+                        name_to_tax_samp = {}
+                        if sample_names:
+                            from django.db.models.functions import Lower
+
+                            sample_lower = {n.casefold() for n in sample_names}
+                            taxa_qs_samp = Taxonomy.objects.annotate(
+                                _ln=Lower("scientific_name")
+                            ).filter(_ln__in=list(sample_lower))
+                            taxa_map_samp = {
+                                t.scientific_name.casefold(): t for t in taxa_qs_samp
+                            }
+
+                            vern_qs_samp = (
+                                TaxonVernacular.objects.annotate(
+                                    _ln=Lower("vernacular_name")
                                 )
-                                tax = tv.taxonomy if tv else None
+                                .filter(_ln__in=list(sample_lower))
+                                .select_related("taxonomy")
+                            )
+                            vern_map_samp = {
+                                v.vernacular_name.casefold(): v for v in vern_qs_samp
+                            }
+
+                            for name in sample_names:
+                                ln = name.casefold()
+                                tax = taxa_map_samp.get(ln)
+                                if not tax:
+                                    tv = vern_map_samp.get(ln)
+                                    tax = tv.taxonomy if tv else None
+                                if tax:
+                                    name_to_tax_samp[name] = tax
+
+                        for n in names[:20]:
+                            if not n:
+                                assoc_lines.append(f"{n} -> unresolved")
+                                continue
+                            tax = None
+                            if sample_names and n in name_to_tax_samp:
+                                tax = name_to_tax_samp.get(n)
+                            else:
+                                # fallback to original behaviour for rare names
+                                tax = Taxonomy.objects.filter(
+                                    scientific_name__iexact=n
+                                ).first()
+                                if not tax:
+                                    tv = (
+                                        TaxonVernacular.objects.filter(
+                                            vernacular_name__iexact=n
+                                        )
+                                        .select_related("taxonomy")
+                                        .first()
+                                    )
+                                    tax = tv.taxonomy if tv else None
                             if tax:
                                 ast = AssociatedSpeciesTaxonomy.objects.filter(
                                     taxonomy=tax
@@ -543,6 +634,18 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "identification_data": identification_data,
                 }
             )
+
+        transform_end = timezone.now()
+        transform_duration = transform_end - transform_start
+        logger.info(
+            "OccurrenceReportImporter %s: transform phase complete (groups=%d) in %s",
+            self.slug,
+            len(ops),
+            str(transform_duration),
+        )
+
+        # Build op_map for O(1) access to per-migrated-id data (avoid O(n) scans)
+        op_map = {o["migrated_from_id"]: o for o in ops}
 
         # Prefetch existing OccurrenceReports to decide create vs update
         migrated_keys = [o["migrated_from_id"] for o in ops]
@@ -786,19 +889,42 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # Create missing AST rows for taxonomy ids that have none
             missing_tax_ids = tax_ids - set(taxid_to_ast.keys())
             if missing_tax_ids:
-                created_asts = []
-                for tid in missing_tax_ids:
-                    try:
-                        created_asts.append(
-                            AssociatedSpeciesTaxonomy.objects.create(taxonomy_id=tid)
-                        )
-                    except Exception:
-                        logger.exception(
-                            "Failed to create AssociatedSpeciesTaxonomy for taxonomy_id %s",
-                            tid,
-                        )
-                for ast in created_asts:
-                    taxid_to_ast[ast.taxonomy_id] = ast
+                # Create missing AssociatedSpeciesTaxonomy rows in bulk to
+                # avoid per-id DB roundtrips. Fall back to individual creates
+                # if bulk_create fails for any reason.
+                try:
+                    create_objs = [
+                        AssociatedSpeciesTaxonomy(taxonomy_id=tid)
+                        for tid in missing_tax_ids
+                    ]
+                    AssociatedSpeciesTaxonomy.objects.bulk_create(
+                        create_objs, batch_size=BATCH
+                    )
+                    # Refresh created rows to ensure we have their PKs
+                    for ast in AssociatedSpeciesTaxonomy.objects.filter(
+                        taxonomy_id__in=list(missing_tax_ids)
+                    ):
+                        if ast.taxonomy_id not in taxid_to_ast:
+                            taxid_to_ast[ast.taxonomy_id] = ast
+                except Exception:
+                    logger.exception(
+                        "Bulk create failed for AssociatedSpeciesTaxonomy; trying individual creates"
+                    )
+                    created_asts = []
+                    for tid in missing_tax_ids:
+                        try:
+                            created_asts.append(
+                                AssociatedSpeciesTaxonomy.objects.create(
+                                    taxonomy_id=tid
+                                )
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to create AssociatedSpeciesTaxonomy for taxonomy_id %s",
+                                tid,
+                            )
+                    for ast in created_asts:
+                        taxid_to_ast[ast.taxonomy_id] = ast
 
             # Build final name -> ast mapping
             name_to_assoc: dict[str, AssociatedSpeciesTaxonomy] = {}
@@ -944,27 +1070,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
             ).values_list("occurrence_report_id", flat=True)
         )
         for mig in target_mig_ids:
-            occ = target_map.get(mig)
-            if not occ:
+            ocr = target_map.get(mig)
+            if not ocr:
                 continue
-            if occ.pk in existing_obs:
+            if ocr.pk in existing_obs:
                 # already has main observer
                 continue
             # find merged data for this migrated id to populate name and role
+            # lookup merged data from op_map to populate name and role
             observer_name = None
             observer_role = None
-            for o in ops:
-                if o.get("migrated_from_id") == mig:
-                    merged = o.get("merged") or {}
-                    observer_name = merged.get("OCRObserverDetail__observer_name")
-                    observer_role = merged.get("OCRObserverDetail__role")
-                    break
+            op = op_map.get(mig)
+            if op:
+                merged = op.get("merged") or {}
+                observer_name = merged.get("OCRObserverDetail__observer_name")
+                observer_role = merged.get("OCRObserverDetail__role")
 
             # create observer instance after searching ops so the variables
             # `observer_name` and `observer_role` are defined regardless of
             # whether the loop hit the break path
             ocr_observer_detail_instance = OCRObserverDetail(
-                occurrence_report=occ,
+                occurrence_report=ocr,
                 main_observer=True,
                 visible=True,
             )
@@ -1025,8 +1151,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
             hd = habitat_data or {}
             hc = habitat_condition or {}
-            if occ.pk in existing_habs:
-                h = existing_habs[occ.pk]
+            # OCRHabitatComposition: update existing or schedule create (use inst/hid)
+            if hid in existing_habs:
+                h = existing_habs[hid]
                 valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
                 for field_name, val in hd.items():
                     if field_name == "occurrence_report":
@@ -1035,7 +1162,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         apply_value_to_instance(h, field_name, val)
                 habs_to_update.append(h)
             else:
-                create_kwargs = {"occurrence_report": occ}
+                create_kwargs = {"occurrence_report": inst}
                 valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
                 for field_name, val in hd.items():
                     if field_name == "occurrence_report":
@@ -1047,14 +1174,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         **normalize_create_kwargs(OCRHabitatComposition, create_kwargs)
                     )
                 )
-                habs_to_create.append(
-                    OCRHabitatComposition(
-                        **normalize_create_kwargs(OCRHabitatComposition, create_kwargs)
-                    )
-                )
-            # OCRHabitatCondition handling for updates
-            if occ.pk in existing_conds:
-                c = existing_conds[occ.pk]
+            # OCRHabitatCondition handling for updates: check existing_conds
+            if hid in existing_conds:
+                c = existing_conds[hid]
                 valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
                 for field_name, val in hc.items():
                     if field_name == "occurrence_report":
@@ -1063,7 +1185,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         apply_value_to_instance(c, field_name, val)
                 conds_to_update.append(c)
             else:
-                cond_create = {"occurrence_report": occ}
+                cond_create = {"occurrence_report": inst}
                 valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
                 for field_name, val in hc.items():
                     if field_name == "occurrence_report":
@@ -1085,10 +1207,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
             ident_data = {}
             if mig_key:
                 # find op entry for this migrated_from_id
-                for o in ops:
-                    if o.get("migrated_from_id") == mig_key:
-                        ident_data = o.get("identification_data") or {}
-                        break
+                # constant-time lookup via op_map
+                op = op_map.get(mig_key)
+                if op:
+                    ident_data = op.get("identification_data") or {}
 
             if hid in existing_idents:
                 id_obj = existing_idents[hid]
@@ -1115,8 +1237,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # Handle created ones
         for mig, habitat_data, habitat_condition in create_meta:
-            occ = created_map.get(mig)
-            if not occ:
+            ocr = created_map.get(mig)
+            if not ocr:
                 continue
             hd = habitat_data or {}
             hc = habitat_condition or {}
@@ -1125,12 +1247,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # but create_meta was appended as (migrated_from_id, habitat_data, habitat_condition) earlier;
             # we need to find the op to get identification_data
             ident_data = {}
-            for o in ops:
-                if o.get("migrated_from_id") == mig:
-                    ident_data = o.get("identification_data") or {}
-                    break
-            if occ.pk in existing_habs:
-                h = existing_habs[occ.pk]
+            ident_data = op_map.get(mig, {}).get("identification_data") or {}
+            if ocr.pk in existing_habs:
+                h = existing_habs[ocr.pk]
                 valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
                 for field_name, val in hd.items():
                     if field_name == "occurrence_report":
@@ -1139,7 +1258,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         apply_value_to_instance(h, field_name, val)
                 habs_to_update.append(h)
             else:
-                create_kwargs = {"occurrence_report": occ}
+                create_kwargs = {"occurrence_report": ocr}
                 valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
                 for field_name, val in hd.items():
                     if field_name == "occurrence_report":
@@ -1151,9 +1270,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         **normalize_create_kwargs(OCRHabitatComposition, create_kwargs)
                     )
                 )
-            # OCRHabitatCondition create/update for newly created occ
-            if occ.pk in existing_conds:
-                c = existing_conds[occ.pk]
+            # OCRHabitatCondition create/update for newly created ocr
+            if ocr.pk in existing_conds:
+                c = existing_conds[ocr.pk]
                 valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
                 for field_name, val in hc.items():
                     if field_name == "occurrence_report":
@@ -1162,7 +1281,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         apply_value_to_instance(c, field_name, val)
                 conds_to_update.append(c)
             else:
-                cond_create = {"occurrence_report": occ}
+                cond_create = {"occurrence_report": ocr}
                 valid_c_fields = {f.name for f in OCRHabitatCondition._meta.fields}
                 for field_name, val in hc.items():
                     if field_name == "occurrence_report":
@@ -1174,9 +1293,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         **normalize_create_kwargs(OCRHabitatCondition, cond_create)
                     )
                 )
-            # identification create for newly created occ
-            if occ.pk in existing_idents:
-                id_obj = existing_idents[occ.pk]
+            # identification create for newly created ocr
+            if ocr.pk in existing_idents:
+                id_obj = existing_idents[ocr.pk]
                 valid_i_fields = {f.name for f in OCRIdentification._meta.fields}
                 for field_name, val in ident_data.items():
                     if field_name == "occurrence_report":
@@ -1185,7 +1304,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         apply_value_to_instance(id_obj, field_name, val)
                 idents_to_update.append(id_obj)
             else:
-                create_kwargs = {"occurrence_report": occ}
+                create_kwargs = {"occurrence_report": ocr}
                 valid_i_fields = {f.name for f in OCRIdentification._meta.fields}
                 for field_name, val in ident_data.items():
                     if field_name == "occurrence_report":
@@ -1344,6 +1463,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)
         updated += len(to_update)
+
+        persist_end = timezone.now()
+        persist_duration = persist_end - transform_end
+
+        # Add per-phase timings to stats for more accurate reporting
+        stats["time_extract"] = str(extract_duration)
+        stats["time_transform"] = str(transform_duration)
+        stats["time_persist"] = str(persist_duration)
 
         stats.update(
             processed=processed,
