@@ -608,28 +608,59 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 len(to_update),
             )
             update_instances = [t[0] for t in to_update]
-            # determine fields to update from defaults keys (take union)
-            fields = set()
-            for inst, _ in to_update:
-                fields.update(
-                    [
-                        f.name
-                        for f in inst._meta.fields
-                        if getattr(inst, f.name, None) is not None
-                    ]
-                )
-            # ensure migrated_from_id not touched here
+            # determine fields to update: include only fields that are
+            # non-None on every instance. Using the union (fields present on
+            # some instances) can cause bulk_update to write NULL into rows
+            # for instances where the attribute is None, which violates NOT
+            # NULL constraints (e.g. `reported_date`). Restricting to fields
+            # present on all instances avoids that.
+            fields = []
+            if update_instances:
+                all_fields = [f for f in update_instances[0]._meta.fields]
+                for f in all_fields:
+                    if f.name in ("id", "migrated_from_id"):
+                        continue
+                    # include field only if every instance has a non-None value
+                    try:
+                        if all(
+                            getattr(inst, f.name, None) is not None
+                            for inst in update_instances
+                        ):
+                            fields.append(f.name)
+                    except Exception:
+                        # Be conservative: skip fields that raise on getattr
+                        continue
+            # perform bulk_update only if we have safe fields to update
             try:
-                OccurrenceReport.objects.bulk_update(
-                    update_instances, list(fields), batch_size=BATCH
-                )
+                if fields:
+                    OccurrenceReport.objects.bulk_update(
+                        update_instances, fields, batch_size=BATCH
+                    )
             except Exception:
                 logger.exception(
                     "Failed to bulk_update OccurrenceReport; falling back to individual saves"
                 )
                 for inst in update_instances:
                     try:
-                        inst.save()
+                        # Build a conservative per-instance update_fields list:
+                        # include only model fields that currently have a non-None
+                        # value on the instance. This avoids attempting to write
+                        # NULL into non-nullable DB columns such as
+                        # `reported_date` when the instance attribute is None.
+                        update_fields = [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                            and f.name not in ("id", "migrated_from_id")
+                        ]
+                        if update_fields:
+                            inst.save(update_fields=update_fields)
+                        else:
+                            # Nothing to update (all values are None or only PK), skip
+                            logger.debug(
+                                "Skipping save for OccurrenceReport %s: no updatable fields",
+                                getattr(inst, "pk", None),
+                            )
                     except Exception:
                         logger.exception(
                             "Failed to save OccurrenceReport %s",
@@ -660,53 +691,108 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # If any mapping rows found, resolve names to AssociatedSpeciesTaxonomy
         if sheet_to_species:
+            # Normalize sheet keys to strings and strip; ensure matching with
+            # target_map keys which are strings from migrated_from_id.
+            normalized_sheet_to_species: dict[str, list[str]] = {}
+            for k, v in sheet_to_species.items():
+                if k is None:
+                    continue
+                ks = str(k).strip()
+                if not ks:
+                    continue
+                normalized_sheet_to_species[ks] = [str(n).strip() for n in v if n]
+            sheet_to_species = normalized_sheet_to_species
+
             # unique species names
             uniq_names = {n for lst in sheet_to_species.values() for n in lst}
 
-            # Resolve Taxonomy for each name (try scientific_name then vernacular)
-            name_to_assoc: dict[str, AssociatedSpeciesTaxonomy] = {}
-            for n in uniq_names:
-                tax = Taxonomy.objects.filter(scientific_name__iexact=n).first()
-                if not tax:
-                    tv = (
-                        TaxonVernacular.objects.filter(vernacular_name__iexact=n)
-                        .select_related("taxonomy")
-                        .first()
-                    )
-                    if tv:
-                        tax = tv.taxonomy
-                if not tax:
-                    # no taxonomy match; warn and skip
-                    warnings.append(f"associated_species: no taxonomy match for '{n}'")
-                    continue
-                # Avoid MultipleObjectsReturned from get_or_create by handling
-                # potential duplicates explicitly: prefer an existing row if
-                # present (take the first), otherwise create one.
-                try:
-                    qs = AssociatedSpeciesTaxonomy.objects.filter(taxonomy=tax)
-                    ast = qs.first()
-                    if qs.count() > 1:
-                        logger.warning(
-                            "Multiple AssociatedSpeciesTaxonomy rows for taxonomy %s; using id=%s",
-                            getattr(tax, "id", None),
-                            getattr(ast, "id", None),
-                        )
-                    if not ast:
-                        ast = AssociatedSpeciesTaxonomy.objects.create(taxonomy=tax)
-                except Exception:
-                    logger.exception(
-                        "Failed to get/create AssociatedSpeciesTaxonomy for taxonomy %s",
-                        getattr(tax, "id", None),
-                    )
-                    continue
-                name_to_assoc[n] = ast
+            logger.info(
+                "OccurrenceReportImporter: resolving %d unique associated-species names",
+                len(uniq_names),
+            )
 
-            # Fetch existing OCRAssociatedSpecies for target occs
+            # Batch-resolve Taxonomy by case-insensitive scientific_name and
+            # TaxonVernacular by vernacular_name (both case-insensitive).
+            from django.db.models.functions import Lower
+
+            lower_names = {n.casefold() for n in uniq_names}
+
+            taxa_qs = Taxonomy.objects.annotate(_ln=Lower("scientific_name")).filter(
+                _ln__in=list(lower_names)
+            )
+            taxa_map = {t.scientific_name.casefold(): t for t in taxa_qs}
+
+            vern_qs = (
+                TaxonVernacular.objects.annotate(_ln=Lower("vernacular_name"))
+                .filter(_ln__in=list(lower_names))
+                .select_related("taxonomy")
+            )
+            vern_map = {v.vernacular_name.casefold(): v for v in vern_qs}
+
+            # Resolve name -> taxonomy using scientific_name first, then vernacular
+            name_to_tax: dict[str, Taxonomy] = {}
+            unresolved = []
+            for name in uniq_names:
+                ln = name.casefold()
+                tax = taxa_map.get(ln)
+                if not tax:
+                    tv = vern_map.get(ln)
+                    tax = tv.taxonomy if tv else None
+                if not tax:
+                    unresolved.append(name)
+                    continue
+                name_to_tax[name] = tax
+
+            if unresolved:
+                logger.warning(
+                    "OccurrenceReportImporter: %d associated-species names unresolved",
+                    len(unresolved),
+                )
+                # record up to 20 unresolved examples in warnings for later inspection
+                for ex in unresolved[:20]:
+                    warnings.append(f"associated_species: no taxonomy match for '{ex}'")
+
+            # Load existing AssociatedSpeciesTaxonomy rows for all resolved taxonomy ids
+            tax_ids = {t.pk for t in name_to_tax.values()}
+            ast_qs = AssociatedSpeciesTaxonomy.objects.filter(
+                taxonomy__in=list(tax_ids)
+            )
+            # Map taxonomy_id -> AssociatedSpeciesTaxonomy (take first if multiple)
+            taxid_to_ast = {}
+            for ast in ast_qs:
+                if ast.taxonomy_id not in taxid_to_ast:
+                    taxid_to_ast[ast.taxonomy_id] = ast
+            # Create missing AST rows for taxonomy ids that have none
+            missing_tax_ids = tax_ids - set(taxid_to_ast.keys())
+            if missing_tax_ids:
+                created_asts = []
+                for tid in missing_tax_ids:
+                    try:
+                        created_asts.append(
+                            AssociatedSpeciesTaxonomy.objects.create(taxonomy_id=tid)
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to create AssociatedSpeciesTaxonomy for taxonomy_id %s",
+                            tid,
+                        )
+                for ast in created_asts:
+                    taxid_to_ast[ast.taxonomy_id] = ast
+
+            # Build final name -> ast mapping
+            name_to_assoc: dict[str, AssociatedSpeciesTaxonomy] = {}
+            for name, tax in name_to_tax.items():
+                ast = taxid_to_ast.get(tax.pk)
+                if ast:
+                    name_to_assoc[name] = ast
+
+            # Fetch existing OCRAssociatedSpecies for target occs; prefetch
+            # related_species to avoid per-object queries later.
             existing_assoc = {
                 a.occurrence_report_id: a
                 for a in OCRAssociatedSpecies.objects.filter(
                     occurrence_report__in=target_occs
-                )
+                ).prefetch_related("related_species")
             }
 
             # Create OCRAssociatedSpecies for occurrence reports that need them
@@ -781,7 +867,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     desired_ids = {
                         name_to_assoc[n].pk for n in names if n in name_to_assoc
                     }
-                    # existing related ids
+                    # existing related ids (prefetched so no DB hit per-obj)
                     existing_ids = set(
                         assoc_obj.related_species.values_list("id", flat=True)
                     )
@@ -809,10 +895,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             f,
                         )
 
-                # perform bulk create for new through rows
+                # perform bulk create for new through rows (in chunks)
                 if to_create_through:
                     try:
-                        through.objects.bulk_create(to_create_through, batch_size=BATCH)
+                        for i in range(0, len(to_create_through), BATCH):
+                            through.objects.bulk_create(
+                                to_create_through[i : i + BATCH], batch_size=BATCH
+                            )
                     except Exception:
                         logger.exception(
                             "Failed to bulk_create associated-species through rows; falling back to individual saves"
