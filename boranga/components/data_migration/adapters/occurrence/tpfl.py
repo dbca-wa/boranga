@@ -32,7 +32,7 @@ COMMUNITY_TRANSFORM = fk_lookup(
     lookup_field="taxonomy__community_name",
 )
 
-WILD_STATUS_TRANSFORM = fk_lookup(model=WildStatus, lookup_field="name")
+WILD_STATUS_TRANSFORM = fk_lookup(model=WildStatus, lookup_field="id")
 
 # Legacy mapping for STATUS closed list -> WildStatus name
 LEGACY_WILD_STATUS_TRANSFORM = build_legacy_map_transform(
@@ -72,6 +72,7 @@ PIPELINES = {
         "strip",
         "blank_to_none",
         LEGACY_WILD_STATUS_TRANSFORM,
+        "to_int",
         WILD_STATUS_TRANSFORM,
     ],
     "comment": ["strip", "blank_to_none"],
