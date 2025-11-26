@@ -67,13 +67,39 @@ class OccurrenceReportImporter(BaseSheetImporter):
         logger.warning(
             "OccurrenceReportImporter: deleting OccurrenceReport and related data..."
         )
-        from django.db import transaction
 
-        with transaction.atomic():
+        # Perform deletes in an autocommit block so they are committed
+        # immediately. This mirrors the approach used in `SpeciesImporter` and
+        # allows us to reset DB sequences safely after the delete.
+        from django.db import connections
+
+        conn = connections["default"]
+        was_autocommit = conn.get_autocommit()
+        if not was_autocommit:
+            conn.set_autocommit(True)
+        try:
             try:
                 OccurrenceReport.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OccurrenceReport")
+
+            # Reset the primary key sequence for OccurrenceReport when using PostgreSQL.
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = OccurrenceReport._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                    logger.info("Reset primary key sequence for table %s", table)
+            except Exception:
+                logger.exception(
+                    "Failed to reset OccurrenceReport primary key sequence"
+                )
+        finally:
+            if not was_autocommit:
+                conn.set_autocommit(False)
 
     def add_arguments(self, parser):
         parser.add_argument(
