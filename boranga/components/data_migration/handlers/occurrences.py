@@ -53,9 +53,17 @@ class OccurrenceImporter(BaseSheetImporter):
             return
 
         logger.warning("OccurrenceImporter: deleting Occurrence and related data...")
-        from django.db import transaction
 
-        with transaction.atomic():
+        # Perform deletes in an autocommit block so they are committed
+        # immediately. This avoids the case where clear_targets runs inside a
+        # larger transaction that later rolls back leaving the wipe undone.
+        from django.db import connections
+
+        conn = connections["default"]
+        was_autocommit = conn.get_autocommit()
+        if not was_autocommit:
+            conn.set_autocommit(True)
+        try:
             try:
                 OCCContactDetail.objects.all().delete()
             except Exception:
@@ -64,6 +72,22 @@ class OccurrenceImporter(BaseSheetImporter):
                 Occurrence.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete Occurrence")
+
+            # Reset the primary key sequence for Occurrence when using PostgreSQL.
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = Occurrence._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                    logger.info("Reset primary key sequence for table %s", table)
+            except Exception:
+                logger.exception("Failed to reset Occurrence primary key sequence")
+        finally:
+            if not was_autocommit:
+                conn.set_autocommit(False)
 
     def add_arguments(self, parser):
         parser.add_argument(
