@@ -20,6 +20,9 @@ from boranga.components.data_migration.handlers.helpers import (
     apply_value_to_instance,
     normalize_create_kwargs,
 )
+from boranga.components.data_migration.mappings import (
+    load_sheet_associated_species_names,
+)
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -28,12 +31,15 @@ from boranga.components.data_migration.registry import (
     run_pipeline,
 )
 from boranga.components.occurrence.models import (
+    AssociatedSpeciesTaxonomy,
     OccurrenceReport,
+    OCRAssociatedSpecies,
     OCRHabitatComposition,
     OCRHabitatCondition,
     OCRIdentification,
     OCRObserverDetail,
 )
+from boranga.components.species_and_communities.models import Taxonomy, TaxonVernacular
 
 logger = logging.getLogger(__name__)
 
@@ -352,13 +358,105 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     continue
 
             if ctx.dry_run:
-                pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
+                # Avoid emitting extremely large JSON blobs to the logger which
+                # can make the process appear to hang when many or very large
+                # records are processed. Produce a truncated preview instead.
+                try:
+                    pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
+                    if len(pretty) > 2000:
+                        preview = pretty[
+                            :2000
+                        ] + "\n... (truncated, total %d chars)" % (len(pretty))
+                    else:
+                        preview = pretty
+                except Exception:
+                    # Fallback: build a concise summary of keys and value types
+                    preview_items = []
+                    for k, v in defaults.items():
+                        sval = str(v)
+                        if len(sval) > 200:
+                            sval = sval[:200] + "..."
+                        preview_items.append(f"{k}: {sval}")
+                    preview = "\n".join(preview_items)
+
                 logger.debug(
-                    "OccurrenceReportImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
+                    "OccurrenceReportImporter %s dry-run: would persist migrated_from_id=%s defaults (preview):\n%s",
                     self.slug,
                     migrated_from_id,
-                    pretty,
+                    preview,
                 )
+                # Also show a concise associated-species preview for this OCR
+                try:
+                    # load a small sample of the mapping (cheap)
+                    sample_map = load_sheet_associated_species_names(
+                        path, max_lines=200
+                    )
+                    # Attempt several key variants so we reliably match mapping keys
+                    names = []
+                    if sample_map:
+                        key_variants = [migrated_from_id]
+                        try:
+                            key_variants.append(str(migrated_from_id))
+                        except Exception:
+                            pass
+                        try:
+                            key_variants.append(int(migrated_from_id))
+                        except Exception:
+                            pass
+                        for k in key_variants:
+                            if k in sample_map:
+                                names = sample_map.get(k) or []
+                                break
+
+                    # Always log a concise per-OCR associated-species preview so
+                    # it appears immediately after the OCR defaults preview.
+                    if not names:
+                        logger.debug(
+                            "OccurrenceReportImporter %s dry-run: associated-species for "
+                            "migrated_from_id=%s: (no mapping found)",
+                            self.slug,
+                            migrated_from_id,
+                        )
+                    else:
+                        assoc_lines = []
+                        for n in names[:20]:
+                            tax = Taxonomy.objects.filter(
+                                scientific_name__iexact=n
+                            ).first()
+                            if not tax:
+                                tv = (
+                                    TaxonVernacular.objects.filter(
+                                        vernacular_name__iexact=n
+                                    )
+                                    .select_related("taxonomy")
+                                    .first()
+                                )
+                                tax = tv.taxonomy if tv else None
+                            if tax:
+                                ast = AssociatedSpeciesTaxonomy.objects.filter(
+                                    taxonomy=tax
+                                ).first()
+                                if ast:
+                                    assoc_lines.append(
+                                        f"{n} -> assoc_id={ast.pk}, tax_id={tax.pk}"
+                                    )
+                                else:
+                                    assoc_lines.append(
+                                        f"{n} -> taxonomy_id={tax.pk} (assoc missing)"
+                                    )
+                            else:
+                                assoc_lines.append(f"{n} -> unresolved")
+                        logger.debug(
+                            "OccurrenceReportImporter %s dry-run: associated-species for migrated_from_id=%s: %s",
+                            self.slug,
+                            migrated_from_id,
+                            "; ".join(assoc_lines),
+                        )
+                except Exception:
+                    logger.exception(
+                        "Failed to build associated-species preview for migrated_from_id=%s",
+                        migrated_from_id,
+                    )
                 continue
 
             # capture related small extras for later (observer + habitat)
@@ -508,6 +606,188 @@ class OccurrenceReportImporter(BaseSheetImporter):
             OccurrenceReport.objects.filter(migrated_from_id__in=target_mig_ids)
         )
         target_map = {o.migrated_from_id: o for o in target_occs}
+
+        # Load associated-species mapping (SHEETNO -> [species names]) from
+        # mappings module. The loader will look for
+        # DRF_SHEET_VEG_CLASSES_Ass_species.csv alongside the provided `path`.
+        # During dry-run, load a small sample and produce a concise debug
+        # preview instead of performing full DB resolution/creation.
+        # During dry-run we already emit a per-OCR associated-species preview
+        # immediately after each OCR defaults preview above. To avoid running
+        # the aggregated (and potentially expensive) sheet-level summary and
+        # duplicate logs, skip loading the full mapping in dry-run mode.
+        if getattr(ctx, "dry_run", False):
+            sheet_to_species = None
+        else:
+            sheet_to_species = load_sheet_associated_species_names(path)
+
+        # If any mapping rows found, resolve names to AssociatedSpeciesTaxonomy
+        if sheet_to_species:
+            # unique species names
+            uniq_names = {n for lst in sheet_to_species.values() for n in lst}
+
+            # Resolve Taxonomy for each name (try scientific_name then vernacular)
+            name_to_assoc: dict[str, AssociatedSpeciesTaxonomy] = {}
+            for n in uniq_names:
+                tax = Taxonomy.objects.filter(scientific_name__iexact=n).first()
+                if not tax:
+                    tv = (
+                        TaxonVernacular.objects.filter(vernacular_name__iexact=n)
+                        .select_related("taxonomy")
+                        .first()
+                    )
+                    if tv:
+                        tax = tv.taxonomy
+                if not tax:
+                    # no taxonomy match; warn and skip
+                    warnings.append(f"associated_species: no taxonomy match for '{n}'")
+                    continue
+                # Avoid MultipleObjectsReturned from get_or_create by handling
+                # potential duplicates explicitly: prefer an existing row if
+                # present (take the first), otherwise create one.
+                try:
+                    qs = AssociatedSpeciesTaxonomy.objects.filter(taxonomy=tax)
+                    ast = qs.first()
+                    if qs.count() > 1:
+                        logger.warning(
+                            "Multiple AssociatedSpeciesTaxonomy rows for taxonomy %s; using id=%s",
+                            getattr(tax, "id", None),
+                            getattr(ast, "id", None),
+                        )
+                    if not ast:
+                        ast = AssociatedSpeciesTaxonomy.objects.create(taxonomy=tax)
+                except Exception:
+                    logger.exception(
+                        "Failed to get/create AssociatedSpeciesTaxonomy for taxonomy %s",
+                        getattr(tax, "id", None),
+                    )
+                    continue
+                name_to_assoc[n] = ast
+
+            # Fetch existing OCRAssociatedSpecies for target occs
+            existing_assoc = {
+                a.occurrence_report_id: a
+                for a in OCRAssociatedSpecies.objects.filter(
+                    occurrence_report__in=target_occs
+                )
+            }
+
+            # Create OCRAssociatedSpecies for occurrence reports that need them
+            assoc_to_create = []
+            for sheetno, names in sheet_to_species.items():
+                ocr = target_map.get(sheetno)
+                if not ocr:
+                    continue
+                if ocr.pk not in existing_assoc:
+                    # create only if there are resolved species
+                    resolved = [name_to_assoc[n] for n in names if n in name_to_assoc]
+                    if not resolved:
+                        continue
+                    assoc = OCRAssociatedSpecies(occurrence_report=ocr)
+                    assoc_to_create.append(assoc)
+
+            if assoc_to_create:
+                try:
+                    OCRAssociatedSpecies.objects.bulk_create(
+                        assoc_to_create, batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_create OCRAssociatedSpecies; falling back to individual saves"
+                    )
+                    for a in assoc_to_create:
+                        try:
+                            a.save()
+                        except Exception:
+                            logger.exception(
+                                "Failed to create OCRAssociatedSpecies for occurrence_report %s",
+                                getattr(a.occurrence_report, "pk", None),
+                            )
+
+            # Refresh existing_assoc mapping
+            existing_assoc = {
+                a.occurrence_report_id: a
+                for a in OCRAssociatedSpecies.objects.filter(
+                    occurrence_report__in=target_occs
+                )
+            }
+
+            # Prepare through model info for bulk operations
+            through = OCRAssociatedSpecies.related_species.through
+            assoc_fk_field = None
+            tax_fk_field = None
+            for f in through._meta.get_fields():
+                if (
+                    getattr(f, "remote_field", None)
+                    and getattr(f.remote_field, "model", None) == OCRAssociatedSpecies
+                ):
+                    assoc_fk_field = f.name
+                if (
+                    getattr(f, "remote_field", None)
+                    and getattr(f.remote_field, "model", None)
+                    == AssociatedSpeciesTaxonomy
+                ):
+                    tax_fk_field = f.name
+            if assoc_fk_field and tax_fk_field:
+                assoc_fk_id = assoc_fk_field + "_id"
+                tax_fk_id = tax_fk_field + "_id"
+
+                to_create_through = []
+                to_delete_filters = []
+                for sheetno, names in sheet_to_species.items():
+                    ocr = target_map.get(sheetno)
+                    if not ocr:
+                        continue
+                    assoc_obj = existing_assoc.get(ocr.pk)
+                    if not assoc_obj:
+                        continue
+                    desired_ids = {
+                        name_to_assoc[n].pk for n in names if n in name_to_assoc
+                    }
+                    # existing related ids
+                    existing_ids = set(
+                        assoc_obj.related_species.values_list("id", flat=True)
+                    )
+                    add_ids = desired_ids - existing_ids
+                    remove_ids = existing_ids - desired_ids
+                    for aid in add_ids:
+                        to_create_through.append(
+                            through(**{assoc_fk_id: assoc_obj.pk, tax_fk_id: aid})
+                        )
+                    if remove_ids:
+                        to_delete_filters.append(
+                            {
+                                assoc_fk_id: assoc_obj.pk,
+                                tax_fk_id + "__in": list(remove_ids),
+                            }
+                        )
+
+                # perform deletes
+                for f in to_delete_filters:
+                    try:
+                        through.objects.filter(**f).delete()
+                    except Exception:
+                        logger.exception(
+                            "Failed to delete old associated-species through rows: %s",
+                            f,
+                        )
+
+                # perform bulk create for new through rows
+                if to_create_through:
+                    try:
+                        through.objects.bulk_create(to_create_through, batch_size=BATCH)
+                    except Exception:
+                        logger.exception(
+                            "Failed to bulk_create associated-species through rows; falling back to individual saves"
+                        )
+                        for t in to_create_through:
+                            try:
+                                t.save()
+                            except Exception:
+                                logger.exception(
+                                    "Failed to create through row for OCRAssociatedSpecies %s",
+                                    getattr(t, assoc_fk_id, None),
+                                )
 
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report
         want_obs_create = []
