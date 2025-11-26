@@ -672,11 +672,12 @@ def taxonomy_lookup(
             except Taxonomy.MultipleObjectsReturned:
                 try:
                     matches = qs.filter(**{lookup_field: candidate})
-                    # If exactly one active record exists among the matches, prefer it.
-                    active_matches = matches.filter(is_active=True)
-                    if active_matches.count() == 1:
-                        return _result(active_matches.first().pk)
-                    # If there are multiple active matches or none, we cannot disambiguate.
+                    # If exactly one 'current' record exists among the matches, prefer it.
+                    # Use `is_current` field which exists on the Taxonomy model.
+                    current_matches = matches.filter(is_current=True)
+                    if current_matches.count() == 1:
+                        return _result(current_matches.first().pk)
+                    # If there are multiple current matches or none, we cannot disambiguate.
                     return _result(
                         value,
                         TransformIssue(
@@ -1041,6 +1042,64 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
 
         entry = table.get(norm) or table.get(norm.casefold())
         if not entry:
+            # Fallback: try resolving via the general taxonomy_lookup and then
+            # find a linked Species for that taxonomy id. This mirrors the
+            # behaviour in `taxonomy_lookup_legacy_mapping` which attempts a
+            # Taxonomy lookup when legacy mapping is absent.
+            try:
+                tax_transform_name = taxonomy_lookup()
+                fn = registry._fns.get(tax_transform_name)
+                if fn is not None:
+                    res = fn(value, ctx)
+                    # Normalize to TransformResult-ish handling
+                    if res is None:
+                        # treat as not found and fall through to error below
+                        res_val = None
+                    elif isinstance(res, TransformResult):
+                        # if the taxonomy lookup returned an error, propagate it
+                        if any(i.level == "error" for i in res.issues):
+                            return res
+                        res_val = res.value
+                    else:
+                        res_val = res
+
+                    if res_val is not None:
+                        try:
+                            # attempt to resolve a Species linked to the taxonomy
+                            from boranga.components.species_and_communities.models import (
+                                Species,
+                                Taxonomy,
+                            )
+
+                            try:
+                                sp = Species.objects.get(taxonomy_id=res_val)
+                                return _result(sp.pk)
+                            except Species.DoesNotExist:
+                                # try resolving via Taxonomy object then Species
+                                try:
+                                    tax = Taxonomy.all_objects.get(pk=res_val)
+                                    sp = Species.objects.get(taxonomy=tax)
+                                    return _result(sp.pk)
+                                except Exception:
+                                    # fall through to final error return
+                                    pass
+                            except Species.MultipleObjectsReturned:
+                                return _result(
+                                    value,
+                                    TransformIssue(
+                                        "error",
+                                        f"Multiple Species linked to taxonomy_id={res_val} for '{value}'",
+                                    ),
+                                )
+                        except Exception:
+                            logger.exception(
+                                "taxonomy_lookup_legacy_mapping_species fallback lookup failed"
+                            )
+            except Exception:
+                logger.exception(
+                    "taxonomy_lookup_legacy_mapping_species fallback to taxonomy_lookup failed"
+                )
+
             return _result(
                 value,
                 TransformIssue(
