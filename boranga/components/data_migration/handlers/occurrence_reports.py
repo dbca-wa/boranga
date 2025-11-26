@@ -307,6 +307,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         val = v
                         break
                 merged[extra] = val
+            # Special-case: for OCRHabitatCondition percentage flags we want to
+            # prefer the maximum non-empty numeric value across all entries.
+            # The default merge above selects the first non-empty value which
+            # can cause zeros from an earlier row to override a later 100%.
+            for key in list(merged.keys()):
+                if key.startswith("OCRHabitatCondition__"):
+                    vals = []
+                    for trans, _, _ in entries_sorted:
+                        v = trans.get(key)
+                        if v in (None, ""):
+                            continue
+                        try:
+                            nv = int(v)
+                        except Exception:
+                            # ignore non-numeric values for the percentage flags
+                            continue
+                        vals.append(nv)
+                    if vals:
+                        merged[key] = max(vals)
+                    else:
+                        merged[key] = None
             for _, _, iss in entries_sorted:
                 combined_issues.extend(iss)
             return merged, combined_issues
