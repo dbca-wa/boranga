@@ -55,7 +55,7 @@ PURPOSE_TRANSFORM = build_legacy_map_transform(
 
 VESTING_TRANSFORM = build_legacy_map_transform(
     "TPFL",
-    "VESTING (DRF_LOV_PURPOSE_VWS)",
+    "VESTING (DRF_LOV_VESTING_VWS)",
     required=False,
 )
 
