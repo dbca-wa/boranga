@@ -670,13 +670,28 @@ def taxonomy_lookup(
             except Taxonomy.DoesNotExist:
                 continue
             except Taxonomy.MultipleObjectsReturned:
-                return _result(
-                    value,
-                    TransformIssue(
-                        "error",
-                        f"Multiple Taxonomy with {lookup_field}='{value}' found",
-                    ),
-                )
+                try:
+                    matches = qs.filter(**{lookup_field: candidate})
+                    # If exactly one active record exists among the matches, prefer it.
+                    active_matches = matches.filter(is_active=True)
+                    if active_matches.count() == 1:
+                        return _result(active_matches.first().pk)
+                    # If there are multiple active matches or none, we cannot disambiguate.
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Taxonomy with {lookup_field}='{value}' found",
+                        ),
+                    )
+                except Exception:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Taxonomy with {lookup_field}='{value}' found",
+                        ),
+                    )
 
         # Try previous names (case-insensitive match on previous_scientific_name)
         if check_previous:
@@ -948,6 +963,26 @@ def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
                     ),
                 )
             return _result(tax_id)
+
+        # Fallback: if no legacy mapping found, try resolving the incoming value
+        # using the general `taxonomy_lookup` pipeline. This lets us resolve
+        # values directly against `Taxonomy` (including previous names) when the
+        # legacy table lacks an entry.
+        try:
+            tax_transform_name = taxonomy_lookup()
+            fn = registry._fns.get(tax_transform_name)
+            if fn is not None:
+                res = fn(value, ctx)
+                # Normalize possible return types to TransformResult
+                if res is None:
+                    return _result(None)
+                if isinstance(res, TransformResult):
+                    return res
+                return _result(res)
+        except Exception:
+            logger.exception(
+                "taxonomy_lookup_legacy_mapping fallback to taxonomy_lookup failed"
+            )
 
         return _result(
             value,
