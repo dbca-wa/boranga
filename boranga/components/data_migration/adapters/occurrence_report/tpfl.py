@@ -315,52 +315,57 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 if scon:
                     hab_notes_parts.append(scon)
 
-            if hab_notes_parts:
-                canonical["OCRHabitatComposition__habitat_notes"] = "; ".join(
-                    hab_notes_parts
-                )
+            # always populate habitat_notes (None when empty) so downstream
+            # merge/creation logic sees the key consistently
+            canonical["OCRHabitatComposition__habitat_notes"] = (
+                "; ".join(hab_notes_parts) if hab_notes_parts else None
+            )
 
-                # HABITAT_CONDITION => populate OCRHabitatCondition flags per task rules
-                hc_raw = canonical.get("HABITAT_CONDITION", "")
-                hc = hc_raw.strip().upper() if hc_raw else ""
-                # default all zeros
-                canonical["OCRHabitatCondition__pristine"] = (
-                    100 if hc in ("PRISTINE",) else 0
+            # HABITAT_CONDITION => populate OCRHabitatCondition flags per task
+            # rules regardless of whether habitat notes exist. Previously these
+            # flags were only set when `hab_notes_parts` existed which caused
+            # missing flags (and default 0s) to be used during merge/creation.
+            hc_raw = canonical.get("HABITAT_CONDITION", "")
+            hc = hc_raw.strip().upper() if hc_raw else ""
+            # default all zeros (will be overridden by merge logic which
+            # prefers the maximum percentage across source rows)
+            canonical["OCRHabitatCondition__pristine"] = (
+                100 if hc in ("PRISTINE",) else 0
+            )
+            canonical["OCRHabitatCondition__excellent"] = (
+                100
+                if hc
+                in (
+                    "EXCELENT",
+                    "EXCELLENT",
                 )
-                canonical["OCRHabitatCondition__excellent"] = (
-                    100
-                    if hc
-                    in (
-                        "EXCELENT",
-                        "EXCELLENT",
-                    )
-                    else 0
+                else 0
+            )
+            canonical["OCRHabitatCondition__very_good"] = (
+                100
+                if hc
+                in (
+                    "VRY_GOOD",
+                    "VRYGOOD",
+                    "VERY_GOOD",
+                    "VERYGOOD",
                 )
-                canonical["OCRHabitatCondition__very_good"] = (
-                    100
-                    if hc
-                    in (
-                        "VRY_GOOD",
-                        "VRYGOOD",
-                        "VERY_GOOD",
-                        "VERYGOOD",
-                    )
-                    else 0
+                else 0
+            )
+            canonical["OCRHabitatCondition__good"] = 100 if hc in ("GOOD",) else 0
+            canonical["OCRHabitatCondition__degraded"] = (
+                100 if hc in ("DEGRADED",) else 0
+            )
+            canonical["OCRHabitatCondition__completely_degraded"] = (
+                100
+                if hc
+                in (
+                    "COM_DEGR",
+                    "COMPLETELY_DEGRADED",
+                    "COM_DEG",
                 )
-                canonical["OCRHabitatCondition__good"] = 100 if hc in ("GOOD",) else 0
-                canonical["OCRHabitatCondition__degraded"] = (
-                    100 if hc in ("DEGRADED",) else 0
-                )
-                canonical["OCRHabitatCondition__completely_degraded"] = (
-                    100
-                    if hc
-                    in (
-                        "COM_DEGR",
-                        "COMPLETELY_DEGRADED",
-                        "COM_DEG",
-                    )
-                    else 0
-                )
+                else 0
+            )
 
             # copy through simple habitat fields if present
             if canonical.get("SOIL_COLOR"):
