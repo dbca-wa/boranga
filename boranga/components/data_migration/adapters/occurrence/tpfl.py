@@ -7,7 +7,7 @@ from boranga.components.data_migration.registry import (
     choices_transform,
     emailuser_by_legacy_username_factory,
     fk_lookup,
-    taxonomy_lookup,
+    taxonomy_lookup_legacy_mapping,
 )
 from boranga.components.occurrence.models import Occurrence, WildStatus
 from boranga.components.species_and_communities.models import (
@@ -21,9 +21,7 @@ from ..sources import Source
 from . import schema
 
 # TPFL-specific transform bindings
-TAXONOMY_TRANSFORM = taxonomy_lookup(
-    lookup_field="scientific_name",
-)
+TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
 
 SPECIES_TRANSFORM = fk_lookup(model=Species, lookup_field="taxonomy_id")
 
