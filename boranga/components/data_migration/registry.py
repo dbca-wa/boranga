@@ -612,6 +612,27 @@ def taxonomy_lookup(
         else:
             candidates.append(value)
 
+        # Spacing-normalisation candidate: produce variants that insert a space
+        # after a period when followed by a capitalised word (e.g. "sp.Darling" -> "sp. Darling")
+        # and ensure there is a space before parentheses ("Range(R..." -> "Range (R...").
+        # This helps resolve names like "Baeckea sp.Darling Range(R.J.Cranfield 1673)".
+        try:
+            norm_variants = []
+            for c in list(candidates):
+                if not isinstance(c, str):
+                    continue
+                s = c
+                # add space after period when followed by Capital+lowercase (surname or word)
+                s = re.sub(r"\.([A-Z][a-z])", r". \1", s)
+                # add space before opening parenthesis if missing
+                s = re.sub(r"([^\s])\(", r"\1 (", s)
+                if s != c and s not in candidates:
+                    norm_variants.append(s)
+            candidates.extend(norm_variants)
+        except Exception:
+            # be conservative: if normalization fails, continue without it
+            logger.exception("spacing-normalisation in taxonomy_lookup failed")
+
         # If transform configured for TPFL, add mapping candidate last (final attempt)
         if source_key and source_key.upper() == "TPFL":
             try:
