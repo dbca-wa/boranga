@@ -455,6 +455,39 @@ class OccurrenceImporter(BaseSheetImporter):
                     "Failed to attach migration_run to some created Occurrence(s)"
                 )
 
+        # Ensure occurrence_number is populated for newly-created Occurrence objects.
+        # The model normally sets this in save() as 'OCC' + pk, but bulk_create
+        # bypasses save(), so we must set it here using the assigned PKs.
+        if created_map:
+            occs_to_update = []
+            for occ in created_map.values():
+                try:
+                    if not getattr(occ, "occurrence_number", None):
+                        occ.occurrence_number = f"OCC{occ.pk}"
+                        occs_to_update.append(occ)
+                except Exception:
+                    logger.exception(
+                        "Error preparing occurrence_number for Occurrence %s",
+                        getattr(occ, "pk", None),
+                    )
+            if occs_to_update:
+                try:
+                    Occurrence.objects.bulk_update(
+                        occs_to_update, ["occurrence_number"], batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_update occurrence_number; falling back to individual saves"
+                    )
+                    for occ in occs_to_update:
+                        try:
+                            occ.save(update_fields=["occurrence_number"])
+                        except Exception:
+                            logger.exception(
+                                "Failed to save occurrence_number for Occurrence %s",
+                                getattr(occ, "pk", None),
+                            )
+
         # Bulk update existing objects
         if to_update:
             logger.info(
