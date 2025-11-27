@@ -166,7 +166,7 @@ class OccurrenceTpflAdapter(SourceAdapter):
             contact = LAND_MGR_ADDRESS
             if LAND_MGR_PHONE:
                 if contact:
-                    contact += ", "
+                    contact += "; "
                 contact += LAND_MGR_PHONE
             canonical["OCCContactDetail__contact"] = contact if contact else None
             rows.append(canonical)
