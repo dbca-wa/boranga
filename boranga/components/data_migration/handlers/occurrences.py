@@ -423,6 +423,8 @@ class OccurrenceImporter(BaseSheetImporter):
                     merged.get("OCCContactDetail__contact"),
                     merged.get("OCCContactDetail__contact_name"),
                     merged.get("OCCContactDetail__notes"),
+                    merged.get("modified_by"),
+                    merged.get("datetime_updated"),
                 )
             )
 
@@ -590,6 +592,76 @@ class OccurrenceImporter(BaseSheetImporter):
                     except Exception:
                         logger.exception(
                             "Failed to create OCCContactDetail for occurrence %s",
+                            getattr(obj.occurrence, "pk", None),
+                        )
+
+        # Create an OccurrenceUserAction for created/updated occurrences (one per occurrence)
+        from boranga.components.occurrence.models import OccurrenceUserAction
+
+        existing_actions = set(
+            OccurrenceUserAction.objects.filter(occurrence__in=target_occs).values_list(
+                "occurrence_id", flat=True
+            )
+        )
+
+        want_action_create = []
+        # created_meta contains tuples for created ones; tuples extended with modified_by and datetime_updated
+        for tpl in create_meta:
+            # tpl = (migrated_from_id, contact, contact_name, notes, modified_by, datetime_updated)
+            mig = tpl[0]
+            modified_by = tpl[4]
+            datetime_updated = tpl[5]
+            occ = created_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_actions:
+                continue
+            if modified_by and datetime_updated:
+                want_action_create.append(
+                    OccurrenceUserAction(
+                        occurrence=occ,
+                        what="Edited in TPFL",
+                        when=datetime_updated,
+                        who=modified_by,
+                    )
+                )
+
+        # also create for updates (ops where occurrence existed)
+        for op in ops:
+            mig = op["migrated_from_id"]
+            merged = op.get("merged") or {}
+            occ = target_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_actions:
+                continue
+            modified_by = merged.get("modified_by")
+            datetime_updated = merged.get("datetime_updated")
+            if modified_by and datetime_updated:
+                want_action_create.append(
+                    OccurrenceUserAction(
+                        occurrence=occ,
+                        what="Edited in TPFL",
+                        when=datetime_updated,
+                        who=modified_by,
+                    )
+                )
+
+        if want_action_create:
+            try:
+                OccurrenceUserAction.objects.bulk_create(
+                    want_action_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OccurrenceUserAction; falling back to individual creates"
+                )
+                for obj in want_action_create:
+                    try:
+                        obj.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OccurrenceUserAction for occurrence %s",
                             getattr(obj.occurrence, "pk", None),
                         )
 
