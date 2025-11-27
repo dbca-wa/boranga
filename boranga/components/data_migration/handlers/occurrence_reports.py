@@ -36,7 +36,7 @@ from boranga.components.occurrence.models import (
     OCRIdentification,
     OCRObserverDetail,
 )
-from boranga.components.species_and_communities.models import Taxonomy, TaxonVernacular
+from boranga.components.species_and_communities.models import Taxonomy
 
 logger = logging.getLogger(__name__)
 
@@ -720,8 +720,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 len(uniq_names),
             )
 
-            # Batch-resolve Taxonomy by case-insensitive scientific_name and
-            # TaxonVernacular by vernacular_name (both case-insensitive).
+            # Batch-resolve Taxonomy by case-insensitive scientific_name
             from django.db.models.functions import Lower
 
             lower_names = {n.casefold() for n in uniq_names}
@@ -731,22 +730,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
             )
             taxa_map = {t.scientific_name.casefold(): t for t in taxa_qs}
 
-            vern_qs = (
-                TaxonVernacular.objects.annotate(_ln=Lower("vernacular_name"))
-                .filter(_ln__in=list(lower_names))
-                .select_related("taxonomy")
-            )
-            vern_map = {v.vernacular_name.casefold(): v for v in vern_qs}
-
-            # Resolve name -> taxonomy using scientific_name first, then vernacular
+            # Resolve name -> taxonomy using scientific_name only (no vernacular lookup)
             name_to_tax: dict[str, Taxonomy] = {}
             unresolved = []
             for name in uniq_names:
                 ln = name.casefold()
                 tax = taxa_map.get(ln)
-                if not tax:
-                    tv = vern_map.get(ln)
-                    tax = tv.taxonomy if tv else None
                 if not tax:
                     unresolved.append(name)
                     continue
