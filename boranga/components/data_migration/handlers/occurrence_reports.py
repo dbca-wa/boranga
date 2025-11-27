@@ -947,6 +947,218 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     getattr(t, assoc_fk_id, None),
                                 )
 
+                # If an Occurrence is linked to the OccurrenceReport, duplicate
+                # the AssociatedSpeciesTaxonomy rows so the OCC (Occurrence) gets
+                # its own per-association records. Use bulk operations where
+                # possible: bulk-create any missing OCCAssociatedSpecies, bulk
+                # create AssociatedSpeciesTaxonomy duplicates with a unique
+                # temporary marker in `comments` to map them back, bulk-create
+                # through rows linking OCCAssociatedSpecies -> new ASTs, then
+                # clean up the temporary markers.
+                try:
+                    # target_occs is a list of OccurrenceReport instances we loaded earlier
+                    occ_reports_with_occ = [
+                        o for o in target_occs if getattr(o, "occurrence_id", None)
+                    ]
+                    if occ_reports_with_occ:
+                        from boranga.components.occurrence.models import (
+                            AssociatedSpeciesTaxonomy as _AST,
+                        )
+                        from boranga.components.occurrence.models import (
+                            OCCAssociatedSpecies,
+                        )
+
+                        # Build set of occurrence ids
+                        occ_ids = {o.occurrence_id for o in occ_reports_with_occ}
+
+                        # Ensure OCCAssociatedSpecies exists for each occurrence (bulk-create missing)
+                        existing_occ_assoc = {
+                            a.occurrence_id: a
+                            for a in OCCAssociatedSpecies.objects.filter(
+                                occurrence_id__in=list(occ_ids)
+                            )
+                        }
+                        occ_assoc_to_create = []
+                        for o in occ_reports_with_occ:
+                            occ = getattr(o, "occurrence", None)
+                            if not occ:
+                                continue
+                            if occ.id not in existing_occ_assoc:
+                                occ_assoc_to_create.append(
+                                    OCCAssociatedSpecies(occurrence=occ)
+                                )
+
+                        if occ_assoc_to_create:
+                            try:
+                                OCCAssociatedSpecies.objects.bulk_create(
+                                    occ_assoc_to_create, batch_size=BATCH
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "Failed to bulk_create OCCAssociatedSpecies; falling back to individual creates"
+                                )
+                                for a in occ_assoc_to_create:
+                                    try:
+                                        a.save()
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to create OCCAssociatedSpecies for occurrence %s",
+                                            getattr(a.occurrence, "pk", None),
+                                        )
+
+                        # Refresh mapping
+                        existing_occ_assoc = {
+                            a.occurrence_id: a
+                            for a in OCCAssociatedSpecies.objects.filter(
+                                occurrence_id__in=list(occ_ids)
+                            )
+                        }
+
+                        # Prepare duplicates to create: list of (occ_assoc_pk, AST instance to create, marker)
+                        dup_create_list = []
+                        import uuid
+
+                        for o in occ_reports_with_occ:
+                            occ = getattr(o, "occurrence", None)
+                            if not occ:
+                                continue
+                            ocr_assoc = existing_assoc.get(o.pk)
+                            if not ocr_assoc:
+                                continue
+                            occ_assoc = existing_occ_assoc.get(occ.id)
+                            if not occ_assoc:
+                                continue
+                            for ast in ocr_assoc.related_species.all():
+                                marker = f"__dm_dup__{uuid.uuid4().hex}"
+                                comments = (ast.comments or "") + " " + marker
+                                inst = _AST(
+                                    taxonomy_id=ast.taxonomy_id,
+                                    species_role_id=getattr(
+                                        ast, "species_role_id", None
+                                    ),
+                                    comments=comments.strip(),
+                                )
+                                dup_create_list.append((occ_assoc.pk, inst, marker))
+
+                        if dup_create_list:
+                            # Bulk create AST duplicates
+                            ast_instances = [t[1] for t in dup_create_list]
+                            try:
+                                _AST.objects.bulk_create(
+                                    ast_instances, batch_size=BATCH
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "Failed bulk_create of AssociatedSpeciesTaxonomy duplicates; "
+                                    "falling back to individual creates"
+                                )
+                                created = []
+                                for occ_assoc_pk, inst, marker in dup_create_list:
+                                    try:
+                                        inst.save()
+                                        created.append((occ_assoc_pk, inst, marker))
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to create AssociatedSpeciesTaxonomy duplicate for taxonomy %s",
+                                            getattr(inst, "taxonomy_id", None),
+                                        )
+                                # replace dup_create_list with created list for downstream linking
+                                dup_create_list = created
+
+                            # Map markers -> created AST instances by querying comments ending with marker
+                            created_map = {}
+                            for occ_assoc_pk, inst, marker in dup_create_list:
+                                try:
+                                    created_inst = _AST.objects.get(
+                                        comments__endswith=marker
+                                    )
+                                except _AST.DoesNotExist:
+                                    created_inst = None
+                                if created_inst:
+                                    created_map.setdefault(occ_assoc_pk, []).append(
+                                        (marker, created_inst)
+                                    )
+
+                            # Build through rows for OCCAssociatedSpecies.related_species.through
+                            through_occ = OCCAssociatedSpecies.related_species.through
+                            # determine fk field names
+                            occ_fk_field = None
+                            tax_fk_field = None
+                            for f in through_occ._meta.get_fields():
+                                if (
+                                    getattr(f, "remote_field", None)
+                                    and getattr(f.remote_field, "model", None)
+                                    == OCCAssociatedSpecies
+                                ):
+                                    occ_fk_field = f.name
+                                if (
+                                    getattr(f, "remote_field", None)
+                                    and getattr(f.remote_field, "model", None) == _AST
+                                ):
+                                    tax_fk_field = f.name
+
+                            if occ_fk_field and tax_fk_field:
+                                occ_fk_id = occ_fk_field + "_id"
+                                tax_fk_id = tax_fk_field + "_id"
+                                through_to_create = []
+                                for occ_assoc_pk, items in created_map.items():
+                                    for marker, ast_inst in items:
+                                        through_to_create.append(
+                                            through_occ(
+                                                **{
+                                                    occ_fk_id: occ_assoc_pk,
+                                                    tax_fk_id: ast_inst.pk,
+                                                }
+                                            )
+                                        )
+
+                                if through_to_create:
+                                    try:
+                                        for i in range(
+                                            0, len(through_to_create), BATCH
+                                        ):
+                                            through_occ.objects.bulk_create(
+                                                through_to_create[i : i + BATCH],
+                                                batch_size=BATCH,
+                                            )
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to bulk_create OCC associated-species through rows; "
+                                            "falling back to individual saves"
+                                        )
+                                        for t in through_to_create:
+                                            try:
+                                                t.save()
+                                            except Exception:
+                                                logger.exception(
+                                                    "Failed to create through row for OCCAssociatedSpecies %s",
+                                                    getattr(t, occ_fk_id, None),
+                                                )
+
+                                # Cleanup: remove markers from comments on created ASTs
+                                try:
+                                    for items in created_map.values():
+                                        for marker, ast_inst in items:
+                                            if (
+                                                ast_inst
+                                                and ast_inst.comments
+                                                and marker in ast_inst.comments
+                                            ):
+                                                ast_inst.comments = (
+                                                    ast_inst.comments.replace(
+                                                        marker, ""
+                                                    ).strip()
+                                                )
+                                                ast_inst.save()
+                                except Exception:
+                                    logger.exception(
+                                        "Failed to clean up duplicate markers on AssociatedSpeciesTaxonomy"
+                                    )
+                except Exception:
+                    logger.exception(
+                        "Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences"
+                    )
+
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report
         want_obs_create = []
         existing_obs = set(
