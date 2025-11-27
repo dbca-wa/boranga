@@ -536,7 +536,8 @@ class OccurrenceImporter(BaseSheetImporter):
         )
         want_contact_create = []
         # created_meta contains tuples for created ones; for updates use merged from ops
-        for mig, contact, contact_name, notes in create_meta:
+        # create_meta may include extra fields (modified_by, datetime_updated) so ignore extras here
+        for mig, contact, contact_name, notes, *rest in create_meta:
             occ = created_map.get(mig)
             if not occ:
                 continue
