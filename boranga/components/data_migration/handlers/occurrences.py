@@ -420,9 +420,9 @@ class OccurrenceImporter(BaseSheetImporter):
             create_meta.append(
                 (
                     migrated_from_id,
-                    merged.get("contact"),
-                    merged.get("contact_name"),
-                    merged.get("notes"),
+                    merged.get("OCCContactDetail__contact"),
+                    merged.get("OCCContactDetail__contact_name"),
+                    merged.get("OCCContactDetail__notes"),
                 )
             )
 
@@ -547,6 +547,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         contact=contact,
                         contact_name=contact_name,
                         notes=notes,
+                        visible=True,
                     )
                 )
 
@@ -560,16 +561,17 @@ class OccurrenceImporter(BaseSheetImporter):
             if occ.pk in existing_contacts:
                 continue
             if (
-                merged.get("contact")
-                or merged.get("contact_name")
-                or merged.get("notes")
+                merged.get("OCCContactDetail__contact")
+                or merged.get("OCCContactDetail__contact_name")
+                or merged.get("OCCContactDetail__notes")
             ):
                 want_contact_create.append(
                     OCCContactDetail(
                         occurrence=occ,
-                        contact=merged.get("contact"),
-                        contact_name=merged.get("contact_name"),
-                        notes=merged.get("notes"),
+                        contact=merged.get("OCCContactDetail__contact"),
+                        contact_name=merged.get("OCCContactDetail__contact_name"),
+                        notes=merged.get("OCCContactDetail__notes"),
+                        visible=True,
                     )
                 )
 
