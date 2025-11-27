@@ -16,6 +16,7 @@ COLUMN_MAP = {
     "STATUS": "wild_status_id",
     "CREATED_DATE": "datetime_created",
     "MODIFIED_DATE": "datetime_updated",
+    "MODIFIED_BY": "modified_by",
     "POP_COMMENTS": "comment",
     "ACTIVE_IND": "processing_status",
     "CREATED_BY": "submitter",
