@@ -148,6 +148,7 @@ class OccurrenceTpflAdapter(SourceAdapter):
             canonical["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
             canonical["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
             canonical["locked"] = True
+            canonical["lodgment_date"] = canonical.get("datetime_created")
             POP_COMMENTS = canonical.get("POP_COMMENTS", "")
             REASON_DEACTIVATED = canonical.get("REASON_DEACTIVATED", "")
             DEACTIVATED_DATE = canonical.get("DEACTIVATED_DATE", "")
