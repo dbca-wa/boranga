@@ -4855,8 +4855,15 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             )
             associated_species.save()
             # copy over related species separately
-            for i in occurrence_report.associated_species.related_species.all():
-                associated_species.related_species.add(i)
+            # Duplicate each AssociatedSpeciesTaxonomy so the OCC has its own
+            # association records (preserving per-association metadata).
+            for ast in occurrence_report.associated_species.related_species.all():
+                new_ast = AssociatedSpeciesTaxonomy.objects.create(
+                    taxonomy=ast.taxonomy,
+                    species_role=ast.species_role,
+                    comments=ast.comments,
+                )
+                associated_species.related_species.add(new_ast)
 
         observation_detail = clone_model(
             OCRObservationDetail,
