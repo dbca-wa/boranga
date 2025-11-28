@@ -2,6 +2,7 @@ import csv
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.db.models.functions import Lower
 from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.main.models import LegacyUsernameEmailuserMapping
@@ -19,6 +20,11 @@ class Command(BaseCommand):
         parser.add_argument("csvfile", type=str)
         parser.add_argument("--legacy-system", required=True)
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument(
+            "--verbose",
+            action="store_true",
+            help="Print per-row result (create/update/skip) and reason",
+        )
         parser.add_argument(
             "--update", action="store_true", help="update existing rows when present"
         )
@@ -54,99 +60,221 @@ class Command(BaseCommand):
         skipped = 0
         errors = 0
 
+        verbose = options.get("verbose", False)
+
+        # Preload existing mappings for this legacy_system to avoid per-row queries.
+        existing_qs = LegacyUsernameEmailuserMapping.objects.filter(
+            legacy_system=legacy_system
+        )
+        existing_map = {m.legacy_username: m for m in existing_qs}
+
+        # Collect emails from CSV to resolve EmailUserRO in bulk (case-insensitive).
+        csv_emails = set()
         for r in rows:
+            em = (r.get("email") or "").strip()
+            if em:
+                csv_emails.add(em.lower())
+
+        email_map = {}
+        if csv_emails and EmailUserRO is not None:
+            try:
+                # annotate with lowercase email for case-insensitive matching
+                qs = EmailUserRO.objects.annotate(email_l=Lower("email")).filter(
+                    email_l__in=list(csv_emails)
+                )
+                for u in qs:
+                    email_map[getattr(u, "email_l")] = u.pk
+            except Exception as exc:
+                self.stderr.write(f"Error preloading EmailUserROs: {exc}")
+
+        # Classify rows, then apply bulk writes
+        to_create = []
+        to_update = []
+        # Track per-row decisions for verbose output and counts
+        decisions = []  # tuples (idx, legacy_username, action, reason)
+
+        for idx, r in enumerate(rows, start=1):
             legacy_username = (
                 r.get("legacy_username") or r.get("username") or r.get("legacy") or ""
             ).strip()
             if not legacy_username:
-                self.stderr.write("Skipping row with no legacy_username")
+                self.stderr.write(f"Skipping row {idx} with no legacy_username")
                 skipped += 1
+                decisions.append((idx, None, "skip", "no legacy_username"))
                 continue
 
             first_name = (r.get("first_name") or "").strip()
             last_name = (r.get("last_name") or "").strip()
             email = (r.get("email") or "").strip() or None
 
-            # resolve emailuser_id by email if possible
+            # resolve emailuser_id by email if possible (preloaded map)
             emailuser_id = None
             if email:
+                em_l = email.lower()
                 if EmailUserRO is None:
                     self.stderr.write(
                         f"Email provided ('{email}') but EmailUserRO model not found; leaving emailuser_id null"
                     )
                 else:
-                    try:
-                        candidates = list(
-                            EmailUserRO.objects.filter(email__iexact=email)[:2]
-                        )
-                        if len(candidates) == 1:
-                            emailuser_id = candidates[0].pk
-                        elif len(candidates) > 1:
-                            emailuser_id = candidates[0].pk
-                            self.stderr.write(
-                                f"Multiple EmailUserRO matches for email '{email}'; using id {emailuser_id}"
-                            )
-                        else:
-                            self.stderr.write(
-                                f"No EmailUserRO found for email '{email}'; leaving emailuser_id null"
-                            )
-                    except Exception as exc:
+                    if em_l in email_map:
+                        emailuser_id = email_map[em_l]
+                    else:
+                        # no match found in preload
                         self.stderr.write(
-                            f"Error querying EmailUserRO for email '{email}': {exc}"
+                            f"No EmailUserRO found for email '{email}'; leaving emailuser_id null"
                         )
-                        errors += 1
-                        continue
 
             if dry_run:
-                self.stdout.write(
-                    f"[DRY] would create/update: legacy_system={legacy_system} legacy_username={legacy_username} "
-                    f"first_name={first_name!r} last_name={last_name!r} email={email!r} emailuser_id={emailuser_id}"
-                )
-                continue
-
-            try:
-                with transaction.atomic():
-                    existing = LegacyUsernameEmailuserMapping.objects.filter(
-                        legacy_system=legacy_system, legacy_username=legacy_username
-                    ).first()
-                    if existing:
-                        if not do_update:
-                            skipped += 1
-                            continue
-                        # update existing row if values differ
-                        changed = False
+                # For dry run, just classify and report without modifying DB
+                if legacy_username in existing_map:
+                    if not do_update:
+                        skipped += 1
+                        decisions.append(
+                            (idx, legacy_username, "skip", "exists (no --update)")
+                        )
+                        if verbose:
+                            self.stdout.write(
+                                f"SKIP[{idx}] {legacy_username}: mapping exists (no --update)"
+                            )
+                    else:
+                        existing = existing_map[legacy_username]
+                        changed_fields = []
                         if existing.first_name != first_name:
-                            existing.first_name = first_name
-                            changed = True
+                            changed_fields.append("first_name")
                         if existing.last_name != last_name:
-                            existing.last_name = last_name
-                            changed = True
+                            changed_fields.append("last_name")
                         if existing.email != email:
-                            existing.email = email
-                            changed = True
+                            changed_fields.append("email")
                         if existing.emailuser_id != emailuser_id:
-                            existing.emailuser_id = emailuser_id
-                            changed = True
-                        if changed:
-                            existing.save()
-                            updated += 1
+                            changed_fields.append("emailuser_id")
+                        if changed_fields:
+                            decisions.append(
+                                (
+                                    idx,
+                                    legacy_username,
+                                    "update",
+                                    ", ".join(changed_fields),
+                                )
+                            )
+                            if verbose:
+                                self.stdout.write(
+                                    f"UPDATE[{idx}] {legacy_username}: would update fields {', '.join(changed_fields)}"
+                                )
                         else:
                             skipped += 1
-                    else:
-                        LegacyUsernameEmailuserMapping.objects.create(
-                            legacy_system=legacy_system,
-                            legacy_username=legacy_username,
-                            first_name=first_name,
-                            last_name=last_name,
-                            email=email,
-                            emailuser_id=emailuser_id,
+                            decisions.append(
+                                (idx, legacy_username, "skip", "no changes")
+                            )
+                            if verbose:
+                                self.stdout.write(
+                                    f"SKIP[{idx}] {legacy_username}: no changes (identical)"
+                                )
+                else:
+                    decisions.append(
+                        (
+                            idx,
+                            legacy_username,
+                            "create",
+                            f"email={email!r} emailuser_id={emailuser_id}",
                         )
-                        created += 1
-            except Exception as exc:
-                self.stderr.write(
-                    f"Failed to process username '{legacy_username}': {exc}"
+                    )
+                    if verbose:
+                        self.stdout.write(
+                            f"[DRY CREATE][{idx}] {legacy_username}: email={email!r} emailuser_id={emailuser_id}"
+                        )
+                    # don't actually create in dry run
+                continue
+
+            # Non-dry-run: classify into create/update/skip lists, perform batched writes later
+            if legacy_username in existing_map:
+                existing = existing_map[legacy_username]
+                if not do_update:
+                    skipped += 1
+                    decisions.append(
+                        (idx, legacy_username, "skip", "exists (no --update)")
+                    )
+                    if verbose:
+                        self.stdout.write(
+                            f"SKIP[{idx}] {legacy_username}: mapping exists (no --update)"
+                        )
+                    continue
+                # check for changes
+                changed_fields = []
+                if existing.first_name != first_name:
+                    existing.first_name = first_name
+                    changed_fields.append("first_name")
+                if existing.last_name != last_name:
+                    existing.last_name = last_name
+                    changed_fields.append("last_name")
+                if existing.email != email:
+                    existing.email = email
+                    changed_fields.append("email")
+                if existing.emailuser_id != emailuser_id:
+                    existing.emailuser_id = emailuser_id
+                    changed_fields.append("emailuser_id")
+                if changed_fields:
+                    to_update.append(existing)
+                    decisions.append(
+                        (idx, legacy_username, "update", ", ".join(changed_fields))
+                    )
+                    if verbose:
+                        self.stdout.write(
+                            f"UPDATE[{idx}] {legacy_username}: queued update fields {', '.join(changed_fields)}"
+                        )
+                else:
+                    skipped += 1
+                    decisions.append((idx, legacy_username, "skip", "no changes"))
+                    if verbose:
+                        self.stdout.write(
+                            f"SKIP[{idx}] {legacy_username}: no changes (identical)"
+                        )
+            else:
+                # create new instance (not saved yet)
+                inst = LegacyUsernameEmailuserMapping(
+                    legacy_system=legacy_system,
+                    legacy_username=legacy_username,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    emailuser_id=emailuser_id,
                 )
-                errors += 1
+                to_create.append(inst)
+                decisions.append(
+                    (
+                        idx,
+                        legacy_username,
+                        "create",
+                        f"email={email!r} emailuser_id={emailuser_id}",
+                    )
+                )
+                if verbose:
+                    self.stdout.write(
+                        f"CREATE[{idx}] {legacy_username}: queued create email={email!r} emailuser_id={emailuser_id}"
+                    )
+
+        # Apply batched writes
+        try:
+            with transaction.atomic():
+                created = 0
+                updated = 0
+                if to_create:
+                    LegacyUsernameEmailuserMapping.objects.bulk_create(
+                        to_create, batch_size=500
+                    )
+                    created = len(to_create)
+                if to_update:
+                    LegacyUsernameEmailuserMapping.objects.bulk_update(
+                        to_update,
+                        ["first_name", "last_name", "email", "emailuser_id"],
+                        batch_size=500,
+                    )
+                    updated = len(to_update)
+                # adjust skipped: total rows - created - updated - errors
+                processed = created + updated
+                skipped = len(rows) - processed - errors
+        except Exception as exc:
+            self.stderr.write(f"Failed to apply batched writes: {exc}")
+            errors += 1
 
         self.stdout.write(
             f"created={created} updated={updated} skipped={skipped} errors={errors} (dry_run={dry_run})"
