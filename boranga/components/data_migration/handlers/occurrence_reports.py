@@ -720,15 +720,69 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 len(uniq_names),
             )
 
-            # Batch-resolve Taxonomy by case-insensitive scientific_name
-            from django.db.models.functions import Lower
+            # Batch-resolve Taxonomy by case-insensitive scientific_name.
+            # Use a server-side array join (unnest) to avoid huge IN(...) lists
+            # which are slow to plan/parse and may hit driver/param limits.
+            from django.db import connection
 
-            lower_names = {n.casefold() for n in uniq_names}
+            # Normalize names client-side to match lower(...) on DB.
+            lower_names = [str(n).strip() for n in uniq_names if n and str(n).strip()]
+            lower_names = [n.casefold() for n in lower_names]
 
-            taxa_qs = Taxonomy.objects.annotate(_ln=Lower("scientific_name")).filter(
-                _ln__in=list(lower_names)
-            )
-            taxa_map = {t.scientific_name.casefold(): t for t in taxa_qs}
+            taxa_map = {}
+            if lower_names:
+                # Resolve table and index names
+                tax_table = Taxonomy._meta.db_table  # may include schema
+
+                # Use server-side array join (unnest) to fetch matching taxonomy rows.
+                # Select only id and scientific_name then materialize Taxonomy instances
+                sql = (
+                    f"SELECT t.id, t.scientific_name FROM {tax_table} t JOIN unnest(%s::text[]) AS n(lower_name) "
+                    "ON lower(t.scientific_name) = n.lower_name;"
+                )
+                with connection.cursor() as cur:
+                    try:
+                        cur.execute(sql, [lower_names])
+                        rows = cur.fetchall()
+                    except Exception:
+                        logger.exception(
+                            "unnest resolution failed; falling back to ORM filter"
+                        )
+                        rows = []
+
+                if rows:
+                    ids = [r[0] for r in rows]
+                    # bulk fetch Taxonomy instances for matched ids
+                    tax_by_id = {
+                        t.pk: t
+                        for t in Taxonomy.objects.filter(pk__in=ids).only(
+                            "id", "scientific_name"
+                        )
+                    }
+                    for tid, sci in rows:
+                        t = tax_by_id.get(tid)
+                        if t:
+                            taxa_map[sci.casefold()] = t
+                else:
+                    # Fallback: small set or unnest failure - try ORM path with batching
+                    try:
+                        from django.db.models.functions import Lower
+
+                        batch_size = 5000
+                        # split lower_names into batches to avoid huge IN lists
+                        for i in range(0, len(lower_names), batch_size):
+                            batch = lower_names[i : i + batch_size]
+                            qs = (
+                                Taxonomy.objects.annotate(_ln=Lower("scientific_name"))
+                                .filter(_ln__in=list(batch))
+                                .only("id", "scientific_name")
+                            )
+                            for t in qs:
+                                taxa_map[t.scientific_name.casefold()] = t
+                    except Exception:
+                        logger.exception(
+                            "Fallback ORM lookup for taxonomy names failed"
+                        )
 
             # Resolve name -> taxonomy using scientific_name only (no vernacular lookup)
             name_to_tax: dict[str, Taxonomy] = {}
