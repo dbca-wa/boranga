@@ -4877,24 +4877,45 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             )
             observation_detail.save()
 
-        plant_count = clone_model(
-            OCRPlantCount, OCCPlantCount, occurrence_report.plant_count
-        )
+        # Only attempt to access `plant_count` for flora reports. Many reports
+        # (fauna/community) won't have a plant_count OneToOne relation and
+        # accessing it raises RelatedObjectDoesNotExist. Restricting by
+        # group_type avoids unnecessary exceptions and makes intent clear.
+        source_plant_count = None
+        try:
+            if (
+                occurrence_report.group_type
+                and occurrence_report.group_type.name == GroupType.GROUP_TYPE_FLORA
+            ):
+                source_plant_count = occurrence_report.plant_count
+        except Exception:
+            source_plant_count = None
+
+        plant_count = clone_model(OCRPlantCount, OCCPlantCount, source_plant_count)
         if plant_count:
             plant_count.occurrence = occurrence
-            plant_count.copied_ocr_plant_count = occurrence_report.plant_count
+            # Use the guarded source_plant_count variable (may be None)
+            plant_count.copied_ocr_plant_count = source_plant_count
             plant_count.save()
+
+        try:
+            source_animal_observation = None
+            if (
+                occurrence_report.group_type
+                and occurrence_report.group_type.name == GroupType.GROUP_TYPE_FAUNA
+            ):
+                source_animal_observation = occurrence_report.animal_observation
+        except Exception:
+            source_animal_observation = None
 
         animal_observation = clone_model(
             OCRAnimalObservation,
             OCCAnimalObservation,
-            occurrence_report.animal_observation,
+            source_animal_observation,
         )
         if animal_observation:
             animal_observation.occurrence = occurrence
-            animal_observation.copied_ocr_animal_observation = (
-                occurrence_report.animal_observation
-            )
+            animal_observation.copied_ocr_animal_observation = source_animal_observation
             animal_observation.save()
 
         identification = clone_model(
