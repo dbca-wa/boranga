@@ -116,3 +116,5 @@ private-media/
 
 **/data_migration/handlers/handler_output/
 **/data_migration/legacy_data/
+
+.db-backups/

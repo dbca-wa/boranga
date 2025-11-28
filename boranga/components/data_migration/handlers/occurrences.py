@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 from collections import defaultdict
@@ -15,6 +16,10 @@ from boranga.components.data_migration.adapters.occurrence.tpfl import (
     OccurrenceTpflAdapter,
 )
 from boranga.components.data_migration.adapters.sources import Source
+from boranga.components.data_migration.handlers.helpers import (
+    apply_value_to_instance,
+    normalize_create_kwargs,
+)
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -25,7 +30,6 @@ from boranga.components.data_migration.registry import (
 from boranga.components.occurrence.models import OCCContactDetail, Occurrence
 
 logger = logging.getLogger(__name__)
-
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OccurrenceTpflAdapter(),
@@ -39,6 +43,51 @@ SOURCE_ADAPTERS = {
 class OccurrenceImporter(BaseSheetImporter):
     slug = "occurrence_legacy"
     description = "Import occurrence data from legacy TEC / TFAUNA / TPFL sources"
+
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """Delete Occurrence target data and obvious children. Respect `ctx.dry_run`."""
+        if ctx.dry_run:
+            logger.info("OccurrenceImporter.clear_targets: dry-run, skipping delete")
+            return
+
+        logger.warning("OccurrenceImporter: deleting Occurrence and related data...")
+
+        # Perform deletes in an autocommit block so they are committed
+        # immediately. This avoids the case where clear_targets runs inside a
+        # larger transaction that later rolls back leaving the wipe undone.
+        from django.db import connections
+
+        conn = connections["default"]
+        was_autocommit = conn.get_autocommit()
+        if not was_autocommit:
+            conn.set_autocommit(True)
+        try:
+            try:
+                OCCContactDetail.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete OCCContactDetail")
+            try:
+                Occurrence.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete Occurrence")
+
+            # Reset the primary key sequence for Occurrence when using PostgreSQL.
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = Occurrence._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                    logger.info("Reset primary key sequence for table %s", table)
+            except Exception:
+                logger.exception("Failed to reset Occurrence primary key sequence")
+        finally:
+            if not was_autocommit:
+                conn.set_autocommit(False)
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -93,14 +142,44 @@ class OccurrenceImporter(BaseSheetImporter):
                 r["_source"] = src
             all_rows.extend(result.rows)
 
-        # 2. Build pipelines / same as before
-        pipelines = {}
-        for col, names in schema.COLUMN_PIPELINES.items():
-            from boranga.components.data_migration.registry import (
-                registry as transform_registry,
-            )
+        # Apply optional global per-importer limit (ctx.limit) after extraction
+        limit = getattr(ctx, "limit", None)
+        if limit:
+            try:
+                all_rows = all_rows[: int(limit)]
+            except Exception:
+                pass
 
-            pipelines[col] = transform_registry.build_pipeline(names)
+        # 2. Build pipelines per-source by merging base schema pipelines with
+        # any adapter-provided `PIPELINES`. This allows adapters to own
+        # source-specific transform bindings while the importer runs them
+        # uniformly.
+        from boranga.components.data_migration.registry import (
+            registry as transform_registry,
+        )
+
+        base_column_names = schema.COLUMN_PIPELINES or {}
+        pipelines_by_source: dict[str, dict] = {}
+        for src_key, adapter in SOURCE_ADAPTERS.items():
+            src_column_names = dict(base_column_names)
+            adapter_pipes = getattr(adapter, "PIPELINES", None)
+            if adapter_pipes:
+                src_column_names.update(adapter_pipes)
+
+            built: dict[str, list] = {}
+            for col, names in src_column_names.items():
+                built[col] = transform_registry.build_pipeline(names)
+            pipelines_by_source[src_key] = built
+
+        # Build a `pipelines` mapping (keys only) used by merge_group to know
+        # which canonical columns to consider when merging entries. Use the
+        # union of columns across all source-specific pipelines.
+        all_columns = set()
+        for built in pipelines_by_source.values():
+            all_columns.update(built.keys())
+        if not all_columns and schema.COLUMN_PIPELINES:
+            all_columns.update(schema.COLUMN_PIPELINES.keys())
+        pipelines = {col: None for col in sorted(all_columns)}
 
         processed = 0
         errors = 0
@@ -128,7 +207,12 @@ class OccurrenceImporter(BaseSheetImporter):
             issues = []
             transformed = {}
             has_error = False
-            for col, pipeline in pipelines.items():
+            # Choose pipeline map based on the row source (fallback to base)
+            src = row.get("_source")
+            pipeline_map = pipelines_by_source.get(
+                src, pipelines_by_source.get(None, {})
+            )
+            for col, pipeline in pipeline_map.items():
                 raw_val = row.get(col)
                 res = run_pipeline(pipeline, raw_val, tcx)
                 transformed[col] = res.value
@@ -216,7 +300,8 @@ class OccurrenceImporter(BaseSheetImporter):
                 combined_issues.extend(iss)
             return merged, combined_issues
 
-        # Persist merged rows
+        # Persist merged rows in bulk where possible (prepare ops then create/update)
+        ops = []
         for migrated_from_id, entries in groups.items():
             merged, combined_issues = merge_group(entries, sources)
             # if any error in combined_issues => skip
@@ -224,17 +309,13 @@ class OccurrenceImporter(BaseSheetImporter):
                 skipped += 1
                 continue
 
-            # build defaults/payload; set legacy_source as joined sources involved
             involved_sources = sorted({src for _, src, _ in entries})
-            # validate merged business rules using schema's OccurrenceRow
             occ_row = schema.OccurrenceRow.from_dict(merged)
-            # if a single source involved, pass it to validate (helps source-specific rules)
             source_for_validation = (
                 involved_sources[0] if len(involved_sources) == 1 else None
             )
             validation_issues = occ_row.validate(source=source_for_validation)
             if validation_issues:
-                # record validation issues and count errors
                 for level, msg in validation_issues:
                     rec = {
                         "migrated_from_id": merged.get("migrated_from_id"),
@@ -254,19 +335,40 @@ class OccurrenceImporter(BaseSheetImporter):
                     )
                     continue
 
+            # QA check: occurrence_name must be unique for the same species
+            if occ_row.occurrence_name and occ_row.species_id:
+                dup_exists = (
+                    Occurrence.objects.filter(
+                        species_id=occ_row.species_id,
+                        occurrence_name=occ_row.occurrence_name,
+                    )
+                    .exclude(migrated_from_id=migrated_from_id)
+                    .exists()
+                )
+                if dup_exists:
+                    rec = {
+                        "migrated_from_id": merged.get("migrated_from_id"),
+                        "reason": "duplicate_occurrence_name",
+                        "level": "error",
+                        "message": (
+                            f"occurrence_name '{occ_row.occurrence_name}' "
+                            f"already exists for species {occ_row.species_id}"
+                        ),
+                        "row": merged,
+                    }
+                    errors_details.append(rec)
+                    skipped += 1
+                    errors += 1
+                    continue
+
             defaults = occ_row.to_model_defaults()
             defaults["lodgement_date"] = merged.get("datetime_created")
-            # include legacy source info
-            defaults["legacy_source"] = ",".join(involved_sources)
-            # include locked if present in merged payload
             if merged.get("locked") is not None:
                 defaults["locked"] = merged.get("locked")
 
+            # If dry-run, log planned defaults and skip adding to ops so no DB work
             if ctx.dry_run:
-                # pretty print defaults on dry-run for easier debugging
-                pretty = __import__("json").dumps(
-                    defaults, default=str, indent=2, sort_keys=True
-                )
+                pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
                 logger.debug(
                     "OccurrenceImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
                     self.slug,
@@ -275,27 +377,298 @@ class OccurrenceImporter(BaseSheetImporter):
                 )
                 continue
 
-            with transaction.atomic():
-                obj, created_flag = Occurrence.objects.update_or_create(
-                    migrated_from_id=migrated_from_id, defaults=defaults
-                )
-                if created_flag:
-                    created += 1
-                else:
-                    updated += 1
+            ops.append(
+                {
+                    "migrated_from_id": migrated_from_id,
+                    "defaults": defaults,
+                    "merged": merged,
+                }
+            )
 
-                # Create OCCContactDetail
-                if (
-                    merged.get("contact")
-                    or merged.get("contact_name")
-                    or merged.get("notes")
-                ):
-                    OCCContactDetail.objects.get_or_create(
-                        occurrence=obj,
-                        contact=merged.get("contact"),
-                        contact_name=merged.get("contact_name"),
-                        notes=merged.get("notes"),
+        # Note: do not exit early on dry-run here — continue so error CSV is generated
+
+        # Determine existing occurrences and plan create vs update
+        migrated_keys = [o["migrated_from_id"] for o in ops]
+        existing_by_migrated = {
+            s.migrated_from_id: s
+            for s in Occurrence.objects.filter(migrated_from_id__in=migrated_keys)
+        }
+
+        to_create = []
+        create_meta = []
+        to_update = []
+        BATCH = 1000
+
+        for op in ops:
+            migrated_from_id = op["migrated_from_id"]
+            defaults = op["defaults"]
+            merged = op.get("merged") or {}
+
+            obj = existing_by_migrated.get(migrated_from_id)
+            if obj:
+                for k, v in defaults.items():
+                    apply_value_to_instance(obj, k, v)
+                to_update.append(obj)
+                continue
+
+            create_kwargs = dict(defaults)
+            create_kwargs["migrated_from_id"] = migrated_from_id
+            if getattr(ctx, "migration_run", None) is not None:
+                create_kwargs["migration_run"] = ctx.migration_run
+            inst = Occurrence(**normalize_create_kwargs(Occurrence, create_kwargs))
+            to_create.append(inst)
+            create_meta.append(
+                (
+                    migrated_from_id,
+                    merged.get("OCCContactDetail__contact"),
+                    merged.get("OCCContactDetail__contact_name"),
+                    merged.get("OCCContactDetail__notes"),
+                    merged.get("modified_by"),
+                    merged.get("datetime_updated"),
+                )
+            )
+
+        # Bulk create new Occurrences
+        created_map = {}
+        if to_create:
+            logger.info(
+                "OccurrenceImporter: bulk-creating %d new Occurrences",
+                len(to_create),
+            )
+            for i in range(0, len(to_create), BATCH):
+                chunk = to_create[i : i + BATCH]
+                with transaction.atomic():
+                    Occurrence.objects.bulk_create(chunk, batch_size=BATCH)
+
+        # Refresh created objects to get PKs
+        if create_meta:
+            created_keys = [m[0] for m in create_meta]
+            for s in Occurrence.objects.filter(migrated_from_id__in=created_keys):
+                created_map[s.migrated_from_id] = s
+
+        # If migration_run present, ensure it's attached to created objects
+        if created_map and getattr(ctx, "migration_run", None) is not None:
+            try:
+                Occurrence.objects.filter(
+                    migrated_from_id__in=list(created_map.keys())
+                ).update(migration_run=ctx.migration_run)
+            except Exception:
+                logger.exception(
+                    "Failed to attach migration_run to some created Occurrence(s)"
+                )
+
+        # Ensure occurrence_number is populated for newly-created Occurrence objects.
+        # The model normally sets this in save() as 'OCC' + pk, but bulk_create
+        # bypasses save(), so we must set it here using the assigned PKs.
+        if created_map:
+            occs_to_update = []
+            for occ in created_map.values():
+                try:
+                    if not getattr(occ, "occurrence_number", None):
+                        occ.occurrence_number = f"OCC{occ.pk}"
+                        occs_to_update.append(occ)
+                except Exception:
+                    logger.exception(
+                        "Error preparing occurrence_number for Occurrence %s",
+                        getattr(occ, "pk", None),
                     )
+            if occs_to_update:
+                try:
+                    Occurrence.objects.bulk_update(
+                        occs_to_update, ["occurrence_number"], batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_update occurrence_number; falling back to individual saves"
+                    )
+                    for occ in occs_to_update:
+                        try:
+                            occ.save(update_fields=["occurrence_number"])
+                        except Exception:
+                            logger.exception(
+                                "Failed to save occurrence_number for Occurrence %s",
+                                getattr(occ, "pk", None),
+                            )
+
+        # Bulk update existing objects
+        if to_update:
+            logger.info(
+                "OccurrenceImporter: bulk-updating %d existing Occurrences",
+                len(to_update),
+            )
+            update_instances = to_update
+            fields = set()
+            for inst in update_instances:
+                fields.update(
+                    [
+                        f.name
+                        for f in inst._meta.fields
+                        if getattr(inst, f.name, None) is not None
+                    ]
+                )
+            try:
+                Occurrence.objects.bulk_update(
+                    update_instances, list(fields), batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update Occurrence; falling back to individual saves"
+                )
+                for inst in update_instances:
+                    try:
+                        inst.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save Occurrence %s", getattr(inst, "pk", None)
+                        )
+
+        # Now create contact details for created/updated occurrences when provided
+        target_mig_ids = [o["migrated_from_id"] for o in ops]
+        target_occs = list(
+            Occurrence.objects.filter(migrated_from_id__in=target_mig_ids)
+        )
+        target_map = {o.migrated_from_id: o for o in target_occs}
+
+        existing_contacts = set(
+            OCCContactDetail.objects.filter(occurrence__in=target_occs).values_list(
+                "occurrence_id", flat=True
+            )
+        )
+        want_contact_create = []
+        # created_meta contains tuples for created ones; for updates use merged from ops
+        # create_meta may include extra fields (modified_by, datetime_updated) so ignore extras here
+        for mig, contact, contact_name, notes, *rest in create_meta:
+            occ = created_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_contacts:
+                continue
+            if contact or contact_name or notes:
+                want_contact_create.append(
+                    OCCContactDetail(
+                        occurrence=occ,
+                        contact=contact,
+                        contact_name=contact_name,
+                        notes=notes,
+                        visible=True,
+                    )
+                )
+
+        # also handle updates (ops where occurrence existed)
+        for op in ops:
+            mig = op["migrated_from_id"]
+            merged = op.get("merged") or {}
+            occ = target_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_contacts:
+                continue
+            if (
+                merged.get("OCCContactDetail__contact")
+                or merged.get("OCCContactDetail__contact_name")
+                or merged.get("OCCContactDetail__notes")
+            ):
+                want_contact_create.append(
+                    OCCContactDetail(
+                        occurrence=occ,
+                        contact=merged.get("OCCContactDetail__contact"),
+                        contact_name=merged.get("OCCContactDetail__contact_name"),
+                        notes=merged.get("OCCContactDetail__notes"),
+                        visible=True,
+                    )
+                )
+
+        if want_contact_create:
+            try:
+                OCCContactDetail.objects.bulk_create(
+                    want_contact_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCCContactDetail; falling back to individual creates"
+                )
+                for obj in want_contact_create:
+                    try:
+                        obj.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCCContactDetail for occurrence %s",
+                            getattr(obj.occurrence, "pk", None),
+                        )
+
+        # Create an OccurrenceUserAction for created/updated occurrences (one per occurrence)
+        from boranga.components.occurrence.models import OccurrenceUserAction
+
+        existing_actions = set(
+            OccurrenceUserAction.objects.filter(occurrence__in=target_occs).values_list(
+                "occurrence_id", flat=True
+            )
+        )
+
+        want_action_create = []
+        # created_meta contains tuples for created ones; tuples extended with modified_by and datetime_updated
+        for tpl in create_meta:
+            # tpl = (migrated_from_id, contact, contact_name, notes, modified_by, datetime_updated)
+            mig = tpl[0]
+            modified_by = tpl[4]
+            datetime_updated = tpl[5]
+            occ = created_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_actions:
+                continue
+            if modified_by and datetime_updated:
+                want_action_create.append(
+                    OccurrenceUserAction(
+                        occurrence=occ,
+                        what="Edited in TPFL",
+                        when=datetime_updated,
+                        who=modified_by,
+                    )
+                )
+
+        # also create for updates (ops where occurrence existed)
+        for op in ops:
+            mig = op["migrated_from_id"]
+            merged = op.get("merged") or {}
+            occ = target_map.get(mig)
+            if not occ:
+                continue
+            if occ.pk in existing_actions:
+                continue
+            modified_by = merged.get("modified_by")
+            datetime_updated = merged.get("datetime_updated")
+            if modified_by and datetime_updated:
+                want_action_create.append(
+                    OccurrenceUserAction(
+                        occurrence=occ,
+                        what="Edited in TPFL",
+                        when=datetime_updated,
+                        who=modified_by,
+                    )
+                )
+
+        if want_action_create:
+            try:
+                OccurrenceUserAction.objects.bulk_create(
+                    want_action_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OccurrenceUserAction; falling back to individual creates"
+                )
+                for obj in want_action_create:
+                    try:
+                        obj.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OccurrenceUserAction for occurrence %s",
+                            getattr(obj.occurrence, "pk", None),
+                        )
+
+        # Update stats counts for created/updated based on performed ops
+        created += len(created_map)
+        updated += len(to_update)
 
         stats.update(
             processed=processed,
@@ -315,9 +688,7 @@ class OccurrenceImporter(BaseSheetImporter):
         stats["time_taken"] = str(elapsed)
 
         if errors_details:
-            # allow override via options, otherwise write to handler_output
-            get_opt = getattr(options, "get", None)
-            csv_path = get_opt("error_csv") if callable(get_opt) else None
+            csv_path = options.get("error_csv")
             if csv_path:
                 csv_path = os.path.abspath(csv_path)
             else:
@@ -329,8 +700,6 @@ class OccurrenceImporter(BaseSheetImporter):
                 )
             try:
                 os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-                import csv
-
                 with open(csv_path, "w", newline="", encoding="utf-8") as fh:
                     fieldnames = [
                         "migrated_from_id",
@@ -342,6 +711,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         "row_json",
                         "timestamp",
                     ]
+                    import csv
+
                     writer = csv.DictWriter(fh, fieldnames=fieldnames)
                     writer.writeheader()
                     for rec in errors_details:
@@ -353,9 +724,7 @@ class OccurrenceImporter(BaseSheetImporter):
                                 "message": rec.get("message"),
                                 "raw_value": rec.get("raw_value"),
                                 "reason": rec.get("reason"),
-                                "row_json": __import__("json").dumps(
-                                    rec.get("row", ""), default=str
-                                ),
+                                "row_json": json.dumps(rec.get("row", ""), default=str),
                                 "timestamp": timezone.now().isoformat(),
                             }
                         )

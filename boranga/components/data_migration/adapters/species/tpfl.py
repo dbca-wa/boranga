@@ -1,9 +1,51 @@
 from boranga.components.data_migration.mappings import get_group_type_id
-from boranga.components.species_and_communities.models import GroupType
+from boranga.components.data_migration.registry import (
+    choices_transform,
+    emailuser_by_legacy_username_factory,
+    taxonomy_lookup_legacy_mapping,
+)
+from boranga.components.species_and_communities.models import GroupType, Species
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 from . import schema
+
+# TPFL-specific transform bindings and pipeline mapping. Keep the same
+# syntax as previously used in `schema.py` but expose it on the adapter
+# so pipelines remain source-local.
+
+
+TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
+
+SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
+
+PROCESSING_STATUS = choices_transform([c[0] for c in Species.PROCESSING_STATUS_CHOICES])
+
+PIPELINES = {
+    "migrated_from_id": ["strip", "required"],
+    "taxonomy_id": ["strip", "blank_to_none", "required", TAXONOMY_TRANSFORM],
+    "comment": ["strip", "blank_to_none"],
+    # normalize & format RP_EXP_DATE to "dd/mm/YYYY"
+    "RP_EXP_DATE": [
+        "strip",
+        "blank_to_none",
+        "date_from_datetime_iso",
+        "format_date_dmy",
+    ],
+    "conservation_plan_exists": ["strip", "blank_to_none", "is_present"],
+    "department_file_numbers": ["strip", "blank_to_none"],
+    "last_data_curation_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
+    "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
+    "processing_status": [
+        "strip",
+        "blank_to_none",
+        "required",
+        "Y_to_active_else_historical",
+        PROCESSING_STATUS,
+    ],
+    "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
+    "distribution": ["strip", "blank_to_none"],
+}
 
 
 class SpeciesTpflAdapter(SourceAdapter):
@@ -33,3 +75,7 @@ class SpeciesTpflAdapter(SourceAdapter):
             canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)
+
+
+# Attach to adapter class so handlers/registry can detect adapter-specific pipelines
+SpeciesTpflAdapter.PIPELINES = PIPELINES

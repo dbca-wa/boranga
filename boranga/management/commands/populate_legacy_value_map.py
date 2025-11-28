@@ -14,7 +14,7 @@ class Command(BaseCommand):
     """
     Example command:
         ./manage.py \
-        populate_legacy_value_map boranga/components/data_migration/legacy_data/TPFL/legacy-data-map-TPFL.csv \
+        populate_legacy_value_map private-media/legacy_data/TPFL/legacy-data-map-TPFL.csv \
             --legacy-system TPFL
     """
 

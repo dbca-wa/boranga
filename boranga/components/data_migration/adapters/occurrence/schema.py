@@ -5,52 +5,9 @@ from datetime import date, datetime
 
 from boranga.components.data_migration import utils
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.registry import (
-    build_legacy_map_transform,
-    choices_transform,
-    emailuser_by_legacy_username_factory,
-    fk_lookup,
-    taxonomy_lookup,
-)
-from boranga.components.occurrence.models import Occurrence, WildStatus
-from boranga.components.species_and_communities.models import (
-    Community,
-    GroupType,
-    Species,
-)
+from boranga.components.species_and_communities.models import GroupType
 
 from ..sources import Source
-
-TAXONOMY_TRANSFORM = taxonomy_lookup(
-    lookup_field="scientific_name",
-)
-
-SPECIES_TRANSFORM = fk_lookup(model=Species, lookup_field="taxonomy_id")
-
-COMMUNITY_TRANSFORM = fk_lookup(
-    model=Community,
-    lookup_field="taxonomy__community_name",
-)
-
-WILD_STATUS_TRANSFORM = fk_lookup(model=WildStatus, lookup_field="name")
-
-PROCESSING_STATUS = choices_transform(
-    [c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES]
-)
-
-SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
-
-PURPOSE_TRANSFORM = build_legacy_map_transform(
-    "TPFL",
-    "PURPOSE (DRF_LOV_PURPOSE_VWS)",
-    required=False,
-)
-
-VESTING_TRANSFORM = build_legacy_map_transform(
-    "TPFL",
-    "VESTING (DRF_LOV_PURPOSE_VWS)",
-    required=False,
-)
 
 COLUMN_MAP = {
     "POP_ID": "migrated_from_id",
@@ -59,6 +16,7 @@ COLUMN_MAP = {
     "STATUS": "wild_status_id",
     "CREATED_DATE": "datetime_created",
     "MODIFIED_DATE": "datetime_updated",
+    "MODIFIED_BY": "modified_by",
     "POP_COMMENTS": "comment",
     "ACTIVE_IND": "processing_status",
     "CREATED_BY": "submitter",
@@ -73,31 +31,7 @@ REQUIRED_COLUMNS = [
     "processing_status",
 ]
 
-PIPELINES = {
-    "migrated_from_id": ["strip", "required"],
-    "species_id": [
-        "strip",
-        "blank_to_none",
-        TAXONOMY_TRANSFORM,  # Get the taxonomy id from the scientific name
-        SPECIES_TRANSFORM,  # Then get the species id from the taxonomy id
-    ],  # conditional required later (cross field check that either species_id or community_id is present)
-    "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
-    "wild_status_id": ["strip", "blank_to_none", WILD_STATUS_TRANSFORM],
-    "comment": ["strip", "blank_to_none"],
-    "datetime_created": ["strip", "blank_to_none", "datetime_iso"],
-    "datetime_updated": ["strip", "blank_to_none", "datetime_iso"],
-    "processing_status": [
-        "strip",
-        "required",
-        "Y_to_active_else_historical",
-        PROCESSING_STATUS,
-    ],
-    "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
-    "OCCContactDetail__contact_name": ["strip", "blank_to_none"],
-    "OCCContactDetail__notes": ["strip", "blank_to_none"],
-    "OccurrenceTenure__purpose_id": ["strip", "blank_to_none", PURPOSE_TRANSFORM],
-    "OccurrenceTenure__vesting_id": ["strip", "blank_to_none", VESTING_TRANSFORM],
-}
+PIPELINES: dict[str, list[str]] = {}
 
 SCHEMA = Schema(
     column_map=COLUMN_MAP,

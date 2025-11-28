@@ -2,42 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from boranga.components.conservation_status.models import ConservationStatus
 from boranga.components.data_migration.adapters.schema_base import Schema
-from boranga.components.data_migration.registry import choices_transform
-
-# Choice enums based on model choices (examples mirror model constants)
-CUSTOMER_STATUS_CHOICES = [
-    "draft",
-    "with_assessor",
-    "ready_for_agenda",
-    "approved",
-    "declined",
-    "discarded",
-    "closed",
-]
-PROCESSING_STATUS_CHOICES = [
-    "draft",
-    "discarded",
-    "with_assessor",
-    "with_referral",
-    "deferred",
-    "proposed_for_agenda",
-    "ready_for_agenda",
-    "on_agenda",
-    "with_approver",
-    "approved",
-    "declined",
-    "delisted",
-    "closed",
-]
-
-CUSTOMER_STATUS = choices_transform(
-    [c[0] for c in ConservationStatus.CUSTOMER_STATUS_CHOICES]
-)
-PROCESSING_STATUS = choices_transform(
-    [c[0] for c in ConservationStatus.PROCESSING_STATUS_CHOICES]
-)
 
 # Column header → canonical key map (adjust headers to match CSV)
 COLUMN_MAP = {
@@ -83,41 +48,14 @@ REQUIRED_COLUMNS = [
     "processing_status",
 ]
 
-PIPELINES = {
-    # Identifiers / basics
-    "migrated_from_id": ["strip", "required"],
-    "conservation_status_number": ["strip", "blank_to_none"],
-    # Statuses / choices
-    "customer_status": ["strip", "blank_to_none", CUSTOMER_STATUS],
-    "processing_status": ["strip", "required", PROCESSING_STATUS],
-    # Simple fields
-    "conservation_criteria": ["strip", "blank_to_none"],
-    "approval_level": ["strip", "blank_to_none"],
-    "comment": ["strip", "blank_to_none"],
-    # Booleans
-    "cam_mou": ["strip", "blank_to_none", "bool"],
-    "public_consultation": ["strip", "blank_to_none", "bool"],
-    "internal_application": ["strip", "blank_to_none", "bool"],
-    "locked": ["strip", "blank_to_none", "bool"],
-    # Dates
-    "cam_mou_date_sent": ["strip", "blank_to_none", "date_iso"],
-    "public_consultation_start_date": ["strip", "blank_to_none", "date_iso"],
-    "public_consultation_end_date": ["strip", "blank_to_none", "date_iso"],
-    "review_due_date": ["strip", "blank_to_none", "date_iso"],
-    "effective_from": ["strip", "blank_to_none", "date_iso"],
-    "effective_to": ["strip", "blank_to_none", "date_iso"],
-    "listing_date": ["strip", "blank_to_none", "date_iso"],
-    "lodgement_date": ["strip", "blank_to_none", "date_iso"],
-    # User references (may be migrated to ledger ids separately)
-    "submitter": ["strip", "blank_to_none"],
-    "assigned_officer": ["strip", "blank_to_none"],
-    "assigned_approver": ["strip", "blank_to_none"],
-    "approved_by": ["strip", "blank_to_none"],
-}
+PIPELINES: dict[str, list[str]] = {}
 
 SCHEMA = Schema(
     column_map=COLUMN_MAP,
     required=REQUIRED_COLUMNS,
+    # pipelines are intentionally left empty here; source-specific bindings
+    # (eg. TPFL) are defined on the adapter module so adapters own legacy
+    # transform bindings.
     pipelines=PIPELINES,
     source_choices=None,
 )

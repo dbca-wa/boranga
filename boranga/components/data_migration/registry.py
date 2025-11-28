@@ -25,6 +25,7 @@ from boranga.components.data_migration import mappings as dm_mappings
 from boranga.components.main.models import (
     LegacyUsernameEmailuserMapping,
     LegacyValueMap,
+    MigrationRun,
     neutralise_html,
 )
 from boranga.components.species_and_communities.models import (
@@ -118,6 +119,13 @@ def t_strip(value, ctx):
     if value is None:
         return _result(None)
     return _result(str(value).strip())
+
+
+@registry.register("normalise_whitespace")
+def t_normalise_whitespace(value, ctx):
+    if value is None:
+        return _result(None)
+    return _result(re.sub(r"\s+", " ", str(value)).strip())
 
 
 @registry.register("blank_to_none")
@@ -387,88 +395,87 @@ def t_date_from_datetime_iso(value, ctx):
 
 @registry.register("ocr_comments_transform")
 def t_ocr_comments_transform(value, ctx):
-    PURPOSE1 = ctx.row.get("PURPOSE1", "").strip()
-    PURPOSE2 = ctx.row.get("PURPOSE2", "").strip()
-    VESTING = ctx.row.get("VESTING", "").strip()
-    FENCING_STATUS = ctx.row.get("FENCING_STATUS", "").strip()
-    FENCING_COMMENTS = ctx.row.get("FENCING_COMMENTS", "").strip()
-    ROADSIDE_MARKER_STATUS = ctx.row.get("ROADSIDE_MARKER_STATUS", "").strip()
-    RDSIDE_MKR_COMMENTS = ctx.row.get("RDSIDE_MKR_COMMENTS", "").strip()
+    PURPOSE1 = (ctx.row.get("PURPOSE1") or "").strip()
+    PURPOSE2 = (ctx.row.get("PURPOSE2") or "").strip()
+    VESTING = (ctx.row.get("VESTING") or "").strip()
+    FENCING_STATUS = (ctx.row.get("FENCING_STATUS") or "").strip()
+    FENCING_COMMENTS = (ctx.row.get("FENCING_COMMENTS") or "").strip()
+    ROADSIDE_MARKER_STATUS = (ctx.row.get("ROADSIDE_MARKER_STATUS") or "").strip()
+    RDSIDE_MKR_COMMENTS = (ctx.row.get("RDSIDE_MKR_COMMENTS") or "").strip()
 
     comments = None
-    transform_issues = []
+    transform_issues: list[TransformIssue] = []
+
+    # Helper to append parts safely (skips falsy parts and avoids None concatenation)
+    def _append_part(part: str | None):
+        nonlocal comments
+        if not part:
+            return
+        if comments:
+            comments += ", " + part
+        else:
+            comments = part
 
     if PURPOSE1:
         purpose1 = LegacyValueMap.get_target(
             legacy_system="TPFL",
             list_name="PURPOSE (DRF_LOV_PURPOSE_VWS)",
-            value=PURPOSE1,
+            legacy_value=PURPOSE1,
             use_cache=True,
         )
         if not purpose1:
             transform_issues.append(
                 TransformIssue(
-                    "error", f"No Purpose found that maps to legacy value: {value!r}"
+                    "error", f"No Purpose found that maps to legacy value: {PURPOSE1!r}"
                 )
             )
+        else:
+            _append_part(purpose1)
 
     if PURPOSE2:
         purpose2 = LegacyValueMap.get_target(
             legacy_system="TPFL",
             list_name="PURPOSE (DRF_LOV_PURPOSE_VWS)",
-            value=PURPOSE2,
+            legacy_value=PURPOSE2,
             use_cache=True,
         )
         if not purpose2:
             transform_issues.append(
                 TransformIssue(
-                    "error", f"No Purpose found that maps to legacy value: {value!r}"
+                    "error", f"No Purpose found that maps to legacy value: {PURPOSE2!r}"
                 )
             )
+        else:
+            _append_part(purpose2)
 
     if VESTING:
         vesting = LegacyValueMap.get_target(
             legacy_system="TPFL",
             list_name="VESTING (DRF_LOV_VESTING_VWS)",
-            value=VESTING,
+            legacy_value=VESTING,
             use_cache=True,
         )
         if not vesting:
             transform_issues.append(
                 TransformIssue(
-                    "error", f"No Vesting found that maps to legacy value: {value!r}"
+                    "error", f"No Vesting found that maps to legacy value: {VESTING!r}"
                 )
             )
+        else:
+            _append_part(f"Vesting: {vesting}")
 
-    if PURPOSE1:
-        comments = purpose1.current_value
-
-    if PURPOSE2:
-        if comments:
-            comments += ", "
-        comments += purpose2.current_value
-
-    if VESTING:
-        if comments:
-            comments += ", "
-        comments += f"Vesting: {vesting.current_value}"
-
-    if FENCING_STATUS:
-        if comments:
-            comments += ", "
-        comments = f"Fencing Status: {FENCING_STATUS}"
-    if FENCING_COMMENTS:
-        if comments:
-            comments += ", "
-        comments += f"Fencing Comments: {FENCING_COMMENTS}"
-    if ROADSIDE_MARKER_STATUS:
-        if comments:
-            comments += ", "
-        comments += f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}"
-    if RDSIDE_MKR_COMMENTS:
-        if comments:
-            comments += ", "
-        comments += f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}"
+    _append_part(f"Fencing Status: {FENCING_STATUS}" if FENCING_STATUS else None)
+    _append_part(f"Fencing Comments: {FENCING_COMMENTS}" if FENCING_COMMENTS else None)
+    _append_part(
+        f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}"
+        if ROADSIDE_MARKER_STATUS
+        else None
+    )
+    _append_part(
+        f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}"
+        if RDSIDE_MKR_COMMENTS
+        else None
+    )
 
     return _result(comments, *transform_issues)
 
@@ -605,6 +612,27 @@ def taxonomy_lookup(
         else:
             candidates.append(value)
 
+        # Spacing-normalisation candidate: produce variants that insert a space
+        # after a period when followed by a capitalised word (e.g. "sp.Darling" -> "sp. Darling")
+        # and ensure there is a space before parentheses ("Range(R..." -> "Range (R...").
+        # This helps resolve names like "Baeckea sp.Darling Range(R.J.Cranfield 1673)".
+        try:
+            norm_variants = []
+            for c in list(candidates):
+                if not isinstance(c, str):
+                    continue
+                s = c
+                # add space after period when followed by Capital+lowercase (surname or word)
+                s = re.sub(r"\.([A-Z][a-z])", r". \1", s)
+                # add space before opening parenthesis if missing
+                s = re.sub(r"([^\s])\(", r"\1 (", s)
+                if s != c and s not in candidates:
+                    norm_variants.append(s)
+            candidates.extend(norm_variants)
+        except Exception:
+            # be conservative: if normalization fails, continue without it
+            logger.exception("spacing-normalisation in taxonomy_lookup failed")
+
         # If transform configured for TPFL, add mapping candidate last (final attempt)
         if source_key and source_key.upper() == "TPFL":
             try:
@@ -663,13 +691,29 @@ def taxonomy_lookup(
             except Taxonomy.DoesNotExist:
                 continue
             except Taxonomy.MultipleObjectsReturned:
-                return _result(
-                    value,
-                    TransformIssue(
-                        "error",
-                        f"Multiple Taxonomy with {lookup_field}='{value}' found",
-                    ),
-                )
+                try:
+                    matches = qs.filter(**{lookup_field: candidate})
+                    # If exactly one 'current' record exists among the matches, prefer it.
+                    # Use `is_current` field which exists on the Taxonomy model.
+                    current_matches = matches.filter(is_current=True)
+                    if current_matches.count() == 1:
+                        return _result(current_matches.first().pk)
+                    # If there are multiple current matches or none, we cannot disambiguate.
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Taxonomy with {lookup_field}='{value}' found",
+                        ),
+                    )
+                except Exception:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Taxonomy with {lookup_field}='{value}' found",
+                        ),
+                    )
 
         # Try previous names (case-insensitive match on previous_scientific_name)
         if check_previous:
@@ -782,6 +826,399 @@ def _load_tpfl_name_to_nomos() -> dict:
 
     _tpfl_name_to_nomos = mapping
     return _tpfl_name_to_nomos
+
+
+# Cache for LegacyTaxonomyMapping list -> {normalized_legacy_canonical_name: {taxonomy_id, taxon_name_id}}
+_legacy_taxonomy_mappings_cache: dict[str, dict] = {}
+
+
+def _norm_legacy_canonical_name(val: str) -> str | None:
+    if val is None:
+        return None
+    s = str(val)
+    # Try to use ftfy to fix mojibake/encoding artefacts when available.
+    try:
+        import ftfy
+
+        try:
+            fixed = ftfy.fix_text(s)
+            if fixed:
+                s = fixed
+        except Exception:
+            # fall through to conservative heuristics below
+            pass
+    except Exception:
+        # ftfy not installed or import failed; fall back to heuristics below
+        pass
+
+    # Attempt to fix common mojibake artifacts where UTF-8 bytes were
+    # incorrectly decoded as Latin-1/Windows-1252 (e.g. sequences like
+    # 'Ã‚Â' that commonly represent a non-breaking space). Try a best-effort
+    # re-decode; on failure fall back to a conservative replacement of
+    # the most common artefacts.
+    try:
+        if "Ã" in s or "Â" in s or "Ã‚" in s:
+            try:
+                s = s.encode("latin-1").decode("utf-8")
+            except Exception:
+                # fallback replacements for common mojibake tokens
+                s = s.replace("Ã‚Â", " ").replace("Ã‚", " ").replace("Â", " ")
+    except Exception:
+        # if anything odd happens, continue with best-effort normalisation
+        pass
+
+    # normalise non-breaking spaces and narrow NBSPs to plain spaces
+    s = s.replace("\u00a0", " ").replace("\u202f", " ")
+    try:
+        s = neutralise_html(s) or s
+    except Exception:
+        # best-effort: fall back to the cleaned whitespace form
+        pass
+
+    # collapse multiple whitespace (including accidental double-spaces from
+    # NBSP substitutions or HTML neutralisation) into a single space, then strip
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
+    """Load and cache LegacyTaxonomyMapping rows for `list_name`.
+
+    Returns a dict keyed by a normalised legacy_canonical_name (and its casefold
+    variant) mapping to a dict with keys `taxonomy_id` and `taxon_name_id`.
+    """
+    if list_name in _legacy_taxonomy_mappings_cache:
+        return _legacy_taxonomy_mappings_cache[list_name]
+
+    mapping: dict = {}
+    try:
+        from boranga.components.main.models import LegacyTaxonomyMapping
+
+        # import Species lazily to optionally resolve species_id (avoid circular import)
+        try:
+            from boranga.components.species_and_communities.models import Species
+        except Exception:
+            Species = None
+
+        qs = LegacyTaxonomyMapping.objects.filter(list_name=list_name)
+        for rec in qs.only("legacy_canonical_name", "taxonomy_id", "taxon_name_id"):
+            key = _norm_legacy_canonical_name(rec.legacy_canonical_name)
+            if not key:
+                continue
+            entry = {"taxonomy_id": rec.taxonomy_id, "taxon_name_id": rec.taxon_name_id}
+            # If possible, resolve a linked Species id so lookups can be answered
+            # from memory without further DB queries during import pipelines.
+            try:
+                if Species and rec.taxonomy_id:
+                    sp_id = (
+                        Species.objects.filter(taxonomy_id=rec.taxonomy_id)
+                        .values_list("id", flat=True)
+                        .first()
+                    )
+                    if sp_id:
+                        entry["species_id"] = sp_id
+            except Exception:
+                # be conservative: ignore errors resolving species and continue
+                pass
+            # store both the canonical key and a casefold variant for case-insensitive lookups
+            mapping.setdefault(key, entry)
+            kcf = key.casefold()
+            mapping.setdefault(kcf, entry)
+    except Exception:
+        logger.exception("Failed to load LegacyTaxonomyMapping for list %s", list_name)
+        mapping = {}
+
+    _legacy_taxonomy_mappings_cache[list_name] = mapping
+    return mapping
+
+
+def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
+    """Register and return a transform name that resolves a legacy canonical name
+    (from `LegacyTaxonomyMapping`) to a taxonomy id.
+
+    Behaviour:
+      - normalises incoming value (NBSPs, HTML neutralisation, strip)
+      - looks up the normalised key (case-insensitive)
+      - returns the `taxonomy_id` if present, else falls back to `taxon_name_id`
+      - on missing mapping returns an error TransformIssue
+    """
+    if not list_name:
+        raise ValueError("list_name must be provided")
+
+    key_repr = f"taxonom_lookup_legacy:{list_name}"
+    name = "taxonom_lookup_legacy_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(None)
+
+        table = _load_legacy_taxonomy_mappings(list_name)
+        if not table:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"No LegacyTaxonomyMapping entries loaded for list '{list_name}'",
+                ),
+            )
+
+        norm = _norm_legacy_canonical_name(value)
+        if norm is None:
+            return _result(
+                value, TransformIssue("error", f"Invalid legacy name: {value!r}")
+            )
+
+        entry = table.get(norm) or table.get(norm.casefold())
+        if entry:
+            # Return the taxonomy id when available, otherwise fall back to taxon_name_id.
+            # Do NOT return species_id here — this transform is expected to resolve
+            # to a taxonomy/taxon_name identifier (numeric) used by downstream logic.
+            tax_id = entry.get("taxonomy_id") or entry.get("taxon_name_id")
+            if tax_id is None:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error",
+                        f"LegacyTaxonomyMapping for '{value}' has no taxonomy or taxon_name_id",
+                    ),
+                )
+            return _result(tax_id)
+
+        # Fallback: if no legacy mapping found, try resolving the incoming value
+        # using the general `taxonomy_lookup` pipeline. This lets us resolve
+        # values directly against `Taxonomy` (including previous names) when the
+        # legacy table lacks an entry.
+        try:
+            tax_transform_name = taxonomy_lookup()
+            fn = registry._fns.get(tax_transform_name)
+            if fn is not None:
+                res = fn(value, ctx)
+                # Normalize possible return types to TransformResult
+                if res is None:
+                    return _result(None)
+                if isinstance(res, TransformResult):
+                    return res
+                return _result(res)
+        except Exception:
+            logger.exception(
+                "taxonomy_lookup_legacy_mapping fallback to taxonomy_lookup failed"
+            )
+
+        return _result(
+            value,
+            TransformIssue(
+                "error",
+                f"LegacyTaxonomyMapping for '{value}' not found in list '{list_name}'",
+            ),
+        )
+
+    registry._fns[name] = _inner
+    return name
+
+
+def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
+    """Register and return a transform name that resolves a legacy canonical name
+    (from `LegacyTaxonomyMapping`) to a Species id.
+
+    Behaviour:
+      - normalises incoming value (NBSPs, HTML neutralisation, strip)
+      - looks up the normalised key (case-insensitive)
+      - prefers to resolve a linked `taxonomy` -> `Species` and return that `Species.id`
+      - if linked `Species` cannot be found, will attempt to resolve via `taxon_name_id`
+        (finding the Taxonomy then its Species)
+      - on missing mapping or missing species returns an error TransformIssue
+    """
+    if not list_name:
+        raise ValueError("list_name must be provided")
+
+    key_repr = f"taxonom_lookup_legacy_species:{list_name}"
+    name = (
+        "taxonom_lookup_legacy_species_"
+        + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    )
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(None)
+
+        table = _load_legacy_taxonomy_mappings(list_name)
+        if not table:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"No LegacyTaxonomyMapping entries loaded for list '{list_name}'",
+                ),
+            )
+
+        norm = _norm_legacy_canonical_name(value)
+        if norm is None:
+            return _result(
+                value, TransformIssue("error", f"Invalid legacy name: {value!r}")
+            )
+
+        entry = table.get(norm) or table.get(norm.casefold())
+        if not entry:
+            # Fallback: try resolving via the general taxonomy_lookup and then
+            # find a linked Species for that taxonomy id. This mirrors the
+            # behaviour in `taxonomy_lookup_legacy_mapping` which attempts a
+            # Taxonomy lookup when legacy mapping is absent.
+            try:
+                tax_transform_name = taxonomy_lookup()
+                fn = registry._fns.get(tax_transform_name)
+                if fn is not None:
+                    res = fn(value, ctx)
+                    # Normalize to TransformResult-ish handling
+                    if res is None:
+                        # treat as not found and fall through to error below
+                        res_val = None
+                    elif isinstance(res, TransformResult):
+                        # if the taxonomy lookup returned an error, propagate it
+                        if any(i.level == "error" for i in res.issues):
+                            return res
+                        res_val = res.value
+                    else:
+                        res_val = res
+
+                    if res_val is not None:
+                        try:
+                            # attempt to resolve a Species linked to the taxonomy
+                            from boranga.components.species_and_communities.models import (
+                                Species,
+                                Taxonomy,
+                            )
+
+                            try:
+                                sp = Species.objects.get(taxonomy_id=res_val)
+                                return _result(sp.pk)
+                            except Species.DoesNotExist:
+                                # try resolving via Taxonomy object then Species
+                                try:
+                                    tax = Taxonomy.all_objects.get(pk=res_val)
+                                    sp = Species.objects.get(taxonomy=tax)
+                                    return _result(sp.pk)
+                                except Exception:
+                                    # fall through to final error return
+                                    pass
+                            except Species.MultipleObjectsReturned:
+                                return _result(
+                                    value,
+                                    TransformIssue(
+                                        "error",
+                                        f"Multiple Species linked to taxonomy_id={res_val} for '{value}'",
+                                    ),
+                                )
+                        except Exception:
+                            logger.exception(
+                                "taxonomy_lookup_legacy_mapping_species fallback lookup failed"
+                            )
+            except Exception:
+                logger.exception(
+                    "taxonomy_lookup_legacy_mapping_species fallback to taxonomy_lookup failed"
+                )
+
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"LegacyTaxonomyMapping for '{value}' not found in list '{list_name}'",
+                ),
+            )
+
+        # Prefer a cached species_id if present (no DB query)
+        species_id = entry.get("species_id")
+        if species_id is not None:
+            return _result(species_id)
+
+        # Otherwise fall back to attempting to resolve via Taxonomy/TaxonName
+        tax_id = entry.get("taxonomy_id")
+        tnid = entry.get("taxon_name_id")
+
+        try:
+            # local imports to avoid circular import issues
+            from boranga.components.species_and_communities.models import (
+                Species,
+                Taxonomy,
+            )
+
+            if tax_id:
+                try:
+                    sp = Species.objects.get(taxonomy_id=tax_id)
+                    return _result(sp.pk)
+                except Species.DoesNotExist:
+                    # fall through to try via taxon_name_id
+                    pass
+                except Species.MultipleObjectsReturned:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Species linked to taxonomy_id={tax_id} for '{value}'",
+                        ),
+                    )
+
+            if tnid:
+                try:
+                    tax = Taxonomy.all_objects.get(taxon_name_id=tnid)
+                except Taxonomy.DoesNotExist:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Taxonomy with taxon_name_id={tnid} not found for '{value}'",
+                        ),
+                    )
+                except Taxonomy.MultipleObjectsReturned:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Taxonomy entries with taxon_name_id={tnid} found for '{value}'",
+                        ),
+                    )
+
+                try:
+                    sp = Species.objects.get(taxonomy=tax)
+                    return _result(sp.pk)
+                except Species.DoesNotExist:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"LegacyTaxonomyMapping for '{value}' maps to taxonomy "
+                            f"(taxon_name_id={tnid}) but no Species found",
+                        ),
+                    )
+                except Species.MultipleObjectsReturned:
+                    return _result(
+                        value,
+                        TransformIssue(
+                            "error",
+                            f"Multiple Species linked to taxon_name_id={tnid} for '{value}'",
+                        ),
+                    )
+
+            # If we reach here, we had a mapping but could not resolve to a Species
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"LegacyTaxonomyMapping for '{value}' has no linked Species for list '{list_name}'",
+                ),
+            )
+
+        except Exception as e:
+            logger.exception(
+                "taxonomy_lookup_legacy_mapping_species lookup failed: %s", e
+            )
+            return _result(value, TransformIssue("error", f"lookup error: {e}"))
+
+    registry._fns[name] = _inner
+    return name
 
 
 @registry.register("upper")
@@ -1201,6 +1638,14 @@ def run_pipeline(
     current = TransformResult(value)
     for fn in pipeline:
         step_res = fn(current.value, ctx)
+        # Some transform callables may return raw values or None instead of
+        # a TransformResult. Normalize to TransformResult for safety.
+        if step_res is None:
+            step_res = TransformResult(None, [])
+        elif not isinstance(step_res, TransformResult):
+            # wrap raw return value with empty issues
+            step_res = TransformResult(step_res, [])
+
         # Accumulate issues
         current = TransformResult(step_res.value, current.issues + step_res.issues)
         # Stop further transforms on error (optional policy)
@@ -1227,6 +1672,8 @@ class ImportContext:
     dry_run: bool
     user_id: int | None = None
     stats: dict = None
+    limit: int | None = None
+    migration_run: MigrationRun | None = None
 
     def __post_init__(self):
         if self.stats is None:
@@ -1253,6 +1700,20 @@ class BaseSheetImporter:
 
     def run(self, path: str, ctx: ImportContext, **options):
         raise NotImplementedError
+
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """
+        Optional hook to delete target model data prior to running an importer.
+
+        - `include_children`: when True (used for runmany wipe), implementations may also
+          delete dependent/child tables. Default False for single-run wipe.
+        - `ctx.dry_run` should be respected by implementations (no-op on dry-run).
+
+        Default implementation is a no-op (importer may override).
+        """
+        return None
 
 
 # Internal storage

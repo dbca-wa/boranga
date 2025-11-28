@@ -1,3 +1,8 @@
+from boranga.components.data_migration.registry import (
+    emailuser_by_legacy_username_factory,
+    fk_lookup,
+)
+from boranga.components.occurrence.models import Occurrence
 from boranga.components.species_and_communities.models import (
     DocumentCategory,
     DocumentSubCategory,
@@ -6,6 +11,20 @@ from boranga.components.species_and_communities.models import (
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 from . import schema
+
+# TPFL-specific transforms and pipelines
+OCCURRENCE_ID_TRANSFORM = fk_lookup(
+    Occurrence,
+    lookup_field="migrated_from_id",
+)
+
+UPLOADED_BY_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
+
+PIPELINES = {
+    "occurrence_id": ["strip", "required", OCCURRENCE_ID_TRANSFORM],
+    "uploaded_by": ["strip", "required", UPLOADED_BY_TRANSFORM],
+    "uploaded_date": ["strip", "required", "datetime_iso"],
+}
 
 
 class OccurrenceDocumentTpflAdapter(SourceAdapter):
@@ -39,3 +58,7 @@ class OccurrenceDocumentTpflAdapter(SourceAdapter):
             canonical["document_sub_category_id"] = doc_sub_cat.id
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)
+
+
+# Attach pipelines to adapter
+OccurrenceDocumentTpflAdapter.PIPELINES = PIPELINES

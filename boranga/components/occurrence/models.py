@@ -404,7 +404,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
     proposed_decline_status = models.BooleanField(default=False)
     assessor_data = models.TextField(blank=True, default="")  # assessor comment
-    approver_comment = models.TextField(blank=True)
     internal_application = models.BooleanField(default=False)
     site = models.TextField(blank=True, default="")
     record_source = models.TextField(blank=True, default="")
@@ -424,6 +423,16 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     )
     # A hash of the import row data to allow for duplicate detection
     import_hash = models.CharField(max_length=64, null=True, blank=True)
+
+    # Track which data-migration run created/modified this record (nullable)
+    migration_run = models.ForeignKey(
+        "boranga.MigrationRun",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="occurrence_reports",
+        db_index=True,
+    )
 
     class Meta:
         app_label = "boranga"
@@ -927,7 +936,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         )
 
         self.proposed_decline_status = True
-        self.approver_comment = ""
         OccurrenceReportApprovalDetails.objects.filter(occurrence_report=self).delete()
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER
         self.save(version_user=request.user)
@@ -1076,7 +1084,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             },
         )
 
-        self.approver_comment = ""
         self.proposed_decline_status = False
         OccurrenceReportDeclinedDetails.objects.filter(occurrence_report=self).delete()
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER
@@ -3952,6 +3959,16 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         max_length=50, blank=True, null=True, unique=True
     )
 
+    # Track which data-migration run created/modified this record (nullable)
+    migration_run = models.ForeignKey(
+        "boranga.MigrationRun",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="occurrences",
+        db_index=True,
+    )
+
     occurrence_name = models.CharField(max_length=250, blank=True, null=True)
     group_type = models.ForeignKey(
         GroupType, on_delete=models.PROTECT, null=True, blank=True
@@ -4838,8 +4855,15 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             )
             associated_species.save()
             # copy over related species separately
-            for i in occurrence_report.associated_species.related_species.all():
-                associated_species.related_species.add(i)
+            # Duplicate each AssociatedSpeciesTaxonomy so the OCC has its own
+            # association records (preserving per-association metadata).
+            for ast in occurrence_report.associated_species.related_species.all():
+                new_ast = AssociatedSpeciesTaxonomy.objects.create(
+                    taxonomy=ast.taxonomy,
+                    species_role=ast.species_role,
+                    comments=ast.comments,
+                )
+                associated_species.related_species.add(new_ast)
 
         observation_detail = clone_model(
             OCRObservationDetail,

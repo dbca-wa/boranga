@@ -34,7 +34,7 @@ class SourceAdapter:
         raise NotImplementedError
 
     def read_table(
-        self, path: str, *, encoding: str = "utf-8"
+        self, path: str, *, encoding: str = "utf-8", **options
     ) -> tuple[list[dict], list["ExtractionWarning"]]:
         """
         Read a flat table file into a list[dict] using pandas (assumed available).
@@ -46,10 +46,56 @@ class SourceAdapter:
             import pandas as pd
 
             ext = os.path.splitext(path)[1].lower()
+            # Determine optional limit (priority: explicit option, then env var)
+            limit = None
+            try:
+                if options is not None:
+                    limit_option = options.get("limit")
+                    if limit_option is not None:
+                        limit = int(limit_option)
+            except Exception:
+                limit = None
+            if limit is None:
+                try:
+                    env = os.environ.get("DATA_MIGRATION_LIMIT")
+                    if env:
+                        limit = int(env)
+                except Exception:
+                    limit = None
+
+            # For Excel files we rely on pandas' read_excel (no streaming support here).
             if ext in (".xls", ".xlsx"):
                 df = pd.read_excel(path, dtype=str)
-            else:
-                df = pd.read_csv(path, dtype=str, encoding=encoding)
+                df = df.fillna("")
+                rows = df.to_dict(orient="records")
+                if limit and isinstance(rows, list):
+                    rows = rows[: int(limit)]
+                return rows, warnings
+
+            # For CSV-like files: if a limit is provided, stream only enough rows
+            # instead of loading the entire file into memory.
+            if limit and limit > 0:
+                try:
+                    # Use chunksize equal to the requested limit and read only first chunk
+                    it = pd.read_csv(
+                        path, dtype=str, encoding=encoding, chunksize=int(limit)
+                    )
+                    try:
+                        df = next(it)
+                    except StopIteration:
+                        df = pd.DataFrame()
+                    df = df.fillna("")
+                    rows = df.to_dict(orient="records")
+                    # If the chunk produced more rows than limit (unlikely), slice
+                    if len(rows) > int(limit):
+                        rows = rows[: int(limit)]
+                    return rows, warnings
+                except Exception:
+                    # Fall back to full read if chunked read fails for any reason
+                    pass
+
+            # Default (no limit): read whole CSV into memory as before
+            df = pd.read_csv(path, dtype=str, encoding=encoding)
             df = df.fillna("")
             rows = df.to_dict(orient="records")
         except Exception as e:

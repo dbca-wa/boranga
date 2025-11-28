@@ -532,7 +532,6 @@ export default {
     },
     emits: ['dirty'],
     data() {
-        let vm = this;
         return {
             uuid_component_map: uuid(),
             uuid_datatable_ocr: uuid(),
