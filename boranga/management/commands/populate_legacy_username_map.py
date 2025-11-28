@@ -30,10 +30,24 @@ class Command(BaseCommand):
         do_update = options["update"]
 
         rows = []
-        with open(csvfile, newline="", encoding="utf-8") as fh:
-            reader = csv.DictReader(fh)
+        # Use 'utf-8-sig' to handle BOMs and skip initial spaces after delimiters.
+        with open(csvfile, newline="", encoding="utf-8-sig") as fh:
+            reader = csv.DictReader(fh, skipinitialspace=True)
+            # Normalize header fieldnames to strip whitespace and any BOM marker.
+            if reader.fieldnames:
+                reader.fieldnames = [
+                    (fn.strip().lstrip("\ufeff") if fn is not None else fn)
+                    for fn in reader.fieldnames
+                ]
             for r in reader:
-                rows.append(r)
+                # Ensure keys are normalized per-row too (defensive).
+                normalized_row = {}
+                for k, v in r.items():
+                    if k is None:
+                        continue
+                    nk = k.strip().lstrip("\ufeff")
+                    normalized_row[nk] = v
+                rows.append(normalized_row)
 
         created = 0
         updated = 0
