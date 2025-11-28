@@ -1,6 +1,6 @@
 import hashlib
 import logging
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db import models, transaction
 from django.db.models import CharField
@@ -2070,7 +2070,16 @@ class SaveBeforeSubmitOCRHabitatConditionSerializer(SaveOCRHabitatConditionSeria
         ]
         total = Decimal("0.00")
         for field in habitat_conditions_fields:
-            total += Decimal(attrs.get(field, Decimal("0.00")))
+            raw = attrs.get(field, Decimal("0.00"))
+            # Treat missing/None/empty as zero
+            if raw is None or raw == "":
+                continue
+            try:
+                # Use str() to safely convert floats/ints/Decimals
+                total += Decimal(str(raw))
+            except (InvalidOperation, TypeError):
+                # If value cannot be parsed as Decimal, ignore it (treat as 0.00)
+                continue
         total = total.quantize(Decimal("0.00"))
         if total != Decimal("100.00") and total != Decimal("0.00"):
             raise serializers.ValidationError(
