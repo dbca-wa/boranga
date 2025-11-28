@@ -247,30 +247,35 @@ export default {
             fetch(
                 `/api/occurrence_report/${to.params.occurrence_report_id}.json`
             ).then(
-                async (response) => {
-                    next(async (vm) => {
-                        const data = await response.json();
-                        vm.loading.push('occurrence report proposal');
-                        vm.occurrence_report_obj = data;
-                        vm.loading.splice(
-                            'fetching occurrence report proposal',
-                            1
-                        );
-                        vm.setdata(vm.occurrence_report_obj.readonly);
-                        fetch(
-                            helpers.add_endpoint_json(
-                                api_endpoints.occurrence_report,
-                                to.params.occurrence_report_id +
-                                    '/amendment_request'
-                            )
-                        ).then(
-                            async (response) => {
+                            }).then(async (response) => {
+                                let data = await response.json();
                                 if (!response.ok) {
-                                    const data = await response.json();
+                                    vm.submitting = false;
                                     swal.fire({
-                                        title: 'Error',
+                                        title: 'Submit Error',
                                         text: JSON.stringify(data),
                                         icon: 'error',
+                                        customClass: {
+                                            confirmButton: 'btn btn-primary',
+                                        },
+                                    });
+                                    return;
+                                }
+                                // Keep the ORF form open after submit: update with returned data and show success
+                                vm.occurrence_report_obj = data;
+                                vm.$nextTick(() => {
+                                    vm.resetDirtyState();
+                                });
+                                swal.fire({
+                                    title: 'Occurrence Report Form Submitted',
+                                    text: 'Your occurrence report form has been submitted successfully.',
+                                    icon: 'success',
+                                    customClass: {
+                                        confirmButton: 'btn btn-primary',
+                                    },
+                                    timer: 2000,
+                                });
+                            });
                                         customClass: {
                                             confirmButton: 'btn btn-primary',
                                         },

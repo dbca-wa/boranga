@@ -1487,11 +1487,11 @@ export default {
                                     body: JSON.stringify(payload),
                                 }
                             ).then(async (response) => {
-                                vm.occurrence = await response.json();
+                                const data = await response.json();
                                 if (!response.ok) {
                                     swal.fire({
                                         title: 'Submit Error',
-                                        text: JSON.stringify(vm.occurrence),
+                                        text: JSON.stringify(data),
                                         icon: 'error',
                                         customClass: {
                                             confirmButton: 'btn btn-primary',
@@ -1500,8 +1500,29 @@ export default {
                                     vm.submitOccurrenceReport = false;
                                     return;
                                 }
-                                vm.$router.push({
-                                    name: 'internal-occurrence-dash',
+                                // Keep the ORF form open after submit: update local model and show success
+                                vm.occurrence_report = data;
+                                vm.original_occurrence_report =
+                                    helpers.copyObject(data);
+                                vm.$nextTick(() => {
+                                    try {
+                                        vm.initialiseAssignedOfficerSelect(
+                                            true
+                                        );
+                                    } catch (e) {}
+                                    try {
+                                        vm.initialiseContributorsSelect();
+                                    } catch (e) {}
+                                    vm.resetDirtyState();
+                                });
+                                swal.fire({
+                                    title: 'Occurrence Report Form Submitted',
+                                    text: 'This occurrence report form has been submitted successfully.',
+                                    icon: 'success',
+                                    customClass: {
+                                        confirmButton: 'btn btn-primary',
+                                    },
+                                    timer: 2000,
                                 });
                             });
                         }
