@@ -1,6 +1,6 @@
 {
   "eslint.enable": true,
-  "eslint.run": "onSave",
+  "eslint.run": "onType",
   "eslint.validate": [
     "javascript",
     "javascriptreact",
@@ -10,7 +10,10 @@
     "typescriptreact"
   ],
   "eslint.workingDirectories": [
-    "frontend/boranga"
+    {
+      "directory": "frontend/boranga",
+      "changeProcessCWD": true
+    }
   ],
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "always"
