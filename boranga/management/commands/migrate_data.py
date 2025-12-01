@@ -11,7 +11,7 @@ class Command(BaseCommand):
     """
     Example command:
         ./manage.py migrate_data run species_legacy \
-            ./boranga/components/data_migration/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv --dry-run
+            private-media/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv --dry-run
     """
 
     help = "Import spreadsheets (list, run one, or run multiple)"
