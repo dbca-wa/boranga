@@ -1509,10 +1509,14 @@ export default {
                                         vm.initialiseAssignedOfficerSelect(
                                             true
                                         );
-                                    } catch (e) {}
+                                    } catch (e) {
+                                        void e;
+                                    }
                                     try {
                                         vm.initialiseContributorsSelect();
-                                    } catch (e) {}
+                                    } catch (e) {
+                                        void e;
+                                    }
                                     vm.resetDirtyState();
                                 });
                                 swal.fire({
@@ -1522,7 +1526,6 @@ export default {
                                     customClass: {
                                         confirmButton: 'btn btn-primary',
                                     },
-                                    timer: 2000,
                                 });
                             });
                         }
