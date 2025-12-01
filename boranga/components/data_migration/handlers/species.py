@@ -593,9 +593,9 @@ class SpeciesImporter(BaseSheetImporter):
         to_update = []  # existing Species instances to bulk_update
         # Handle duplicate taxonomy_id values across ops to avoid unique constraint
         tax_seen = {}  # taxonomy_id -> canonical migrated_from_id
-        pending_updates = (
-            {}
-        )  # canonical_migrated -> list of (migrated_from_id, defaults, merged, districts_raw)
+        tax_collisions = defaultdict(
+            list
+        )  # taxonomy_id -> list of skipped migrated_from_ids
 
         for op in ops:
             migrated_from_id = op["migrated_from_id"]
@@ -624,18 +624,17 @@ class SpeciesImporter(BaseSheetImporter):
                 to_update.append((existing, merged, districts_raw))
             elif taxonomy_id and taxonomy_id in tax_seen:
                 # Another op in this run has already claimed this taxonomy_id.
-                # Defer applying this op as an update to the canonical record after it's created.
+                # Skip this record to avoid duplicate taxonomy entries.
                 canonical = tax_seen[taxonomy_id]
                 logger.info(
                     "SpeciesImporter: taxonomy collision detected for taxonomy_id=%s; "
-                    "deferring migrated_from_id=%s to canonical migrated_from_id=%s",
+                    "skipping migrated_from_id=%s (first instance: migrated_from_id=%s)",
                     taxonomy_id,
                     migrated_from_id,
                     canonical,
                 )
-                pending_updates.setdefault(canonical, []).append(
-                    (migrated_from_id, defaults, merged, districts_raw)
-                )
+                tax_collisions[taxonomy_id].append(migrated_from_id)
+                skipped += 1
             elif taxonomy_id:
                 # First time we see this taxonomy_id and it doesn't exist in DB.
                 # Claim it as canonical and create one instance for it.
@@ -703,45 +702,6 @@ class SpeciesImporter(BaseSheetImporter):
                                 "Failed to populate species_number for created Species %s",
                                 getattr(s, "pk", None),
                             )
-
-        # Apply any pending updates that were deferred because they shared a taxonomy_id
-        if "pending_updates" in locals() and pending_updates:
-            # build reverse map so we can log taxonomy_id for a canonical migrated key
-            canonical_to_tax = (
-                {v: k for k, v in tax_seen.items()} if "tax_seen" in locals() else {}
-            )
-            for canonical_mig, pendings in pending_updates.items():
-                taxonomy_id_for_canonical = canonical_to_tax.get(canonical_mig)
-                # canonical may be in created_map (newly created) or existing_by_migrated
-                obj = created_map.get(canonical_mig) or existing_by_migrated.get(
-                    canonical_mig
-                )
-                if not obj:
-                    logger.warning(
-                        "SpeciesImporter: canonical object for taxonomy pending_updates not found: %s",
-                        canonical_mig,
-                    )
-                    continue
-                # Log what we're about to merge for auditing
-                pending_ids = [p[0] for p in pendings]
-                logger.info(
-                    "SpeciesImporter: applying %d pending updates to canonical migrated_from_id=%s "
-                    "(taxonomy_id=%s): %s",
-                    len(pendings),
-                    canonical_mig,
-                    taxonomy_id_for_canonical,
-                    pending_ids,
-                )
-                # Apply each pending update in order; later pendings overwrite earlier
-                for pending in pendings:
-                    pending_mig, pending_defaults, pending_merged, pending_districts = (
-                        pending
-                    )
-                    for k, v in pending_defaults.items():
-                        setattr(obj, k, v)
-                    # set migrated_from_id to the pending migrated id to match original behavior
-                    obj.migrated_from_id = pending_mig
-                    to_update.append((obj, pending_merged, pending_districts))
 
         # Bulk update existing objects collected in to_update
         if to_update:
@@ -1167,6 +1127,28 @@ class SpeciesImporter(BaseSheetImporter):
         stats["warning_count_details"] = len(warnings_details)
         stats["warning_messages"] = warnings
         stats["error_details_csv"] = None
+
+        # Log taxonomy collision summary
+        if tax_collisions:
+            logger.info(
+                "SpeciesImporter: taxonomy collision summary - %d unique taxonomies with duplicates:",
+                len(tax_collisions),
+            )
+            collision_skipped = 0
+            for taxonomy_id, skipped_ids in sorted(tax_collisions.items()):
+                collision_count = len(skipped_ids)
+                collision_skipped += collision_count
+                logger.info(
+                    "  taxonomy_id=%s: skipped %d duplicate records (%s)",
+                    taxonomy_id,
+                    collision_count,
+                    ", ".join(str(mid) for mid in skipped_ids[:3])
+                    + ("..." if collision_count > 3 else ""),
+                )
+            logger.info(
+                "SpeciesImporter: total records skipped due to taxonomy collisions: %d",
+                collision_skipped,
+            )
 
         elapsed = timezone.now() - start_time
         stats["time_taken"] = str(elapsed)
