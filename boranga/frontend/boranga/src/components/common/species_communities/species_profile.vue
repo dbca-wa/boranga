@@ -433,6 +433,7 @@
                         >
                         <div
                             v-if="
+                                is_internal ||
                                 showField(
                                     species_community.distribution
                                         .number_of_occurrences
