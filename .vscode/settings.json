@@ -3,8 +3,18 @@
     "eslint.enable": true,
     "eslint.format.enable": true,
     "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": "always",
+        "source.fixAll.eslint": "always"
     },
+    "eslint.validate": [
+        "javascript",
+        "javascriptreact",
+        "vue",
+        "typescript",
+        "typescriptreact"
+    ],
+    "eslint.workingDirectories": [
+        "boranga/frontend/boranga"
+    ],
     "python-envs.defaultEnvManager": "ms-python.python:system",
     "python-envs.pythonProjects": [],
     "files.watcherExclude": { "**/.kb_layer_cache/**": true, "**/*.geojson": true },
