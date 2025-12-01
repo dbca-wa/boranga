@@ -40,20 +40,17 @@ class Command(BaseCommand):
         with open(csvfile, newline="", encoding="utf-8-sig") as fh:
             reader = csv.DictReader(fh, skipinitialspace=True)
             # Normalize header fieldnames to strip whitespace and any BOM marker.
+            # Note: we must read fieldnames first (by peeking or accessing reader.fieldnames)
+            # before we can modify them.
+            _ = reader.fieldnames  # force fieldnames to be read
             if reader.fieldnames:
-                reader.fieldnames = [
+                normalized_fieldnames = [
                     (fn.strip().lstrip("\ufeff") if fn is not None else fn)
                     for fn in reader.fieldnames
                 ]
+                reader.fieldnames = normalized_fieldnames
             for r in reader:
-                # Ensure keys are normalized per-row too (defensive).
-                normalized_row = {}
-                for k, v in r.items():
-                    if k is None:
-                        continue
-                    nk = k.strip().lstrip("\ufeff")
-                    normalized_row[nk] = v
-                rows.append(normalized_row)
+                rows.append(r)
 
         created = 0
         updated = 0
