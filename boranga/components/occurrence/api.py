@@ -33,6 +33,7 @@ from boranga.components.main.api import (
     NoPaginationListMixin,
     search_datums,
 )
+from boranga.components.main.models import ArchivableModel
 from boranga.components.main.permissions import CommsLogPermission
 from boranga.components.main.related_item import RelatedItemsSerializer
 from boranga.components.main.utils import validate_threat_request
@@ -251,6 +252,7 @@ from boranga.helpers import (
     is_occurrence_report_referee,
     is_readonly_user,
 )
+from boranga.ordered_model import OrderedModel
 
 logger = logging.getLogger(__name__)
 
@@ -880,22 +882,32 @@ class OccurrenceReportViewSet(
                 elif isinstance(i, models.ForeignKey):
                     sub_section_value = getattr(section_value, i.name)
                     if sub_section_value is not None:
-                        res_json[i.name] = {}
-                        sub_section_fields = sub_section_value._meta.get_fields()
-                        for j in sub_section_fields:
-                            if (
-                                j.name != "id"
-                                and not isinstance(j, models.ForeignKey)
-                                and not isinstance(j, models.ManyToOneRel)
-                                and not isinstance(j, models.ManyToManyRel)
-                                and getattr(sub_section_value, j.name) is not None
-                            ):
-                                res_json[i.name][j.name] = str(
-                                    getattr(sub_section_value, j.name)
-                                )
-                        # if the num sub section has only one value, assign as section
-                        if len(res_json[i.name]) == 1:
-                            res_json[i.name] = list(res_json[i.name].values())[0]
+                        # For models that inherit from ArchivableModel or OrderedModel,
+                        # only show the 'name' field to avoid cluttering with 'order' and 'archived'
+                        is_archivable_or_ordered = isinstance(
+                            sub_section_value, (ArchivableModel, OrderedModel)
+                        )
+                        if is_archivable_or_ordered and hasattr(
+                            sub_section_value, "name"
+                        ):
+                            res_json[i.name] = str(sub_section_value.name)
+                        else:
+                            res_json[i.name] = {}
+                            sub_section_fields = sub_section_value._meta.get_fields()
+                            for j in sub_section_fields:
+                                if (
+                                    j.name != "id"
+                                    and not isinstance(j, models.ForeignKey)
+                                    and not isinstance(j, models.ManyToOneRel)
+                                    and not isinstance(j, models.ManyToManyRel)
+                                    and getattr(sub_section_value, j.name) is not None
+                                ):
+                                    res_json[i.name][j.name] = str(
+                                        getattr(sub_section_value, j.name)
+                                    )
+                            # if the num sub section has only one value, assign as section
+                            if len(res_json[i.name]) == 1:
+                                res_json[i.name] = list(res_json[i.name].values())[0]
                 elif isinstance(i, MultiSelectField):
                     if i.choices:
                         choice_dict = dict(i.choices)
@@ -3869,22 +3881,32 @@ class OccurrenceViewSet(
                 elif isinstance(i, models.ForeignKey):
                     sub_section_value = getattr(section_value, i.name)
                     if sub_section_value is not None:
-                        res_json[i.name] = {}
-                        sub_section_fields = sub_section_value._meta.get_fields()
-                        for j in sub_section_fields:
-                            if (
-                                j.name != "id"
-                                and not isinstance(j, models.ForeignKey)
-                                and not isinstance(j, models.ManyToOneRel)
-                                and not isinstance(j, models.ManyToManyRel)
-                                and getattr(sub_section_value, j.name) is not None
-                            ):
-                                res_json[i.name][j.name] = str(
-                                    getattr(sub_section_value, j.name)
-                                )
-                        # if the num sub section has only one value, assign as section
-                        if len(res_json[i.name]) == 1:
-                            res_json[i.name] = list(res_json[i.name].values())[0]
+                        # For models that inherit from ArchivableModel or OrderedModel,
+                        # only show the 'name' field to avoid cluttering with 'order' and 'archived'
+                        is_archivable_or_ordered = isinstance(
+                            sub_section_value, (ArchivableModel, OrderedModel)
+                        )
+                        if is_archivable_or_ordered and hasattr(
+                            sub_section_value, "name"
+                        ):
+                            res_json[i.name] = str(sub_section_value.name)
+                        else:
+                            res_json[i.name] = {}
+                            sub_section_fields = sub_section_value._meta.get_fields()
+                            for j in sub_section_fields:
+                                if (
+                                    j.name != "id"
+                                    and not isinstance(j, models.ForeignKey)
+                                    and not isinstance(j, models.ManyToOneRel)
+                                    and not isinstance(j, models.ManyToManyRel)
+                                    and getattr(sub_section_value, j.name) is not None
+                                ):
+                                    res_json[i.name][j.name] = str(
+                                        getattr(sub_section_value, j.name)
+                                    )
+                            # if the num sub section has only one value, assign as section
+                            if len(res_json[i.name]) == 1:
+                                res_json[i.name] = list(res_json[i.name].values())[0]
                 elif isinstance(i, MultiSelectField):
                     if i.choices:
                         choice_dict = dict(i.choices)
