@@ -32,6 +32,7 @@ PIPELINES = {
         "date_from_datetime_iso",
         "format_date_dmy",
     ],
+    "RP_COMMENTS": ["strip", "blank_to_none"],
     "conservation_plan_exists": ["strip", "blank_to_none", "is_present"],
     "department_file_numbers": ["strip", "blank_to_none"],
     "last_data_curation_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
@@ -61,14 +62,20 @@ class SpeciesTpflAdapter(SourceAdapter):
 
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
-            # RP_EXP_DATE is already formatted by the pipeline to "dd/mm/YYYY"
-            rp_comments = (canonical.get("RP_COMMENTS") or "").strip()
-            rp_exp_date = canonical.get("RP_EXP_DATE")  # already formatted or None
+            # Extract raw values from the raw row (not canonical, which hasn't had pipelines applied yet)
+            # The pipelines will be applied by the importer after extraction.
+            rp_comments = (raw.get("RP_COMMENTS") or "").strip()
+            rp_exp_date_raw = (raw.get("RP_EXP_DATE") or "").strip()
+
             parts = []
             if rp_comments:
                 parts.append(rp_comments)
-            if rp_exp_date:
-                parts.append(f"RP Expiry Date: {rp_exp_date}")
+            if rp_exp_date_raw:
+                # Parse and format the date to remove any time component
+                # Try to extract just the date portion (YYYY-MM-DD or similar)
+                date_part = rp_exp_date_raw.split()[0] if rp_exp_date_raw else ""
+                if date_part:
+                    parts.append(f"RP Expiry Date: {date_part}")
             canonical["conservation_plan_reference"] = (
                 " ".join(parts) if parts else None
             )

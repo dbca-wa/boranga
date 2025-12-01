@@ -21,7 +21,8 @@ COLUMN_MAP = {
     "ACTIVE_IND": "processing_status",
     "CREATED_BY": "submitter",
     "DISTRIBUTION": "distribution",
-    # source column with RP expiry date
+    # source columns for RP (Research Plan) reference
+    "RP_COMMENTS": "RP_COMMENTS",
     "RP_EXP_DATE": "RP_EXP_DATE",
 }
 
