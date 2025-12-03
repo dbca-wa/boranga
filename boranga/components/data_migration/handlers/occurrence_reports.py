@@ -37,6 +37,7 @@ from boranga.components.occurrence.models import (
     OCRObserverDetail,
 )
 from boranga.components.species_and_communities.models import Taxonomy
+from boranga.components.users.models import SubmitterInformation
 
 logger = logging.getLogger(__name__)
 
@@ -498,6 +499,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             habitat_data = {}
             identification_data = {}
             habitat_condition = {}
+            submitter_information_data = {}
             for k, v in merged.items():
                 if k.startswith("OCRHabitatComposition__"):
                     short = k.split("OCRHabitatComposition__", 1)[1]
@@ -508,6 +510,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OCRIdentification__"):
                     short = k.split("OCRIdentification__", 1)[1]
                     identification_data[short] = v
+                if k.startswith("SubmitterInformation__"):
+                    short = k.split("SubmitterInformation__", 1)[1]
+                    submitter_information_data[short] = v
 
             ops.append(
                 {
@@ -517,6 +522,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "habitat_data": habitat_data,
                     "habitat_condition": habitat_condition,
                     "identification_data": identification_data,
+                    "submitter_information_data": submitter_information_data,
                 }
             )
 
@@ -550,13 +556,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
             defaults = op["defaults"]
             habitat_data = op.get("habitat_data") or {}
             habitat_condition = op.get("habitat_condition") or {}
+            submitter_information_data = op.get("submitter_information_data") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
                 # apply defaults to instance for later bulk_update
                 for k, v in defaults.items():
                     apply_value_to_instance(obj, k, v)
-                to_update.append((obj, habitat_data, habitat_condition))
+                to_update.append(
+                    (obj, habitat_data, habitat_condition, submitter_information_data)
+                )
                 continue
 
             # create new instance (bulk_create later)
@@ -568,7 +577,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 **normalize_create_kwargs(OccurrenceReport, create_kwargs)
             )
             to_create.append(inst)
-            create_meta.append((migrated_from_id, habitat_data, habitat_condition))
+            create_meta.append(
+                (
+                    migrated_from_id,
+                    habitat_data,
+                    habitat_condition,
+                    submitter_information_data,
+                )
+            )
 
         # Bulk create new OccurrenceReports
         created_map = {}
@@ -1202,6 +1218,270 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences"
                     )
 
+        # SubmitterInformation: OneToOne - create or update submitter information
+        # Note: OneToOne relationship is defined on OccurrenceReport side (submitter_information field)
+        # Fetch existing submitter information (keyed by occurrence_report.pk)
+        existing_submitter_info = {}
+        for s in SubmitterInformation.objects.filter(occurrence_report__in=target_occs):
+            # The relationship is OneToOne from OccurrenceReport to SubmitterInformation
+            # Access the related OccurrenceReport through the related_name
+            try:
+                ocr_id = s.occurrence_report.pk
+                existing_submitter_info[ocr_id] = s
+            except Exception:
+                # If occurrence_report is None or deleted, skip
+                pass
+
+        submitter_info_to_create = []
+        submitter_info_create_map = (
+            {}
+        )  # Maps (ocr_id, mig_id) -> SubmitterInformation instance
+        submitter_info_to_update = []
+
+        for up in to_update:
+            inst, habitat_data, habitat_condition, submitter_information_data = up
+            sid = inst.pk
+            si_data = submitter_information_data or {}
+
+            # SubmitterInformation: update existing or schedule create
+            if sid in existing_submitter_info:
+                si = existing_submitter_info[sid]
+                valid_si_fields = {f.name for f in SubmitterInformation._meta.fields}
+                for field_name, val in si_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_si_fields:
+                        apply_value_to_instance(si, field_name, val)
+
+                # Ensure defaults are set if not already present
+                if not si.organisation:
+                    si.organisation = "DBCA"
+                if not si.submitter_category_id:
+                    try:
+                        from boranga.components.users.models import SubmitterCategory
+
+                        dbca_cat = SubmitterCategory.objects.filter(
+                            name__iexact="DBCA"
+                        ).first()
+                        if dbca_cat:
+                            si.submitter_category_id = dbca_cat.pk
+                    except Exception:
+                        pass
+
+                submitter_info_to_update.append(si)
+            else:
+                # Create new SubmitterInformation (DON'T pass occurrence_report in create_kwargs)
+                # We'll link it to OccurrenceReport after creation
+                si_create = {}
+                valid_si_fields = {f.name for f in SubmitterInformation._meta.fields}
+                for field_name, val in si_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_si_fields:
+                        si_create[field_name] = val
+
+                # Ensure defaults for organisation and submitter_category
+                if (
+                    "organisation" not in si_create
+                    or si_create.get("organisation") is None
+                ):
+                    si_create["organisation"] = "DBCA"
+
+                if (
+                    "submitter_category_id" not in si_create
+                    or si_create.get("submitter_category_id") is None
+                ):
+                    try:
+                        from boranga.components.users.models import SubmitterCategory
+
+                        dbca_cat = SubmitterCategory.objects.filter(
+                            name__iexact="DBCA"
+                        ).first()
+                        if dbca_cat:
+                            si_create["submitter_category_id"] = dbca_cat.pk
+                    except Exception:
+                        pass
+
+                if si_data:  # only create if we have data
+                    si_instance = SubmitterInformation(
+                        **normalize_create_kwargs(SubmitterInformation, si_create)
+                    )
+                    submitter_info_to_create.append(si_instance)
+                    submitter_info_create_map[(sid, None)] = (
+                        si_instance  # track for linking later
+                    )
+
+        # Handle created ones (from create_meta)
+        for (
+            mig,
+            habitat_data,
+            habitat_condition,
+            submitter_information_data,
+        ) in create_meta:
+            ocr = target_map.get(mig)
+            if not ocr:
+                continue
+            si_data = submitter_information_data or {}
+
+            # Check if submitter_information already exists (shouldn't normally happen for created)
+            if ocr.pk in existing_submitter_info:
+                si = existing_submitter_info[ocr.pk]
+                valid_si_fields = {f.name for f in SubmitterInformation._meta.fields}
+                for field_name, val in si_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_si_fields:
+                        apply_value_to_instance(si, field_name, val)
+
+                # Ensure defaults are set if not already present
+                if not si.organisation:
+                    si.organisation = "DBCA"
+                if not si.submitter_category_id:
+                    try:
+                        from boranga.components.users.models import SubmitterCategory
+
+                        dbca_cat = SubmitterCategory.objects.filter(
+                            name__iexact="DBCA"
+                        ).first()
+                        if dbca_cat:
+                            si.submitter_category_id = dbca_cat.pk
+                    except Exception:
+                        pass
+
+                submitter_info_to_update.append(si)
+            else:
+                # Create new SubmitterInformation (DON'T pass occurrence_report in create_kwargs)
+                si_create = {}
+                valid_si_fields = {f.name for f in SubmitterInformation._meta.fields}
+                for field_name, val in si_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_si_fields:
+                        si_create[field_name] = val
+
+                # Ensure organisation defaults to 'DBCA' if not provided
+                if (
+                    "organisation" not in si_create
+                    or si_create.get("organisation") is None
+                ):
+                    si_create["organisation"] = "DBCA"
+
+                # Ensure submitter_category defaults to DBCA category if not provided
+                if (
+                    "submitter_category_id" not in si_create
+                    or si_create.get("submitter_category_id") is None
+                ):
+                    try:
+                        from boranga.components.users.models import SubmitterCategory
+
+                        dbca_cat = SubmitterCategory.objects.filter(
+                            name__iexact="DBCA"
+                        ).first()
+                        if dbca_cat:
+                            si_create["submitter_category_id"] = dbca_cat.pk
+                    except Exception:
+                        pass
+
+                if si_data:  # only create if we have data
+                    si_instance = SubmitterInformation(
+                        **normalize_create_kwargs(SubmitterInformation, si_create)
+                    )
+                    submitter_info_to_create.append(si_instance)
+                    submitter_info_create_map[(ocr.pk, mig)] = (
+                        si_instance  # track for linking later
+                    )
+
+        # Bulk update existing SubmitterInformation records with defaults
+        if submitter_info_to_update:
+            logger.info(
+                "OccurrenceReportImporter: bulk-updating %d SubmitterInformation records",
+                len(submitter_info_to_update),
+            )
+
+            # Determine which fields have been modified (non-None values)
+            update_fields = set()
+            for si in submitter_info_to_update:
+                for f in SubmitterInformation._meta.fields:
+                    if f.name not in ("id", "occurrence_report"):
+                        val = getattr(si, f.name, None)
+                        if val is not None or f.name in (
+                            "organisation",
+                            "submitter_category_id",
+                        ):
+                            update_fields.add(f.name)
+
+            update_fields = list(update_fields)
+
+            try:
+                SubmitterInformation.objects.bulk_update(
+                    submitter_info_to_update, update_fields, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update SubmitterInformation; falling back to individual saves"
+                )
+                for obj in submitter_info_to_update:
+                    try:
+                        obj.save(update_fields=update_fields)
+                    except Exception:
+                        logger.exception(
+                            "Failed to update SubmitterInformation %s", obj.pk
+                        )
+
+        if submitter_info_to_create:
+            logger.info(
+                "OccurrenceReportImporter: bulk-creating %d SubmitterInformation records",
+                len(submitter_info_to_create),
+            )
+            try:
+                SubmitterInformation.objects.bulk_create(
+                    submitter_info_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create SubmitterInformation; falling back to individual creates"
+                )
+                for obj in submitter_info_to_create:
+                    try:
+                        obj.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create SubmitterInformation for occurrence_report %s",
+                            getattr(obj.pk, "pk", None),
+                        )
+
+        # After bulk_create, refresh created SubmitterInformation instances to get their IDs
+        # and link them to OccurrenceReports
+        if submitter_info_create_map:
+            occs_to_link_si = []
+            for (ocr_id, mig), si_instance in submitter_info_create_map.items():
+                # Refresh to get the ID
+                si_instance.refresh_from_db()
+                ocr = target_map.get(mig) if mig else None
+                if not ocr and ocr_id:
+                    ocr = OccurrenceReport.objects.filter(pk=ocr_id).first()
+                if ocr:
+                    ocr.submitter_information_id = si_instance.pk
+                    occs_to_link_si.append(ocr)
+
+            if occs_to_link_si:
+                try:
+                    OccurrenceReport.objects.bulk_update(
+                        occs_to_link_si, ["submitter_information_id"], batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to link SubmitterInformation to OccurrenceReport"
+                    )
+                    for ocr in occs_to_link_si:
+                        try:
+                            ocr.save(update_fields=["submitter_information_id"])
+                        except Exception:
+                            logger.exception(
+                                "Failed to link SubmitterInformation for OccurrenceReport %s",
+                                ocr.pk,
+                            )
+
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report
         want_obs_create = []
         existing_obs = set(
@@ -1286,7 +1566,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         idents_to_create = []
         idents_to_update = []
         for up in to_update:
-            inst, habitat_data, habitat_condition = up
+            inst, habitat_data, habitat_condition, submitter_information_data = up
             hid = inst.pk
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
             hd = habitat_data or {}
@@ -1376,7 +1656,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
 
         # Handle created ones
-        for mig, habitat_data, habitat_condition in create_meta:
+        for (
+            mig,
+            habitat_data,
+            habitat_condition,
+            submitter_information_data,
+        ) in create_meta:
             ocr = created_map.get(mig)
             if not ocr:
                 continue
