@@ -110,6 +110,14 @@ class OccurrenceReportRow:
     # OCRObserverDetail fields
     OCRObserverDetail__role: str | None = None
 
+    # SubmitterInformation fields
+    SubmitterInformation__submitter_category: int | None = (
+        None  # FK id (SubmitterCategory)
+    )
+    SubmitterInformation__email_user: int | None = None  # EmailUser id
+    SubmitterInformation__name: str | None = None
+    SubmitterInformation__organisation: str | None = None
+
     # OCRHabitatComposition fields
     OCRHabitatComposition__rock_type: str | None = None
     OCRHabitatComposition__loose_rock_percent: int | None = None
@@ -159,6 +167,18 @@ class OccurrenceReportRow:
             approved_by=utils.to_int_maybe(d.get("approved_by")),
             submitter=utils.to_int_maybe(d.get("submitter")),
             OCRObserverDetail__role=utils.safe_strip(d.get("OCRObserverDetail__role")),
+            SubmitterInformation__submitter_category=utils.to_int_maybe(
+                d.get("SubmitterInformation__submitter_category")
+            ),
+            SubmitterInformation__email_user=utils.to_int_maybe(
+                d.get("SubmitterInformation__email_user")
+            ),
+            SubmitterInformation__name=utils.safe_strip(
+                d.get("SubmitterInformation__name")
+            ),
+            SubmitterInformation__organisation=utils.safe_strip(
+                d.get("SubmitterInformation__organisation")
+            ),
             OCRHabitatComposition__loose_rock_percent=utils.to_int_maybe(
                 d.get("OCRHabitatComposition__loose_rock_percent")
             ),
