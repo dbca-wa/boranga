@@ -6,8 +6,11 @@ from boranga.components.data_migration.registry import (
     csv_lookup_factory,
     dependent_from_column_factory,
     emailuser_by_legacy_username_factory,
+    emailuser_object_by_legacy_username_factory,
     fk_lookup,
+    fk_lookup_static,
     pluck_attribute_factory,
+    static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
     to_int_trailing_factory,
 )
@@ -16,6 +19,7 @@ from boranga.components.occurrence.models import (
     OccurrenceReport,
 )
 from boranga.components.species_and_communities.models import Community, GroupType
+from boranga.components.users.models import SubmitterCategory
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
@@ -81,7 +85,7 @@ RECORD_SOURCE_FROM_CSV = csv_lookup_factory(
     required=False,
 )
 
-SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
+EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
 ROLE_TRANSFORM = build_legacy_map_transform(
     "TPFL",
@@ -187,6 +191,26 @@ def veg_condition_prefix_transform(value: str, ctx=None) -> str | None:
     return f"Vegetation Condition: {v}" if v else None
 
 
+SUBMITTER_CATEGORY_DEFAULT_TRANSFORM = fk_lookup_static(
+    model=SubmitterCategory,
+    lookup_field="name",
+    static_value="DBCA",
+)
+
+GET_CREATED_BY_COLUMN_VALUE = dependent_from_column_factory(
+    "CREATED_BY",
+    mapper=lambda dep, ctx: dep.strip() if dep else None,
+    default=None,
+)
+
+STATIC_DBCA = static_value_factory("DBCA")
+
+# Transform to fetch EmailUser object by legacy username, then pluck full_name
+EMAILUSER_OBJ_BY_LEGACY_USERNAME_TRANSFORM = (
+    emailuser_object_by_legacy_username_factory("TPFL")
+)
+SUBMITTER_NAME_FROM_EMAILUSER = pluck_attribute_factory("get_full_name")
+
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     "Occurrence__migrated_from_id": [POP_ID_FROM_SHEETNO],
@@ -206,7 +230,7 @@ PIPELINES = {
         "required",
         MAP_FORM_STATUS_CODE_TO_PROCESSING_STATUS,
     ],
-    "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
+    "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
     "OCRObserverDetail__role": ["strip", "blank_to_none", ROLE_TRANSFORM],
     "OCRObserverDetail__observer_name": [
         "strip",
@@ -255,6 +279,22 @@ PIPELINES = {
         identification_certainty_default_transform,
     ],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
+    # SubmitterInformation pipelines (Task 11302-11306)
+    "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DEFAULT_TRANSFORM],
+    "SubmitterInformation__email_user": [
+        GET_CREATED_BY_COLUMN_VALUE,
+        "strip",
+        "blank_to_none",
+        EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM,
+    ],
+    "SubmitterInformation__name": [
+        GET_CREATED_BY_COLUMN_VALUE,
+        "strip",
+        "blank_to_none",
+        EMAILUSER_OBJ_BY_LEGACY_USERNAME_TRANSFORM,
+        SUBMITTER_NAME_FROM_EMAILUSER,
+    ],
+    "SubmitterInformation__organisation": [STATIC_DBCA],
 }
 
 
