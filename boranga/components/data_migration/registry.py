@@ -630,6 +630,36 @@ def fk_lookup_static(
     return key
 
 
+def static_value_factory(static_value: Any) -> str:
+    """
+    Return a registered transform name that always returns the same static value,
+    ignoring the incoming row data.
+
+    This is useful for populating fields with a constant value across all imported rows.
+
+    Parameters:
+      - static_value: the constant value to return for every row
+
+    Usage:
+      STATIC_DBCA = static_value_factory("DBCA")
+      PIPELINES["organization"] = [STATIC_DBCA]
+
+    Returns the static value for every row.
+    """
+    key = "static_value_" + hashlib.sha1(str(static_value).encode()).hexdigest()[:8]
+
+    # Check if already registered (cached by value)
+    if key in registry._fns:
+        return key
+
+    @registry.register(key)
+    def inner(value, ctx):
+        # Always return the static value, ignore incoming data
+        return _result(static_value)
+
+    return key
+
+
 def taxonomy_lookup(
     group_type_name: str | None = None,
     lookup_field: str = "scientific_name",
