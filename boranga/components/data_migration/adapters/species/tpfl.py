@@ -2,6 +2,7 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     choices_transform,
     emailuser_by_legacy_username_factory,
+    registry,
     taxonomy_lookup_legacy_mapping,
 )
 from boranga.components.species_and_communities.models import GroupType, Species
@@ -71,11 +72,17 @@ class SpeciesTpflAdapter(SourceAdapter):
             if rp_comments:
                 parts.append(rp_comments)
             if rp_exp_date_raw:
-                # Parse and format the date to remove any time component
-                # Try to extract just the date portion (YYYY-MM-DD or similar)
-                date_part = rp_exp_date_raw.split()[0] if rp_exp_date_raw else ""
-                if date_part:
-                    parts.append(f"RP Expiry Date: {date_part}")
+                # Parse and format the date using the same transforms as the pipeline
+                date_from_iso = registry._fns.get("date_from_datetime_iso")
+                format_dmy = registry._fns.get("format_date_dmy")
+                if date_from_iso and format_dmy:
+                    # Apply date_from_datetime_iso to parse the raw date string
+                    parsed_date_result = date_from_iso(rp_exp_date_raw, None)
+                    if parsed_date_result and parsed_date_result.value:
+                        # Apply format_date_dmy to format as dd/mm/YYYY
+                        formatted_result = format_dmy(parsed_date_result.value, None)
+                        if formatted_result and formatted_result.value:
+                            parts.append(f"RP Expiry Date: {formatted_result.value}")
             canonical["conservation_plan_reference"] = (
                 " ".join(parts) if parts else None
             )
