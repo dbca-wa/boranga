@@ -25,6 +25,32 @@ def _norm(s: Any) -> str:
     return str(s).strip().casefold()
 
 
+def _default_legacy_base_dir() -> Path:
+    """Return the default base dir for legacy data files.
+
+    Prefer `settings.BASE_DIR/private-media` (manage.py location). If
+    `settings.BASE_DIR` is not available fall back to a path relative to
+    this file's repository root and return `<repo-root>/private-media`.
+    """
+    try:
+        base_dir = getattr(settings, "BASE_DIR", None)
+        if base_dir:
+            return Path(base_dir) / "private-media"
+    except Exception:
+        # If anything unexpected happens, fall back to relative path below
+        pass
+
+    # Fallback: move up from this file to repository root and use private-media
+    try:
+        # mappings.py is at boranga/components/data_migration/mappings.py so
+        # parents[3] should be the project root containing manage.py
+        repo_root = Path(__file__).resolve().parents[3]
+        return repo_root / "private-media"
+    except Exception:
+        # Last-resort fallback: directory containing this file
+        return Path(__file__).resolve().parent
+
+
 def preload_map(legacy_system: str, list_name: str, active_only: bool = True):
     cache_key = (legacy_system, list_name)
     if cache_key in _CACHE:
@@ -78,8 +104,8 @@ def load_species_to_district_links(
     """
     mapping: dict[str, list[str]] = {}
 
-    # directory containing the current file
-    BASE_DIR = Path(__file__).resolve().parent
+    # directory containing the current file (defaults to project `private-media`)
+    BASE_DIR = _default_legacy_base_dir()
 
     # default import file path
     default_csv_path = BASE_DIR / "legacy_data/TPFL/DRF_TAXON_CONSV_LST_DISTRICTS.csv"
@@ -213,7 +239,7 @@ def load_csv_mapping(
     Returns (mapping_dict, resolved_path) or (None, resolved_path) if file not found
     or could not be read.
     """
-    base_dir = Path(__file__).resolve().parent
+    base_dir = _default_legacy_base_dir()
 
     # Resolve file path:
     if path:
@@ -389,7 +415,7 @@ def load_sheet_associated_species_names(
     """
     mapping: dict[str, list[str]] = defaultdict(list)
 
-    base_dir = Path(__file__).resolve().parent
+    base_dir = _default_legacy_base_dir()
     if path:
         p = Path(path)
         if p.suffix and p.suffix.lower() == ".csv":

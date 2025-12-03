@@ -250,13 +250,10 @@ export default {
                 async (response) => {
                     next(async (vm) => {
                         const data = await response.json();
-                        vm.loading.push('occurrence report proposal');
                         vm.occurrence_report_obj = data;
-                        vm.loading.splice(
-                            'fetching occurrence report proposal',
-                            1
-                        );
                         vm.setdata(vm.occurrence_report_obj.readonly);
+
+                        // fetch any amendment requests for this occurrence report
                         fetch(
                             helpers.add_endpoint_json(
                                 api_endpoints.occurrence_report,
@@ -265,19 +262,8 @@ export default {
                             )
                         ).then(
                             async (response) => {
-                                if (!response.ok) {
-                                    const data = await response.json();
-                                    swal.fire({
-                                        title: 'Error',
-                                        text: JSON.stringify(data),
-                                        icon: 'error',
-                                        customClass: {
-                                            confirmButton: 'btn btn-primary',
-                                        },
-                                    });
-                                    return;
-                                }
-                                vm.setAmendmentData(data);
+                                const amendData = await response.json();
+                                vm.setAmendmentData(amendData);
                             },
                             (err) => {
                                 console.log(err);
@@ -298,12 +284,7 @@ export default {
             }).then(
                 async (response) => {
                     next(async (vm) => {
-                        vm.loading.push('fetching occurrence report proposal');
                         vm.occurrence_report_obj = await response.json();
-                        vm.loading.splice(
-                            'fetching occurrence report proposal',
-                            1
-                        );
                     });
                 },
                 (err) => {

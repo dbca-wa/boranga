@@ -1990,9 +1990,26 @@ export default {
                                 async (response) => {
                                     vm.conservation_status_obj =
                                         await response.json();
-                                    vm.$router.push({
-                                        name: 'internal-conservation-status-dash',
+                                    // Keep the CS form open for all users after submit.
+                                    // Update local state and show a success message
+                                    vm.original_conservation_status_obj =
+                                        helpers.copyObject(
+                                            vm.conservation_status_obj
+                                        );
+                                    vm.updateEditingWindowVarsFromCSObj();
+                                    vm.$nextTick(() => {
+                                        vm.initialisedSelects = false;
+                                        vm.initialiseSelects();
                                     });
+                                    swal.fire({
+                                        title: 'Submitted',
+                                        text: 'Your conservation status proposal has been submitted.',
+                                        icon: 'success',
+                                        customClass: {
+                                            confirmButton: 'btn btn-primary',
+                                        },
+                                    });
+                                    vm.submitConservationStatus = false;
                                 },
                                 (err) => {
                                     swal.fire({

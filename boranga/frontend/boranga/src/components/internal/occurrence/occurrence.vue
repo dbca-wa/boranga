@@ -325,7 +325,6 @@ export default {
             form: null,
             savingOccurrence: false,
             saveExitOccurrence: false,
-            submitOccurrence: false,
             imageURL: '',
             isSaved: false,
             combine_key: 0,
@@ -348,9 +347,6 @@ export default {
         },
         occurrence_form_url: function () {
             return `/api/occurrence/${this.occurrence.id}/occurrence_save.json`;
-        },
-        occurrence_submit_url: function () {
-            return `occurrence`;
         },
         display_group_type: function () {
             if (this.occurrence && this.occurrence.group_type) {
@@ -492,7 +488,7 @@ export default {
         },
         save: async function () {
             let vm = this;
-            var missing_data = vm.can_submit('');
+            var missing_data = vm.can_save('');
             vm.isSaved = false;
             if (missing_data != true) {
                 swal.fire({
@@ -578,7 +574,7 @@ export default {
         },
         save_exit: async function () {
             let vm = this;
-            var missing_data = vm.can_submit('');
+            var missing_data = vm.can_save('');
             if (missing_data != true) {
                 swal.fire({
                     title: 'Please fix following errors before saving',
@@ -601,53 +597,7 @@ export default {
                 }
             });
         },
-        save_before_submit: async function () {
-            let vm = this;
-            vm.saveError = false;
-
-            let payload = new Object();
-            Object.assign(payload, vm.occurrence);
-            const result = await fetch(vm.occurrence_form_url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-            }).then(
-                async (response) => {
-                    const data = await response.json();
-                    if (!response.ok) {
-                        swal.fire({
-                            title: 'Error',
-                            text: JSON.stringify(data),
-                            icon: 'error',
-                            customClass: {
-                                confirmButton: 'btn btn-primary',
-                            },
-                        });
-                        return;
-                    }
-                    vm.occurrence = data;
-                    vm.original_occurrence = helpers.copyObject(data);
-                    vm.updateEditingWindowVarsFromOccObj();
-                },
-                (err) => {
-                    var errorText = helpers.apiVueResourceError(err);
-                    swal.fire({
-                        title: 'Submit Error',
-                        text: errorText,
-                        icon: 'error',
-                        customClass: {
-                            confirmButton: 'btn btn-primary',
-                        },
-                    });
-                    vm.submitOccurrence = false;
-                    vm.saveError = true;
-                }
-            );
-            return result;
-        },
-        can_submit: function () {
+        can_save: function () {
             let vm = this;
             let blank_fields = [];
             if (!vm.occurrence.occurrence_name) {
@@ -676,78 +626,6 @@ export default {
             } else {
                 return blank_fields;
             }
-        },
-        submit: async function () {
-            let vm = this;
-
-            var missing_data = vm.can_submit('submit');
-            missing_data = missing_data.replace(',', ', ');
-            if (missing_data != true) {
-                swal.fire({
-                    title: 'Please fix following errors before submitting',
-                    text: missing_data.toString().replace(',', ', '),
-                    icon: 'error',
-                    customClass: {
-                        confirmButton: 'btn btn-primary',
-                    },
-                });
-                return false;
-            }
-
-            vm.submitOccurrence = true;
-            swal.fire({
-                title: 'Submit Occurrence',
-                text: 'Are you sure you want to submit this Occurrence?',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'submit',
-                customClass: {
-                    confirmButton: 'btn btn-primary',
-                    cancelButton: 'btn btn-secondary',
-                },
-                reverseButtons: true,
-            }).then(
-                async (swalresult) => {
-                    if (swalresult.isConfirmed) {
-                        await vm.save_before_submit();
-                        if (!vm.saveError) {
-                            let payload = new Object();
-                            Object.assign(payload, vm.occurrence);
-                            const submit_url = helpers.add_endpoint_json(
-                                api_endpoints.occurrence,
-                                vm.occurrence.id + '/submit'
-                            );
-                            fetch(submit_url, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify(payload),
-                            }).then(
-                                async (response) => {
-                                    vm.occurrence = await response.json();
-                                    vm.$router.push({
-                                        name: 'internal-occurrence-dash',
-                                    });
-                                },
-                                (err) => {
-                                    swal.fire({
-                                        title: 'Submit Error',
-                                        text: helpers.apiVueResourceError(err),
-                                        icon: 'error',
-                                        customClass: {
-                                            confirmButton: 'btn btn-primary',
-                                        },
-                                    });
-                                }
-                            );
-                        }
-                    }
-                },
-                () => {
-                    vm.submitOccurrence = false;
-                }
-            );
         },
         refreshFromResponse: async function (response) {
             let vm = this;

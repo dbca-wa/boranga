@@ -38,8 +38,13 @@ class NH3SanitizeSerializerMixin:
 
     def to_internal_value(self, data):
         if isinstance(data, list):
-            # Recursively sanitize each item in the list
-            return [self.child.to_internal_value(item) for item in data]
+            # If this serializer is a ListSerializer it will have a `child`
+            # attribute. If not, a list is invalid input for a single
+            # object serializer — raise a validation error so the caller
+            # receives a clear message instead of an AttributeError.
+            if hasattr(self, "child"):
+                return [self.child.to_internal_value(item) for item in data]
+            raise serializers.ValidationError("Expected an object but received a list.")
 
         data = data.copy()
         for field_name, field in self.fields.items():

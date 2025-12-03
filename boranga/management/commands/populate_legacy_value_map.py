@@ -103,9 +103,8 @@ class Command(BaseCommand):
                 # Only perform model lookup if target_model is specified
                 if target_model:
                     # default lookup field to "name" when the CSV cell is empty
-                    lookup_field = (
-                        (r.get("target_lookup_field_name") or "").strip().lower()
-                    )
+                    # Do not lower() the field name: keep original case for model field
+                    lookup_field = (r.get("target_lookup_field_name") or "").strip()
                     if not lookup_field:
                         lookup_field = "name"
                     lookup_value = (
@@ -147,17 +146,33 @@ class Command(BaseCommand):
                         continue
                     try:
                         # assemble filter kwargs; include the second lookup if provided
-                        filter_kwargs = {lookup_field: lookup_value}
+                        # Use case-insensitive lookups for matching by appending '__iexact'
+                        # unless an explicit lookup (iexact, icontains, etc.) is already provided.
+                        def _ci_lookup_key(field_name: str) -> str:
+                            # Always perform a case-insensitive exact match for CSV-provided
+                            # field names by appending '__iexact'. This keeps behavior
+                            # simple because CSVs in this project never include lookup
+                            # suffixes.
+                            if field_name.endswith("__iexact"):
+                                return field_name
+                            return field_name + "__iexact"
+
+                        query_kwargs = {_ci_lookup_key(lookup_field): lookup_value}
+                        create_kwargs = {lookup_field: lookup_value}
                         if lookup_field_2 and lookup_value_2:
-                            filter_kwargs[lookup_field_2] = lookup_value_2
-                        obj = model_cls._default_manager.get(**filter_kwargs)
+                            query_kwargs[_ci_lookup_key(lookup_field_2)] = (
+                                lookup_value_2
+                            )
+                            create_kwargs[lookup_field_2] = lookup_value_2
+
+                        obj = model_cls._default_manager.get(**query_kwargs)
                         target_id = str(obj.pk)
                     except model_cls.DoesNotExist:
                         if create_missing:
                             # Create the target object with a warning
                             self.stdout.write(
                                 self.style.WARNING(
-                                    f"Creating missing {target_model} with {filter_kwargs} "
+                                    f"Creating missing {target_model} with {create_kwargs} "
                                     f"for legacy_value '{legacy_value}'"
                                 )
                             )
@@ -165,26 +180,26 @@ class Command(BaseCommand):
                                 # Use a savepoint to prevent transaction pollution
                                 with transaction.atomic():
                                     obj = model_cls._default_manager.create(
-                                        **filter_kwargs
+                                        **create_kwargs
                                     )
                                     target_id = str(obj.pk)
                                     targets_created += 1
                             except Exception as e:
                                 self.stderr.write(
-                                    f"Failed to create {target_model} with {filter_kwargs}: "
+                                    f"Failed to create {target_model} with {create_kwargs}: "
                                     f"{e}; skipping row '{legacy_value}'"
                                 )
                                 skipped += 1
                                 continue
                         else:
                             self.stderr.write(
-                                f"No {target_model} matching {filter_kwargs}; skipping row '{legacy_value}'"
+                                f"No {target_model} matching {query_kwargs}; skipping row '{legacy_value}'"
                             )
                             skipped += 1
                             continue
                     except model_cls.MultipleObjectsReturned:
                         self.stderr.write(
-                            f"Multiple {target_model} matching {filter_kwargs}; skipping row '{legacy_value}'"
+                            f"Multiple {target_model} matching {query_kwargs}; skipping row '{legacy_value}'"
                         )
                         skipped += 1
                         continue

@@ -1,14 +1,37 @@
 {
-    "eslint.debug": true,
-    "eslint.enable": true,
-    "eslint.format.enable": true,
-    "editor.codeActionsOnSave": {
-        "source.fixAll.eslint": "always",
-    },
-    "python-envs.defaultEnvManager": "ms-python.python:system",
-    "python-envs.pythonProjects": [],
-    "files.watcherExclude": { "**/.kb_layer_cache/**": true, "**/*.geojson": true },
-    "search.exclude": { "**/.kb_layer_cache/**": true, "**/*.geojson": true },
-    "files.associations": { "**/*.geojson": "plaintext" },
-    "editor.largeFileOptimizations": true
+  "eslint.enable": true,
+  "eslint.run": "onType",
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "vue",
+    "vue-html",
+    "typescript",
+    "typescriptreact"
+  ],
+  "eslint.workingDirectories": [
+    {
+      "directory": "frontend/boranga",
+      "changeProcessCWD": true
+    }
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "always"
+  },
+  "prettier.enable": true,
+  "editor.formatOnSave": true,
+  "vetur.validation": false,
+  "volar.takeOverMode": true,
+  "files.watcherExclude": {
+    "**/.kb_layer_cache/**": true,
+    "**/*.geojson": true
+  },
+  "search.exclude": {
+    "**/.kb_layer_cache/**": true,
+    "**/*.geojson": true
+  },
+  "files.associations": {
+    "**/*.geojson": "plaintext"
+  },
+  "editor.largeFileOptimizations": true
 }

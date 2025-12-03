@@ -10,61 +10,78 @@
             @ok="ok()"
             @cancel="close()"
         >
-            <div class="container-fluid">
-                <div class="row">
-                    <FormSection
-                        :form-collapse="false"
-                        :label="sectionTypeDisplay"
-                    >
-                        <div class="card-body card-collapse">
+            <div>
+                <FormSection :form-collapse="false" :label="sectionTypeDisplay">
+                    <div class="card-body card-collapse">
+                        <div v-if="isLoading" class="text-center py-4">
                             <div
-                                v-for="(value, index) in sectionObjExpanded"
-                                :key="index"
+                                class="spinner-border text-primary"
+                                role="status"
                             >
-                                <div v-if="value && index != 'id'">
-                                    <div v-if="typeof value == 'object'">
-                                        <div
-                                            v-for="(o_value, o_index) in value"
-                                            :key="o_index"
-                                            class="row mb-3"
-                                        >
-                                            <label
-                                                class="col-sm-6 control-label"
-                                                >{{ index }}.{{
-                                                    o_index
-                                                }}:</label
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div v-else>
+                            <div v-if="hasData">
+                                <div
+                                    v-for="(value, index) in sectionObjExpanded"
+                                    :key="index"
+                                >
+                                    <div v-if="value && index != 'id'">
+                                        <div v-if="typeof value == 'object'">
+                                            <div
+                                                v-for="(
+                                                    o_value, o_index
+                                                ) in value"
+                                                :key="o_index"
+                                                class="row mb-3"
                                             >
-                                            <div class="col-sm-6">
-                                                <input
-                                                    :disabled="true"
-                                                    type="text"
-                                                    class="form-control"
-                                                    :value="o_value"
-                                                />
+                                                <label
+                                                    class="col-sm-6 control-label"
+                                                >
+                                                    {{ formatLabel(index) }}.{{
+                                                        formatLabel(o_index)
+                                                    }}:
+                                                </label>
+                                                <div class="col-sm-6">
+                                                    <input
+                                                        :disabled="true"
+                                                        type="text"
+                                                        class="form-control"
+                                                        :value="o_value"
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div v-else>
-                                        <div class="row mb-3">
-                                            <label
-                                                class="col-sm-6 control-label"
-                                                >{{ index }}:</label
-                                            >
-                                            <div class="col-sm-6">
-                                                <textarea
-                                                    :disabled="true"
-                                                    type="text"
-                                                    class="form-control"
-                                                    v-bind:value="value"
-                                                ></textarea>
+                                        <div v-else>
+                                            <div class="row mb-3">
+                                                <label
+                                                    class="col-sm-6 control-label"
+                                                >
+                                                    {{ formatLabel(index) }}:
+                                                </label>
+                                                <div class="col-sm-6">
+                                                    <textarea
+                                                        :disabled="true"
+                                                        type="text"
+                                                        class="form-control"
+                                                        v-bind:value="value"
+                                                    ></textarea>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
+                            <div v-else class="text-center py-5">
+                                <p class="text-secondary fs-5">
+                                    No data from this ORF is available for this
+                                    section
+                                </p>
+                            </div>
                         </div>
-                    </FormSection>
-                </div>
+                    </div>
+                </FormSection>
             </div>
             <template #footer>
                 <div>
@@ -109,30 +126,60 @@ export default {
             required: true,
         },
     },
-    data: function () {
-        let vm = this;
+    data() {
         return {
             isModalOpen: false,
             form: null,
-            sectionObjExpanded: vm.sectionObj,
+            sectionObjExpanded: {},
+            isLoading: false,
             ocr_model_prefix: constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX,
         };
     },
-    mounted: function () {
+    computed: {
+        hasData() {
+            const displayableKeys = Object.keys(this.sectionObjExpanded).filter(
+                (key) => key !== 'id' && this.sectionObjExpanded[key]
+            );
+            return displayableKeys.length > 0;
+        },
+    },
+    watch: {
+        sectionObj() {
+            let vm = this;
+            vm.sectionObjExpanded = {};
+            this.$nextTick(() => {
+                vm.fetchSectionData();
+            });
+        },
+    },
+    mounted() {
         let vm = this;
         this.$nextTick(() => {
             vm.fetchSectionData();
         });
     },
     methods: {
-        close: function () {
+        close() {
             this.isModalOpen = false;
             this.errors = false;
             $('.has-error').removeClass('has-error');
         },
-        fetchSectionData: function () {
+        formatLabel(label) {
+            // Replace underscores with spaces and convert to title case
+            return label
+                .replace(/_/g, ' ')
+                .split(' ')
+                .map(
+                    (word) =>
+                        word.charAt(0).toUpperCase() +
+                        word.slice(1).toLowerCase()
+                )
+                .join(' ');
+        },
+        fetchSectionData() {
             let vm = this;
             if (vm.sectionObj.occurrence_report_id !== undefined) {
+                vm.isLoading = true;
                 fetch(
                     api_endpoints.lookup_ocr_section_values(
                         vm.sectionType,
@@ -141,9 +188,11 @@ export default {
                 ).then(
                     async (response) => {
                         vm.sectionObjExpanded = await response.json();
+                        vm.isLoading = false;
                     },
                     (error) => {
                         console.log(error);
+                        vm.isLoading = false;
                     }
                 );
             }

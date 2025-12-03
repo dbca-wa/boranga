@@ -73,91 +73,77 @@ class SpeciesImporter(BaseSheetImporter):
             from boranga.components.occurrence.models import (
                 Occurrence,
                 OccurrenceReport,
-                OccurrenceReportApprovalDetails,
             )
 
-            # 1) Handle Occurrences -> must remove/clear PROTECT references first
-            occ_qs = Occurrence.objects.all()
-            if occ_qs.exists():
-                occ_ids = list(occ_qs.values_list("id", flat=True))
+            vendor = getattr(conn, "vendor", None)
 
-                # Nullify approval details that point to these occurrences
-                if OccurrenceReportApprovalDetails is not None:
-                    try:
-                        (
-                            OccurrenceReportApprovalDetails.objects.filter(
-                                occurrence_id__in=occ_ids
-                            ).update(occurrence=None)
-                        )
-                    except Exception:
-                        logger.exception(
-                            "Failed to nullify OccurrenceReportApprovalDetails.occurrence"
-                        )
-                        raise
-
-                # Nullify occurrence FK on OccurrenceReport
+            # Use TRUNCATE CASCADE for PostgreSQL (more efficient than DELETE)
+            # For other databases, fall back to DELETE
+            if vendor == "postgresql":
+                logger.info(
+                    "SpeciesImporter: using TRUNCATE CASCADE for efficient bulk deletion"
+                )
                 try:
-                    OccurrenceReport.objects.filter(occurrence_id__in=occ_ids).update(
-                        occurrence=None
-                    )
-                except Exception:
-                    logger.exception("Failed to nullify OccurrenceReport.occurrence")
-                    raise
+                    with conn.cursor() as cur:
+                        # TRUNCATE CASCADE will delete Species and cascade to all dependent tables
+                        # This is much faster than DELETE and doesn't require constraint disabling
+                        cur.execute(f"TRUNCATE TABLE {Species._meta.db_table} CASCADE")
+                        logger.info(
+                            "SpeciesImporter: successfully truncated %s with CASCADE",
+                            Species._meta.db_table,
+                        )
 
-                # Clear combined_occurrence references pointing to these occurrences
-                try:
-                    Occurrence.objects.filter(
-                        combined_occurrence_id__in=occ_ids
-                    ).update(combined_occurrence=None)
+                    # Also truncate OccurrenceReport and Occurrence to ensure clean state
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"TRUNCATE TABLE {OccurrenceReport._meta.db_table} CASCADE"
+                        )
+                        logger.info(
+                            "SpeciesImporter: successfully truncated %s with CASCADE",
+                            OccurrenceReport._meta.db_table,
+                        )
+
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"TRUNCATE TABLE {Occurrence._meta.db_table} CASCADE"
+                        )
+                        logger.info(
+                            "SpeciesImporter: successfully truncated %s with CASCADE",
+                            Occurrence._meta.db_table,
+                        )
+
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"TRUNCATE TABLE {ConservationStatus._meta.db_table} CASCADE"
+                        )
+                        logger.info(
+                            "SpeciesImporter: successfully truncated %s with CASCADE",
+                            ConservationStatus._meta.db_table,
+                        )
+
                 except Exception:
                     logger.exception(
-                        "Failed to clear Occurrence.combined_occurrence references"
+                        "Failed to truncate tables with CASCADE; falling back to DELETE"
                     )
-                    raise
+                    # Fall back to DELETE-based approach
+                    self._delete_using_orm(
+                        ConservationStatus, OccurrenceReport, Occurrence
+                    )
+            else:
+                # For non-PostgreSQL databases, use ORM-based deletion
+                logger.info(
+                    "SpeciesImporter: using DELETE-based approach for non-PostgreSQL database"
+                )
+                self._delete_using_orm(ConservationStatus, OccurrenceReport, Occurrence)
 
-                # Now safe to delete the occurrence rows
-                try:
-                    occ_qs.delete()
-                except Exception:
-                    logger.exception("Failed to delete Occurrence objects")
-                    raise
-
-            # 2) Delete any remaining OccurrenceReport objects that reference Species
-            try:
-                OccurrenceReport.objects.all().delete()
-            except Exception:
-                logger.exception("Failed to delete OccurrenceReport objects")
-                raise
-
-            # 3) Delete ConservationStatus that reference Species
-            try:
-                ConservationStatus.objects.all().delete()
-            except Exception:
-                logger.exception("Failed to delete ConservationStatus")
-                raise
-
-            # 4) Delete species-related helper tables and species
-            try:
-                SpeciesPublishingStatus.objects.all().delete()
-            except Exception:
-                logger.exception("Failed to delete SpeciesPublishingStatus")
-                raise
-            try:
-                SpeciesDistribution.objects.all().delete()
-            except Exception:
-                logger.exception("Failed to delete SpeciesDistribution")
-                raise
-            try:
-                Species.objects.all().delete()
-            except Exception:
-                logger.exception("Failed to delete Species")
-                raise
             # Reset the primary key sequence for Species when using PostgreSQL.
             # This ensures that after a full wipe the next created Species will
             # start with a low/consistent PK (and hence predictable `species_number`).
-            try:
-                # `conn` is a DatabaseWrapper obtained above (connections['default']).
-                if getattr(conn, "vendor", None) == "postgresql":
+            if vendor == "postgresql":
+                logger.info(
+                    "SpeciesImporter: resetting primary key sequence for Species"
+                )
+                try:
                     table = Species._meta.db_table
                     with conn.cursor() as cur:
                         # Use pg_get_serial_sequence so we don't need to know
@@ -167,11 +153,127 @@ class SpeciesImporter(BaseSheetImporter):
                             [table, "id", 1, False],
                         )
                     logger.info("Reset primary key sequence for table %s", table)
-            except Exception:
-                logger.exception("Failed to reset Species primary key sequence")
+                except Exception:
+                    logger.exception("Failed to reset Species primary key sequence")
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
+
+    def _delete_using_orm(self, ConservationStatus, OccurrenceReport, Occurrence):
+        """Helper to delete records using Django ORM when TRUNCATE is not available."""
+        logger.info("SpeciesImporter: deleting records using Django ORM")
+
+        # 1) Delete all OccurrenceReport records first (CASCADE will handle most)
+        logger.info("SpeciesImporter: deleting OccurrenceReport records...")
+        report_count = OccurrenceReport.objects.count()
+        if report_count > 0:
+            logger.info(
+                "SpeciesImporter: found %d OccurrenceReport records to delete",
+                report_count,
+            )
+            try:
+                OccurrenceReport.objects.all().delete()
+                logger.info(
+                    "SpeciesImporter: successfully deleted OccurrenceReport records"
+                )
+            except Exception:
+                logger.exception("Failed to delete OccurrenceReport objects")
+                raise
+
+        # 2) Handle Occurrences
+        logger.info("SpeciesImporter: deleting Occurrence records...")
+        occ_qs = Occurrence.objects.all()
+        occ_count = occ_qs.count()
+        if occ_count > 0:
+            logger.info(
+                "SpeciesImporter: found %d Occurrence records to delete", occ_count
+            )
+            occ_ids = list(occ_qs.values_list("id", flat=True))
+
+            # Clear combined_occurrence self-references before deletion
+            try:
+                Occurrence.objects.filter(combined_occurrence_id__in=occ_ids).update(
+                    combined_occurrence=None
+                )
+                logger.info(
+                    "SpeciesImporter: cleared combined_occurrence self-references"
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to clear Occurrence.combined_occurrence references"
+                )
+                raise
+
+            # Now safe to delete the occurrence rows
+            try:
+                occ_qs.delete()
+                logger.info("SpeciesImporter: successfully deleted Occurrence records")
+            except Exception:
+                logger.exception("Failed to delete Occurrence objects")
+                raise
+
+        # 3) Delete ConservationStatus that reference Species
+        logger.info("SpeciesImporter: deleting ConservationStatus records...")
+        cs_count = ConservationStatus.objects.count()
+        if cs_count > 0:
+            logger.info(
+                "SpeciesImporter: found %d ConservationStatus records to delete",
+                cs_count,
+            )
+            try:
+                ConservationStatus.objects.all().delete()
+                logger.info(
+                    "SpeciesImporter: successfully deleted ConservationStatus records"
+                )
+            except Exception:
+                logger.exception("Failed to delete ConservationStatus")
+                raise
+
+        # 4) Delete species-related helper tables and species
+        logger.info("SpeciesImporter: deleting SpeciesPublishingStatus records...")
+        try:
+            count = SpeciesPublishingStatus.objects.count()
+            if count > 0:
+                logger.info(
+                    "SpeciesImporter: found %d SpeciesPublishingStatus records to delete",
+                    count,
+                )
+            SpeciesPublishingStatus.objects.all().delete()
+            logger.info(
+                "SpeciesImporter: successfully deleted SpeciesPublishingStatus records"
+            )
+        except Exception:
+            logger.exception("Failed to delete SpeciesPublishingStatus")
+            raise
+
+        logger.info("SpeciesImporter: deleting SpeciesDistribution records...")
+        try:
+            count = SpeciesDistribution.objects.count()
+            if count > 0:
+                logger.info(
+                    "SpeciesImporter: found %d SpeciesDistribution records to delete",
+                    count,
+                )
+            SpeciesDistribution.objects.all().delete()
+            logger.info(
+                "SpeciesImporter: successfully deleted SpeciesDistribution records"
+            )
+        except Exception:
+            logger.exception("Failed to delete SpeciesDistribution")
+            raise
+
+        logger.info("SpeciesImporter: deleting Species records...")
+        try:
+            species_count = Species.objects.count()
+            if species_count > 0:
+                logger.info(
+                    "SpeciesImporter: found %d Species records to delete", species_count
+                )
+            Species.objects.all().delete()
+            logger.info("SpeciesImporter: successfully deleted Species records")
+        except Exception:
+            logger.exception("Failed to delete Species")
+            raise
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -491,9 +593,9 @@ class SpeciesImporter(BaseSheetImporter):
         to_update = []  # existing Species instances to bulk_update
         # Handle duplicate taxonomy_id values across ops to avoid unique constraint
         tax_seen = {}  # taxonomy_id -> canonical migrated_from_id
-        pending_updates = (
-            {}
-        )  # canonical_migrated -> list of (migrated_from_id, defaults, merged, districts_raw)
+        tax_collisions = defaultdict(
+            list
+        )  # taxonomy_id -> list of skipped migrated_from_ids
 
         for op in ops:
             migrated_from_id = op["migrated_from_id"]
@@ -522,18 +624,17 @@ class SpeciesImporter(BaseSheetImporter):
                 to_update.append((existing, merged, districts_raw))
             elif taxonomy_id and taxonomy_id in tax_seen:
                 # Another op in this run has already claimed this taxonomy_id.
-                # Defer applying this op as an update to the canonical record after it's created.
+                # Skip this record to avoid duplicate taxonomy entries.
                 canonical = tax_seen[taxonomy_id]
                 logger.info(
                     "SpeciesImporter: taxonomy collision detected for taxonomy_id=%s; "
-                    "deferring migrated_from_id=%s to canonical migrated_from_id=%s",
+                    "skipping migrated_from_id=%s (first instance: migrated_from_id=%s)",
                     taxonomy_id,
                     migrated_from_id,
                     canonical,
                 )
-                pending_updates.setdefault(canonical, []).append(
-                    (migrated_from_id, defaults, merged, districts_raw)
-                )
+                tax_collisions[taxonomy_id].append(migrated_from_id)
+                skipped += 1
             elif taxonomy_id:
                 # First time we see this taxonomy_id and it doesn't exist in DB.
                 # Claim it as canonical and create one instance for it.
@@ -601,45 +702,6 @@ class SpeciesImporter(BaseSheetImporter):
                                 "Failed to populate species_number for created Species %s",
                                 getattr(s, "pk", None),
                             )
-
-        # Apply any pending updates that were deferred because they shared a taxonomy_id
-        if "pending_updates" in locals() and pending_updates:
-            # build reverse map so we can log taxonomy_id for a canonical migrated key
-            canonical_to_tax = (
-                {v: k for k, v in tax_seen.items()} if "tax_seen" in locals() else {}
-            )
-            for canonical_mig, pendings in pending_updates.items():
-                taxonomy_id_for_canonical = canonical_to_tax.get(canonical_mig)
-                # canonical may be in created_map (newly created) or existing_by_migrated
-                obj = created_map.get(canonical_mig) or existing_by_migrated.get(
-                    canonical_mig
-                )
-                if not obj:
-                    logger.warning(
-                        "SpeciesImporter: canonical object for taxonomy pending_updates not found: %s",
-                        canonical_mig,
-                    )
-                    continue
-                # Log what we're about to merge for auditing
-                pending_ids = [p[0] for p in pendings]
-                logger.info(
-                    "SpeciesImporter: applying %d pending updates to canonical migrated_from_id=%s "
-                    "(taxonomy_id=%s): %s",
-                    len(pendings),
-                    canonical_mig,
-                    taxonomy_id_for_canonical,
-                    pending_ids,
-                )
-                # Apply each pending update in order; later pendings overwrite earlier
-                for pending in pendings:
-                    pending_mig, pending_defaults, pending_merged, pending_districts = (
-                        pending
-                    )
-                    for k, v in pending_defaults.items():
-                        setattr(obj, k, v)
-                    # set migrated_from_id to the pending migrated id to match original behavior
-                    obj.migrated_from_id = pending_mig
-                    to_update.append((obj, pending_merged, pending_districts))
 
         # Bulk update existing objects collected in to_update
         if to_update:
@@ -1065,6 +1127,28 @@ class SpeciesImporter(BaseSheetImporter):
         stats["warning_count_details"] = len(warnings_details)
         stats["warning_messages"] = warnings
         stats["error_details_csv"] = None
+
+        # Log taxonomy collision summary
+        if tax_collisions:
+            logger.info(
+                "SpeciesImporter: taxonomy collision summary - %d unique taxonomies with duplicates:",
+                len(tax_collisions),
+            )
+            collision_skipped = 0
+            for taxonomy_id, skipped_ids in sorted(tax_collisions.items()):
+                collision_count = len(skipped_ids)
+                collision_skipped += collision_count
+                logger.info(
+                    "  taxonomy_id=%s: skipped %d duplicate records (%s)",
+                    taxonomy_id,
+                    collision_count,
+                    ", ".join(str(mid) for mid in skipped_ids[:3])
+                    + ("..." if collision_count > 3 else ""),
+                )
+            logger.info(
+                "SpeciesImporter: total records skipped due to taxonomy collisions: %d",
+                collision_skipped,
+            )
 
         elapsed = timezone.now() - start_time
         stats["time_taken"] = str(elapsed)
