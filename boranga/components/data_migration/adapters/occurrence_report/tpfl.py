@@ -197,8 +197,8 @@ SUBMITTER_CATEGORY_DEFAULT_TRANSFORM = fk_lookup_static(
     static_value="DBCA",
 )
 
-GET_CREATED_BY_COLUMN_VALUE = dependent_from_column_factory(
-    "CREATED_BY",
+GET_SUBMITTER_VALUE = dependent_from_column_factory(
+    "submitter",
     mapper=lambda dep, ctx: dep.strip() if dep else None,
     default=None,
 )
@@ -209,7 +209,19 @@ STATIC_DBCA = static_value_factory("DBCA")
 EMAILUSER_OBJ_BY_LEGACY_USERNAME_TRANSFORM = (
     emailuser_object_by_legacy_username_factory("TPFL")
 )
-SUBMITTER_NAME_FROM_EMAILUSER = pluck_attribute_factory("get_full_name")
+
+
+def submitter_name_from_emailuser(value, ctx=None):
+    """Extract full name from EmailUser object by calling get_full_name() method."""
+    if value is None:
+        return _result(None)
+    try:
+        if hasattr(value, "get_full_name"):
+            return _result(value.get_full_name())
+        return _result(None)
+    except Exception:
+        return _result(None)
+
 
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
@@ -282,17 +294,17 @@ PIPELINES = {
     # SubmitterInformation pipelines (Task 11302-11306)
     "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DEFAULT_TRANSFORM],
     "SubmitterInformation__email_user": [
-        GET_CREATED_BY_COLUMN_VALUE,
+        GET_SUBMITTER_VALUE,
         "strip",
         "blank_to_none",
         EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM,
     ],
     "SubmitterInformation__name": [
-        GET_CREATED_BY_COLUMN_VALUE,
+        GET_SUBMITTER_VALUE,
         "strip",
         "blank_to_none",
         EMAILUSER_OBJ_BY_LEGACY_USERNAME_TRANSFORM,
-        SUBMITTER_NAME_FROM_EMAILUSER,
+        submitter_name_from_emailuser,
     ],
     "SubmitterInformation__organisation": [STATIC_DBCA],
 }
