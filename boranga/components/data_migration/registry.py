@@ -1431,6 +1431,94 @@ def emailuser_by_legacy_username_factory(legacy_system: str) -> str:
     return name
 
 
+def emailuser_object_by_legacy_username_factory(legacy_system: str) -> str:
+    """
+    Return a registered transform name that resolves legacy username -> EmailUser object
+    (the full EmailUser model instance, not just the ID).
+
+    This is useful when you need to extract attributes from the EmailUser object
+    using pluck_attribute_factory, e.g., to get the full name.
+
+    Results are cached for the duration of the data migration to avoid repeated
+    database queries for the same legacy username.
+
+    Usage:
+      EMAILUSER_OBJ_TPFL = emailuser_object_by_legacy_username_factory("TPFL")
+      SUBMITTER_NAME = pluck_attribute_factory("get_full_name")
+      PIPELINES["submitter_information_name"] = [EMAILUSER_OBJ_TPFL, SUBMITTER_NAME]
+    """
+    if not legacy_system:
+        raise ValueError("legacy_system must be provided to bind this transform")
+
+    key = f"emailuser_object_by_legacy_username:{legacy_system}"
+    name = (
+        "emailuser_object_by_legacy_username_"
+        + hashlib.sha1(key.encode()).hexdigest()[:8]
+    )
+    if name in registry._fns:
+        return name
+
+    # Cache for EmailUser objects keyed by (legacy_system, username)
+    cache: dict = {}
+
+    def inner(value, ctx):
+        if value in (None, ""):
+            return _result(None)
+        username = str(value).strip()
+        cache_key = (str(legacy_system).lower(), username.lower())
+
+        # Return cached result if available
+        if cache_key in cache:
+            cached = cache[cache_key]
+            if isinstance(cached, TransformResult):
+                return cached
+            return _result(cached)
+
+        qs = LegacyUsernameEmailuserMapping.objects.filter(
+            legacy_system__iexact=str(legacy_system), legacy_username__iexact=username
+        )
+        try:
+            mapping = qs.get()
+            # Fetch and return the actual EmailUser object
+            email_user = EmailUserRO.objects.get(id=mapping.emailuser_id)
+            result = _result(email_user)
+            cache[cache_key] = result
+            return result
+        except LegacyUsernameEmailuserMapping.DoesNotExist:
+            result = _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"User with legacy username='{value}' not found for system='{legacy_system}'",
+                ),
+            )
+            cache[cache_key] = result
+            return result
+        except LegacyUsernameEmailuserMapping.MultipleObjectsReturned:
+            result = _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"Multiple users with legacy username='{value}' for system='{legacy_system}'",
+                ),
+            )
+            cache[cache_key] = result
+            return result
+        except EmailUserRO.DoesNotExist:
+            result = _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"EmailUser with id={mapping.emailuser_id} not found for legacy username='{value}'",
+                ),
+            )
+            cache[cache_key] = result
+            return result
+
+    registry._fns[name] = inner
+    return name
+
+
 @registry.register("split_multiselect")
 def t_split_multiselect(value, ctx):
     """Split a multi-select cell into a trimmed, deduped list (split on ';' or ',')."""
