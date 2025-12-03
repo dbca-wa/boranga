@@ -557,6 +557,79 @@ def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
     return key
 
 
+def fk_lookup_static(
+    model: type[models.Model], lookup_field: str, static_value: Any
+) -> str:
+    """
+    Return a registered transform name that looks up a foreign key using a
+    static/constant value (ignoring the incoming row value).
+
+    This is useful when every row should map to the same FK object.
+
+    The lookup result is cached for the duration of the data migration (per transform name),
+    so the database query only happens once.
+
+    Parameters:
+      - model: the Django model to query
+      - lookup_field: the field name to filter by (e.g. 'id', 'name', 'code')
+      - static_value: the constant value to use for lookup
+
+    Usage:
+      FK_STATIC_GROUP = fk_lookup_static(GroupType, "name", "Flora")
+      PIPELINES["group_type_id"] = [FK_STATIC_GROUP]
+
+    Returns the primary key (id) of the matched object, or an error TransformIssue
+    if the object is not found or multiple objects match.
+    """
+    key = (
+        f"fk_static_{model._meta.label_lower}_{lookup_field}"
+        + "_"
+        + hashlib.sha1(str(static_value).encode()).hexdigest()[:8]
+    )
+
+    # Check if already registered (cached by value)
+    if key in registry._fns:
+        return key
+
+    # Closure variable to cache the lookup result and any error
+    cached_result = {"result": None, "error": None, "cached": False}
+
+    @registry.register(key)
+    def inner(value, ctx):
+        # Return cached result if available
+        if cached_result["cached"]:
+            if cached_result["error"]:
+                return _result(value, cached_result["error"])
+            return _result(cached_result["result"])
+
+        # Perform lookup on first call
+        qs = model._default_manager
+
+        try:
+            obj = qs.get(**{lookup_field: static_value})
+            cached_result["result"] = obj.pk
+            cached_result["cached"] = True
+            return _result(obj.pk)
+        except model.DoesNotExist:
+            error = TransformIssue(
+                "error",
+                f"{model.__name__} with {lookup_field}='{static_value}' not found",
+            )
+            cached_result["error"] = error
+            cached_result["cached"] = True
+            return _result(value, error)
+        except model.MultipleObjectsReturned:
+            error = TransformIssue(
+                "error",
+                f"Multiple {model.__name__} objects with {lookup_field}='{static_value}' found",
+            )
+            cached_result["error"] = error
+            cached_result["cached"] = True
+            return _result(value, error)
+
+    return key
+
+
 def taxonomy_lookup(
     group_type_name: str | None = None,
     lookup_field: str = "scientific_name",
