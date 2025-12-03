@@ -24,6 +24,8 @@ COLUMN_MAP = {
     # source columns for RP (Research Plan) reference
     "RP_COMMENTS": "RP_COMMENTS",
     "RP_EXP_DATE": "RP_EXP_DATE",
+    "MODIFIED_BY": "modified_by",
+    "MODIFIED_DATE": "datetime_updated",
 }
 
 # Minimal required canonical fields for migration

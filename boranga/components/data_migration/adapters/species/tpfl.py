@@ -18,7 +18,7 @@ from . import schema
 
 TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
 
-SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
+EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
 PROCESSING_STATUS = choices_transform([c[0] for c in Species.PROCESSING_STATUS_CHOICES])
 
@@ -45,8 +45,10 @@ PIPELINES = {
         "Y_to_active_else_historical",
         PROCESSING_STATUS,
     ],
-    "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
+    "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
     "distribution": ["strip", "blank_to_none"],
+    "modified_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
+    "datetime_updated": ["strip", "blank_to_none", "datetime_iso"],
 }
 
 
