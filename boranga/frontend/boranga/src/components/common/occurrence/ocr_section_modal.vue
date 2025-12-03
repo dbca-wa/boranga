@@ -24,7 +24,7 @@
                         <div v-else>
                             <div v-if="hasData">
                                 <div
-                                    v-for="(value, index) in sectionObjExpanded"
+                                    v-for="(value, index) in displayData"
                                     :key="index"
                                 >
                                     <div v-if="value && index != 'id'">
@@ -137,10 +137,38 @@ export default {
     },
     computed: {
         hasData() {
-            const displayableKeys = Object.keys(this.sectionObjExpanded).filter(
-                (key) => key !== 'id' && this.sectionObjExpanded[key]
-            );
+            // Use sectionObjExpanded if it has been populated from API, otherwise use sectionObj
+            const dataToCheck =
+                Object.keys(this.sectionObjExpanded).length > 0
+                    ? this.sectionObjExpanded
+                    : this.sectionObj;
+            const displayableKeys = Object.keys(dataToCheck).filter((key) => {
+                const value = dataToCheck[key];
+                // Exclude id, null, undefined, empty strings
+                if (key === 'id' || value == null || value === '') {
+                    return false;
+                }
+                // Exclude empty arrays
+                if (Array.isArray(value) && value.length === 0) {
+                    return false;
+                }
+                // Exclude empty objects
+                if (
+                    typeof value === 'object' &&
+                    !Array.isArray(value) &&
+                    Object.keys(value).length === 0
+                ) {
+                    return false;
+                }
+                return true;
+            });
             return displayableKeys.length > 0;
+        },
+        displayData() {
+            // Use sectionObjExpanded if it has been populated from API, otherwise use sectionObj
+            return Object.keys(this.sectionObjExpanded).length > 0
+                ? this.sectionObjExpanded
+                : this.sectionObj;
         },
     },
     watch: {
@@ -166,7 +194,8 @@ export default {
         },
         formatLabel(label) {
             // Replace underscores with spaces and convert to title case
-            return label
+            const str = String(label);
+            return str
                 .replace(/_/g, ' ')
                 .split(' ')
                 .map(
