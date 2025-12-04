@@ -78,6 +78,34 @@ This README explains the pieces and the typical workflow in simple language.
    - Calls the adapter and runs the import logic
    - Register the importer with the registry (so the command can find it)
 
+## Adding OneToOne relationships (child models) to an importer
+
+When adding a new OneToOne child model to an importer (e.g., OCRLocation to OccurrenceReport), follow this pattern to avoid common mistakes:
+
+1. **Schema** (schema.py):
+   - Add COLUMN_MAP entries to map raw CSV columns to `ChildModel__field_name` keys
+   - Add fields to the OccurrenceReportRow dataclass for each child field
+   - Update from_dict() to coerce/validate child fields using utils.to_int_maybe(), utils.safe_strip(), etc.
+
+2. **Adapter** (tpfl.py):
+   - Add transform functions using build_legacy_map_transform() for FK lookups, dependent_from_column_factory() for derived fields, static_value_factory() for defaults
+   - Add entries to PIPELINES dict mapping `ChildModel__field_name` to their transform pipelines
+   - **CRITICAL**: In extract() method, copy raw CSV column values into the canonical dict with `ChildModel__` prefix (e.g., `canonical["ChildModel__field"] = canonical.get("RAW_CSV_COLUMN")`) so pipelines can process them. This mirrors how habitat/identification fields are handled.
+
+3. **Handler** (occurrence_reports.py):
+   - In ops collection loop (around line 536): Extract child data into `child_data = {}` dict from merged dict with `ChildModel__` prefix keys
+   - In ops.append() call: Add `"child_data": child_data` to the ops dict
+   - In to_update loop unpacking (around line 1200+): **CRITICAL** - Unpack child_data from the tuple, e.g., `(inst, habitat_data, habitat_condition, submitter_information_data, location_data) = up`
+   - In create_meta.append() call: Add child_data to the tuple being appended
+   - In create_meta for loop unpacking (around line 1323): **CRITICAL** - Unpack child_data from create_meta, e.g., `for (mig, habitat_data, habitat_condition, submitter_information_data, location_data) in create_meta:`
+   - After identifying existing child instances: Build create/update lists and bulk_create/bulk_update them (follow pattern from OCRHabitatComposition, OCRIdentification, etc.)
+
+**Common mistakes to avoid:**
+- Forgetting to copy raw values to canonical dict in adapter.extract() → child fields won't reach pipelines
+- Forgetting to unpack child_data in to_update loop or create_meta loop → ValueError: too many values to unpack
+- Forgetting to add child_data to ops.append() or create_meta.append() → child data is lost before reaching persistence code
+- Not adding bulk_create/bulk_update code for the child model → model instances created but not persisted to database
+
 ## Running imports
 
 - List importers:
