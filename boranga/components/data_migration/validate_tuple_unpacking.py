@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
 """
-Validation script for tuple unpacking consistency in occurrence_reports.py handler.
+Validation script for tuple unpacking consistency in data migration handlers.
 
 This script detects when tuple structures are changed (new child models added) but not
 all unpacking locations are updated, which would cause ValueError: too many values to unpack.
 
+Works with any handler file (occurrence_reports.py, occurrences.py, etc.) by looking for
+unpacking patterns with "to_update", "to_create", "create_meta", etc.
+
 Usage:
+    python validate_tuple_unpacking.py [handler_path]
+
+Examples:
     python validate_tuple_unpacking.py
+    # Validates handlers/occurrence_reports.py (default)
+
+    python validate_tuple_unpacking.py handlers/occurrences.py
+    # Validates a specific handler file
 
 Exit codes:
     0 = All checks passed
@@ -254,10 +264,28 @@ def validate_append_consistency(handler_path: str) -> tuple[bool, str]:
 
 
 def main():
-    handler_path = Path(__file__).parent / "handlers" / "occurrence_reports.py"
+    # Determine handler path from command-line argument or default
+    if len(sys.argv) > 1:
+        handler_path = Path(sys.argv[1])
+    else:
+        # Default: occurrence_reports.py in the handlers directory
+        handler_path = Path(__file__).parent / "handlers" / "occurrence_reports.py"
+
+    # If path is relative but doesn't start with handlers/, prepend handlers/
+    if not handler_path.is_absolute() and "handlers" not in str(handler_path):
+        handler_path = Path(__file__).parent / "handlers" / handler_path
+    elif not handler_path.is_absolute():
+        # Path contains handlers/ or is relative, make it absolute from script location
+        if not str(handler_path).startswith("/"):
+            handler_path = Path(__file__).parent.parent / handler_path
 
     if not handler_path.exists():
         print(f"ERROR: Handler file not found: {handler_path}")
+        print("Usage: python validate_tuple_unpacking.py [handler_path]")
+        print("Examples:")
+        print("  python validate_tuple_unpacking.py")
+        print("  python validate_tuple_unpacking.py occurrences.py")
+        print("  python validate_tuple_unpacking.py /absolute/path/to/handler.py")
         return 1
 
     print(f"Validating tuple unpacking in {handler_path.name}...\n")
