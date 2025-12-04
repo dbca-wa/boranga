@@ -24,6 +24,8 @@ COLUMN_MAP = {
     "LAND_MGR_NOTES": "OCCContactDetail__notes",
     "PURPOSE1": "OccurrenceTenure__purpose_id",
     "VESTING": "OccurrenceTenure__vesting_id",
+    "POP_NUMBER": "pop_number",
+    "SUB_POP_CODE": "sub_pop_code",
 }
 
 REQUIRED_COLUMNS = [
