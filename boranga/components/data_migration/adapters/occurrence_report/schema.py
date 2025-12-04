@@ -56,6 +56,9 @@ COLUMN_MAP = {
     "DISTRICT": "OCRLocation__district",
     "LANDDISTRICT": "OCRLocation__locality",
     "RESOLUTION": "OCRLocation__location_accuracy",
+    # location_description: composed from LOCATION + LGA_CODE
+    "LOCATION": "LOCATION",
+    "LGA_CODE": "LGA_CODE",
     # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
     "PURPOSE1": "PURPOSE1",
     "PURPOSE2": "PURPOSE2",
@@ -149,6 +152,7 @@ class OccurrenceReportRow:
     OCRLocation__district: int | None = None  # FK id (District)
     OCRLocation__region: int | None = None  # FK id (Region)
     OCRLocation__locality: str | None = None
+    OCRLocation__location_description: str | None = None
     OCRLocation__boundary_description: str | None = None
     OCRLocation__epsg_code: int | None = None
 
@@ -242,6 +246,9 @@ class OccurrenceReportRow:
             OCRLocation__district=utils.to_int_maybe(d.get("OCRLocation__district")),
             OCRLocation__region=utils.to_int_maybe(d.get("OCRLocation__region")),
             OCRLocation__locality=utils.safe_strip(d.get("OCRLocation__locality")),
+            OCRLocation__location_description=utils.safe_strip(
+                d.get("OCRLocation__location_description")
+            ),
             OCRLocation__boundary_description=utils.safe_strip(
                 d.get("OCRLocation__boundary_description")
             ),

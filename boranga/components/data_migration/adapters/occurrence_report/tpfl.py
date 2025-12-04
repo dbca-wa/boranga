@@ -264,6 +264,96 @@ LANDDISTRICT_TRANSFORM = build_legacy_map_transform(
     return_type="canonical",
 )
 
+
+def lga_code_transform_canonical(value: str, ctx=None) -> str | None:
+    """Transform LGA_CODE to canonical_name, then reverse format from "Town, Type" to "Type Town".
+
+    Example: "Busselton, Shire Of" -> "Shire Of Busselton"
+    """
+    if not value or value.strip() == "":
+        return None
+
+    from boranga.components.main.models import LegacyValueMap
+
+    try:
+        lvm = LegacyValueMap.objects.filter(
+            legacy_system="TPFL",
+            list_name="LGA_CODE (DRF_LOV_LGA_VWS)",
+            legacy_value=str(value).strip(),
+        ).first()
+
+        if not lvm or not lvm.canonical_name:
+            return None
+
+        canonical = lvm.canonical_name.strip()
+        # Reverse format: "Town, Type" -> "Type Town"
+        if "," in canonical:
+            parts = canonical.split(",", 1)
+            town = parts[0].strip()
+            lga_type = parts[1].strip()
+            return f"{lga_type} {town}"
+        else:
+            # If no comma, return as-is
+            return canonical
+    except Exception:
+        return None
+
+
+def location_description_concatenate(value: str, ctx=None) -> str | None:
+    """Concatenate LOCATION with transformed LGA_CODE.
+
+    Formula: LOCATION + " LGA: " + transformed_LGA_CODE
+
+    This transform is designed to run after LGA_CODE has been transformed to the
+    canonical reversed format. It reads both the original LOCATION value and the
+    transformed LGA_CODE from the transform context.
+    """
+    if ctx is None:
+        return None
+
+    # Extract row from TransformContext or dict
+    row = getattr(ctx, "row", None) if ctx is not None else None
+    if row is None and isinstance(ctx, dict):
+        row = ctx.get("row") or ctx
+
+    if not isinstance(row, dict):
+        return None
+
+    location = row.get("LOCATION", "")
+    lga_code = row.get("LGA_CODE", "")
+
+    # Strip values
+    location = location.strip() if location else ""
+    lga_code = lga_code.strip() if lga_code else ""
+
+    # Transform LGA_CODE to canonical reversed format
+    lga_canonical = None
+    if lga_code:
+        lga_canonical = lga_code_transform_canonical(lga_code, ctx)
+
+    # Build result based on what we have
+    if location and lga_canonical:
+        # Full format: location + " LGA: " + transformed_lga_code
+        return _result(f"{location} LGA: {lga_canonical}")
+    elif location:
+        # Only location available
+        return _result(location)
+    elif lga_canonical:
+        # Only LGA available (unlikely)
+        return _result(f"LGA: {lga_canonical}")
+    else:
+        # Nothing available
+        return None
+
+
+def location_description_wrap_result(value: str, ctx=None) -> str | None:
+    """Wrapper that returns TransformResult for location_description_concatenate."""
+    result = location_description_concatenate(value, ctx)
+    if isinstance(result, str):
+        return _result(result)
+    return result
+
+
 BOUNDARY_DESCRIPTION_DEFAULT = static_value_factory(
     "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
 )
@@ -370,6 +460,9 @@ PIPELINES = {
     "OCRLocation__district": ["strip", "blank_to_none", DISTRICT_TRANSFORM],
     "OCRLocation__region": [REGION_FROM_DISTRICT],
     "OCRLocation__locality": ["strip", "blank_to_none", LANDDISTRICT_TRANSFORM],
+    "OCRLocation__location_description": [
+        location_description_wrap_result,
+    ],
     "OCRLocation__boundary_description": [BOUNDARY_DESCRIPTION_DEFAULT],
     "OCRLocation__epsg_code": [EPSG_CODE_DEFAULT],
 }
@@ -560,6 +653,12 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 canonical["OCRLocation__district"] = canonical.get("DISTRICT")
             if canonical.get("LANDDISTRICT"):
                 canonical["OCRLocation__locality"] = canonical.get("LANDDISTRICT")
+            # location_description is composed from LOCATION + LGA_CODE
+            # The pipeline will handle the concatenation; we just preserve raw values
+            if canonical.get("LOCATION"):
+                canonical["LOCATION"] = canonical.get("LOCATION")
+            if canonical.get("LGA_CODE"):
+                canonical["LGA_CODE"] = canonical.get("LGA_CODE")
 
             # If an explicit occurrence id is present in the source we do not assign
             # it here; the importer will link habitat to the parent OccurrenceReport
