@@ -6,6 +6,8 @@ import os
 from collections import defaultdict
 from typing import Any
 
+from django.core.exceptions import FieldDoesNotExist
+from django.db import models as dj_models
 from django.db import transaction
 from django.utils import timezone
 
@@ -366,6 +368,31 @@ class OccurrenceImporter(BaseSheetImporter):
             if merged.get("locked") is not None:
                 defaults["locked"] = merged.get("locked")
 
+            # If transforms produced None for fields that have model defaults
+            # (for example CharFields with default=''), prefer the model's
+            # default value. This keeps transforms simple (they can return
+            # None) while avoiding validation failures for non-nullable
+            # fields that expect a non-None default like an empty string or
+            # choice fields like review_status.
+            for k, v in list(defaults.items()):
+                if v is not None:
+                    continue
+                try:
+                    field = Occurrence._meta.get_field(k)
+                except FieldDoesNotExist:
+                    continue
+                # Prefer explicit field default (handles callables)
+                field_default = field.get_default()
+                if field_default is not None:
+                    defaults[k] = field_default
+                    continue
+                # Fallback: for non-nullable text fields, prefer empty string
+                if not getattr(field, "null", False) and isinstance(
+                    field, (dj_models.CharField, dj_models.TextField)
+                ):
+                    defaults[k] = ""
+                    continue
+
             # If dry-run, log planned defaults and skip adding to ops so no DB work
             if ctx.dry_run:
                 pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
@@ -497,29 +524,63 @@ class OccurrenceImporter(BaseSheetImporter):
                 len(to_update),
             )
             update_instances = to_update
-            fields = set()
-            for inst in update_instances:
-                fields.update(
-                    [
-                        f.name
-                        for f in inst._meta.fields
-                        if getattr(inst, f.name, None) is not None
-                    ]
-                )
+            # determine fields to update: include only fields that are
+            # non-None on every instance. Using the union (fields present on
+            # some instances) can cause bulk_update to write NULL into rows
+            # for instances where the attribute is None, which violates NOT
+            # NULL constraints. Restricting to fields present on all instances
+            # avoids that. Also exclude id and migrated_from_id which cannot be updated.
+            fields = []
+            if update_instances:
+                all_fields = [f for f in update_instances[0]._meta.fields]
+                for f in all_fields:
+                    if f.name in ("id", "migrated_from_id"):
+                        continue
+                    # include field only if every instance has a non-None value
+                    try:
+                        if all(
+                            getattr(inst, f.name, None) is not None
+                            for inst in update_instances
+                        ):
+                            fields.append(f.name)
+                    except Exception:
+                        # Be conservative: skip fields that raise on getattr
+                        continue
+            # perform bulk_update only if we have safe fields to update
             try:
-                Occurrence.objects.bulk_update(
-                    update_instances, list(fields), batch_size=BATCH
-                )
+                if fields:
+                    Occurrence.objects.bulk_update(
+                        update_instances, fields, batch_size=BATCH
+                    )
             except Exception:
                 logger.exception(
                     "Failed to bulk_update Occurrence; falling back to individual saves"
                 )
                 for inst in update_instances:
                     try:
-                        inst.save()
+                        # Build a conservative per-instance update_fields list:
+                        # include only model fields that currently have a non-None
+                        # value on the instance. This avoids attempting to write
+                        # NULL into non-nullable DB columns when the instance
+                        # attribute is None. Also exclude id and migrated_from_id.
+                        update_fields = [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                            and f.name not in ("id", "migrated_from_id")
+                        ]
+                        if update_fields:
+                            inst.save(update_fields=update_fields)
+                        else:
+                            # Nothing to update (all values are None or only PK), skip
+                            logger.debug(
+                                "Skipping save for Occurrence %s: no updatable fields",
+                                getattr(inst, "pk", None),
+                            )
                     except Exception:
                         logger.exception(
-                            "Failed to save Occurrence %s", getattr(inst, "pk", None)
+                            "Failed to save Occurrence %s",
+                            getattr(inst, "pk", None),
                         )
 
         # Now create contact details for created/updated occurrences when provided
@@ -547,9 +608,9 @@ class OccurrenceImporter(BaseSheetImporter):
                 want_contact_create.append(
                     OCCContactDetail(
                         occurrence=occ,
-                        contact=contact,
-                        contact_name=contact_name,
-                        notes=notes,
+                        contact=contact or "",
+                        contact_name=contact_name or "",
+                        notes=notes or "",
                         visible=True,
                     )
                 )
@@ -571,9 +632,9 @@ class OccurrenceImporter(BaseSheetImporter):
                 want_contact_create.append(
                     OCCContactDetail(
                         occurrence=occ,
-                        contact=merged.get("OCCContactDetail__contact"),
-                        contact_name=merged.get("OCCContactDetail__contact_name"),
-                        notes=merged.get("OCCContactDetail__notes"),
+                        contact=merged.get("OCCContactDetail__contact") or "",
+                        contact_name=merged.get("OCCContactDetail__contact_name") or "",
+                        notes=merged.get("OCCContactDetail__notes") or "",
                         visible=True,
                     )
                 )
