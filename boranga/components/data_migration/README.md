@@ -4,9 +4,9 @@ This folder contains the architecture used to import legacy spreadsheets into th
 
 It is designed to be modular so you can add:
 
- - New adapters (for different sources/formats)
- - Importers (handlers for specific domain objects)
- - Reusable transforms (validation / mapping functions).
+- New adapters (for different sources/formats)
+- Importers (handlers for specific domain objects)
+- Reusable transforms (validation / mapping functions).
 
 This README explains the pieces and the typical workflow in simple language.
 
@@ -18,7 +18,7 @@ This README explains the pieces and the typical workflow in simple language.
   - Exposes `run_pipeline` to execute a pipeline (list of transforms) on a value.
   - Provides helpers to build results with issues (warnings/errors).
 
-- Schema (adapters/*/schema.py and schema_base.Schema)
+- Schema (adapters/\*/schema.py and schema_base.Schema)
 
   - Defines how raw spreadsheet headers map to canonical column names: `column_map`.
   - Declares which canonical fields are required.
@@ -83,11 +83,13 @@ This README explains the pieces and the typical workflow in simple language.
 When adding a new OneToOne child model to an importer (e.g., OCRLocation to OccurrenceReport), follow this pattern to avoid common mistakes:
 
 1. **Schema** (schema.py):
+
    - Add COLUMN_MAP entries to map raw CSV columns to `ChildModel__field_name` keys
    - Add fields to the OccurrenceReportRow dataclass for each child field
    - Update from_dict() to coerce/validate child fields using utils.to_int_maybe(), utils.safe_strip(), etc.
 
 2. **Adapter** (tpfl.py):
+
    - Add transform functions using build_legacy_map_transform() for FK lookups, dependent_from_column_factory() for derived fields, static_value_factory() for defaults
    - Add entries to PIPELINES dict mapping `ChildModel__field_name` to their transform pipelines
    - **CRITICAL**: In extract() method, copy raw CSV column values into the canonical dict with `ChildModel__` prefix (e.g., `canonical["ChildModel__field"] = canonical.get("RAW_CSV_COLUMN")`) so pipelines can process them. This mirrors how habitat/identification fields are handled.
@@ -101,6 +103,7 @@ When adding a new OneToOne child model to an importer (e.g., OCRLocation to Occu
    - After identifying existing child instances: Build create/update lists and bulk_create/bulk_update them (follow pattern from OCRHabitatComposition, OCRIdentification, etc.)
 
 **Common mistakes to avoid:**
+
 - Forgetting to copy raw values to canonical dict in adapter.extract() → child fields won't reach pipelines
 - Forgetting to unpack child_data in to_update loop or create_meta loop → ValueError: too many values to unpack
 - Forgetting to add child_data to ops.append() or create_meta.append() → child data is lost before reaching persistence code
@@ -126,8 +129,8 @@ When adding a new OneToOne child model to an importer (e.g., OCRLocation to Occu
 
 - registry.py — transform implementations and pipeline runner
 - mappings.py — legacy lookup helpers and cache
-- adapters/* — parsing logic for each source
-- handlers/* — import orchestration and model creation
+- adapters/\* — parsing logic for each source
+- handlers/\* — import orchestration and model creation
 - row_expansion.py — expanding repeating columns into child rows
 - migrate_data.py — CLI entrypoint
 
