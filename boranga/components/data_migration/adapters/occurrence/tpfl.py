@@ -141,7 +141,7 @@ class OccurrenceTpflAdapter(SourceAdapter):
             canonical = schema.map_raw_row(raw)
             # Build occurrence_name: concat POP_NUMBER + SUBPOP_CODE (no space)
             pop = str(canonical.get("pop_number", "") or "").strip()
-            sub = str(canonical.get("sub_pop_code", "") or "").strip()
+            sub = str(canonical.get("subpop_code", "") or "").strip()
             occ_name = (pop + sub).strip()
             # If only a single digit (e.g. "1"), pad with leading zero -> "01"
             if occ_name and len(occ_name) == 1 and occ_name.isdigit():

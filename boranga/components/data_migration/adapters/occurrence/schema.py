@@ -25,7 +25,7 @@ COLUMN_MAP = {
     "PURPOSE1": "OccurrenceTenure__purpose_id",
     "VESTING": "OccurrenceTenure__vesting_id",
     "POP_NUMBER": "pop_number",
-    "SUB_POP_CODE": "sub_pop_code",
+    "SUBPOP_CODE": "subpop_code",
 }
 
 REQUIRED_COLUMNS = [
