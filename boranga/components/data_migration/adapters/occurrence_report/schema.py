@@ -51,6 +51,10 @@ COLUMN_MAP = {
     "DUPVOUCH_LOCATION": "DUPVOUCH_LOCATION",
     # Voucher location (sample destination) closed-list mapping
     "VOUCHER_LOCATION": "OCRIdentification__sample_destination",
+    # OCRLocation fields
+    "CO_ORD_SOURCE_CODE": "OCRLocation__coordinate_source",
+    "DISTRICT": "OCRLocation__district",
+    "RESOLUTION": "OCRLocation__location_accuracy",
     # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
     "PURPOSE1": "PURPOSE1",
     "PURPOSE2": "PURPOSE2",
@@ -138,6 +142,14 @@ class OccurrenceReportRow:
     OCRIdentification__identification_certainty: int | None = None
     OCRIdentification__sample_destination: int | None = None
 
+    # OCRLocation fields
+    OCRLocation__coordinate_source: int | None = None  # FK id (CoordinateSource)
+    OCRLocation__location_accuracy: int | None = None  # FK id (LocationAccuracy)
+    OCRLocation__district: int | None = None  # FK id (District)
+    OCRLocation__region: int | None = None  # FK id (Region)
+    OCRLocation__boundary_description: str | None = None
+    OCRLocation__epsg_code: int | None = None
+
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
         """
@@ -219,6 +231,18 @@ class OccurrenceReportRow:
             OCRIdentification__sample_destination=utils.to_int_maybe(
                 d.get("OCRIdentification__sample_destination")
             ),
+            OCRLocation__coordinate_source=utils.to_int_maybe(
+                d.get("OCRLocation__coordinate_source")
+            ),
+            OCRLocation__location_accuracy=utils.to_int_maybe(
+                d.get("OCRLocation__location_accuracy")
+            ),
+            OCRLocation__district=utils.to_int_maybe(d.get("OCRLocation__district")),
+            OCRLocation__region=utils.to_int_maybe(d.get("OCRLocation__region")),
+            OCRLocation__boundary_description=utils.safe_strip(
+                d.get("OCRLocation__boundary_description")
+            ),
+            OCRLocation__epsg_code=utils.to_int_maybe(d.get("OCRLocation__epsg_code")),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:

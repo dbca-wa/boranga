@@ -234,6 +234,54 @@ APPROVED_BY_TRANSFORM = conditional_transform_factory(
     false_value=None,
 )
 
+# OCRLocation transforms
+COORDINATE_SOURCE_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "CO_ORD_SOURCE_CODE (DRF_LOV_CORDINATE_SOURCE_VWS)",
+    required=False,
+)
+
+LOCATION_ACCURACY_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "RESOLUTION (DRF_LOV_RESOLUTION_VWS)",
+    required=False,
+)
+
+DISTRICT_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
+    required=False,
+)
+
+
+def region_from_district_transform(value, ctx=None):
+    """
+    Derive region from district by looking up the District object and extracting its region_id.
+    The value is expected to be a district_id (int) after the DISTRICT_TRANSFORM has been applied.
+    """
+    if value is None:
+        return _result(None)
+    try:
+        from boranga.components.species_and_communities.models import District
+
+        district = District.objects.get(pk=value)
+        return _result(district.region_id if district.region_id else None)
+    except Exception:
+        return _result(None)
+
+
+REGION_FROM_DISTRICT = dependent_from_column_factory(
+    "OCRLocation__district",
+    mapper=region_from_district_transform,
+    default=None,
+)
+
+BOUNDARY_DESCRIPTION_DEFAULT = static_value_factory(
+    "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
+)
+
+EPSG_CODE_DEFAULT = static_value_factory(4326)
+
 
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
@@ -320,6 +368,21 @@ PIPELINES = {
         submitter_name_from_emailuser,
     ],
     "SubmitterInformation__organisation": [STATIC_DBCA],
+    # OCRLocation pipelines (Tasks 11347-11355)
+    "OCRLocation__coordinate_source": [
+        "strip",
+        "blank_to_none",
+        COORDINATE_SOURCE_TRANSFORM,
+    ],
+    "OCRLocation__location_accuracy": [
+        "strip",
+        "blank_to_none",
+        LOCATION_ACCURACY_TRANSFORM,
+    ],
+    "OCRLocation__district": ["strip", "blank_to_none", DISTRICT_TRANSFORM],
+    "OCRLocation__region": [REGION_FROM_DISTRICT],
+    "OCRLocation__boundary_description": [BOUNDARY_DESCRIPTION_DEFAULT],
+    "OCRLocation__epsg_code": [EPSG_CODE_DEFAULT],
 }
 
 
@@ -494,6 +557,18 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             except Exception:
                 # non-fatal: continue without identification comment
                 pass
+
+            # OCRLocation: copy simple fields through so pipelines can map them
+            if canonical.get("CO_ORD_SOURCE_CODE"):
+                canonical["OCRLocation__coordinate_source"] = canonical.get(
+                    "CO_ORD_SOURCE_CODE"
+                )
+            if canonical.get("RESOLUTION"):
+                canonical["OCRLocation__location_accuracy"] = canonical.get(
+                    "RESOLUTION"
+                )
+            if canonical.get("DISTRICT"):
+                canonical["OCRLocation__district"] = canonical.get("DISTRICT")
 
             # If an explicit occurrence id is present in the source we do not assign
             # it here; the importer will link habitat to the parent OccurrenceReport
