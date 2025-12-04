@@ -2372,12 +2372,17 @@ def region_from_district_factory():
     This transform looks up a District by its ID and extracts the associated region_id.
     Results are cached for the duration of the migration run to avoid repeated DB lookups.
 
+    IMPORTANT: This transform is designed to work with the raw CSV row and extracts the
+    OCRLocation__district value from the row context, applies the district transform to it,
+    then derives the region from the transformed district ID.
+
     Usage:
       REGION_FROM_DISTRICT_TRANSFORM = region_from_district_factory()
       PIPELINES["OCRLocation__region"] = [REGION_FROM_DISTRICT_TRANSFORM]
 
-    The transform expects a district_id (int) as input and returns the corresponding region_id.
-    Returns None if the district is not found.
+    The transform ignores the input value (OCRLocation__region from CSV) and instead derives
+    the region from the OCRLocation__district in the same row. Returns None if district is
+    not found or cannot be transformed.
     """
     key = "region_from_district"
     name = "region_from_district_" + hashlib.sha1(key.encode()).hexdigest()[:8]
@@ -2389,38 +2394,59 @@ def region_from_district_factory():
     district_to_region_cache = {}
 
     def inner(value, ctx: TransformContext):
-        if value is None or value == "":
+        # Ignore the input value (OCRLocation__region from CSV, which is usually empty)
+        # Instead, derive region from OCRLocation__district in the row
+        if not ctx or not isinstance(ctx.row, dict):
             return _result(None)
 
-        try:
-            district_id = int(value)
-        except (ValueError, TypeError):
-            return _result(
-                None,
-                TransformIssue("error", f"Invalid district_id: {value!r}"),
-            )
+        # Get the raw district value from the row (this will be a legacy code like "5", "67")
+        raw_district_value = ctx.row.get("OCRLocation__district")
+        if raw_district_value is None or raw_district_value == "":
+            return _result(None)
 
-        # Check cache first
-        if district_id in district_to_region_cache:
-            return _result(district_to_region_cache[district_id])
-
-        # Look up district and extract region_id
+        # Derive region from the raw district value by looking it up in LegacyValueMap
         try:
+            from django.contrib.contenttypes.models import ContentType
+
+            from boranga.components.main.models import LegacyValueMap
             from boranga.components.species_and_communities.models import District
 
-            district = District.objects.get(pk=district_id)
-            region_id = district.region_id
-            # Cache the result
-            district_to_region_cache[district_id] = region_id
-            return _result(region_id)
+            # Get the District content type and look up the legacy mapping
+            district_ct = ContentType.objects.get_for_model(District)
+            lvm = LegacyValueMap.objects.filter(
+                legacy_system="TPFL",
+                list_name="DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
+                legacy_value=str(raw_district_value).strip(),
+                target_content_type=district_ct,
+                active=True,
+            ).first()
+
+            if lvm:
+                district_id = lvm.target_object_id
+                # Check cache
+                if district_id in district_to_region_cache:
+                    return _result(district_to_region_cache[district_id])
+
+                # Look up district and extract region_id
+                district = District.objects.get(pk=district_id)
+                region_id = district.region_id
+                # Cache the result
+                district_to_region_cache[district_id] = region_id
+                return _result(region_id)
+            else:
+                return _result(
+                    None,
+                    TransformIssue(
+                        "warning",
+                        f"No legacy mapping found for DISTRICT value '{raw_district_value}'",
+                    ),
+                )
         except Exception as e:
-            # Cache None so we don't retry on the same district_id
-            district_to_region_cache[district_id] = None
             return _result(
                 None,
                 TransformIssue(
                     "warning",
-                    f"Could not derive region from district_id={district_id}: {e}",
+                    f"Could not derive region from district value '{raw_district_value}': {e}",
                 ),
             )
 
