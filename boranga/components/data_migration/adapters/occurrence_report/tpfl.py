@@ -14,6 +14,7 @@ from boranga.components.data_migration.registry import (
     region_from_district_factory,
     static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
+    to_decimal_factory,
     to_int_trailing_factory,
 )
 from boranga.components.occurrence.models import (
@@ -354,6 +355,13 @@ def location_description_wrap_result(value: str, ctx=None) -> str | None:
     return result
 
 
+# OCRObservationDetail transforms (Tasks 11380, 11382, 11383, 11385)
+AREA_ASSESSMENT_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "SVY_EXTENT (DRF_LOV_SRV_EXT_VWS)",
+    required=False,
+)
+
 BOUNDARY_DESCRIPTION_DEFAULT = static_value_factory(
     "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
 )
@@ -465,6 +473,22 @@ PIPELINES = {
     ],
     "OCRLocation__boundary_description": [BOUNDARY_DESCRIPTION_DEFAULT],
     "OCRLocation__epsg_code": [EPSG_CODE_DEFAULT],
+    # OCRObservationDetail pipelines (Tasks 11380, 11382, 11383, 11385)
+    "OCRObservationDetail__area_assessment": [
+        "strip",
+        "blank_to_none",
+        AREA_ASSESSMENT_TRANSFORM,
+    ],
+    "OCRObservationDetail__area_surveyed": [
+        "strip",
+        "blank_to_none",
+        to_decimal_factory(decimal_places=4),
+    ],
+    "OCRObservationDetail__survey_duration": [
+        "strip",
+        "blank_to_none",
+        "to_int",
+    ],
 }
 
 
@@ -659,6 +683,20 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 canonical["LOCATION"] = canonical.get("LOCATION")
             if canonical.get("LGA_CODE"):
                 canonical["LGA_CODE"] = canonical.get("LGA_CODE")
+
+            # OCRObservationDetail: copy simple fields through so pipelines can map them
+            if canonical.get("SVY_EXTENT"):
+                canonical["OCRObservationDetail__area_assessment"] = canonical.get(
+                    "SVY_EXTENT"
+                )
+            if canonical.get("SVY_EFFORT_AREA"):
+                canonical["OCRObservationDetail__area_surveyed"] = canonical.get(
+                    "SVY_EFFORT_AREA"
+                )
+            if canonical.get("SVY_EFFORT_TIME"):
+                canonical["OCRObservationDetail__survey_duration"] = canonical.get(
+                    "SVY_EFFORT_TIME"
+                )
 
             # If an explicit occurrence id is present in the source we do not assign
             # it here; the importer will link habitat to the parent OccurrenceReport

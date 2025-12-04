@@ -35,6 +35,7 @@ from boranga.components.occurrence.models import (
     OCRHabitatCondition,
     OCRIdentification,
     OCRLocation,
+    OCRObservationDetail,
     OCRObserverDetail,
 )
 from boranga.components.species_and_communities.models import Taxonomy
@@ -502,6 +503,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             habitat_condition = {}
             submitter_information_data = {}
             location_data = {}
+            observation_detail_data = {}
 
             # Helper to extract .value from TransformResult if needed
             def extract_value(v):
@@ -527,6 +529,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OCRLocation__"):
                     short = k.split("OCRLocation__", 1)[1]
                     location_data[short] = extract_value(v)
+                if k.startswith("OCRObservationDetail__"):
+                    short = k.split("OCRObservationDetail__", 1)[1]
+                    observation_detail_data[short] = extract_value(v)
 
             ops.append(
                 {
@@ -538,6 +543,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "identification_data": identification_data,
                     "submitter_information_data": submitter_information_data,
                     "location_data": location_data,
+                    "observation_detail_data": observation_detail_data,
                 }
             )
 
@@ -573,6 +579,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             habitat_condition = op.get("habitat_condition") or {}
             submitter_information_data = op.get("submitter_information_data") or {}
             location_data = op.get("location_data") or {}
+            observation_detail_data = op.get("observation_detail_data") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
@@ -586,6 +593,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         habitat_condition,
                         submitter_information_data,
                         location_data,
+                        observation_detail_data,
                     )
                 )
                 continue
@@ -606,6 +614,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     habitat_condition,
                     submitter_information_data,
                     location_data,
+                    observation_detail_data,
                 )
             )
 
@@ -1347,6 +1356,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             habitat_condition,
             submitter_information_data,
             location_data,
+            observation_detail_data,
         ) in create_meta:
             ocr = target_map.get(mig)
             if not ocr:
@@ -1594,6 +1604,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
             loc.occurrence_report_id: loc
             for loc in OCRLocation.objects.filter(occurrence_report__in=target_occs)
         }
+        # Fetch existing observation details
+        existing_observations = {
+            od.occurrence_report_id: od
+            for od in OCRObservationDetail.objects.filter(
+                occurrence_report__in=target_occs
+            )
+        }
         habs_to_create = []
         habs_to_update = []
         conds_to_create = []
@@ -1602,6 +1619,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
         idents_to_update = []
         locs_to_create = []
         locs_to_update = []
+        obs_to_create = []
+        obs_to_update = []
         for up in to_update:
             (
                 inst,
@@ -1609,6 +1628,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 habitat_condition,
                 submitter_information_data,
                 location_data,
+                observation_detail_data,
             ) = up
             hid = inst.pk
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
@@ -1722,6 +1742,32 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     OCRLocation(**normalize_create_kwargs(OCRLocation, create_kwargs))
                 )
 
+            # OCRObservationDetail handling for updates
+            od = observation_detail_data or {}
+            if hid in existing_observations:
+                obs_obj = existing_observations[hid]
+                valid_obs_fields = {f.name for f in OCRObservationDetail._meta.fields}
+                for field_name, val in od.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_obs_fields:
+                        apply_value_to_instance(obs_obj, field_name, val)
+                obs_to_update.append(obs_obj)
+            else:
+                obs_create = {"occurrence_report": inst}
+                valid_obs_fields = {f.name for f in OCRObservationDetail._meta.fields}
+                for field_name, val in od.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_obs_fields:
+                        obs_create[field_name] = val
+                if len(od) > 0:
+                    obs_to_create.append(
+                        OCRObservationDetail(
+                            **normalize_create_kwargs(OCRObservationDetail, obs_create)
+                        )
+                    )
+
         # Handle created ones
         for (
             mig,
@@ -1729,6 +1775,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             habitat_condition,
             submitter_information_data,
             location_data,
+            observation_detail_data,
         ) in create_meta:
             ocr = created_map.get(mig)
             if not ocr:
@@ -1810,6 +1857,33 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         **normalize_create_kwargs(OCRIdentification, create_kwargs)
                     )
                 )
+
+            # OCRObservationDetail: OneToOne - create or update survey fields
+            od = observation_detail_data or {}
+            if ocr.pk in existing_observations:
+                obs_obj = existing_observations[ocr.pk]
+                valid_obs_fields = {f.name for f in OCRObservationDetail._meta.fields}
+                for field_name, val in od.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_obs_fields:
+                        apply_value_to_instance(obs_obj, field_name, val)
+                obs_to_update.append(obs_obj)
+            else:
+                obs_create = {"occurrence_report": ocr}
+                valid_obs_fields = {f.name for f in OCRObservationDetail._meta.fields}
+                for field_name, val in od.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_obs_fields:
+                        obs_create[field_name] = val
+                # Only create OCRObservationDetail if we have data
+                if len(od) > 0:
+                    obs_to_create.append(
+                        OCRObservationDetail(
+                            **normalize_create_kwargs(OCRObservationDetail, obs_create)
+                        )
+                    )
 
             # OCRLocation create/update for newly created ocr
             if ocr.pk in existing_locations:
@@ -2025,6 +2099,59 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         logger.exception(
                             "Failed to save OCRLocation %s",
                             getattr(loc, "pk", None),
+                        )
+
+        # OCRObservationDetail: OneToOne - create or update observation detail records
+        if obs_to_create:
+            try:
+                OCRObservationDetail.objects.bulk_create(
+                    obs_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRObservationDetail; falling back to individual creates"
+                )
+                for obs in obs_to_create:
+                    try:
+                        obs.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRObservationDetail for occurrence_report %s",
+                            getattr(obs.occurrence_report, "pk", None),
+                        )
+
+        if obs_to_update:
+            try:
+                obs_fields = set()
+                for inst in obs_to_update:
+                    obs_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                obs_fields = {
+                    f
+                    for f in obs_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if obs_fields:
+                    OCRObservationDetail.objects.bulk_update(
+                        obs_to_update, list(obs_fields), batch_size=BATCH
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRObservationDetail; falling back to individual saves"
+                )
+                for obs in obs_to_update:
+                    try:
+                        obs.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRObservationDetail %s",
+                            getattr(obs, "pk", None),
                         )
 
         # Update stats counts for created/updated based on performed ops

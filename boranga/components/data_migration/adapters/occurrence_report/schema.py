@@ -59,6 +59,10 @@ COLUMN_MAP = {
     # location_description: composed from LOCATION + LGA_CODE
     "LOCATION": "LOCATION",
     "LGA_CODE": "LGA_CODE",
+    # OCRObservationDetail fields (Task 11380, 11382, 11383, 11385)
+    "SVY_EXTENT": "OCRObservationDetail__area_assessment",
+    "SVY_EFFORT_AREA": "OCRObservationDetail__area_surveyed",
+    "SVY_EFFORT_TIME": "OCRObservationDetail__survey_duration",
     # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
     "PURPOSE1": "PURPOSE1",
     "PURPOSE2": "PURPOSE2",
@@ -155,6 +159,13 @@ class OccurrenceReportRow:
     OCRLocation__location_description: str | None = None
     OCRLocation__boundary_description: str | None = None
     OCRLocation__epsg_code: int | None = None
+
+    # OCRObservationDetail fields
+    OCRObservationDetail__area_assessment: int | None = None  # FK id (AreaAssessment)
+    OCRObservationDetail__area_surveyed: str | None = (
+        None  # Decimal with 4 decimal places
+    )
+    OCRObservationDetail__survey_duration: int | None = None  # Integer hours
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
@@ -253,6 +264,15 @@ class OccurrenceReportRow:
                 d.get("OCRLocation__boundary_description")
             ),
             OCRLocation__epsg_code=utils.to_int_maybe(d.get("OCRLocation__epsg_code")),
+            OCRObservationDetail__area_assessment=utils.to_int_maybe(
+                d.get("OCRObservationDetail__area_assessment")
+            ),
+            OCRObservationDetail__area_surveyed=utils.safe_strip(
+                d.get("OCRObservationDetail__area_surveyed")
+            ),
+            OCRObservationDetail__survey_duration=utils.to_int_maybe(
+                d.get("OCRObservationDetail__survey_duration")
+            ),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:
