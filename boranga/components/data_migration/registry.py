@@ -2363,3 +2363,66 @@ def conditional_transform_factory(
 
     registry._fns[name] = _inner
     return name
+
+
+def region_from_district_factory():
+    """
+    Factory that returns a registered transform name for deriving region_id from district_id.
+
+    This transform looks up a District by its ID and extracts the associated region_id.
+    Results are cached for the duration of the migration run to avoid repeated DB lookups.
+
+    Usage:
+      REGION_FROM_DISTRICT_TRANSFORM = region_from_district_factory()
+      PIPELINES["OCRLocation__region"] = [REGION_FROM_DISTRICT_TRANSFORM]
+
+    The transform expects a district_id (int) as input and returns the corresponding region_id.
+    Returns None if the district is not found.
+    """
+    key = "region_from_district"
+    name = "region_from_district_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Create a cache dict that persists for the migration run
+    district_to_region_cache = {}
+
+    def inner(value, ctx: TransformContext):
+        if value is None or value == "":
+            return _result(None)
+
+        try:
+            district_id = int(value)
+        except (ValueError, TypeError):
+            return _result(
+                None,
+                TransformIssue("error", f"Invalid district_id: {value!r}"),
+            )
+
+        # Check cache first
+        if district_id in district_to_region_cache:
+            return _result(district_to_region_cache[district_id])
+
+        # Look up district and extract region_id
+        try:
+            from boranga.components.species_and_communities.models import District
+
+            district = District.objects.get(pk=district_id)
+            region_id = district.region_id
+            # Cache the result
+            district_to_region_cache[district_id] = region_id
+            return _result(region_id)
+        except Exception as e:
+            # Cache None so we don't retry on the same district_id
+            district_to_region_cache[district_id] = None
+            return _result(
+                None,
+                TransformIssue(
+                    "warning",
+                    f"Could not derive region from district_id={district_id}: {e}",
+                ),
+            )
+
+    registry._fns[name] = inner
+    return name
