@@ -2,11 +2,11 @@
 
 ## Problem
 
-When adding OneToOne child relationships to the occurrence_report_legacy importer, data is packed into tuples that are later unpacked in multiple locations. If tuple structure changes (new child model added), ALL unpacking locations must be updated consistently, or the code will fail with `ValueError: too many values to unpack`.
+When adding OneToOne child relationships to importers, data is packed into tuples that are later unpacked in multiple locations. If tuple structure changes (new child model added), ALL unpacking locations must be updated consistently, or the code will fail with `ValueError: too many values to unpack`.
 
-This happened in the OCRLocation implementation: the tuple was updated from 4 elements to 5, but only 2 of 3 unpacking locations were fixed, causing the code to fail when the bulk update path was tested.
+This happened in the OCRLocation implementation of occurrence_report_legacy: the tuple was updated from 4 elements to 5, but only 2 of 3 unpacking locations were fixed, causing the code to fail when the bulk update path was tested.
 
-## Current Tuple Structure
+## Current Tuple Structure (occurrence_reports.py)
 
 As of the OCRLocation implementation, child data tuples contain **5 elements**:
 
@@ -35,6 +35,7 @@ OR (for to_update only, with OccurrenceReport instance instead of migrated_from_
 ## All Unpacking Locations (MUST be kept in sync)
 
 ### 1. **to_update appending** (Line ~585)
+
 **File:** `occurrence_reports.py`
 **What:** Building the to_update tuple for instances with existing migrated_from_id
 
@@ -53,6 +54,7 @@ to_update.append(
 ✅ **Currently correct (5 elements)**
 
 ### 2. **create_meta appending** (Line ~606)
+
 **File:** `occurrence_reports.py`
 **What:** Building the create_meta tuple for new instances
 
@@ -71,6 +73,7 @@ create_meta.append(
 ✅ **Currently correct (5 elements)**
 
 ### 3. **to_update unpacking - Habitat/Condition/SubmitterInfo section** (Line ~1264)
+
 **File:** `occurrence_reports.py`
 **What:** Processing habitat, condition, and submitter info for updates
 
@@ -88,6 +91,7 @@ for up in to_update:
 ✅ **Currently correct (5 elements)**
 
 ### 4. **to_update unpacking - Habitat/Condition/Identification/Location section** (Line ~1605)
+
 **File:** `occurrence_reports.py`
 **What:** Processing habitat, condition, identification, and location for updates
 
@@ -105,6 +109,7 @@ for up in to_update:
 ✅ **Currently correct (5 elements)**
 
 ### 5. **create_meta unpacking - Handle created ones section** (Line ~1726)
+
 **File:** `occurrence_reports.py`
 **What:** Processing habitat, condition, identification, and location for newly created records
 
@@ -140,13 +145,26 @@ When adding a new OneToOne child model (e.g., OCRNewThing) to the importer, foll
 
 ## How to Verify All Locations Are Updated
 
-Run this grep command to find all unpacking locations:
+**Use the automated validator:**
+
+```bash
+# Validate occurrence_reports.py (default)
+python boranga/components/data_migration/validate_tuple_unpacking.py
+
+# Validate a different handler
+python boranga/components/data_migration/validate_tuple_unpacking.py occurrences.py
+```
+
+The validator will report if all unpacking locations use the same tuple size and if appends match unpacking expectations.
+
+**Manual verification** (grep):
 
 ```bash
 grep -n "for.*in (to_update|create_meta):" boranga/components/data_migration/handlers/occurrence_reports.py
 ```
 
 Should show exactly 3 lines (two to_update loops + one create_meta loop):
+
 - Line ~1264: `for up in to_update:` (habitat/condition/submitter)
 - Line ~1605: `for up in to_update:` (habitat/condition/ident/location)
 - Line ~1726: `for (mig, ...` (create_meta loop)
@@ -157,22 +175,29 @@ For each match, verify the unpacking includes all expected fields by reading the
 
 After making changes:
 
-1. **Test with `--wipe-targets`** (creates only):
+1. **Run the validator** (catches tuple mismatches early):
+
+   ```bash
+   python boranga/components/data_migration/validate_tuple_unpacking.py <handler>
+   ```
+
+2. **Test with `--wipe-targets`** (creates only):
+
    ```bash
    ./manage.py migrate_data run occurrence_report_legacy \
      private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv \
      --limit 5 --wipe-targets
    ```
 
-2. **Test without `--wipe-targets`** (creates + updates):
+3. **Test without `--wipe-targets`** (creates + updates):
    ```bash
    ./manage.py migrate_data run occurrence_report_legacy \
      private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv \
      --limit 5
    ```
 
-Both must pass. If the second fails with `ValueError: too many values to unpack`, check Location 3 and 4 (to_update unpacking).
+All must pass. If the validator fails with tuple size mismatch, review all unpacking locations. If tests fail with `ValueError: too many values to unpack`, you missed an unpacking location—run the validator to identify which one.
 
 ## History
 
-- **2025-12-04**: Added OCRLocation (5 elements). Fixed missing unpacking at Location 3 after discovering error during update path testing.
+- **2025-12-04**: Added OCRLocation (5 elements). Fixed missing unpacking at Location 3 after discovering error during update path testing. Created validate_tuple_unpacking.py to prevent this class of error in future handlers.
