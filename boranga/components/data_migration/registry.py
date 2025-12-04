@@ -2287,3 +2287,79 @@ def to_int_trailing_factory(prefix: str, required: bool = False):
             )
 
     return _transform
+
+
+def conditional_transform_factory(
+    condition_column: str,
+    condition_value: Any,
+    true_column: str,
+    true_transform: str | None = None,
+    false_value: Any = None,
+) -> str:
+    """
+    Return a registered transform name that applies conditional logic:
+    - If condition_column equals condition_value, apply true_transform to true_column value
+    - Otherwise return false_value
+
+    Parameters:
+      - condition_column: column name to check in the row
+      - condition_value: value to compare against (uses == comparison)
+      - true_column: column name to use when condition is true
+      - true_transform: registered transform name to apply to true_column value (optional)
+      - false_value: value to return when condition is false (default None)
+
+    Usage:
+      APPROVED_BY_IF_ACCEPTED = conditional_transform_factory(
+          condition_column="processing_status",
+          condition_value="PROCESSING_STATUS_APPROVED",
+          true_column="modified_by",
+          true_transform="emailuser_by_legacy_username_tpfl"
+      )
+      PIPELINES["approved_by"] = [APPROVED_BY_IF_ACCEPTED]
+    """
+    if not condition_column or not true_column:
+        raise ValueError("condition_column and true_column must be provided")
+
+    key_repr = f"conditional:{condition_column}:{condition_value}:{true_column}:{true_transform or ''}:{false_value!r}"
+    name = "conditional_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        # Get condition and true column values from row
+        row = ctx.row if ctx and isinstance(ctx.row, dict) else {}
+        condition_val = row.get(condition_column)
+        true_val = row.get(true_column)
+
+        # Check condition
+        if condition_val != condition_value:
+            return _result(false_value)
+
+        # If no true_column value, return false_value
+        if true_val in (None, ""):
+            return _result(false_value)
+
+        # If no transform specified, return the value as-is
+        if true_transform is None:
+            return _result(true_val)
+
+        # Apply the registered transform to the true_column value
+        fn = registry._fns.get(true_transform)
+        if fn is None:
+            return _result(
+                value,
+                TransformIssue("error", f"Unknown transform '{true_transform}'"),
+            )
+
+        try:
+            res = fn(true_val, ctx)
+            if isinstance(res, TransformResult):
+                return res
+            return _result(res)
+        except Exception as e:
+            return _result(
+                value, TransformIssue("error", f"conditional transform error: {e}")
+            )
+
+    registry._fns[name] = _inner
+    return name
