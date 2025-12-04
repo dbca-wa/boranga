@@ -109,6 +109,14 @@ When adding a new OneToOne child model to an importer (e.g., OCRLocation to Occu
 - Forgetting to add child_data to ops.append() or create_meta.append() → child data is lost before reaching persistence code
 - Not adding bulk_create/bulk_update code for the child model → model instances created but not persisted to database
 
+**VALIDATION**: After adding a new child model, run the tuple unpacking validator to catch any mismatches before testing:
+
+```bash
+python boranga/components/data_migration/validate_tuple_unpacking.py
+```
+
+This script detects when tuple structures change (new fields added) but not all unpacking locations are updated. See `TUPLE_UNPACKING_VALIDATION.md` for detailed information about all unpacking locations.
+
 ## Running imports
 
 - List importers:
