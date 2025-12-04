@@ -10,7 +10,6 @@ from boranga.components.data_migration.registry import (
     emailuser_object_by_legacy_username_factory,
     fk_lookup,
     fk_lookup_static,
-    pluck_attribute_factory,
     region_from_district_factory,
     static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
@@ -379,10 +378,7 @@ PIPELINES = {
     "record_source": ["strip", "blank_to_none", RECORD_SOURCE_FROM_CSV],
     "customer_status": [CUSTOMER_STATUS_FROM_FORM_STATUS_CODE],
     "comments": ["ocr_comments_transform"],
-    "ocr_for_occ_name": [
-        OCCURRENCE_FROM_POP_ID,
-        pluck_attribute_factory("occurrence_name"),
-    ],
+    "ocr_for_occ_name": ["strip", "blank_to_none"],
     "processing_status": [
         "strip",
         "required",
