@@ -257,6 +257,13 @@ DISTRICT_TRANSFORM = build_legacy_map_transform(
 # Use the factory-based region_from_district transform from registry
 REGION_FROM_DISTRICT = region_from_district_factory()
 
+LANDDISTRICT_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "LANDDISTRICT (DRF_LOV_LAND_DISTRICT_VWS)",
+    required=False,
+    return_type="canonical",
+)
+
 BOUNDARY_DESCRIPTION_DEFAULT = static_value_factory(
     "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
 )
@@ -362,6 +369,7 @@ PIPELINES = {
     ],
     "OCRLocation__district": ["strip", "blank_to_none", DISTRICT_TRANSFORM],
     "OCRLocation__region": [REGION_FROM_DISTRICT],
+    "OCRLocation__locality": ["strip", "blank_to_none", LANDDISTRICT_TRANSFORM],
     "OCRLocation__boundary_description": [BOUNDARY_DESCRIPTION_DEFAULT],
     "OCRLocation__epsg_code": [EPSG_CODE_DEFAULT],
 }
@@ -550,6 +558,8 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 )
             if canonical.get("DISTRICT"):
                 canonical["OCRLocation__district"] = canonical.get("DISTRICT")
+            if canonical.get("LANDDISTRICT"):
+                canonical["OCRLocation__locality"] = canonical.get("LANDDISTRICT")
 
             # If an explicit occurrence id is present in the source we do not assign
             # it here; the importer will link habitat to the parent OccurrenceReport
