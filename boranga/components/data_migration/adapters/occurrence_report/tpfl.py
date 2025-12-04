@@ -11,6 +11,7 @@ from boranga.components.data_migration.registry import (
     fk_lookup,
     fk_lookup_static,
     pluck_attribute_factory,
+    region_from_district_factory,
     static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
     to_int_trailing_factory,
@@ -253,28 +254,8 @@ DISTRICT_TRANSFORM = build_legacy_map_transform(
     required=False,
 )
 
-
-def region_from_district_transform(value, ctx=None):
-    """
-    Derive region from district by looking up the District object and extracting its region_id.
-    The value is expected to be a district_id (int) after the DISTRICT_TRANSFORM has been applied.
-    """
-    if value is None:
-        return _result(None)
-    try:
-        from boranga.components.species_and_communities.models import District
-
-        district = District.objects.get(pk=value)
-        return _result(district.region_id if district.region_id else None)
-    except Exception:
-        return _result(None)
-
-
-REGION_FROM_DISTRICT = dependent_from_column_factory(
-    "OCRLocation__district",
-    mapper=region_from_district_transform,
-    default=None,
-)
+# Use the factory-based region_from_district transform from registry
+REGION_FROM_DISTRICT = region_from_district_factory()
 
 BOUNDARY_DESCRIPTION_DEFAULT = static_value_factory(
     "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
