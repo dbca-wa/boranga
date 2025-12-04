@@ -3,6 +3,7 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
     build_legacy_map_transform,
+    conditional_transform_factory,
     csv_lookup_factory,
     dependent_from_column_factory,
     emailuser_by_legacy_username_factory,
@@ -223,6 +224,16 @@ def submitter_name_from_emailuser(value, ctx=None):
         return _result(None)
 
 
+# Transform for approved_by: if processing_status is 'accepted', use modified_by and resolve to EmailUser id
+APPROVED_BY_TRANSFORM = conditional_transform_factory(
+    condition_column="processing_status",
+    condition_value=OccurrenceReport.PROCESSING_STATUS_APPROVED,
+    true_column="modified_by",
+    true_transform=EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM,
+    false_value=None,
+)
+
+
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     "Occurrence__migrated_from_id": [POP_ID_FROM_SHEETNO],
@@ -243,6 +254,7 @@ PIPELINES = {
         MAP_FORM_STATUS_CODE_TO_PROCESSING_STATUS,
     ],
     "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
+    "approved_by": [APPROVED_BY_TRANSFORM],
     "OCRObserverDetail__role": ["strip", "blank_to_none", ROLE_TRANSFORM],
     "OCRObserverDetail__observer_name": [
         "strip",

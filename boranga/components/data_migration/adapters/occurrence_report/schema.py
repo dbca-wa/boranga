@@ -23,6 +23,7 @@ COLUMN_MAP = {
     "RECORD_SRC_CODE": "record_source",
     # reported_date: just a copy of lodgement_date, so will be applied in handler
     "CREATED_BY": "submitter",
+    "MODIFIED_BY": "modified_by",  # used in tpfl adapter to derive submitter
     # OCRObserverDetail fields
     "OBS_ROLE_CODE": "OCRObserverDetail__role",
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
