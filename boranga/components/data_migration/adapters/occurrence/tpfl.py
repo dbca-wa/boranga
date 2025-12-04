@@ -43,7 +43,7 @@ PROCESSING_STATUS = choices_transform(
     [c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES]
 )
 
-SUBMITTER_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
+EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
 PURPOSE_TRANSFORM = build_legacy_map_transform(
     "TPFL",
@@ -82,7 +82,8 @@ PIPELINES = {
         "Y_to_active_else_historical",
         PROCESSING_STATUS,
     ],
-    "submitter": ["strip", "blank_to_none", SUBMITTER_TRANSFORM],
+    "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
+    "modified_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
     "OCCContactDetail__contact_name": ["strip", "blank_to_none"],
     "OCCContactDetail__notes": ["strip", "blank_to_none"],
     "OccurrenceTenure__purpose_id": ["strip", "blank_to_none", PURPOSE_TRANSFORM],
