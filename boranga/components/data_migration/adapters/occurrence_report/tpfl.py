@@ -10,6 +10,7 @@ from boranga.components.data_migration.registry import (
     fk_lookup,
     fk_lookup_static,
     occurrence_from_pop_id_factory,
+    occurrence_number_from_pop_id_factory,
     region_from_district_factory,
     static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
@@ -30,6 +31,9 @@ from . import schema
 # TPFL-specific transforms and pipelines
 # Create factory transform that maps POP_ID to Occurrence instance with persistent caching
 OCCURRENCE_FROM_POP_ID_TRANSFORM = occurrence_from_pop_id_factory("TPFL")
+
+# Create factory transform that maps POP_ID to occurrence_number with persistent caching
+OCCURRENCE_NUMBER_FROM_POP_ID = occurrence_number_from_pop_id_factory("TPFL")
 
 SPECIES_TRANSFORM = taxonomy_lookup_legacy_mapping_species("TPFL")
 
@@ -373,6 +377,7 @@ PIPELINES = {
     "customer_status": [CUSTOMER_STATUS_FROM_FORM_STATUS_CODE],
     "comments": ["ocr_comments_transform"],
     "ocr_for_occ_name": ["strip", "blank_to_none"],
+    "ocr_for_occ_number": [OCCURRENCE_NUMBER_FROM_POP_ID],
     "processing_status": [
         "strip",
         "required",
@@ -507,12 +512,18 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                     f"Reason Deactivated: {REASON_DEACTIVATED}, {DEACTIVATED_DATE}"
                 )
             canonical["assessor_data"] = assessor_data
-            ocr_for_occ_number = None
-            SHEET_POP_NUMBER = canonical.get("SHEET_POP_NUMBER", "").strip()
-            if SHEET_POP_NUMBER:
-                SHEET_SUBPOP_CODE = canonical.get("SHEET_SUBPOP_CODE", "").strip()
-                ocr_for_occ_number = f"{SHEET_POP_NUMBER}{SHEET_SUBPOP_CODE}"
-            canonical["ocr_for_occ_name"] = ocr_for_occ_number
+            # Build occurrence_name: concat POP_NUMBER + SUBPOP_CODE (no space)
+            pop = str(canonical.get("SHEET_POP_NUMBER", "") or "").strip()
+            sub = str(canonical.get("SHEET_SUBPOP_CODE", "") or "").strip()
+            ocr_for_occ_name = (pop + sub).strip()
+            # If only a single digit (e.g. "1"), pad with leading zero -> "01"
+            if (
+                ocr_for_occ_name
+                and len(ocr_for_occ_name) == 1
+                and ocr_for_occ_name.isdigit()
+            ):
+                ocr_for_occ_name = ocr_for_occ_name.zfill(2)
+            canonical["ocr_for_occ_name"] = ocr_for_occ_name
             canonical["OCRObserverDetail__main_observer"] = True
             canonical["internal_application"] = True
             # Build habitat_notes by combining habitat notes, aspect and vegetation condition
