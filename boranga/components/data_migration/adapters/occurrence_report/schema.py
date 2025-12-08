@@ -328,4 +328,5 @@ class OccurrenceReportRow:
             "lodgement_date": self.lodgement_date,
             "approved_by": self.approved_by,
             "submitter": self.submitter,
+            "occurrence": self.Occurrence__migrated_from_id,
         }
