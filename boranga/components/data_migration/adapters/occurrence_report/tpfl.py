@@ -1,4 +1,3 @@
-import boranga.components.data_migration.mappings as dm_mappings
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
@@ -10,6 +9,7 @@ from boranga.components.data_migration.registry import (
     emailuser_object_by_legacy_username_factory,
     fk_lookup,
     fk_lookup_static,
+    occurrence_from_pop_id_factory,
     region_from_district_factory,
     static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
@@ -28,14 +28,8 @@ from ..sources import Source
 from . import schema
 
 # TPFL-specific transforms and pipelines
-# build mapper that reads SHEETNO column and returns POP_ID (uses cached map)
-POP_ID_FROM_SHEETNO = dependent_from_column_factory(
-    "SHEETNO",
-    mapper=lambda dep, ctx: dm_mappings.get_pop_id_for_sheetno(
-        dep, legacy_system="TPFL"
-    ),
-    default=None,
-)
+# Create factory transform that maps POP_ID to Occurrence instance with persistent caching
+OCCURRENCE_FROM_POP_ID_TRANSFORM = occurrence_from_pop_id_factory("TPFL")
 
 SPECIES_TRANSFORM = taxonomy_lookup_legacy_mapping_species("TPFL")
 
@@ -370,7 +364,7 @@ EPSG_CODE_DEFAULT = static_value_factory(4326)
 
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
-    "Occurrence__migrated_from_id": [POP_ID_FROM_SHEETNO],
+    "Occurrence__migrated_from_id": [OCCURRENCE_FROM_POP_ID_TRANSFORM],
     "species_id": ["strip", "blank_to_none", SPECIES_TRANSFORM],
     "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
     "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
