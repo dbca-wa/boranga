@@ -2610,3 +2610,52 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
 
     registry._fns[name] = inner
     return name
+
+
+def pop_id_from_sheetno_factory(legacy_system: str = "TPFL"):
+    """
+    Factory that returns a registered transform name for mapping SHEETNO to POP_ID directly.
+
+    This transform converts SHEETNO to POP_ID via the legacy mapping, returning the
+    POP_ID string itself (not the occurrence_number).
+
+    Usage:
+      POP_ID_FROM_SHEETNO = pop_id_from_sheetno_factory("TPFL")
+      PIPELINES["ocr_for_occ_number"] = [POP_ID_FROM_SHEETNO]
+
+    The transform takes a SHEETNO (read from the row's migrated_from_id field),
+    converts it to POP_ID via the legacy mapping, then returns the POP_ID string.
+    """
+    key = f"pop_id_from_sheetno_{legacy_system}"
+    name = "pop_id_from_sheetno_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    def inner(value, ctx: TransformContext):
+        # The input value should be ignored; we read SHEETNO from the row context
+        if not ctx or not isinstance(ctx.row, dict):
+            return _result(None)
+
+        try:
+            # Get SHEETNO (migrated_from_id) from the row
+            sheetno = ctx.row.get("migrated_from_id")
+            if sheetno in (None, ""):
+                return _result(None)
+
+            # Get POP_ID from SHEETNO using the mapping
+            pop_id = dm_mappings.get_pop_id_for_sheetno(
+                sheetno, legacy_system=legacy_system
+            )
+            if not pop_id:
+                return _result(None)
+
+            # Return POP_ID as string
+            return _result(str(pop_id).strip())
+
+        except Exception as e:
+            logger.exception("Error in pop_id_from_sheetno_factory: %s", e)
+            return _result(None)
+
+    registry._fns[name] = inner
+    return name

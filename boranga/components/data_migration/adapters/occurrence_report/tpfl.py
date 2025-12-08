@@ -11,6 +11,7 @@ from boranga.components.data_migration.registry import (
     fk_lookup_static,
     occurrence_from_pop_id_factory,
     occurrence_number_from_pop_id_factory,
+    pop_id_from_sheetno_factory,
     region_from_district_factory,
     static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
@@ -34,6 +35,9 @@ OCCURRENCE_FROM_POP_ID_TRANSFORM = occurrence_from_pop_id_factory("TPFL")
 
 # Create factory transform that maps POP_ID to occurrence_number with persistent caching
 OCCURRENCE_NUMBER_FROM_POP_ID = occurrence_number_from_pop_id_factory("TPFL")
+
+# Create factory transform that maps SHEETNO to POP_ID directly
+POP_ID_FROM_SHEETNO = pop_id_from_sheetno_factory("TPFL")
 
 SPECIES_TRANSFORM = taxonomy_lookup_legacy_mapping_species("TPFL")
 
@@ -377,7 +381,7 @@ PIPELINES = {
     "customer_status": [CUSTOMER_STATUS_FROM_FORM_STATUS_CODE],
     "comments": ["ocr_comments_transform"],
     "ocr_for_occ_name": ["strip", "blank_to_none"],
-    "ocr_for_occ_number": [OCCURRENCE_NUMBER_FROM_POP_ID],
+    "ocr_for_occ_number": [POP_ID_FROM_SHEETNO],
     "processing_status": [
         "strip",
         "required",
