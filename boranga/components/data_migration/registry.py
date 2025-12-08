@@ -2532,3 +2532,81 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
 
     registry._fns[name] = inner
     return name
+
+
+def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
+    """
+    Factory that returns a registered transform name for mapping POP_ID to occurrence_number.
+
+    This transform uses an in-memory cache (populated on first call) that maps
+    POP_ID (Occurrence.migrated_from_id) to Occurrence.occurrence_number for fast
+    lookups without repeated DB queries. The cache persists for the entire migration run.
+
+    Usage:
+      OCCURRENCE_NUMBER_FROM_POP_ID = occurrence_number_from_pop_id_factory("TPFL")
+      PIPELINES["ocr_for_occ_number"] = [OCCURRENCE_NUMBER_FROM_POP_ID]
+
+    The transform takes a SHEETNO (read from the row's migrated_from_id field),
+    converts it to POP_ID via the legacy mapping, then returns the corresponding
+    Occurrence's occurrence_number.
+    """
+    key = f"occurrence_number_from_pop_id_{legacy_system}"
+    name = "occurrence_number_from_pop_id_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Create a cache dict that persists for the migration run
+    # Maps: POP_ID (string) -> occurrence_number (string)
+    pop_id_to_occurrence_number_cache = {}
+    cache_initialized = [False]  # Use list to allow modification in nested function
+
+    def inner(value, ctx: TransformContext):
+        # The input value should be ignored; we read SHEETNO from the row context
+        if not ctx or not isinstance(ctx.row, dict):
+            return _result(None)
+
+        try:
+            from boranga.components.occurrence.models import Occurrence
+
+            # Initialize cache on first call: preload all Occurrences
+            if not cache_initialized[0]:
+                for occ in Occurrence.objects.filter(
+                    migrated_from_id__isnull=False, occurrence_number__isnull=False
+                ).values("occurrence_number", "migrated_from_id"):
+                    pop_id_to_occurrence_number_cache[str(occ["migrated_from_id"])] = (
+                        occ["occurrence_number"]
+                    )
+                cache_initialized[0] = True
+                logger.debug(
+                    "occurrence_number_from_pop_id: initialized cache with %d entries",
+                    len(pop_id_to_occurrence_number_cache),
+                )
+
+            # Get SHEETNO (migrated_from_id) from the row
+            sheetno = ctx.row.get("migrated_from_id")
+            if sheetno in (None, ""):
+                return _result(None)
+
+            # Get POP_ID from SHEETNO using the mapping
+            pop_id = dm_mappings.get_pop_id_for_sheetno(
+                sheetno, legacy_system=legacy_system
+            )
+            if not pop_id:
+                return _result(None)
+
+            pop_id_str = str(pop_id).strip()
+
+            # Check cache for the occurrence_number
+            occurrence_number = pop_id_to_occurrence_number_cache.get(pop_id_str)
+            if occurrence_number:
+                return _result(occurrence_number)
+            else:
+                return _result(None)
+
+        except Exception as e:
+            logger.exception("Error in occurrence_number_from_pop_id_factory: %s", e)
+            return _result(None)
+
+    registry._fns[name] = inner
+    return name
