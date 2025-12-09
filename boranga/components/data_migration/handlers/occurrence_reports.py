@@ -38,6 +38,7 @@ from boranga.components.occurrence.models import (
     OCRLocation,
     OCRObservationDetail,
     OCRObserverDetail,
+    OCRPlantCount,
 )
 from boranga.components.species_and_communities.models import Taxonomy
 from boranga.components.users.models import SubmitterInformation
@@ -506,6 +507,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             location_data = {}
             observation_detail_data = {}
             geometry_data = {}
+            plant_count_data = {}
 
             # Helper to extract .value from TransformResult if needed
             def extract_value(v):
@@ -538,6 +540,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     short = k.split("OccurrenceReportGeometry__", 1)[1]
                     geometry_data[short] = extract_value(v)
                     logger.debug(f"Extracted geometry field: {short}={type(v)}")
+                if k.startswith("OCRPlantCount__"):
+                    short = k.split("OCRPlantCount__", 1)[1]
+                    plant_count_data[short] = extract_value(v)
 
             ops.append(
                 {
@@ -551,6 +556,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "location_data": location_data,
                     "observation_detail_data": observation_detail_data,
                     "geometry_data": geometry_data,
+                    "plant_count_data": plant_count_data,
                 }
             )
 
@@ -588,6 +594,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             location_data = op.get("location_data") or {}
             observation_detail_data = op.get("observation_detail_data") or {}
             geometry_data = op.get("geometry_data") or {}
+            plant_count_data = op.get("plant_count_data") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
@@ -603,6 +610,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         location_data,
                         observation_detail_data,
                         geometry_data,
+                        plant_count_data,
                     )
                 )
                 continue
@@ -625,6 +633,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     location_data,
                     observation_detail_data,
                     geometry_data,
+                    plant_count_data,
                 )
             )
 
@@ -1289,6 +1298,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 habitat_condition,
                 submitter_information_data,
                 location_data,
+                observation_detail_data,
+                geometry_data,
+                plant_count_data,
             ) = up
             sid = inst.pk
             si_data = submitter_information_data or {}
@@ -1370,6 +1382,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             location_data,
             observation_detail_data,
             geometry_data,
+            plant_count_data,
         ) in create_meta:
             ocr = target_map.get(mig)
             if not ocr:
@@ -1624,6 +1637,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 occurrence_report__in=target_occs
             )
         }
+        existing_plant_counts = {
+            pc.occurrence_report_id: pc
+            for pc in OCRPlantCount.objects.filter(occurrence_report__in=target_occs)
+        }
         habs_to_create = []
         habs_to_update = []
         conds_to_create = []
@@ -1634,6 +1651,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
         locs_to_update = []
         obs_to_create = []
         obs_to_update = []
+        plant_counts_to_create = []
+        plant_counts_to_update = []
         for up in to_update:
             (
                 inst,
@@ -1642,6 +1661,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 submitter_information_data,
                 location_data,
                 observation_detail_data,
+                geometry_data,
+                plant_count_data,
             ) = up
             hid = inst.pk
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
@@ -1781,6 +1802,32 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                     )
 
+            # OCRPlantCount handling for updates
+            pcd = plant_count_data or {}
+            if hid in existing_plant_counts:
+                pc_obj = existing_plant_counts[hid]
+                valid_pc_fields = {f.name for f in OCRPlantCount._meta.fields}
+                for field_name, val in pcd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_pc_fields:
+                        apply_value_to_instance(pc_obj, field_name, val)
+                plant_counts_to_update.append(pc_obj)
+            else:
+                pc_create = {"occurrence_report": inst}
+                valid_pc_fields = {f.name for f in OCRPlantCount._meta.fields}
+                for field_name, val in pcd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_pc_fields:
+                        pc_create[field_name] = val
+                if len(pcd) > 0:
+                    plant_counts_to_create.append(
+                        OCRPlantCount(
+                            **normalize_create_kwargs(OCRPlantCount, pc_create)
+                        )
+                    )
+
         # Handle created ones
         logger.debug(
             f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}"
@@ -1800,6 +1847,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             location_data,
             observation_detail_data,
             geometry_data,
+            plant_count_data,
         ) in create_meta:
             logger.info(
                 f"Processing create_meta item: mig={mig}, has_geometry_data={bool(geometry_data)}"
@@ -1911,6 +1959,32 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     obs_to_create.append(
                         OCRObservationDetail(
                             **normalize_create_kwargs(OCRObservationDetail, obs_create)
+                        )
+                    )
+
+            # OCRPlantCount handling for newly created ocr
+            pcd = plant_count_data or {}
+            if ocr.pk in existing_plant_counts:
+                pc_obj = existing_plant_counts[ocr.pk]
+                valid_pc_fields = {f.name for f in OCRPlantCount._meta.fields}
+                for field_name, val in pcd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_pc_fields:
+                        apply_value_to_instance(pc_obj, field_name, val)
+                plant_counts_to_update.append(pc_obj)
+            else:
+                pc_create = {"occurrence_report": ocr}
+                valid_pc_fields = {f.name for f in OCRPlantCount._meta.fields}
+                for field_name, val in pcd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_pc_fields:
+                        pc_create[field_name] = val
+                if len(pcd) > 0:
+                    plant_counts_to_create.append(
+                        OCRPlantCount(
+                            **normalize_create_kwargs(OCRPlantCount, pc_create)
                         )
                     )
 
@@ -2263,6 +2337,59 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         logger.exception(
                             "Failed to save OCRObservationDetail %s",
                             getattr(obs, "pk", None),
+                        )
+
+        # OCRPlantCount: OneToOne - create or update plant count records
+        if plant_counts_to_create:
+            try:
+                OCRPlantCount.objects.bulk_create(
+                    plant_counts_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRPlantCount; falling back to individual creates"
+                )
+                for pc in plant_counts_to_create:
+                    try:
+                        pc.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRPlantCount for occurrence_report %s",
+                            getattr(pc.occurrence_report, "pk", None),
+                        )
+
+        if plant_counts_to_update:
+            try:
+                pc_fields = set()
+                for inst in plant_counts_to_update:
+                    pc_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                pc_fields = {
+                    f
+                    for f in pc_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if pc_fields:
+                    OCRPlantCount.objects.bulk_update(
+                        plant_counts_to_update, list(pc_fields), batch_size=BATCH
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRPlantCount; falling back to individual saves"
+                )
+                for pc in plant_counts_to_update:
+                    try:
+                        pc.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRPlantCount %s",
+                            getattr(pc, "pk", None),
                         )
 
         # Update stats counts for created/updated based on performed ops
