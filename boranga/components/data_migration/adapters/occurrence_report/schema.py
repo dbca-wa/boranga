@@ -66,6 +66,9 @@ COLUMN_MAP = {
     "SVY_EXTENT": "OCRObservationDetail__area_assessment",
     "SVY_EFFORT_AREA": "OCRObservationDetail__area_surveyed",
     "SVY_EFFORT_TIME": "OCRObservationDetail__survey_duration",
+    # OccurrenceReportGeometry fields (Task 11359, 11364, 11366)
+    "GDA94LAT": "GDA94LAT",
+    "GDA94LONG": "GDA94LONG",
     # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
     "PURPOSE1": "PURPOSE1",
     "PURPOSE2": "PURPOSE2",
