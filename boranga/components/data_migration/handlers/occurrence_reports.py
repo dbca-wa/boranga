@@ -1786,6 +1786,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
             f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}"
         )
         logger.info(f"created_map keys: {list(created_map.keys())}")
+
+        # Fetch ContentType once before processing geometries
+        from django.contrib.contenttypes.models import ContentType
+
+        ocr_content_type = ContentType.objects.get_for_model(OccurrenceReport)
+
         for (
             mig,
             habitat_data,
@@ -1970,11 +1976,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                 else:
                     # Create new geometry
-                    from django.contrib.contenttypes.models import ContentType
-
-                    ocr_content_type = ContentType.objects.get_for_model(
-                        OccurrenceReport
-                    )
                     geom_create_kwargs = {
                         "occurrence_report_id": ocr.pk,
                         "content_type": ocr_content_type,
