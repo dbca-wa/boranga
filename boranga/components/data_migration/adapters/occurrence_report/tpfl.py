@@ -701,6 +701,7 @@ PIPELINES = {
         "blank_to_none",
         "y_to_true_n_to_none",
     ],
+    "OCRPlantCount__obs_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
 }
 
 
@@ -717,6 +718,10 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
 
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
+            # Map observation_date to OCRPlantCount__obs_date
+            if canonical.get("observation_date"):
+                canonical["OCRPlantCount__obs_date"] = canonical.get("observation_date")
+
             canonical["occurrence_report_name"] = (
                 f"{canonical.get('POP_NUMBER', '').strip()} {canonical.get('SUBPOP_CODE', '').strip()}".strip()
             )

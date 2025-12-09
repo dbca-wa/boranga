@@ -233,6 +233,7 @@ class OccurrenceReportRow:
     OCRPlantCount__simple_dead: int | None = None
     OCRPlantCount__total_quadrat_area: Decimal | None = None
     OCRPlantCount__vegetative_state_present: bool | None = None
+    OCRPlantCount__obs_date: date | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
@@ -411,6 +412,7 @@ class OccurrenceReportRow:
             OCRPlantCount__vegetative_state_present=d.get(
                 "OCRPlantCount__vegetative_state_present"
             ),
+            OCRPlantCount__obs_date=obs_date,
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:
