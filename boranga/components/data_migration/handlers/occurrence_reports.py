@@ -39,6 +39,7 @@ from boranga.components.occurrence.models import (
     OCRObservationDetail,
     OCRObserverDetail,
     OCRPlantCount,
+    OCRVegetationStructure,
 )
 from boranga.components.species_and_communities.models import Taxonomy
 from boranga.components.users.models import SubmitterInformation
@@ -508,6 +509,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             observation_detail_data = {}
             geometry_data = {}
             plant_count_data = {}
+            vegetation_structure_data = {}
 
             # Helper to extract .value from TransformResult if needed
             def extract_value(v):
@@ -543,6 +545,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OCRPlantCount__"):
                     short = k.split("OCRPlantCount__", 1)[1]
                     plant_count_data[short] = extract_value(v)
+                if k.startswith("OCRVegetationStructure__"):
+                    short = k.split("OCRVegetationStructure__", 1)[1]
+                    vegetation_structure_data[short] = extract_value(v)
 
             ops.append(
                 {
@@ -557,6 +562,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "observation_detail_data": observation_detail_data,
                     "geometry_data": geometry_data,
                     "plant_count_data": plant_count_data,
+                    "vegetation_structure_data": vegetation_structure_data,
                 }
             )
 
@@ -595,6 +601,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             observation_detail_data = op.get("observation_detail_data") or {}
             geometry_data = op.get("geometry_data") or {}
             plant_count_data = op.get("plant_count_data") or {}
+            vegetation_structure_data = op.get("vegetation_structure_data") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
@@ -611,6 +618,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         observation_detail_data,
                         geometry_data,
                         plant_count_data,
+                        vegetation_structure_data,
                     )
                 )
                 continue
@@ -634,6 +642,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     observation_detail_data,
                     geometry_data,
                     plant_count_data,
+                    vegetation_structure_data,
                 )
             )
 
@@ -1301,6 +1310,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 observation_detail_data,
                 geometry_data,
                 plant_count_data,
+                vegetation_structure_data,
             ) = up
             sid = inst.pk
             si_data = submitter_information_data or {}
@@ -1383,6 +1393,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             observation_detail_data,
             geometry_data,
             plant_count_data,
+            vegetation_structure_data,
         ) in create_meta:
             ocr = target_map.get(mig)
             if not ocr:
@@ -1641,6 +1652,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
             pc.occurrence_report_id: pc
             for pc in OCRPlantCount.objects.filter(occurrence_report__in=target_occs)
         }
+        existing_vegetation_structures = {
+            vs.occurrence_report_id: vs
+            for vs in OCRVegetationStructure.objects.filter(
+                occurrence_report__in=target_occs
+            )
+        }
         habs_to_create = []
         habs_to_update = []
         conds_to_create = []
@@ -1653,6 +1670,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
         obs_to_update = []
         plant_counts_to_create = []
         plant_counts_to_update = []
+        vegetation_structures_to_create = []
+        vegetation_structures_to_update = []
         for up in to_update:
             (
                 inst,
@@ -1663,6 +1682,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 observation_detail_data,
                 geometry_data,
                 plant_count_data,
+                vegetation_structure_data,
             ) = up
             hid = inst.pk
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
@@ -1828,6 +1848,32 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                     )
 
+            # OCRVegetationStructure handling for updates
+            vsd = vegetation_structure_data or {}
+            if hid in existing_vegetation_structures:
+                vs_obj = existing_vegetation_structures[hid]
+                valid_vs_fields = {f.name for f in OCRVegetationStructure._meta.fields}
+                for field_name, val in vsd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_vs_fields:
+                        apply_value_to_instance(vs_obj, field_name, val)
+                vegetation_structures_to_update.append(vs_obj)
+            else:
+                vs_create = {"occurrence_report": inst}
+                valid_vs_fields = {f.name for f in OCRVegetationStructure._meta.fields}
+                for field_name, val in vsd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_vs_fields:
+                        vs_create[field_name] = val
+                if len(vsd) > 0:
+                    vegetation_structures_to_create.append(
+                        OCRVegetationStructure(
+                            **normalize_create_kwargs(OCRVegetationStructure, vs_create)
+                        )
+                    )
+
         # Handle created ones
         logger.debug(
             f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}"
@@ -1848,6 +1894,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             observation_detail_data,
             geometry_data,
             plant_count_data,
+            vegetation_structure_data,
         ) in create_meta:
             logger.info(
                 f"Processing create_meta item: mig={mig}, has_geometry_data={bool(geometry_data)}"
@@ -1987,6 +2034,31 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             **normalize_create_kwargs(OCRPlantCount, pc_create)
                         )
                     )
+
+            # OCRVegetationStructure handling for newly created ocr
+            vsd = vegetation_structure_data or {}
+            # Note: existing_vegetation_structures is keyed by occurrence_report_id
+            # but for newly created OCRs, we might not have them in existing_vegetation_structures
+            # unless we re-fetched them (which we didn't).
+            # However, since these are newly created OCRs, they shouldn't have existing VS unless
+            # something weird happened.
+            # But let's check anyway if we want to be safe, or just assume create.
+            # Actually, we are iterating over create_meta, so these are definitely new OCRs.
+            # So we just create.
+
+            vs_create = {"occurrence_report": ocr}
+            valid_vs_fields = {f.name for f in OCRVegetationStructure._meta.fields}
+            for field_name, val in vsd.items():
+                if field_name == "occurrence_report":
+                    continue
+                if val is not None and field_name in valid_vs_fields:
+                    vs_create[field_name] = val
+            if len(vsd) > 0:
+                vegetation_structures_to_create.append(
+                    OCRVegetationStructure(
+                        **normalize_create_kwargs(OCRVegetationStructure, vs_create)
+                    )
+                )
 
             # OCRLocation create/update for newly created ocr
             if ocr.pk in existing_locations:
@@ -2390,6 +2462,61 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         logger.exception(
                             "Failed to save OCRPlantCount %s",
                             getattr(pc, "pk", None),
+                        )
+
+        # OCRVegetationStructure: OneToOne - create or update vegetation structure records
+        if vegetation_structures_to_create:
+            try:
+                OCRVegetationStructure.objects.bulk_create(
+                    vegetation_structures_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRVegetationStructure; falling back to individual creates"
+                )
+                for vs in vegetation_structures_to_create:
+                    try:
+                        vs.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRVegetationStructure for occurrence_report %s",
+                            getattr(vs.occurrence_report, "pk", None),
+                        )
+
+        if vegetation_structures_to_update:
+            try:
+                vs_fields = set()
+                for inst in vegetation_structures_to_update:
+                    vs_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                vs_fields = {
+                    f
+                    for f in vs_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if vs_fields:
+                    OCRVegetationStructure.objects.bulk_update(
+                        vegetation_structures_to_update,
+                        list(vs_fields),
+                        batch_size=BATCH,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRVegetationStructure; falling back to individual saves"
+                )
+                for vs in vegetation_structures_to_update:
+                    try:
+                        vs.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRVegetationStructure %s",
+                            getattr(vs, "pk", None),
                         )
 
         # Update stats counts for created/updated based on performed ops

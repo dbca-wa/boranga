@@ -705,6 +705,31 @@ PIPELINES = {
 }
 
 
+def preload_veg_classes_map(path: str) -> dict[str, list[str]]:
+    """
+    Load DRF_SHEET_VEG_CLASSES_Sanitised.csv into a dict:
+    SHEETNO -> [VEG_CLASS_CODE, ...]
+    Preserves order of records for each SHEETNO.
+    """
+    import csv
+    import os
+
+    if not os.path.exists(path):
+        return {}
+
+    mapping = {}
+    with open(path, encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            sheetno = row.get("SHEETNO", "").strip()
+            code = row.get("VEG_CLASS_CODE", "").strip()
+            if sheetno and code:
+                if sheetno not in mapping:
+                    mapping[sheetno] = []
+                mapping[sheetno].append(code)
+    return mapping
+
+
 class OccurrenceReportTpflAdapter(SourceAdapter):
     source_key = Source.TPFL.value
     domain = "occurrence_report"
@@ -712,6 +737,21 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
     def extract(self, path: str, **options) -> ExtractionResult:
         rows = []
         warnings: list[ExtractionWarning] = []
+
+        # Preload veg classes
+        import os
+
+        # Always use the standard location
+        veg_classes_path = (
+            "private-media/legacy_data/TPFL/DRF_SHEET_VEG_CLASSES_Sanitised.csv"
+        )
+
+        if not os.path.exists(veg_classes_path):
+            raise FileNotFoundError(
+                f"Vegetation classes file not found at {veg_classes_path}"
+            )
+
+        veg_classes_map = preload_veg_classes_map(veg_classes_path)
 
         raw_rows, read_warnings = self.read_table(path)
         warnings.extend(read_warnings)
@@ -721,6 +761,31 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             # Map observation_date to OCRPlantCount__obs_date
             if canonical.get("observation_date"):
                 canonical["OCRPlantCount__obs_date"] = canonical.get("observation_date")
+
+            # Map OCRVegetationStructure fields from preloaded map
+            sheetno = canonical.get("migrated_from_id")
+            if sheetno and sheetno in veg_classes_map:
+                veg_codes = veg_classes_map[sheetno]
+                # 1st record -> layer 4
+                if len(veg_codes) >= 1:
+                    canonical[
+                        "OCRVegetationStructure__vegetation_structure_layer_four"
+                    ] = veg_codes[0]
+                # 2nd record -> layer 3
+                if len(veg_codes) >= 2:
+                    canonical[
+                        "OCRVegetationStructure__vegetation_structure_layer_three"
+                    ] = veg_codes[1]
+                # 3rd record -> layer 2
+                if len(veg_codes) >= 3:
+                    canonical[
+                        "OCRVegetationStructure__vegetation_structure_layer_two"
+                    ] = veg_codes[2]
+                # 4th record -> layer 1
+                if len(veg_codes) >= 4:
+                    canonical[
+                        "OCRVegetationStructure__vegetation_structure_layer_one"
+                    ] = veg_codes[3]
 
             canonical["occurrence_report_name"] = (
                 f"{canonical.get('POP_NUMBER', '').strip()} {canonical.get('SUBPOP_CODE', '').strip()}".strip()

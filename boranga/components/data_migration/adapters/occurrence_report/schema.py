@@ -235,6 +235,12 @@ class OccurrenceReportRow:
     OCRPlantCount__vegetative_state_present: bool | None = None
     OCRPlantCount__obs_date: date | None = None
 
+    # OCRVegetationStructure fields
+    OCRVegetationStructure__vegetation_structure_layer_one: str | None = None
+    OCRVegetationStructure__vegetation_structure_layer_two: str | None = None
+    OCRVegetationStructure__vegetation_structure_layer_three: str | None = None
+    OCRVegetationStructure__vegetation_structure_layer_four: str | None = None
+
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
         """
@@ -413,6 +419,18 @@ class OccurrenceReportRow:
                 "OCRPlantCount__vegetative_state_present"
             ),
             OCRPlantCount__obs_date=obs_date,
+            OCRVegetationStructure__vegetation_structure_layer_one=utils.safe_strip(
+                d.get("OCRVegetationStructure__vegetation_structure_layer_one")
+            ),
+            OCRVegetationStructure__vegetation_structure_layer_two=utils.safe_strip(
+                d.get("OCRVegetationStructure__vegetation_structure_layer_two")
+            ),
+            OCRVegetationStructure__vegetation_structure_layer_three=utils.safe_strip(
+                d.get("OCRVegetationStructure__vegetation_structure_layer_three")
+            ),
+            OCRVegetationStructure__vegetation_structure_layer_four=utils.safe_strip(
+                d.get("OCRVegetationStructure__vegetation_structure_layer_four")
+            ),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:
