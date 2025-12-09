@@ -382,6 +382,126 @@ BOUNDARY_DESCRIPTION_DEFAULT = static_value_factory(
 EPSG_CODE_DEFAULT = static_value_factory(4326)
 
 
+# OCRPlantCount transforms
+COUNTED_SUBJECT_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "CNT_PLANT_TYPE_CODE (DRF_LOV_CNT_PLANT_TYPE_VWS)",
+    required=False,
+)
+
+PLANT_CONDITION_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "POPULATION_CONDITION (DRF_LOV_PLNT_COND_VWS)",
+    required=False,
+)
+
+PLANT_COUNT_METHOD_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "COUNT_MTHD_CODE (DRF_LOV_COUNT_METHOD_VWS)",
+    required=False,
+)
+
+
+def ocr_plant_count_comment_transform(value, ctx):
+    """Concatenate fields for OCRPlantCount comment."""
+    parts = []
+
+    # 1. POPULATION_NOTES
+    if value and str(value).strip():
+        parts.append(str(value).strip())
+
+    row = getattr(ctx, "row", None) if ctx is not None else None
+    if row is None and isinstance(ctx, dict):
+        row = ctx.get("row") or ctx
+
+    if not isinstance(row, dict):
+        return _result("; ".join(parts) if parts else "")
+
+    from boranga.components.main.models import LegacyValueMap
+
+    # 2. AREA_OCCUPIED_METHOD
+    area_method = row.get("AREA_OCCUPIED_METHOD")
+    if area_method and str(area_method).strip():
+        mapped = LegacyValueMap.get_target(
+            legacy_system="TPFL",
+            list_name="AREA_OCCUPIED_METHOD (DRF_LOV_AREA_CALC_VWS)",
+            legacy_value=str(area_method).strip(),
+        )
+        if mapped:
+            parts.append(f"Area Occupied Method: {mapped}")
+
+    # 3. QUAD_SIZE
+    quad_size = row.get("QUAD_SIZE")
+    if quad_size and str(quad_size).strip():
+        parts.append(f"Quadrat Size: {str(quad_size).strip()}")
+
+    # 4. QUAD_NUM_TOTAL
+    quad_num_total = row.get("QUAD_NUM_TOTAL")
+    if quad_num_total and str(quad_num_total).strip():
+        parts.append(f"Quadrat Simple Count: {str(quad_num_total).strip()}")
+
+    # 5. QUAD_NUM_MATURE
+    quad_num_mature = row.get("QUAD_NUM_MATURE")
+    if quad_num_mature and str(quad_num_mature).strip():
+        parts.append(f"Quadrat Mature Count: {str(quad_num_mature).strip()}")
+
+    # 6. QUAD_NUM_JUVENILE
+    quad_num_juvenile = row.get("QUAD_NUM_JUVENILE")
+    if quad_num_juvenile and str(quad_num_juvenile).strip():
+        parts.append(f"Quadrat Juvenile Count: {str(quad_num_juvenile).strip()}")
+
+    # 7. QUAD_NUM_SEEDLINGS
+    quad_num_seedlings = row.get("QUAD_NUM_SEEDLINGS")
+    if quad_num_seedlings and str(quad_num_seedlings).strip():
+        parts.append(f"Quadrat Seedlings Count: {str(quad_num_seedlings).strip()}")
+
+    return _result("; ".join(parts))
+
+
+def ocr_plant_count_status_transform(value, ctx):
+    """Derive count_status from presence of count data."""
+    from boranga.settings import (
+        COUNT_STATUS_COUNTED,
+        COUNT_STATUS_NOT_COUNTED,
+        COUNT_STATUS_SIMPLE_COUNT,
+    )
+
+    row = getattr(ctx, "row", None) if ctx is not None else None
+    if row is None and isinstance(ctx, dict):
+        row = ctx.get("row") or ctx
+
+    if not isinstance(row, dict):
+        return _result(COUNT_STATUS_NOT_COUNTED)
+
+    # Check detailed count fields
+    detailed_fields = [
+        "JUVENILE_PLANTS",
+        "MATURE_PLANTS",
+        "SEEDLING_PLANTS",
+        "JUVENILE_DEAD",
+        "MATURE_DEAD",
+        "SEEDLING_DEAD",
+    ]
+    has_detailed = any(
+        row.get(f) is not None and str(row.get(f)).strip() != ""
+        for f in detailed_fields
+    )
+
+    if has_detailed:
+        return _result(COUNT_STATUS_COUNTED)
+
+    # Check simple count fields
+    simple_fields = ["SIMPLE_LIVE_TOT", "SIMPLE_DEAD_TOT"]
+    has_simple = any(
+        row.get(f) is not None and str(row.get(f)).strip() != "" for f in simple_fields
+    )
+
+    if has_simple:
+        return _result(COUNT_STATUS_SIMPLE_COUNT)
+
+    return _result(COUNT_STATUS_NOT_COUNTED)
+
+
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     "Occurrence__migrated_from_id": [OCCURRENCE_FROM_POP_ID_TRANSFORM],
@@ -503,6 +623,84 @@ PIPELINES = {
     # OccurrenceReportGeometry pipelines (Tasks 11359, 11364, 11366)
     "OccurrenceReportGeometry__geometry": [GEOMETRY_FROM_COORDS],
     "OccurrenceReportGeometry__locked": [GEOMETRY_LOCKED_DEFAULT],
+    # OCRPlantCount pipelines
+    "OCRPlantCount__counted_subject": [
+        "strip",
+        "blank_to_none",
+        COUNTED_SUBJECT_TRANSFORM,
+    ],
+    "OCRPlantCount__plant_condition": [
+        "strip",
+        "blank_to_none",
+        PLANT_CONDITION_TRANSFORM,
+    ],
+    "OCRPlantCount__plant_count_method": [
+        "strip",
+        "blank_to_none",
+        PLANT_COUNT_METHOD_TRANSFORM,
+    ],
+    "OCRPlantCount__clonal_reproduction_present": [
+        "strip",
+        "blank_to_none",
+        "y_to_true_n_to_none",
+    ],
+    "OCRPlantCount__comment": [ocr_plant_count_comment_transform],
+    "OCRPlantCount__count_status": [ocr_plant_count_status_transform],
+    "OCRPlantCount__dehisced_fruit_present": [
+        "strip",
+        "blank_to_none",
+        "y_to_true_n_to_none",
+    ],
+    "OCRPlantCount__detailed_alive_juvenile": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__detailed_alive_mature": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__detailed_alive_seedling": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__detailed_dead_juvenile": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__detailed_dead_mature": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__detailed_dead_seedling": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__estimated_population_area": [
+        "strip",
+        "blank_to_none",
+        "to_decimal",
+    ],
+    "OCRPlantCount__flower_bud_present": [
+        "strip",
+        "blank_to_none",
+        "y_to_true_n_to_none",
+    ],
+    "OCRPlantCount__flower_present": [
+        "strip",
+        "blank_to_none",
+        "y_to_true_n_to_none",
+    ],
+    "OCRPlantCount__flowering_plants_per": [
+        "strip",
+        "blank_to_none",
+        "to_decimal",
+    ],
+    "OCRPlantCount__immature_fruit_present": [
+        "strip",
+        "blank_to_none",
+        "y_to_true_n_to_none",
+    ],
+    "OCRPlantCount__pollinator_observation": ["strip", "blank_to_none"],
+    "OCRPlantCount__quadrats_surveyed": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__ripe_fruit_present": [
+        "strip",
+        "blank_to_none",
+        "y_to_true_n_to_none",
+    ],
+    "OCRPlantCount__simple_alive": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__simple_dead": ["strip", "blank_to_none", "to_int"],
+    "OCRPlantCount__total_quadrat_area": [
+        "strip",
+        "blank_to_none",
+        to_decimal_factory(max_digits=12, decimal_places=2),
+    ],
+    "OCRPlantCount__vegetative_state_present": [
+        "strip",
+        "blank_to_none",
+        "y_to_true_n_to_none",
+    ],
 }
 
 
