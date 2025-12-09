@@ -2659,3 +2659,101 @@ def pop_id_from_sheetno_factory(legacy_system: str = "TPFL"):
 
     registry._fns[name] = inner
     return name
+
+
+def geometry_from_coords_factory(
+    latitude_field: str = "GDA94LAT",
+    longitude_field: str = "GDA94LONG",
+    datum_field: str | None = None,
+    radius_m: float = 1.0,
+):
+    """
+    Factory that returns a registered transform name for creating WGS84 geometries from lat/lon coordinates.
+
+    This transform reads latitude and longitude from the row context and creates a small buffered
+    polygon (default 1m radius) around the point. It handles coordinate transformation from the
+    source datum (GDA94, AGD84, WGS84, GPS, etc.) to WGS84 (EPSG:4326).
+
+    Usage:
+      GEOMETRY_FROM_COORDS = geometry_from_coords_factory("GDA94LAT", "GDA94LONG", "DATUM", radius_m=1.0)
+      PIPELINES["OccurrenceReportGeometry__geometry"] = [GEOMETRY_FROM_COORDS]
+
+    Args:
+        latitude_field: The row column name containing latitude (default: GDA94LAT)
+        longitude_field: The row column name containing longitude (default: GDA94LONG)
+        datum_field: The row column name containing datum/CRS info (optional, default: None)
+        radius_m: Buffer radius in meters (default: 1.0m)
+
+    Returns:
+        A registered transform name that converts point coordinates to WGS84 polygon geometry
+    """
+    from django.contrib.gis.geos import Point
+    from pyproj import Transformer
+
+    # Map legacy datum values to EPSG codes
+    DATUM_TO_EPSG = {
+        "GDA94": "EPSG:4283",  # Geocentric Datum of Australia 1994 (modern standard)
+        "AGD84": "EPSG:4202",  # Australian Geodetic Datum 1984 (older, superseded)
+        "WGS84": "EPSG:4326",  # World Geodetic System 1984
+        "GPS": "EPSG:4326",  # GPS typically uses WGS84
+        "UNKNOWN": "EPSG:4326",  # Default to WGS84 when datum is unknown
+    }
+
+    key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}"
+    name = "geometry_from_coords_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    def inner(value, ctx: TransformContext):
+        if not ctx or not isinstance(ctx.row, dict):
+            return _result(None)
+
+        try:
+            lat_str = ctx.row.get(latitude_field)
+            lng_str = ctx.row.get(longitude_field)
+
+            if not lat_str or not lng_str:
+                return _result(None)
+
+            lat = float(lat_str)
+            lng = float(lng_str)
+
+            # Determine source CRS from datum field or default to WGS84
+            source_epsg = "EPSG:4326"  # default
+            if datum_field:
+                datum_str = ctx.row.get(datum_field, "").strip().upper()
+                source_epsg = DATUM_TO_EPSG.get(datum_str, "EPSG:4326")
+
+            # Transform coordinates to WGS84 if necessary
+            if source_epsg != "EPSG:4326":
+                try:
+                    transformer = Transformer.from_crs(
+                        source_epsg, "EPSG:4326", always_xy=True
+                    )
+                    lng, lat = transformer.transform(lng, lat)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to transform coordinates from %s to EPSG:4326: %s. Using as-is.",
+                        source_epsg,
+                        e,
+                    )
+
+            # Create a point from the coordinates
+            point = Point(lng, lat, srid=4326)
+
+            # Create a small buffer. Convert radius in meters to degrees (approximate):
+            # 1 degree ≈ 111,320 meters at the equator
+            radius_degrees = radius_m / 111320.0
+            buffered = point.buffer(radius_degrees)
+
+            # Ensure SRID is set
+            buffered.srid = 4326
+            return _result(buffered)
+
+        except Exception as e:
+            logger.exception("Error in geometry_from_coords_factory: %s", e)
+            return _result(None)
+
+    registry._fns[name] = inner
+    return name
