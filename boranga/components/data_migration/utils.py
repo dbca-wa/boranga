@@ -49,6 +49,20 @@ def parse_date_iso(v: Any) -> datetime | None:
         return None
 
 
+def to_decimal_maybe(v: Any) -> Any | None:
+    """Return Decimal(v) or None for None/''/invalid."""
+    from decimal import Decimal, InvalidOperation
+
+    if v is None or v == "":
+        return None
+    if isinstance(v, Decimal):
+        return v
+    try:
+        return Decimal(str(v))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
 def safe_strip(v: Any) -> str | None:
     """Trim whitespace and return None for empty strings or None inputs."""
     if v is None:
