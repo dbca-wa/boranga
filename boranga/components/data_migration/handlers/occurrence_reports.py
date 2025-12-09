@@ -30,6 +30,7 @@ from boranga.components.data_migration.registry import (
 from boranga.components.occurrence.models import (
     AssociatedSpeciesTaxonomy,
     OccurrenceReport,
+    OccurrenceReportGeometry,
     OCRAssociatedSpecies,
     OCRHabitatComposition,
     OCRHabitatCondition,
@@ -504,6 +505,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             submitter_information_data = {}
             location_data = {}
             observation_detail_data = {}
+            geometry_data = {}
 
             # Helper to extract .value from TransformResult if needed
             def extract_value(v):
@@ -532,6 +534,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OCRObservationDetail__"):
                     short = k.split("OCRObservationDetail__", 1)[1]
                     observation_detail_data[short] = extract_value(v)
+                if k.startswith("OccurrenceReportGeometry__"):
+                    short = k.split("OccurrenceReportGeometry__", 1)[1]
+                    geometry_data[short] = extract_value(v)
+                    logger.debug(f"Extracted geometry field: {short}={type(v)}")
 
             ops.append(
                 {
@@ -544,6 +550,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "submitter_information_data": submitter_information_data,
                     "location_data": location_data,
                     "observation_detail_data": observation_detail_data,
+                    "geometry_data": geometry_data,
                 }
             )
 
@@ -580,6 +587,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             submitter_information_data = op.get("submitter_information_data") or {}
             location_data = op.get("location_data") or {}
             observation_detail_data = op.get("observation_detail_data") or {}
+            geometry_data = op.get("geometry_data") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
@@ -594,6 +602,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         submitter_information_data,
                         location_data,
                         observation_detail_data,
+                        geometry_data,
                     )
                 )
                 continue
@@ -615,6 +624,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     submitter_information_data,
                     location_data,
                     observation_detail_data,
+                    geometry_data,
                 )
             )
 
@@ -633,7 +643,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Refresh created objects to get PKs
         if create_meta:
             created_keys = [m[0] for m in create_meta]
+            logger.info(f"created_keys for lookup: {created_keys[:5]}")
             for s in OccurrenceReport.objects.filter(migrated_from_id__in=created_keys):
+                logger.info(f"Adding to created_map: {s.migrated_from_id}={s.pk}")
                 created_map[s.migrated_from_id] = s
 
         # Populate occurrence_report_number for newly-created objects (bulk_update)
@@ -1157,7 +1169,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 dup_create_list = created
 
                             # Map markers -> created AST instances by querying comments ending with marker
-                            created_map = {}
+                            ast_created_map = {}
                             for occ_assoc_pk, inst, marker in dup_create_list:
                                 try:
                                     created_inst = _AST.objects.get(
@@ -1166,7 +1178,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 except _AST.DoesNotExist:
                                     created_inst = None
                                 if created_inst:
-                                    created_map.setdefault(occ_assoc_pk, []).append(
+                                    ast_created_map.setdefault(occ_assoc_pk, []).append(
                                         (marker, created_inst)
                                     )
 
@@ -1192,7 +1204,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 occ_fk_id = occ_fk_field + "_id"
                                 tax_fk_id = tax_fk_field + "_id"
                                 through_to_create = []
-                                for occ_assoc_pk, items in created_map.items():
+                                for occ_assoc_pk, items in ast_created_map.items():
                                     for marker, ast_inst in items:
                                         through_to_create.append(
                                             through_occ(
@@ -1228,7 +1240,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                                 # Cleanup: remove markers from comments on created ASTs
                                 try:
-                                    for items in created_map.values():
+                                    for items in ast_created_map.values():
                                         for marker, ast_inst in items:
                                             if (
                                                 ast_inst
@@ -1357,6 +1369,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             submitter_information_data,
             location_data,
             observation_detail_data,
+            geometry_data,
         ) in create_meta:
             ocr = target_map.get(mig)
             if not ocr:
@@ -1769,6 +1782,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     )
 
         # Handle created ones
+        logger.debug(
+            f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}"
+        )
+        logger.info(f"created_map keys: {list(created_map.keys())}")
         for (
             mig,
             habitat_data,
@@ -1776,10 +1793,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
             submitter_information_data,
             location_data,
             observation_detail_data,
+            geometry_data,
         ) in create_meta:
+            logger.info(
+                f"Processing create_meta item: mig={mig}, has_geometry_data={bool(geometry_data)}"
+            )
             ocr = created_map.get(mig)
             if not ocr:
+                logger.info(f"Skipping {mig}: not in created_map")
                 continue
+            logger.info(f"Continuing with mig={mig}, ocr.pk={ocr.pk}")
             hd = habitat_data or {}
             hc = habitat_condition or {}
             # also pull identification_data from create_meta mapping (create_meta entries are tuples of
@@ -1906,6 +1929,93 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 locs_to_create.append(
                     OCRLocation(**normalize_create_kwargs(OCRLocation, create_kwargs))
                 )
+
+            # OccurrenceReportGeometry: OneToOne - create geometry with locked=True and content_type set
+            logger.info(f"About to process geometry for mig={mig}, ocr.pk={ocr.pk}")
+            gd = geometry_data or {}
+            if gd:
+                logger.info(
+                    f"Creating geometry for OCR {ocr.migrated_from_id} (pk={ocr.pk}): gd keys={list(gd.keys())}"
+                )
+            # Only create geometry if we have at least a geometry field
+            if gd.get("geometry"):
+                logger.debug(
+                    f"Creating geometry for OCR {ocr.pk}: {type(gd.get('geometry'))}"
+                )
+                existing_geom = None
+                # Check if geometry already exists for this report
+                try:
+                    existing_geom = OccurrenceReportGeometry.objects.get(
+                        occurrence_report_id=ocr.pk
+                    )
+                except OccurrenceReportGeometry.DoesNotExist:
+                    existing_geom = None
+
+                if existing_geom:
+                    # Update existing geometry
+                    valid_geom_fields = {
+                        f.name for f in OccurrenceReportGeometry._meta.fields
+                    }
+                    for field_name, val in gd.items():
+                        if field_name == "occurrence_report":
+                            continue
+                        if val is not None and field_name in valid_geom_fields:
+                            apply_value_to_instance(existing_geom, field_name, val)
+                    try:
+                        existing_geom.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to update OccurrenceReportGeometry for occurrence_report %s",
+                            ocr.pk,
+                        )
+                else:
+                    # Create new geometry
+                    from django.contrib.contenttypes.models import ContentType
+
+                    ocr_content_type = ContentType.objects.get_for_model(
+                        OccurrenceReport
+                    )
+                    geom_create_kwargs = {
+                        "occurrence_report_id": ocr.pk,
+                        "content_type": ocr_content_type,
+                        "object_id": ocr.pk,
+                    }
+                    # Add geometry fields from gd
+                    valid_geom_fields = {
+                        f.name for f in OccurrenceReportGeometry._meta.fields
+                    }
+                    for field_name, val in gd.items():
+                        if field_name == "occurrence_report":
+                            continue
+                        if val is not None and field_name in valid_geom_fields:
+                            geom_create_kwargs[field_name] = val
+
+                    # Store the original point geometry (before buffering) in EWKB format
+                    # The buffered polygon is in gd['geometry'], but we also want to preserve
+                    # the original point for reference
+                    try:
+                        buffered_geom = gd.get("geometry")
+                        if buffered_geom and hasattr(buffered_geom, "centroid"):
+                            # Extract the centroid of the buffered polygon as the original point
+                            original_point = buffered_geom.centroid
+                            if original_point:
+                                geom_create_kwargs["original_geometry_ewkb"] = (
+                                    original_point.ewkb
+                                )
+                    except Exception:
+                        logger.debug("Could not extract original point geometry")
+
+                    try:
+                        OccurrenceReportGeometry.objects.create(
+                            **normalize_create_kwargs(
+                                OccurrenceReportGeometry, geom_create_kwargs
+                            )
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OccurrenceReportGeometry for occurrence_report %s",
+                            ocr.pk,
+                        )
 
         if habs_to_create:
             try:
