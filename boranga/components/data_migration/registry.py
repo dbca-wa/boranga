@@ -114,6 +114,18 @@ def t_Y_to_active_else_historical(value, ctx):
     return _result("historical")
 
 
+@registry.register("y_to_true_n_to_none")
+def t_y_to_true_n_to_none(value, ctx):
+    if not value:
+        return _result(None)
+    val = str(value).strip().upper()
+    if val == "Y":
+        return _result(True)
+    if val == "N":
+        return _result(None)
+    return _result(None)
+
+
 @registry.register("strip")
 def t_strip(value, ctx):
     if value is None:
