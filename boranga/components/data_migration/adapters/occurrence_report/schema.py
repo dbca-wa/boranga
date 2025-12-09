@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
 from boranga.components.data_migration import utils
 from boranga.components.data_migration.adapters.schema_base import Schema
@@ -77,6 +78,39 @@ COLUMN_MAP = {
     "FENCING_COMMENTS": "FENCING_COMMENTS",
     "ROADSIDE_MARKER_STATUS": "ROADSIDE_MARKER_STATUS",
     "RDSIDE_MKR_COMMENTS": "RDSIDE_MKR_COMMENTS",
+    # OCRPlantCount fields
+    "CNT_PLANT_TYPE_CODE": "OCRPlantCount__counted_subject",
+    "POPULATION_CONDITION": "OCRPlantCount__plant_condition",
+    "COUNT_MTHD_CODE": "OCRPlantCount__plant_count_method",
+    "CLONAL": "OCRPlantCount__clonal_reproduction_present",
+    # comment composition parts
+    "POPULATION_NOTES": "POPULATION_NOTES",
+    "AREA_OCCUPIED_METHOD": "AREA_OCCUPIED_METHOD",
+    "QUAD_SIZE": "QUAD_SIZE",
+    "QUAD_NUM_TOTAL": "QUAD_NUM_TOTAL",
+    "QUAD_NUM_MATURE": "QUAD_NUM_MATURE",
+    "QUAD_NUM_JUVENILE": "QUAD_NUM_JUVENILE",
+    "QUAD_NUM_SEEDLINGS": "QUAD_NUM_SEEDLINGS",
+    # count_status derived from other fields
+    "DEHISCED_FRUIT": "OCRPlantCount__dehisced_fruit_present",
+    "JUVENILE_PLANTS": "OCRPlantCount__detailed_alive_juvenile",
+    "MATURE_PLANTS": "OCRPlantCount__detailed_alive_mature",
+    "SEEDLING_PLANTS": "OCRPlantCount__detailed_alive_seedling",
+    "JUVENILE_DEAD": "OCRPlantCount__detailed_dead_juvenile",
+    "MATURE_DEAD": "OCRPlantCount__detailed_dead_mature",
+    "SEEDLING_DEAD": "OCRPlantCount__detailed_dead_seedling",
+    "AREA_OCCUPIED": "OCRPlantCount__estimated_population_area",
+    "IN_BUDS": "OCRPlantCount__flower_bud_present",
+    "IN_FLOWER": "OCRPlantCount__flower_present",
+    "FLOWER_PERCENTAGE": "OCRPlantCount__flowering_plants_per",
+    "IMMATURE_FRUIT": "OCRPlantCount__immature_fruit_present",
+    "POLLINATOR": "OCRPlantCount__pollinator_observation",
+    "QUAD_NUM": "OCRPlantCount__quadrats_surveyed",
+    "FRUIT": "OCRPlantCount__ripe_fruit_present",
+    "SIMPLE_LIVE_TOT": "OCRPlantCount__simple_alive",
+    "SIMPLE_DEAD_TOT": "OCRPlantCount__simple_dead",
+    "QUAD_TOT_SQ_M": "OCRPlantCount__total_quadrat_area",
+    "VEGETATIVE": "OCRPlantCount__vegetative_state_present",
 }
 
 REQUIRED_COLUMNS = [
@@ -172,6 +206,33 @@ class OccurrenceReportRow:
         None  # Decimal with 4 decimal places
     )
     OCRObservationDetail__survey_duration: int | None = None  # Integer hours
+
+    # OCRPlantCount fields
+    OCRPlantCount__counted_subject: int | None = None  # FK id (CountedSubject)
+    OCRPlantCount__plant_condition: int | None = None  # FK id (PlantCondition)
+    OCRPlantCount__plant_count_method: int | None = None  # FK id (PlantCountMethod)
+    OCRPlantCount__clonal_reproduction_present: bool | None = None
+    OCRPlantCount__comment: str | None = None
+    OCRPlantCount__count_status: str | None = None
+    OCRPlantCount__dehisced_fruit_present: bool | None = None
+    OCRPlantCount__detailed_alive_juvenile: int | None = None
+    OCRPlantCount__detailed_alive_mature: int | None = None
+    OCRPlantCount__detailed_alive_seedling: int | None = None
+    OCRPlantCount__detailed_dead_juvenile: int | None = None
+    OCRPlantCount__detailed_dead_mature: int | None = None
+    OCRPlantCount__detailed_dead_seedling: int | None = None
+    OCRPlantCount__estimated_population_area: Decimal | None = None
+    OCRPlantCount__flower_bud_present: bool | None = None
+    OCRPlantCount__flower_present: bool | None = None
+    OCRPlantCount__flowering_plants_per: Decimal | None = None
+    OCRPlantCount__immature_fruit_present: bool | None = None
+    OCRPlantCount__pollinator_observation: str | None = None
+    OCRPlantCount__quadrats_surveyed: int | None = None
+    OCRPlantCount__ripe_fruit_present: bool | None = None
+    OCRPlantCount__simple_alive: int | None = None
+    OCRPlantCount__simple_dead: int | None = None
+    OCRPlantCount__total_quadrat_area: Decimal | None = None
+    OCRPlantCount__vegetative_state_present: bool | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
@@ -278,6 +339,77 @@ class OccurrenceReportRow:
             ),
             OCRObservationDetail__survey_duration=utils.to_int_maybe(
                 d.get("OCRObservationDetail__survey_duration")
+            ),
+            OCRPlantCount__counted_subject=utils.to_int_maybe(
+                d.get("OCRPlantCount__counted_subject")
+            ),
+            OCRPlantCount__plant_condition=utils.to_int_maybe(
+                d.get("OCRPlantCount__plant_condition")
+            ),
+            OCRPlantCount__plant_count_method=utils.to_int_maybe(
+                d.get("OCRPlantCount__plant_count_method")
+            ),
+            OCRPlantCount__clonal_reproduction_present=d.get(
+                "OCRPlantCount__clonal_reproduction_present"
+            ),
+            OCRPlantCount__comment=utils.safe_strip(d.get("OCRPlantCount__comment")),
+            OCRPlantCount__count_status=utils.safe_strip(
+                d.get("OCRPlantCount__count_status")
+            ),
+            OCRPlantCount__dehisced_fruit_present=d.get(
+                "OCRPlantCount__dehisced_fruit_present"
+            ),
+            OCRPlantCount__detailed_alive_juvenile=utils.to_int_maybe(
+                d.get("OCRPlantCount__detailed_alive_juvenile")
+            ),
+            OCRPlantCount__detailed_alive_mature=utils.to_int_maybe(
+                d.get("OCRPlantCount__detailed_alive_mature")
+            ),
+            OCRPlantCount__detailed_alive_seedling=utils.to_int_maybe(
+                d.get("OCRPlantCount__detailed_alive_seedling")
+            ),
+            OCRPlantCount__detailed_dead_juvenile=utils.to_int_maybe(
+                d.get("OCRPlantCount__detailed_dead_juvenile")
+            ),
+            OCRPlantCount__detailed_dead_mature=utils.to_int_maybe(
+                d.get("OCRPlantCount__detailed_dead_mature")
+            ),
+            OCRPlantCount__detailed_dead_seedling=utils.to_int_maybe(
+                d.get("OCRPlantCount__detailed_dead_seedling")
+            ),
+            OCRPlantCount__estimated_population_area=utils.to_decimal_maybe(
+                d.get("OCRPlantCount__estimated_population_area")
+            ),
+            OCRPlantCount__flower_bud_present=d.get(
+                "OCRPlantCount__flower_bud_present"
+            ),
+            OCRPlantCount__flower_present=d.get("OCRPlantCount__flower_present"),
+            OCRPlantCount__flowering_plants_per=utils.to_decimal_maybe(
+                d.get("OCRPlantCount__flowering_plants_per")
+            ),
+            OCRPlantCount__immature_fruit_present=d.get(
+                "OCRPlantCount__immature_fruit_present"
+            ),
+            OCRPlantCount__pollinator_observation=utils.safe_strip(
+                d.get("OCRPlantCount__pollinator_observation")
+            ),
+            OCRPlantCount__quadrats_surveyed=utils.to_int_maybe(
+                d.get("OCRPlantCount__quadrats_surveyed")
+            ),
+            OCRPlantCount__ripe_fruit_present=d.get(
+                "OCRPlantCount__ripe_fruit_present"
+            ),
+            OCRPlantCount__simple_alive=utils.to_int_maybe(
+                d.get("OCRPlantCount__simple_alive")
+            ),
+            OCRPlantCount__simple_dead=utils.to_int_maybe(
+                d.get("OCRPlantCount__simple_dead")
+            ),
+            OCRPlantCount__total_quadrat_area=utils.to_decimal_maybe(
+                d.get("OCRPlantCount__total_quadrat_area")
+            ),
+            OCRPlantCount__vegetative_state_present=d.get(
+                "OCRPlantCount__vegetative_state_present"
             ),
         )
 
