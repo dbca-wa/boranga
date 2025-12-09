@@ -9,6 +9,7 @@ from boranga.components.data_migration.registry import (
     emailuser_object_by_legacy_username_factory,
     fk_lookup,
     fk_lookup_static,
+    geometry_from_coords_factory,
     occurrence_from_pop_id_factory,
     occurrence_number_from_pop_id_factory,
     pop_id_from_sheetno_factory,
@@ -38,6 +39,17 @@ OCCURRENCE_NUMBER_FROM_POP_ID = occurrence_number_from_pop_id_factory("TPFL")
 
 # Create factory transform that maps SHEETNO to POP_ID directly
 POP_ID_FROM_SHEETNO = pop_id_from_sheetno_factory("TPFL")
+
+# Create factory transform for geometry from coordinates
+GEOMETRY_FROM_COORDS = geometry_from_coords_factory(
+    latitude_field="GDA94LAT",
+    longitude_field="GDA94LONG",
+    datum_field="DATUM",
+    radius_m=1.0,
+)
+
+# Create static value transform for locked=True
+GEOMETRY_LOCKED_DEFAULT = static_value_factory(True)
 
 SPECIES_TRANSFORM = taxonomy_lookup_legacy_mapping_species("TPFL")
 
@@ -488,6 +500,9 @@ PIPELINES = {
         "blank_to_none",
         "to_int",
     ],
+    # OccurrenceReportGeometry pipelines (Tasks 11359, 11364, 11366)
+    "OccurrenceReportGeometry__geometry": [GEOMETRY_FROM_COORDS],
+    "OccurrenceReportGeometry__locked": [GEOMETRY_LOCKED_DEFAULT],
 }
 
 
@@ -701,6 +716,16 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             if canonical.get("SVY_EFFORT_TIME"):
                 canonical["OCRObservationDetail__survey_duration"] = canonical.get(
                     "SVY_EFFORT_TIME"
+                )
+
+            # OccurrenceReportGeometry: trigger geometry creation with lat/long
+            # Store lat/long as separate keys; the pipeline will convert them to geometry
+            if canonical.get("GDA94LAT") or canonical.get("GDA94LONG"):
+                canonical["OccurrenceReportGeometry__geometry"] = (
+                    None  # Will be populated by pipeline
+                )
+                canonical["OccurrenceReportGeometry__locked"] = (
+                    True  # Default locked=True
                 )
 
             # If an explicit occurrence id is present in the source we do not assign
