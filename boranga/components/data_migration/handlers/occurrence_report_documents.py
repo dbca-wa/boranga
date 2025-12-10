@@ -239,7 +239,7 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
                 ts = timezone.now().strftime("%Y%m%d_%H%M%S")
                 csv_path = os.path.join(
                     os.getcwd(),
-                    "boranga/components/data_migration/handlers/handler_output",
+                    "private-media/handler_output",
                     f"{self.slug}_errors_{ts}.csv",
                 )
             try:

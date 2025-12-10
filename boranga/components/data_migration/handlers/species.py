@@ -1231,7 +1231,7 @@ class SpeciesImporter(BaseSheetImporter):
         # write detailed errors to CSV (if any) but only log a concise count summary
         if errors_details:
             # allow override via options, otherwise write to
-            # <cwd>/boranga/components/data_migration/handlers/handler_output with timestamp
+            # <cwd>/private-media/handler_output with timestamp
             csv_path = options.get("error_csv")
             if csv_path:
                 csv_path = os.path.abspath(csv_path)
@@ -1239,7 +1239,7 @@ class SpeciesImporter(BaseSheetImporter):
                 ts = timezone.now().strftime("%Y%m%d_%H%M%S")
                 csv_path = os.path.join(
                     os.getcwd(),
-                    "boranga/components/data_migration/handlers/handler_output",
+                    "private-media/handler_output",
                     f"{self.slug}_errors_{ts}.csv",
                 )
 

@@ -913,9 +913,12 @@ def _load_tpfl_name_to_nomos() -> dict:
 
     mapping = {}
     try:
-        base_dir = os.path.dirname(__file__)
+        from django.conf import settings
+
+        base_dir = getattr(settings, "BASE_DIR", os.getcwd())
         csv_path = os.path.join(
             base_dir,
+            "private-media",
             "legacy_data",
             "TPFL",
             "TPFL_CS_LISTING_NAME_TO_NOMOS_CANONICAL_NAME.csv",
@@ -1016,6 +1019,21 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
             Species = None
 
         qs = LegacyTaxonomyMapping.objects.filter(list_name=list_name)
+
+        # Pre-fetch species mapping: taxonomy_id -> species_id
+        taxonomy_ids = set(qs.values_list("taxonomy_id", flat=True))
+        taxonomy_ids.discard(None)
+
+        tax_to_species = {}
+        if Species and taxonomy_ids:
+            # Fetch all species linked to these taxonomy_ids
+            # Note: Assuming one species per taxonomy_id, or taking one arbitrarily if multiple
+            sp_qs = Species.objects.filter(taxonomy_id__in=taxonomy_ids).values(
+                "taxonomy_id", "id"
+            )
+            for sp in sp_qs:
+                tax_to_species[sp["taxonomy_id"]] = sp["id"]
+
         for rec in qs.only("legacy_canonical_name", "taxonomy_id", "taxon_name_id"):
             key = _norm_legacy_canonical_name(rec.legacy_canonical_name)
             if not key:
@@ -1023,18 +1041,9 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
             entry = {"taxonomy_id": rec.taxonomy_id, "taxon_name_id": rec.taxon_name_id}
             # If possible, resolve a linked Species id so lookups can be answered
             # from memory without further DB queries during import pipelines.
-            try:
-                if Species and rec.taxonomy_id:
-                    sp_id = (
-                        Species.objects.filter(taxonomy_id=rec.taxonomy_id)
-                        .values_list("id", flat=True)
-                        .first()
-                    )
-                    if sp_id:
-                        entry["species_id"] = sp_id
-            except Exception:
-                # be conservative: ignore errors resolving species and continue
-                pass
+            if rec.taxonomy_id in tax_to_species:
+                entry["species_id"] = tax_to_species[rec.taxonomy_id]
+
             # store both the canonical key and a casefold variant for case-insensitive lookups
             mapping.setdefault(key, entry)
             kcf = key.casefold()

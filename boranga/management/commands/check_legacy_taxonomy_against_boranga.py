@@ -57,7 +57,7 @@ class Command(BaseCommand):
             "--out",
             dest="out",
             default=None,
-            help="Optional output CSV path (defaults to handler_output with timestamp)",
+            help="Optional output CSV path (defaults to private-media/handler_output with timestamp)",
         )
         parser.add_argument(
             "--limit",
@@ -127,12 +127,8 @@ class Command(BaseCommand):
         # prepare output path
         if not out_path:
             base_dir = os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "..",
-                "components",
-                "data_migration",
-                "handlers",
+                settings.BASE_DIR,
+                "private-media",
                 "handler_output",
             )
             os.makedirs(base_dir, exist_ok=True)
