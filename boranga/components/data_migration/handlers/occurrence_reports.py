@@ -29,11 +29,13 @@ from boranga.components.data_migration.registry import (
 )
 from boranga.components.occurrence.models import (
     AssociatedSpeciesTaxonomy,
+    Intensity,
     Occurrence,
     OccurrenceGeometry,
     OccurrenceReport,
     OccurrenceReportGeometry,
     OCRAssociatedSpecies,
+    OCRFireHistory,
     OCRHabitatComposition,
     OCRHabitatCondition,
     OCRIdentification,
@@ -512,6 +514,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             geometry_data = {}
             plant_count_data = {}
             vegetation_structure_data = {}
+            fire_history_data = {}
 
             # Helper to extract .value from TransformResult if needed
             def extract_value(v):
@@ -550,6 +553,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OCRVegetationStructure__"):
                     short = k.split("OCRVegetationStructure__", 1)[1]
                     vegetation_structure_data[short] = extract_value(v)
+                if k.startswith("OCRFireHistory__"):
+                    short = k.split("OCRFireHistory__", 1)[1]
+                    fire_history_data[short] = extract_value(v)
 
             ops.append(
                 {
@@ -565,6 +571,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "geometry_data": geometry_data,
                     "plant_count_data": plant_count_data,
                     "vegetation_structure_data": vegetation_structure_data,
+                    "fire_history_data": fire_history_data,
                 }
             )
 
@@ -606,6 +613,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             geometry_data = op.get("geometry_data") or {}
             plant_count_data = op.get("plant_count_data") or {}
             vegetation_structure_data = op.get("vegetation_structure_data") or {}
+            fire_history_data = op.get("fire_history_data") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
@@ -623,6 +631,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         geometry_data,
                         plant_count_data,
                         vegetation_structure_data,
+                        fire_history_data,
                     )
                 )
                 continue
@@ -647,6 +656,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     geometry_data,
                     plant_count_data,
                     vegetation_structure_data,
+                    fire_history_data,
                 )
             )
 
@@ -1435,6 +1445,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             geometry_data,
             plant_count_data,
             vegetation_structure_data,
+            fire_history_data,
         ) in create_meta:
             ocr = target_map.get(mig)
             if not ocr:
@@ -1699,6 +1710,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 occurrence_report__in=target_occs
             )
         }
+        existing_fire_histories = {
+            fh.occurrence_report_id: fh
+            for fh in OCRFireHistory.objects.filter(occurrence_report__in=target_occs)
+        }
+        intensity_map = {i.name: i for i in Intensity.objects.all()}
+        intensity_id_map = {i.id: i for i in Intensity.objects.all()}
         habs_to_create = []
         habs_to_update = []
         conds_to_create = []
@@ -1713,6 +1730,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
         plant_counts_to_update = []
         vegetation_structures_to_create = []
         vegetation_structures_to_update = []
+        fire_history_to_create = []
+        fire_history_to_update = []
 
         # Fetch ContentType once before processing geometries
         from django.contrib.contenttypes.models import ContentType
@@ -1755,6 +1774,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 geometry_data,
                 plant_count_data,
                 vegetation_structure_data,
+                fire_history_data,
             ) = up
             hid = inst.pk
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
@@ -1946,6 +1966,47 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                     )
 
+            # OCRFireHistory handling for updates
+            fhd = fire_history_data or {}
+
+            # Transform fields
+            comment = fhd.get("comment")
+            intensity_name = fhd.get("intensity")
+
+            intensity_obj = None
+            if intensity_name:
+                intensity_obj = intensity_map.get(intensity_name)
+
+            fh_fields = {}
+            if comment:
+                fh_fields["comment"] = comment
+            if intensity_obj:
+                fh_fields["intensity"] = intensity_obj
+
+            if hid in existing_fire_histories:
+                fh_obj = existing_fire_histories[hid]
+                valid_fh_fields = {f.name for f in OCRFireHistory._meta.fields}
+                for field_name, val in fh_fields.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fh_fields:
+                        apply_value_to_instance(fh_obj, field_name, val)
+                fire_history_to_update.append(fh_obj)
+            else:
+                fh_create = {"occurrence_report": inst}
+                valid_fh_fields = {f.name for f in OCRFireHistory._meta.fields}
+                for field_name, val in fh_fields.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fh_fields:
+                        fh_create[field_name] = val
+                if len(fh_fields) > 0:
+                    fire_history_to_create.append(
+                        OCRFireHistory(
+                            **normalize_create_kwargs(OCRFireHistory, fh_create)
+                        )
+                    )
+
             # OccurrenceReportGeometry handling for updates
             gd = geometry_data or {}
             if gd.get("geometry"):
@@ -2102,6 +2163,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             geometry_data,
             plant_count_data,
             vegetation_structure_data,
+            fire_history_data,
         ) in create_meta:
             logger.info(
                 f"Processing create_meta item: mig={mig}, has_geometry_data={bool(geometry_data)}"
@@ -2266,6 +2328,50 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         **normalize_create_kwargs(OCRVegetationStructure, vs_create)
                     )
                 )
+
+            # OCRFireHistory handling for newly created ocr
+            fhd = fire_history_data or {}
+
+            # Transform fields
+            comment = fhd.get("comment")
+            intensity_val = fhd.get("intensity")
+
+            intensity_obj = None
+            if intensity_val:
+                if isinstance(intensity_val, int):
+                    intensity_obj = intensity_id_map.get(intensity_val)
+                else:
+                    intensity_obj = intensity_map.get(intensity_val)
+
+            fh_fields = {}
+            if comment:
+                fh_fields["comment"] = comment
+            if intensity_obj:
+                fh_fields["intensity"] = intensity_obj
+
+            if ocr.pk in existing_fire_histories:
+                fh_obj = existing_fire_histories[ocr.pk]
+                valid_fh_fields = {f.name for f in OCRFireHistory._meta.fields}
+                for field_name, val in fh_fields.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fh_fields:
+                        apply_value_to_instance(fh_obj, field_name, val)
+                fire_history_to_update.append(fh_obj)
+            else:
+                fh_create = {"occurrence_report": ocr}
+                valid_fh_fields = {f.name for f in OCRFireHistory._meta.fields}
+                for field_name, val in fh_fields.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fh_fields:
+                        fh_create[field_name] = val
+                if len(fh_fields) > 0:
+                    fire_history_to_create.append(
+                        OCRFireHistory(
+                            **normalize_create_kwargs(OCRFireHistory, fh_create)
+                        )
+                    )
 
             # OCRLocation create/update for newly created ocr
             if ocr.pk in existing_locations:
@@ -2793,6 +2899,61 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         logger.exception(
                             "Failed to save OCRVegetationStructure %s",
                             getattr(vs, "pk", None),
+                        )
+
+        # OCRFireHistory: OneToOne - create or update fire history records
+        if fire_history_to_create:
+            try:
+                OCRFireHistory.objects.bulk_create(
+                    fire_history_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRFireHistory; falling back to individual creates"
+                )
+                for fh in fire_history_to_create:
+                    try:
+                        fh.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRFireHistory for occurrence_report %s",
+                            getattr(fh.occurrence_report, "pk", None),
+                        )
+
+        if fire_history_to_update:
+            try:
+                fh_fields = set()
+                for inst in fire_history_to_update:
+                    fh_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                fh_fields = {
+                    f
+                    for f in fh_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if fh_fields:
+                    OCRFireHistory.objects.bulk_update(
+                        fire_history_to_update,
+                        list(fh_fields),
+                        batch_size=BATCH,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRFireHistory; falling back to individual saves"
+                )
+                for fh in fire_history_to_update:
+                    try:
+                        fh.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRFireHistory %s",
+                            getattr(fh, "pk", None),
                         )
 
         # Update stats counts for created/updated based on performed ops
