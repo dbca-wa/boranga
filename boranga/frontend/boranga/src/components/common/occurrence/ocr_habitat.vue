@@ -1312,7 +1312,8 @@ export default {
             if (
                 isNaN(
                     new Date(
-                        this.occurrence_report_obj.fire_history.last_fire_estimate
+                        this.occurrence_report_obj.fire_history
+                            .last_fire_estimate
                     )
                 )
             ) {
