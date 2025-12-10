@@ -29,6 +29,8 @@ from boranga.components.data_migration.registry import (
 )
 from boranga.components.occurrence.models import (
     AssociatedSpeciesTaxonomy,
+    Occurrence,
+    OccurrenceGeometry,
     OccurrenceReport,
     OccurrenceReportGeometry,
     OCRAssociatedSpecies,
@@ -582,7 +584,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         migrated_keys = [o["migrated_from_id"] for o in ops]
         existing_by_migrated = {
             s.migrated_from_id: s
-            for s in OccurrenceReport.objects.filter(migrated_from_id__in=migrated_keys)
+            for s in OccurrenceReport.objects.filter(
+                migrated_from_id__in=migrated_keys
+            ).select_related("occurrence")
         }
 
         # Prepare lists for bulk ops
@@ -662,7 +666,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         if create_meta:
             created_keys = [m[0] for m in create_meta]
             logger.info(f"created_keys for lookup: {created_keys[:5]}")
-            for s in OccurrenceReport.objects.filter(migrated_from_id__in=created_keys):
+            for s in OccurrenceReport.objects.filter(
+                migrated_from_id__in=created_keys
+            ).select_related("occurrence"):
                 logger.info(f"Adding to created_map: {s.migrated_from_id}={s.pk}")
                 created_map[s.migrated_from_id] = s
 
@@ -1707,6 +1713,37 @@ class OccurrenceReportImporter(BaseSheetImporter):
         plant_counts_to_update = []
         vegetation_structures_to_create = []
         vegetation_structures_to_update = []
+
+        # Fetch ContentType once before processing geometries
+        from django.contrib.contenttypes.models import ContentType
+
+        ocr_content_type = ContentType.objects.get_for_model(OccurrenceReport)
+        occ_content_type = ContentType.objects.get_for_model(Occurrence)
+
+        # Pre-fetch existing geometries for bulk lookup
+        # For updates:
+        update_ocr_ids = [t[0].pk for t in to_update]
+        update_occ_ids = [t[0].occurrence_id for t in to_update if t[0].occurrence_id]
+        # For creates:
+        create_ocr_ids = [s.pk for s in created_map.values()]
+        create_occ_ids = [
+            s.occurrence_id for s in created_map.values() if s.occurrence_id
+        ]
+
+        all_ocr_ids = update_ocr_ids + create_ocr_ids
+        all_occ_ids = update_occ_ids + create_occ_ids
+
+        existing_ocr_geoms = {
+            g.occurrence_report_id: g
+            for g in OccurrenceReportGeometry.objects.filter(
+                occurrence_report_id__in=all_ocr_ids
+            )
+        }
+        existing_occ_geoms = {
+            g.occurrence_id: g
+            for g in OccurrenceGeometry.objects.filter(occurrence_id__in=all_occ_ids)
+        }
+
         for up in to_update:
             (
                 inst,
@@ -1909,16 +1946,151 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                     )
 
+            # OccurrenceReportGeometry handling for updates
+            gd = geometry_data or {}
+            if gd.get("geometry"):
+                existing_geom = existing_ocr_geoms.get(inst.pk)
+
+                if existing_geom:
+                    # Update existing geometry
+                    valid_geom_fields = {
+                        f.name for f in OccurrenceReportGeometry._meta.fields
+                    }
+                    for field_name, val in gd.items():
+                        if field_name == "occurrence_report":
+                            continue
+                        if val is not None and field_name in valid_geom_fields:
+                            apply_value_to_instance(existing_geom, field_name, val)
+                    try:
+                        existing_geom.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to update OccurrenceReportGeometry for occurrence_report %s",
+                            inst.pk,
+                        )
+                else:
+                    # Create new geometry
+                    geom_create_kwargs = {
+                        "occurrence_report_id": inst.pk,
+                        "content_type": ocr_content_type,
+                        "object_id": inst.pk,
+                    }
+                    valid_geom_fields = {
+                        f.name for f in OccurrenceReportGeometry._meta.fields
+                    }
+                    for field_name, val in gd.items():
+                        if field_name == "occurrence_report":
+                            continue
+                        if val is not None and field_name in valid_geom_fields:
+                            geom_create_kwargs[field_name] = val
+
+                    try:
+                        buffered_geom = gd.get("geometry")
+                        if buffered_geom and hasattr(buffered_geom, "centroid"):
+                            original_point = buffered_geom.centroid
+                            if original_point:
+                                geom_create_kwargs["original_geometry_ewkb"] = (
+                                    original_point.ewkb
+                                )
+                    except Exception:
+                        logger.debug("Could not extract original point geometry")
+
+                    try:
+                        new_geom = OccurrenceReportGeometry.objects.create(
+                            **normalize_create_kwargs(
+                                OccurrenceReportGeometry, geom_create_kwargs
+                            )
+                        )
+                        existing_ocr_geoms[inst.pk] = new_geom
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OccurrenceReportGeometry for occurrence_report %s",
+                            inst.pk,
+                        )
+
+                # If there is a related Occurrence, copy the geometry to it
+                if inst.occurrence_id:
+                    try:
+                        occ = inst.occurrence
+                        if occ.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE:
+                            existing_occ_geom = existing_occ_geoms.get(occ.pk)
+
+                            if existing_occ_geom:
+                                valid_geom_fields = {
+                                    f.name for f in OccurrenceGeometry._meta.fields
+                                }
+                                for field_name, val in gd.items():
+                                    if field_name == "occurrence_report":
+                                        continue
+                                    if (
+                                        val is not None
+                                        and field_name in valid_geom_fields
+                                    ):
+                                        apply_value_to_instance(
+                                            existing_occ_geom, field_name, val
+                                        )
+                                try:
+                                    existing_occ_geom.save()
+                                except Exception:
+                                    logger.exception(
+                                        "Failed to update OccurrenceGeometry for occurrence %s",
+                                        occ.pk,
+                                    )
+                            else:
+                                geom_create_kwargs = {
+                                    "occurrence_id": occ.pk,
+                                    "content_type": occ_content_type,
+                                    "object_id": occ.pk,
+                                }
+                                valid_geom_fields = {
+                                    f.name for f in OccurrenceGeometry._meta.fields
+                                }
+                                for field_name, val in gd.items():
+                                    if field_name == "occurrence_report":
+                                        continue
+                                    if (
+                                        val is not None
+                                        and field_name in valid_geom_fields
+                                    ):
+                                        geom_create_kwargs[field_name] = val
+
+                                try:
+                                    buffered_geom = gd.get("geometry")
+                                    if buffered_geom and hasattr(
+                                        buffered_geom, "centroid"
+                                    ):
+                                        original_point = buffered_geom.centroid
+                                        if original_point:
+                                            geom_create_kwargs[
+                                                "original_geometry_ewkb"
+                                            ] = original_point.ewkb
+                                except Exception:
+                                    logger.debug(
+                                        "Could not extract original point geometry for Occurrence"
+                                    )
+
+                                try:
+                                    new_occ_geom = OccurrenceGeometry.objects.create(
+                                        **normalize_create_kwargs(
+                                            OccurrenceGeometry, geom_create_kwargs
+                                        )
+                                    )
+                                    existing_occ_geoms[occ.pk] = new_occ_geom
+                                except Exception:
+                                    logger.exception(
+                                        "Failed to create OccurrenceGeometry for occurrence %s",
+                                        occ.pk,
+                                    )
+                    except Exception:
+                        logger.exception(
+                            "Failed to process OccurrenceGeometry for linked Occurrence"
+                        )
+
         # Handle created ones
         logger.debug(
             f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}"
         )
         logger.info(f"created_map keys: {list(created_map.keys())}")
-
-        # Fetch ContentType once before processing geometries
-        from django.contrib.contenttypes.models import ContentType
-
-        ocr_content_type = ContentType.objects.get_for_model(OccurrenceReport)
 
         for (
             mig,
@@ -2129,14 +2301,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 logger.debug(
                     f"Creating geometry for OCR {ocr.pk}: {type(gd.get('geometry'))}"
                 )
-                existing_geom = None
-                # Check if geometry already exists for this report
-                try:
-                    existing_geom = OccurrenceReportGeometry.objects.get(
-                        occurrence_report_id=ocr.pk
-                    )
-                except OccurrenceReportGeometry.DoesNotExist:
-                    existing_geom = None
+                existing_geom = existing_ocr_geoms.get(ocr.pk)
 
                 if existing_geom:
                     # Update existing geometry
@@ -2188,16 +2353,92 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         logger.debug("Could not extract original point geometry")
 
                     try:
-                        OccurrenceReportGeometry.objects.create(
+                        new_geom = OccurrenceReportGeometry.objects.create(
                             **normalize_create_kwargs(
                                 OccurrenceReportGeometry, geom_create_kwargs
                             )
                         )
+                        existing_ocr_geoms[ocr.pk] = new_geom
                     except Exception:
                         logger.exception(
                             "Failed to create OccurrenceReportGeometry for occurrence_report %s",
                             ocr.pk,
                         )
+
+            # If there is a related Occurrence, copy the geometry to it
+            if ocr.occurrence_id and gd.get("geometry"):
+                try:
+                    occ = ocr.occurrence
+                    if occ.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE:
+                        # Check if OccurrenceGeometry already exists
+                        existing_occ_geom = existing_occ_geoms.get(occ.pk)
+
+                        if existing_occ_geom:
+                            # Update existing geometry
+                            valid_geom_fields = {
+                                f.name for f in OccurrenceGeometry._meta.fields
+                            }
+                            for field_name, val in gd.items():
+                                if field_name == "occurrence_report":
+                                    continue
+                                if val is not None and field_name in valid_geom_fields:
+                                    apply_value_to_instance(
+                                        existing_occ_geom, field_name, val
+                                    )
+                            try:
+                                existing_occ_geom.save()
+                            except Exception:
+                                logger.exception(
+                                    "Failed to update OccurrenceGeometry for occurrence %s",
+                                    occ.pk,
+                                )
+                        else:
+                            # Create new geometry
+                            geom_create_kwargs = {
+                                "occurrence_id": occ.pk,
+                                "content_type": occ_content_type,
+                                "object_id": occ.pk,
+                            }
+                            # Add geometry fields from gd
+                            valid_geom_fields = {
+                                f.name for f in OccurrenceGeometry._meta.fields
+                            }
+                            for field_name, val in gd.items():
+                                if field_name == "occurrence_report":
+                                    continue
+                                if val is not None and field_name in valid_geom_fields:
+                                    geom_create_kwargs[field_name] = val
+
+                            # Store the original point geometry (before buffering) in EWKB format
+                            try:
+                                buffered_geom = gd.get("geometry")
+                                if buffered_geom and hasattr(buffered_geom, "centroid"):
+                                    original_point = buffered_geom.centroid
+                                    if original_point:
+                                        geom_create_kwargs["original_geometry_ewkb"] = (
+                                            original_point.ewkb
+                                        )
+                            except Exception:
+                                logger.debug(
+                                    "Could not extract original point geometry for Occurrence"
+                                )
+
+                            try:
+                                new_occ_geom = OccurrenceGeometry.objects.create(
+                                    **normalize_create_kwargs(
+                                        OccurrenceGeometry, geom_create_kwargs
+                                    )
+                                )
+                                existing_occ_geoms[occ.pk] = new_occ_geom
+                            except Exception:
+                                logger.exception(
+                                    "Failed to create OccurrenceGeometry for occurrence %s",
+                                    occ.pk,
+                                )
+                except Exception:
+                    logger.exception(
+                        "Failed to process OccurrenceGeometry for linked Occurrence"
+                    )
 
         if habs_to_create:
             try:
