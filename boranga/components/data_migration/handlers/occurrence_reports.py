@@ -950,16 +950,26 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # Create OCRAssociatedSpecies for occurrence reports that need them
             assoc_to_create = []
-            for sheetno, names in sheet_to_species.items():
-                ocr = target_map.get(sheetno)
-                if not ocr:
+            # Iterate over all target occurrence reports, not just those in sheet_to_species
+            for sheetno, ocr in target_map.items():
+                if ocr.pk in existing_assoc:
                     continue
-                if ocr.pk not in existing_assoc:
-                    # create only if there are resolved species
-                    resolved = [name_to_assoc[n] for n in names if n in name_to_assoc]
-                    if not resolved:
-                        continue
+
+                # Check if we have species
+                names = sheet_to_species.get(sheetno, [])
+                resolved = [name_to_assoc[n] for n in names if n in name_to_assoc]
+
+                # Check if we have comment
+                op = op_map.get(sheetno)
+                comment = None
+                if op:
+                    merged = op.get("merged") or {}
+                    comment = merged.get("OCRAssociatedSpecies__comment")
+
+                if resolved or comment:
                     assoc = OCRAssociatedSpecies(occurrence_report=ocr)
+                    if comment:
+                        assoc.comment = comment
                     assoc_to_create.append(assoc)
 
             if assoc_to_create:
@@ -987,6 +997,31 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     occurrence_report__in=target_occs
                 )
             }
+
+            # Update existing OCRAssociatedSpecies with comments
+            assoc_to_update = []
+            for sheetno, ocr in target_map.items():
+                if ocr.pk not in existing_assoc:
+                    continue
+
+                assoc = existing_assoc[ocr.pk]
+                op = op_map.get(sheetno)
+                if op:
+                    merged = op.get("merged") or {}
+                    comment = merged.get("OCRAssociatedSpecies__comment")
+                    if comment and assoc.comment != comment:
+                        assoc.comment = comment
+                        assoc_to_update.append(assoc)
+
+            if assoc_to_update:
+                try:
+                    OCRAssociatedSpecies.objects.bulk_update(
+                        assoc_to_update, ["comment"], batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_update OCRAssociatedSpecies comments"
+                    )
 
             # Prepare through model info for bulk operations
             through = OCRAssociatedSpecies.related_species.through
