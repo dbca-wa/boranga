@@ -502,6 +502,35 @@ def ocr_plant_count_status_transform(value, ctx):
     return _result(COUNT_STATUS_NOT_COUNTED)
 
 
+def ocr_fire_history_comment_transform(value, ctx):
+    """Concatenate FIRE_SEASON and FIRE_YEAR for OCRFireHistory comment."""
+    row = getattr(ctx, "row", None) if ctx is not None else None
+    if row is None and isinstance(ctx, dict):
+        row = ctx.get("row") or ctx
+
+    if not isinstance(row, dict):
+        return _result("")
+
+    parts = []
+    # value is FIRE_SEASON (mapped to OCRFireHistory__comment)
+    if value and str(value).strip():
+        parts.append(str(value).strip())
+
+    # FIRE_YEAR is mapped to itself in schema, so it should be in row
+    year = row.get("FIRE_YEAR")
+    if year and str(year).strip():
+        parts.append(str(year).strip())
+
+    return _result(" ".join(parts))
+
+
+FIRE_INTENSITY_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "FIRE_INTENSITY (DRF_LOV_LW_MD_HI_VWS)",
+    required=False,
+)
+
+
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     "Occurrence__migrated_from_id": [OCCURRENCE_FROM_POP_ID_TRANSFORM],
@@ -702,6 +731,9 @@ PIPELINES = {
         "y_to_true_n_to_none",
     ],
     "OCRPlantCount__obs_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
+    # OCRFireHistory pipelines
+    "OCRFireHistory__comment": [ocr_fire_history_comment_transform],
+    "OCRFireHistory__intensity": [FIRE_INTENSITY_TRANSFORM],
 }
 
 
