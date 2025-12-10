@@ -189,6 +189,10 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
         if to_create:
             # Unzip instances for bulk operation
             instances = [x[0] for x in to_create]
+            # Capture original uploaded_date values because bulk_create mutates instances
+            # and might overwrite them with DB defaults (auto_now_add)
+            original_dates = [inst.uploaded_date for inst in instances]
+
             try:
                 from django.db import transaction
 
@@ -200,9 +204,11 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
                     created = len(created_objs)
 
                     # Post-process to set document_number and ensure uploaded_date is preserved
-                    # (since auto_now_add=True ignores the value on create)
-                    for obj in created_objs:
+                    for i, obj in enumerate(created_objs):
                         obj.document_number = f"D{obj.pk}"
+                        # Restore the original date if it was set
+                        if original_dates[i]:
+                            obj.uploaded_date = original_dates[i]
 
                     OccurrenceReportDocument.objects.bulk_update(
                         created_objs,
