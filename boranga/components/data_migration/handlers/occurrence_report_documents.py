@@ -176,52 +176,74 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
                 "_file": "",  # Placeholder
             }
 
-            to_create.append(defaults)
+            # Store tuple of (instance, original_row) to allow fallback error logging
+            to_create.append((OccurrenceReportDocument(**defaults), row))
 
         if ctx.dry_run:
             logger.info(f"Dry run: would create {len(to_create)} documents")
             return
 
         # Bulk create
-        # We can't use bulk_create easily if we need to override auto_now_add fields or if we have other logic.
-        # Also OccurrenceReportDocument.save() has logic to set document_number.
-        # "if self.document_number == "": ... new_document_id = f"D{str(self.pk)}" ..."
-        # So we should call save() or replicate this logic.
-        # Replicating logic in bulk_create is hard because we need the PK.
-        # So we should probably loop and save.
-
         logger.info(f"Creating {len(to_create)} documents...")
 
-        for data in to_create:
+        if to_create:
+            # Unzip instances for bulk operation
+            instances = [x[0] for x in to_create]
             try:
-                uploaded_date = data.pop("uploaded_date", None)
+                from django.db import transaction
 
-                doc = OccurrenceReportDocument(**data)
-                doc.save()
-                created += 1
+                with transaction.atomic():
+                    # Use batch_size to avoid huge SQL queries
+                    created_objs = OccurrenceReportDocument.objects.bulk_create(
+                        instances, batch_size=1000
+                    )
+                    created = len(created_objs)
 
-                # Update uploaded_date if provided
-                if uploaded_date:
-                    OccurrenceReportDocument.objects.filter(pk=doc.pk).update(
-                        uploaded_date=uploaded_date
+                    # Post-process to set document_number and ensure uploaded_date is preserved
+                    # (since auto_now_add=True ignores the value on create)
+                    for obj in created_objs:
+                        obj.document_number = f"D{obj.pk}"
+
+                    OccurrenceReportDocument.objects.bulk_update(
+                        created_objs,
+                        ["document_number", "uploaded_date"],
+                        batch_size=1000,
                     )
 
             except Exception as e:
-                logger.error(f"Failed to create document: {e}")
-                errors += 1
-                errors_details.append(
-                    {
-                        "migrated_from_id": data.get(
-                            "occurrence_report_id"
-                        ),  # This is the ID, not SHEETNO, but close enough for tracking
-                        "column": None,
-                        "level": "error",
-                        "message": str(e),
-                        "raw_value": None,
-                        "reason": "create_error",
-                        "row": data,
-                    }
+                logger.error(
+                    f"Bulk create failed ({e}), falling back to individual saves..."
                 )
+
+                # Fallback: Try to save one by one to isolate errors
+                for instance, row_data in to_create:
+                    try:
+                        # We must manually handle uploaded_date because auto_now_add=True
+                        # ignores the value on the instance during creation.
+                        target_date = instance.uploaded_date
+
+                        instance.save()
+                        created += 1
+
+                        # Patch the date if needed
+                        if target_date:
+                            OccurrenceReportDocument.objects.filter(
+                                pk=instance.pk
+                            ).update(uploaded_date=target_date)
+
+                    except Exception as inner_e:
+                        errors += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": row_data.get("SHEETNO"),
+                                "column": None,
+                                "level": "error",
+                                "message": str(inner_e),
+                                "raw_value": None,
+                                "reason": "create_error",
+                                "row": row_data,
+                            }
+                        )
 
         end_time = timezone.now()
         duration = end_time - start_time
