@@ -113,6 +113,10 @@ COLUMN_MAP = {
     "SIMPLE_DEAD_TOT": "OCRPlantCount__simple_dead",
     "QUAD_TOT_SQ_M": "OCRPlantCount__total_quadrat_area",
     "VEGETATIVE": "OCRPlantCount__vegetative_state_present",
+    # OCRFireHistory fields
+    "FIRE_SEASON": "OCRFireHistory__comment",
+    "FIRE_YEAR": "FIRE_YEAR",
+    "FIRE_INTENSITY": "OCRFireHistory__intensity",
 }
 
 REQUIRED_COLUMNS = [
@@ -245,6 +249,10 @@ class OccurrenceReportRow:
     OCRVegetationStructure__vegetation_structure_layer_two: str | None = None
     OCRVegetationStructure__vegetation_structure_layer_three: str | None = None
     OCRVegetationStructure__vegetation_structure_layer_four: str | None = None
+
+    # OCRFireHistory fields
+    OCRFireHistory__comment: str | None = None
+    OCRFireHistory__intensity: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
@@ -438,6 +446,10 @@ class OccurrenceReportRow:
             ),
             OCRVegetationStructure__vegetation_structure_layer_four=utils.safe_strip(
                 d.get("OCRVegetationStructure__vegetation_structure_layer_four")
+            ),
+            OCRFireHistory__comment=utils.safe_strip(d.get("OCRFireHistory__comment")),
+            OCRFireHistory__intensity=utils.safe_strip(
+                d.get("OCRFireHistory__intensity")
             ),
         )
 
