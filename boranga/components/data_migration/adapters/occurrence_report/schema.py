@@ -67,6 +67,8 @@ COLUMN_MAP = {
     "SVY_EXTENT": "OCRObservationDetail__area_assessment",
     "SVY_EFFORT_AREA": "OCRObservationDetail__area_surveyed",
     "SVY_EFFORT_TIME": "OCRObservationDetail__survey_duration",
+    # OCRAssociatedSpecies fields (Task 11456)
+    "ASSOCIATED_SPECIES": "OCRAssociatedSpecies__comment",
     # OccurrenceReportGeometry fields (Task 11359, 11364, 11366)
     "GDA94LAT": "GDA94LAT",
     "GDA94LONG": "GDA94LONG",
@@ -207,6 +209,9 @@ class OccurrenceReportRow:
     )
     OCRObservationDetail__survey_duration: int | None = None  # Integer hours
 
+    # OCRAssociatedSpecies fields
+    OCRAssociatedSpecies__comment: str | None = None
+
     # OCRPlantCount fields
     OCRPlantCount__counted_subject: int | None = None  # FK id (CountedSubject)
     OCRPlantCount__plant_condition: int | None = None  # FK id (PlantCondition)
@@ -346,6 +351,9 @@ class OccurrenceReportRow:
             ),
             OCRObservationDetail__survey_duration=utils.to_int_maybe(
                 d.get("OCRObservationDetail__survey_duration")
+            ),
+            OCRAssociatedSpecies__comment=utils.safe_strip(
+                d.get("OCRAssociatedSpecies__comment")
             ),
             OCRPlantCount__counted_subject=utils.to_int_maybe(
                 d.get("OCRPlantCount__counted_subject")
