@@ -5,6 +5,7 @@ import os
 from collections import defaultdict
 from datetime import datetime
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from boranga.components.species_and_communities.models import Taxonomy
@@ -44,11 +45,8 @@ class Command(BaseCommand):
             "--csv",
             dest="csv",
             default=os.path.join(
-                os.path.dirname(__file__),
-                "..",
-                "..",
-                "components",
-                "data_migration",
+                settings.BASE_DIR,
+                "private-media",
                 "legacy_data",
                 "TPFL",
                 "TPFL_CS_LISTING_NAME_TO_NOMOS_CANONICAL_NAME.csv",
