@@ -204,6 +204,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
         path_map = self._parse_path_map(options.get("path_map"))
 
+        # Load pop_section_map early so we can use it for associated species filtering
+        pop_section_map = self.preload_pop_section_map(path)
+
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
         warnings = []
@@ -1237,16 +1240,49 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         dup_create_list = []
                         import uuid
 
+                        occ_assoc_to_update = []
                         for o in occ_reports_with_occ:
                             occ = getattr(o, "occurrence", None)
                             if not occ:
                                 continue
+
+                            # Check if HABITAT section exists for this sheetno
+                            sheetno = o.migrated_from_id
+                            is_habitat = False
+                            if sheetno and sheetno in pop_section_map:
+                                for _, code in pop_section_map[sheetno]:
+                                    if code == "HABITAT":
+                                        is_habitat = True
+                                        break
+
+                            if not is_habitat:
+                                continue
+
                             ocr_assoc = existing_assoc.get(o.pk)
                             if not ocr_assoc:
                                 continue
                             occ_assoc = existing_occ_assoc.get(occ.id)
                             if not occ_assoc:
                                 continue
+
+                            # Update OCCAssociatedSpecies fields (comment and link)
+                            updated = False
+                            if (
+                                ocr_assoc.comment
+                                and occ_assoc.comment != ocr_assoc.comment
+                            ):
+                                occ_assoc.comment = ocr_assoc.comment
+                                updated = True
+                            if (
+                                occ_assoc.copied_ocr_associated_species_id
+                                != ocr_assoc.pk
+                            ):
+                                occ_assoc.copied_ocr_associated_species = ocr_assoc
+                                updated = True
+
+                            if updated:
+                                occ_assoc_to_update.append(occ_assoc)
+
                             for ast in ocr_assoc.related_species.all():
                                 marker = f"__dm_dup__{uuid.uuid4().hex}"
                                 comments = (ast.comments or "") + " " + marker
@@ -1258,6 +1294,26 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     comments=comments.strip(),
                                 )
                                 dup_create_list.append((occ_assoc.pk, inst, marker))
+
+                        if occ_assoc_to_update:
+                            try:
+                                OCCAssociatedSpecies.objects.bulk_update(
+                                    occ_assoc_to_update,
+                                    ["comment", "copied_ocr_associated_species"],
+                                    batch_size=BATCH,
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "Failed to bulk_update OCCAssociatedSpecies; falling back to individual saves"
+                                )
+                                for a in occ_assoc_to_update:
+                                    try:
+                                        a.save()
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to update OCCAssociatedSpecies %s",
+                                            getattr(a, "pk", None),
+                                        )
 
                         if dup_create_list:
                             # Bulk create AST duplicates
@@ -3011,7 +3067,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Populate Occurrence 1-to-1 objects by cloning from OccurrenceReport
         # based on DRF_POP_SECTION_MAP.csv
         # ---------------------------------------------------------------------
-        pop_section_map = self.preload_pop_section_map(path)
         if pop_section_map:
             logger.info(
                 "Starting population of Occurrence 1-to-1 objects from OccurrenceReports..."
