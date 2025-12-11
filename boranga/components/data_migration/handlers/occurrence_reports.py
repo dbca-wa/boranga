@@ -30,10 +30,19 @@ from boranga.components.data_migration.registry import (
 from boranga.components.occurrence.models import (
     AssociatedSpeciesTaxonomy,
     Intensity,
+    OCCAssociatedSpecies,
+    OCCFireHistory,
+    OCCHabitatComposition,
+    OCCHabitatCondition,
+    OCCIdentification,
+    OCCLocation,
+    OCCObservationDetail,
+    OCCPlantCount,
     Occurrence,
     OccurrenceGeometry,
     OccurrenceReport,
     OccurrenceReportGeometry,
+    OCCVegetationStructure,
     OCRAssociatedSpecies,
     OCRFireHistory,
     OCRHabitatComposition,
@@ -116,6 +125,47 @@ class OccurrenceReportImporter(BaseSheetImporter):
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
+
+    def preload_pop_section_map(self, path: str) -> dict[str, list[tuple[str, str]]]:
+        """
+        Load DRF_POP_SECTION_MAP.csv into a dict:
+        SHEETNO -> [(POP_ID, SECT_CODE), ...]
+        """
+        import csv
+        import os
+
+        # Try to find the file in the same directory as the input path first.
+        base_dir = os.path.dirname(path)
+        map_path = os.path.join(base_dir, "DRF_POP_SECTION_MAP.csv")
+
+        if not os.path.exists(map_path):
+            # Fallback to the known location if the input path is different
+            map_path = "private-media/legacy_data/TPFL/DRF_POP_SECTION_MAP.csv"
+
+        if not os.path.exists(map_path):
+            logger.warning(
+                f"DRF_POP_SECTION_MAP.csv not found at {map_path}. Skipping section copying."
+            )
+            return {}
+
+        mapping = defaultdict(list)
+        try:
+            with open(map_path, encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    sheetno = row.get("SHEETNO", "").strip()
+                    pop_id = row.get("POP_ID", "").strip()
+                    sect_code = row.get("SECT_CODE", "").strip()
+                    is_active = row.get("IS_ACTIVE", "").strip()
+
+                    if sheetno and pop_id and sect_code and is_active == "Y":
+                        mapping[sheetno].append((pop_id, sect_code))
+
+            logger.info(f"Loaded {len(mapping)} entries from {map_path}")
+            return mapping
+        except Exception as e:
+            logger.exception(f"Failed to load DRF_POP_SECTION_MAP.csv: {e}")
+            return {}
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -1135,9 +1185,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if occ_reports_with_occ:
                         from boranga.components.occurrence.models import (
                             AssociatedSpeciesTaxonomy as _AST,
-                        )
-                        from boranga.components.occurrence.models import (
-                            OCCAssociatedSpecies,
                         )
 
                         # Build set of occurrence ids
@@ -2959,6 +3006,147 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)
         updated += len(to_update)
+
+        # ---------------------------------------------------------------------
+        # Populate Occurrence 1-to-1 objects by cloning from OccurrenceReport
+        # based on DRF_POP_SECTION_MAP.csv
+        # ---------------------------------------------------------------------
+        pop_section_map = self.preload_pop_section_map(path)
+        if pop_section_map:
+            logger.info(
+                "Starting population of Occurrence 1-to-1 objects from OccurrenceReports..."
+            )
+            # We iterate over all processed OccurrenceReports (both created and updated)
+            # For each OCR, we check if its SHEETNO (migrated_from_id) is in the map.
+            # If so, we clone the relevant sections to the parent Occurrence.
+
+            # Combine created and updated OCRs into a single list for processing
+            all_processed_ocrs = []
+            if created_map:
+                all_processed_ocrs.extend(created_map.values())
+            if to_update:
+                all_processed_ocrs.extend([t[0] for t in to_update])
+
+            # Map SECT_CODE to list of (OCR_Model, OCC_Model, copied_ocr_field_name)
+            section_config = {
+                "LOCATION": [
+                    (OCRLocation, OCCLocation, "copied_ocr_location"),
+                ],
+                "PLNT_CNT": [
+                    (OCRPlantCount, OCCPlantCount, "copied_ocr_plant_count"),
+                    (
+                        OCRObservationDetail,
+                        OCCObservationDetail,
+                        "copied_ocr_observation_detail",
+                    ),
+                ],
+                "HABITAT": [
+                    (
+                        OCRHabitatCondition,
+                        OCCHabitatCondition,
+                        "copied_ocr_habitat_condition",
+                    ),
+                    (
+                        OCRHabitatComposition,
+                        OCCHabitatComposition,
+                        "copied_ocr_habitat_composition",
+                    ),
+                    (
+                        OCRVegetationStructure,
+                        OCCVegetationStructure,
+                        "copied_ocr_vegetation_structure",
+                    ),
+                    (OCRFireHistory, OCCFireHistory, "copied_ocr_fire_history"),
+                ],
+                "VOUCHER": [
+                    (OCRIdentification, OCCIdentification, "copied_ocr_identification"),
+                ],
+            }
+
+            cloned_count = 0
+            for ocr in all_processed_ocrs:
+                sheetno = ocr.migrated_from_id
+                if not sheetno or sheetno not in pop_section_map:
+                    continue
+
+                # Get the list of sections to copy for this SHEETNO
+                # Each entry is (POP_ID, SECT_CODE)
+                entries = pop_section_map[sheetno]
+
+                for pop_id, sect_code in entries:
+                    if sect_code not in section_config:
+                        # Some codes might not be implemented or relevant
+                        continue
+
+                    configs = section_config[sect_code]
+
+                    for ocr_model, occ_model, copied_field in configs:
+                        # 1. Find the source OCR child object
+                        try:
+                            source_obj = ocr_model.objects.get(occurrence_report=ocr)
+                        except ocr_model.DoesNotExist:
+                            # Source doesn't exist, nothing to clone
+                            continue
+                        except ocr_model.MultipleObjectsReturned:
+                            source_obj = ocr_model.objects.filter(
+                                occurrence_report=ocr
+                            ).first()
+
+                        if not source_obj:
+                            continue
+
+                        # 2. Find or create the target OCC child object
+                        occurrence = ocr.occurrence
+                        if not occurrence:
+                            logger.warning(
+                                f"OCR {ocr.pk} (SHEETNO={sheetno}) has no parent Occurrence. "
+                                f"Skipping clone for {sect_code}."
+                            )
+                            continue
+
+                        # Check if target already exists on the occurrence
+                        target_obj = occ_model.objects.filter(
+                            occurrence=occurrence
+                        ).first()
+
+                        if not target_obj:
+                            # Create new instance
+                            target_obj = occ_model(occurrence=occurrence)
+
+                        # 3. Clone data
+                        try:
+                            # Copy fields that exist in both models
+                            source_fields = {f.name for f in source_obj._meta.fields}
+                            target_fields = {f.name for f in target_obj._meta.fields}
+                            common_fields = source_fields.intersection(target_fields)
+
+                            for field_name in common_fields:
+                                if field_name in [
+                                    "id",
+                                    "occurrence_report",
+                                    "occurrence",
+                                    "migrated_from_id",
+                                ]:
+                                    continue
+                                val = getattr(source_obj, field_name)
+                                setattr(target_obj, field_name, val)
+
+                            # Set the traceability field
+                            if hasattr(target_obj, copied_field):
+                                setattr(target_obj, copied_field, source_obj)
+
+                            target_obj.save()
+                            cloned_count += 1
+
+                        except Exception:
+                            logger.exception(
+                                f"Failed to clone {sect_code} ({ocr_model.__name__}) from OCR "
+                                f"{ocr.pk} to OCC {occurrence.pk}"
+                            )
+
+            logger.info(
+                f"Finished populating Occurrence 1-to-1 objects. Cloned {cloned_count} sections."
+            )
 
         persist_end = timezone.now()
         persist_duration = persist_end - transform_end
