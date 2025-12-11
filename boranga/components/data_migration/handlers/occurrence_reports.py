@@ -1465,6 +1465,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 geometry_data,
                 plant_count_data,
                 vegetation_structure_data,
+                fire_history_data,
             ) = up
             sid = inst.pk
             si_data = submitter_information_data or {}
