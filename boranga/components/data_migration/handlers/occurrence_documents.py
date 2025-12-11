@@ -43,14 +43,37 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
             "OccurrenceDocumentImporter: deleting OccurrenceDocument data..."
         )
         from django.apps import apps
-        from django.db import transaction
+        from django.db import connections
 
-        with transaction.atomic():
+        conn = connections["default"]
+        was_autocommit = conn.get_autocommit()
+        if not was_autocommit:
+            conn.set_autocommit(True)
+
+        try:
+            OccurrenceDocument = apps.get_model("boranga", "OccurrenceDocument")
             try:
-                OccurrenceDocument = apps.get_model("occurrence", "OccurrenceDocument")
                 OccurrenceDocument.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OccurrenceDocument")
+
+            # Reset the primary key sequence for OccurrenceDocument when using PostgreSQL.
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = OccurrenceDocument._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                    logger.info("Reset primary key sequence for table %s", table)
+            except Exception:
+                logger.exception(
+                    "Failed to reset OccurrenceDocument primary key sequence"
+                )
+        finally:
+            if not was_autocommit:
+                conn.set_autocommit(False)
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -131,8 +154,10 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
         skipped = 0
         warn_count = 0
 
+        errors_details = []
+
         # 3. Transform each row (documents are 1:many children; no merging)
-        transformed_rows: list[tuple[dict, str, list[tuple[str, Any]]]] = []
+        transformed_rows: list[tuple[dict, str, list[tuple[str, Any]], dict]] = []
         for row in all_rows:
             processed += 1
             tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
@@ -153,107 +178,239 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
                     if issue.level == "error":
                         has_error = True
                         errors += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": row.get("migrated_from_id"),
+                                "column": col,
+                                "level": issue.level,
+                                "message": issue.message,
+                                "raw_value": raw_val,
+                                "reason": "transform_error",
+                                "row": row,
+                            }
+                        )
                     else:
                         warn_count += 1
             if has_error:
                 skipped += 1
                 continue
-            transformed_rows.append((transformed, row.get("_source"), issues))
+            transformed_rows.append((transformed, row.get("_source"), issues, row))
 
         # 4. Persist each transformed document row, linking to parent occurrence
         # Resolve models
         try:
-            Occurrence = apps.get_model("occurrence", "Occurrence")
+            Occurrence = apps.get_model("boranga", "Occurrence")
         except LookupError:
             raise RuntimeError("Model occurrence.Occurrence not found")
 
         try:
-            OccurrenceDocument = apps.get_model("occurrence", "OccurrenceDocument")
+            OccurrenceDocument = apps.get_model("boranga", "OccurrenceDocument")
         except LookupError:
             # If OccurrenceDocument model is not present, we cannot persist documents
             raise RuntimeError("Model occurrence.OccurrenceDocument not found")
 
-        # helper to filter payload to model fields
-        def filter_fields(model, payload: dict):
-            allowed = {
-                f.name
-                for f in model._meta.get_fields()
-                if f.concrete and not f.many_to_many and not f.one_to_many
-            }
-            return {k: v for k, v in payload.items() if k in allowed}
+        # Pre-fetch valid occurrence IDs to avoid in-loop queries
+        valid_occurrence_ids = set(Occurrence.objects.values_list("pk", flat=True))
 
-        for transformed, src, issues in transformed_rows:
+        to_create = []
+        logger = __import__("logging").getLogger(__name__)
+
+        for transformed, src, issues, row in transformed_rows:
             # normalized key: pipelines for occurrence_id may return occurrence instance or migrated id
             occurrence_id = transformed.get("occurrence_id")
             if occurrence_id is None:
                 warnings.append(f"{src}: missing occurrence_id after transform")
                 skipped += 1
                 errors += 1
+                errors_details.append(
+                    {
+                        "migrated_from_id": row.get("migrated_from_id"),
+                        "column": "occurrence_id",
+                        "level": "error",
+                        "message": "missing occurrence_id after transform",
+                        "raw_value": None,
+                        "reason": "validation_error",
+                        "row": row,
+                    }
+                )
                 continue
 
-            # locate parent occurrence instance
-            occ_obj = None
-
+            # Validate occurrence_id
             try:
-                occ_obj = Occurrence.objects.get(pk=str(occurrence_id))
-            except Occurrence.DoesNotExist:
-                warnings.append(f"{src}: occurrence_id {occurrence_id} not found")
-                occ_obj = None
-
-            if occ_obj is None:
-                warnings.append(
-                    f"{src}: cannot link document to occurrence {occurrence_id}"
-                )
+                # Assuming PK is int or compatible
+                occ_id_val = int(occurrence_id)
+            except (ValueError, TypeError):
+                warnings.append(f"{src}: invalid occurrence_id format {occurrence_id}")
                 skipped += 1
                 errors += 1
+                errors_details.append(
+                    {
+                        "migrated_from_id": row.get("migrated_from_id"),
+                        "column": "occurrence_id",
+                        "level": "error",
+                        "message": f"invalid occurrence_id format {occurrence_id}",
+                        "raw_value": occurrence_id,
+                        "reason": "validation_error",
+                        "row": row,
+                    }
+                )
+                continue
+
+            if occ_id_val not in valid_occurrence_ids:
+                warnings.append(f"{src}: occurrence_id {occurrence_id} not found")
+                skipped += 1
+                errors += 1
+                errors_details.append(
+                    {
+                        "migrated_from_id": row.get("migrated_from_id"),
+                        "column": "occurrence_id",
+                        "level": "error",
+                        "message": f"occurrence_id {occurrence_id} not found",
+                        "raw_value": occurrence_id,
+                        "reason": "validation_error",
+                        "row": row,
+                    }
+                )
                 continue
 
             # build payload mapping to model fields
             payload = {
-                "occurrence": occ_obj,
+                "occurrence_id": occ_id_val,
                 "document_category_id": transformed.get("document_category_id"),
                 "document_sub_category_id": transformed.get("document_sub_category_id"),
                 "uploaded_by": transformed.get("uploaded_by"),
                 "uploaded_date": transformed.get("uploaded_date"),
-                "description": transformed.get("description"),
+                "description": transformed.get("description") or "",
+                "name": transformed.get("name") or "",
+                "_file": "",  # Placeholder
+                "active": True,
             }
 
-            # filter fields that actually exist on the model
-            safe_payload = filter_fields(OccurrenceDocument, payload)
+            to_create.append((OccurrenceDocument(**payload), row))
 
-            if ctx.dry_run:
-                # don't persist
-                continue
+        if ctx.dry_run:
+            stats.update(
+                processed=processed,
+                created=len(to_create),
+                updated=0,
+                skipped=skipped,
+                errors=errors,
+                warnings=warn_count,
+            )
+            return stats
 
-            # Determine lookup for update_or_create: prefer a combination that uniquely identifies a doc
-            lookup = {}
-            for key in (
-                "occurrence",
-                "document_category",
-                "document_sub_category",
-                "uploaded_by",
-                "uploaded_date",
-            ):
-                if key in safe_payload:
-                    lookup[key] = safe_payload[key]
+        # Bulk create
+        if to_create:
+            logger.info(f"Creating {len(to_create)} documents...")
+            # Unzip instances for bulk operation
+            instances = [x[0] for x in to_create]
+            # Capture original uploaded_date values because bulk_create mutates instances
+            # and might overwrite them with DB defaults (auto_now_add)
+            original_dates = [inst.uploaded_date for inst in instances]
+
             try:
                 with transaction.atomic():
-                    if lookup:
-                        obj, created_flag = OccurrenceDocument.objects.update_or_create(
-                            defaults=safe_payload, **lookup
-                        )
-                    else:
-                        OccurrenceDocument.objects.create(**safe_payload)
-                        created_flag = True
-                    if created_flag:
+                    # Use batch_size to avoid huge SQL queries
+                    created_objs = OccurrenceDocument.objects.bulk_create(
+                        instances, batch_size=1000
+                    )
+                    created = len(created_objs)
+
+                    # Post-process to set document_number and ensure uploaded_date is preserved
+                    for i, obj in enumerate(created_objs):
+                        obj.document_number = f"D{obj.pk}"
+                        # Restore the original date if it was set
+                        if original_dates[i]:
+                            obj.uploaded_date = original_dates[i]
+
+                    OccurrenceDocument.objects.bulk_update(
+                        created_objs,
+                        ["document_number", "uploaded_date"],
+                        batch_size=1000,
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"Bulk create failed ({e}), falling back to individual saves..."
+                )
+                # Fallback: Try to save one by one to isolate errors
+                for instance, row in to_create:
+                    try:
+                        target_date = instance.uploaded_date
+                        instance.save()
                         created += 1
-                    else:
-                        updated += 1
+
+                        # Patch the date if needed
+                        if target_date:
+                            OccurrenceDocument.objects.filter(pk=instance.pk).update(
+                                uploaded_date=target_date
+                            )
+
+                    except Exception as inner_e:
+                        skipped += 1
+                        errors += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": row.get("migrated_from_id"),
+                                "column": None,
+                                "level": "error",
+                                "message": str(inner_e),
+                                "raw_value": None,
+                                "reason": "create_error",
+                                "row": row,
+                            }
+                        )
+                        continue
+
+        # Write error CSV if needed
+        if errors_details:
+            import csv
+            import json
+            import os
+
+            from django.utils import timezone
+
+            csv_path = options.get("error_csv")
+            if csv_path:
+                csv_path = os.path.abspath(csv_path)
+            else:
+                ts = timezone.now().strftime("%Y%m%d_%H%M%S")
+                csv_path = os.path.join(
+                    os.getcwd(),
+                    "private-media/handler_output",
+                    f"{self.slug}_errors_{ts}.csv",
+                )
+            try:
+                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+                with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+                    fieldnames = [
+                        "migrated_from_id",
+                        "column",
+                        "level",
+                        "message",
+                        "raw_value",
+                        "reason",
+                        "row_json",
+                        "timestamp",
+                    ]
+                    writer = csv.DictWriter(fh, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for rec in errors_details:
+                        writer.writerow(
+                            {
+                                "migrated_from_id": rec.get("migrated_from_id"),
+                                "column": rec.get("column"),
+                                "level": rec.get("level"),
+                                "message": rec.get("message"),
+                                "raw_value": rec.get("raw_value"),
+                                "reason": rec.get("reason"),
+                                "row_json": json.dumps(rec.get("row", ""), default=str),
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                logger.warning(f"Wrote {len(errors_details)} errors to {csv_path}")
             except Exception:
-                # don't fail whole run for one bad row
-                skipped += 1
-                errors += 1
-                continue
+                logger.exception("Failed to write error CSV")
 
         stats.update(
             processed=processed,
