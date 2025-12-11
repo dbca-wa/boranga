@@ -154,6 +154,11 @@ def t_null_to_none(value, ctx):
     return _result(value)
 
 
+@registry.register("identity")
+def t_identity(value, ctx):
+    return _result(value)
+
+
 @registry.register("required")
 def t_required(value, ctx):
     if value in (None, "", []):
