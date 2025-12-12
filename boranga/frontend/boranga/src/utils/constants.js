@@ -39,7 +39,7 @@ export default {
         INTERNAL_CONTRIBUTORS: 'Internal Contributors',
         OCCURRENCE_APPROVERS: 'Occurrence Approvers',
         OCCURRENCE_ASSESSORS: 'Occurrence Assessors',
-        READ_ONLY_USERS: 'Read Only Users',
+        READ_ONLY_USERS: 'Query Users',
         SPECIES_AND_COMMUNITIES_APPROVERS: 'Species and Communities Approvers',
     },
     DATATABLE_PROCESSING_HTML:
