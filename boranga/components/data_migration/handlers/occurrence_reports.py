@@ -1687,12 +1687,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # and link them to OccurrenceReports
         if submitter_info_create_map:
             occs_to_link_si = []
+
+            # Pre-fetch any OccurrenceReports that might be missing from target_map
+            missing_ocr_ids = {
+                ocr_id
+                for (ocr_id, mig) in submitter_info_create_map.keys()
+                if (not mig or mig not in target_map) and ocr_id
+            }
+            fetched_ocrs = {}
+            if missing_ocr_ids:
+                fetched_ocrs = OccurrenceReport.objects.in_bulk(list(missing_ocr_ids))
+
             for (ocr_id, mig), si_instance in submitter_info_create_map.items():
-                # Refresh to get the ID
-                si_instance.refresh_from_db()
+                # No need to refresh_from_db() as bulk_create populates PKs in Django 5.x+ with Postgres
+
                 ocr = target_map.get(mig) if mig else None
                 if not ocr and ocr_id:
-                    ocr = OccurrenceReport.objects.filter(pk=ocr_id).first()
+                    ocr = fetched_ocrs.get(ocr_id)
+
                 if ocr:
                     ocr.submitter_information_id = si_instance.pk
                     occs_to_link_si.append(ocr)
@@ -1706,6 +1718,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     logger.exception(
                         "Failed to link SubmitterInformation to OccurrenceReport"
                     )
+                    # Fallback to individual saves if bulk_update fails
                     for ocr in occs_to_link_si:
                         try:
                             ocr.save(update_fields=["submitter_information_id"])
