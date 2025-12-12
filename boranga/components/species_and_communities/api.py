@@ -3620,8 +3620,13 @@ class ConservationThreatFilterBackend(DatatablesFilterBackend):
 class ConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = ConservationThreat.objects.order_by("id")
     serializer_class = ConservationThreatSerializer
-    filter_backends = (ConservationThreatFilterBackend,)
+    # filter_backends = (ConservationThreatFilterBackend,)
     permission_classes = [IsSuperuser | IsAuthenticated & ConservationThreatPermission]
+
+    def get_permissions(self):
+        if self.action == "retrieve":
+            return [AllowAny()]
+        return super().get_permissions()
 
     def get_queryset(self):
         qs = super().get_queryset()

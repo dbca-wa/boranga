@@ -3616,14 +3616,42 @@ class OCCConservationThreatFilterBackend(DatatablesFilterBackend):
 class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = OCCConservationThreat.objects.all()
     serializer_class = OCCConservationThreatSerializer
-    filter_backends = (OCCConservationThreatFilterBackend,)
+    # filter_backends = (OCCConservationThreatFilterBackend,)
     permission_classes = [OccurrenceObjectPermission]
+
+    def get_permissions(self):
+        if self.action == "retrieve":
+            return [AllowAny()]
+        return super().get_permissions()
 
     def get_queryset(self):
         qs = OCCConservationThreat.objects.none()
 
         if is_internal(self.request) or self.request.user.is_superuser:
             qs = OCCConservationThreat.objects.all().order_by("id")
+        else:
+            qs = (
+                OCCConservationThreat.objects.filter(visible=True)
+                .filter(
+                    (
+                        Q(
+                            occurrence__species__species_publishing_status__species_public=True
+                        )
+                        & Q(
+                            occurrence__species__species_publishing_status__threats_public=True
+                        )
+                    )
+                    | (
+                        Q(
+                            occurrence__community__community_publishing_status__community_public=True
+                        )
+                        & Q(
+                            occurrence__community__community_publishing_status__threats_public=True
+                        )
+                    )
+                )
+                .order_by("id")
+            )
 
         return qs
 
