@@ -265,6 +265,7 @@ export default {
             },
             occurrence_comment: '',
             errorString: '',
+            originalProposeApprove: null,
         };
     },
     computed: {
@@ -317,6 +318,11 @@ export default {
                         ).select2('open');
                     });
                 }
+                this.$nextTick(() => {
+                    this.originalProposeApprove = JSON.parse(
+                        JSON.stringify(this.propose_approve)
+                    );
+                });
             }
         },
         'propose_approve.create_new_occurrence': {
@@ -338,6 +344,12 @@ export default {
         this.initialiseOccurrenceNameLookup();
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.propose_approve) !==
+                JSON.stringify(this.originalProposeApprove)
+            );
+        },
         ok: function () {
             let vm = this;
             if (vm.form.checkValidity()) {

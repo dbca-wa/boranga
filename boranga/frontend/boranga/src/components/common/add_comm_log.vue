@@ -263,6 +263,7 @@ export default {
                     name: '',
                 },
             ],
+            originalComms: null,
         };
     },
     watch: {
@@ -271,6 +272,7 @@ export default {
             if (val) {
                 vm.$nextTick(function () {
                     vm.$refs.to.focus();
+                    vm.originalComms = JSON.parse(JSON.stringify(vm.comms));
                 });
             }
         },
@@ -280,6 +282,12 @@ export default {
         vm.form = document.forms.commsForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.comms) !==
+                JSON.stringify(this.originalComms)
+            );
+        },
         ok: function () {
             let vm = this;
             if ($(vm.form).valid()) {

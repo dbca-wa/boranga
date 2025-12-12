@@ -615,6 +615,7 @@ export default {
             addingThreat: false,
             updatingThreat: false,
             errorString: '',
+            originalThreatObj: null,
         };
     },
     computed: {
@@ -630,6 +631,17 @@ export default {
         },
         isReadOnly: function () {
             return this.threat_action === 'view' ? true : false;
+        },
+    },
+    watch: {
+        isModalOpen: function (val) {
+            if (val) {
+                this.$nextTick(() => {
+                    this.originalThreatObj = JSON.parse(
+                        JSON.stringify(this.threatObj)
+                    );
+                });
+            }
         },
     },
     created: async function () {
@@ -660,6 +672,12 @@ export default {
         vm.form = document.forms.threatForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.threatObj) !==
+                JSON.stringify(this.originalThreatObj)
+            );
+        },
         ok: function () {
             let vm = this;
             if ($(vm.form).valid()) {
@@ -668,6 +686,10 @@ export default {
         },
         cancel: function () {
             if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
                 this.close();
                 return;
             }

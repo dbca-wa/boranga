@@ -79,6 +79,7 @@ export default {
                 cc_email: '',
             },
             errorString: '',
+            originalProposeDecline: null,
         };
     },
     watch: {
@@ -86,6 +87,9 @@ export default {
             if (val) {
                 this.$nextTick(() => {
                     this.$refs.reason.focus();
+                    this.originalProposeDecline = JSON.parse(
+                        JSON.stringify(this.propose_decline)
+                    );
                 });
             }
         },
@@ -94,6 +98,12 @@ export default {
         this.form = document.forms['propose-decline-form'];
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.propose_decline) !==
+                JSON.stringify(this.originalProposeDecline)
+            );
+        },
         ok: function () {
             let vm = this;
             if (vm.form.checkValidity()) {

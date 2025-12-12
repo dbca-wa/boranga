@@ -338,6 +338,7 @@ export default {
             success: false,
             purposes: [],
             vestings: [],
+            originalTenureObj: null,
         };
     },
     computed: {
@@ -355,7 +356,17 @@ export default {
             return this.modal_action === 'view' ? true : false;
         },
     },
-    watch: {},
+    watch: {
+        isModalOpen: function (val) {
+            if (val) {
+                this.$nextTick(() => {
+                    this.originalTenureObj = JSON.parse(
+                        JSON.stringify(this.tenureObj)
+                    );
+                });
+            }
+        },
+    },
     created: async function () {
         this.fetchSelectionValues(
             api_endpoints.occurrence_tenure_list_of_values,
@@ -368,6 +379,12 @@ export default {
         vm.form = document.forms.modalForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.tenureObj) !==
+                JSON.stringify(this.originalTenureObj)
+            );
+        },
         fetchSelectionValues: function (url, payload, target_list_names) {
             fetch(url, payload)
                 .then(async (response) => {
@@ -395,6 +412,10 @@ export default {
         },
         cancel: function () {
             if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
                 this.close();
                 return;
             }

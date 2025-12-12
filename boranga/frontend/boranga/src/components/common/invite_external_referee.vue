@@ -156,6 +156,7 @@ export default {
                 email: '',
             },
             errors: null,
+            originalExternalRefereeInvite: null,
         };
     },
     watch: {
@@ -163,6 +164,9 @@ export default {
             if (val) {
                 this.$nextTick(() => {
                     this.$refs.Email.focus();
+                    this.originalExternalRefereeInvite = JSON.parse(
+                        JSON.stringify(this.external_referee_invite)
+                    );
                 });
             }
         },
@@ -171,6 +175,12 @@ export default {
         },
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.external_referee_invite) !==
+                JSON.stringify(this.originalExternalRefereeInvite)
+            );
+        },
         title: function () {
             return 'Invite External Referee';
         },

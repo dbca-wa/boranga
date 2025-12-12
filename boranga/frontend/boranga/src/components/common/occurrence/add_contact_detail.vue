@@ -224,6 +224,7 @@ export default {
             successString: '',
             success: false,
             validDate: false,
+            originalContactObj: null,
         };
     },
     computed: {
@@ -246,6 +247,9 @@ export default {
             if (val) {
                 this.$nextTick(() => {
                     this.$refs.contact_name.focus();
+                    this.originalContactObj = JSON.parse(
+                        JSON.stringify(this.contactObj)
+                    );
                 });
             }
         },
@@ -255,6 +259,12 @@ export default {
         vm.form = document.forms.contactDetailForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.contactObj) !==
+                JSON.stringify(this.originalContactObj)
+            );
+        },
         ok: function () {
             let vm = this;
             if ($(vm.form).valid()) {
@@ -263,6 +273,10 @@ export default {
         },
         cancel: function () {
             if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
                 this.close();
                 return;
             }

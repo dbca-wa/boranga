@@ -420,6 +420,7 @@ export default {
             addingObserver: false,
             updatingObserver: false,
             errorString: '',
+            originalObserverObj: null,
         };
     },
     computed: {
@@ -465,16 +466,29 @@ export default {
                         this.observerObj.main_observer =
                             !this.occurrence_report.has_main_observer;
                     }
+                    this.originalObserverObj = JSON.parse(
+                        JSON.stringify(this.observerObj)
+                    );
                 });
             }
         },
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.observerObj) !==
+                JSON.stringify(this.originalObserverObj)
+            );
+        },
         ok: function () {
             this.validateForm();
         },
         cancel: function () {
             if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
                 this.close();
                 return;
             }

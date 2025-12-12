@@ -586,6 +586,7 @@ export default {
             renameCommunityFetched: false,
             processingStatusForOriginalAfterRename: null,
             errors: null,
+            originalRenameCommunity: null,
         };
     },
     computed: {
@@ -630,6 +631,9 @@ export default {
                                 this.openAndFocusSelect2();
                             });
                         }
+                        this.originalRenameCommunity = JSON.parse(
+                            JSON.stringify(this.rename_community)
+                        );
                     });
                 });
             } else {
@@ -661,6 +665,12 @@ export default {
         this.destroySelect2();
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.rename_community) !==
+                JSON.stringify(this.originalRenameCommunity)
+            );
+        },
         initialiseCommunityNameLookup(callback) {
             const el = this.$refs.community_name_lookup_rename_community;
             if (!el) return;
@@ -791,6 +801,10 @@ export default {
             this.$refs.community_name.focus();
         },
         cancel: function () {
+            if (!this.hasUnsavedChanges()) {
+                this.close();
+                return;
+            }
             swal.fire({
                 title: 'Are you sure you want to close this pop-up?',
                 text: 'You will lose any unsaved changes.',

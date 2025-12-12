@@ -964,6 +964,7 @@ export default {
                 chosen_plant_count_section: this.main_occurrence_obj.id,
                 chosen_identification_section: this.main_occurrence_obj.id,
             },
+            originalOccCombineData: null,
         };
     },
     watch: {
@@ -996,6 +997,9 @@ export default {
                 );
                 vm.$nextTick(() => {
                     $(vm.$refs.occurrence_name_lookup).select2('open');
+                    vm.originalOccCombineData = JSON.parse(
+                        JSON.stringify(vm.occ_combine_data)
+                    );
                 });
             }
         },
@@ -1017,6 +1021,12 @@ export default {
         this.initialiseOccurrenceNameLookup();
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.occ_combine_data) !==
+                JSON.stringify(this.originalOccCombineData)
+            );
+        },
         sendData: function () {
             let vm = this;
             let formData = new FormData();
