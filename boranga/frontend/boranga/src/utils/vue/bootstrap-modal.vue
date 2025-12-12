@@ -191,7 +191,12 @@ export default {
             }
         },
         cancel() {
-            if (!this.dataLossWarningOnCancel) {
+            let warn = this.dataLossWarningOnCancel;
+            if (warn && typeof this.$parent.hasUnsavedChanges === 'function') {
+                warn = this.$parent.hasUnsavedChanges();
+            }
+
+            if (!warn) {
                 this.$parent.close();
             } else {
                 swal.fire({
