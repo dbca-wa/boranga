@@ -1601,9 +1601,6 @@ class ConservationStatus(
                 ConservationStatus.PROCESSING_STATUS_CLOSED
             )
             previous_approved_version.locked = True
-            previous_approved_version.change_code = (
-                ConservationChangeCode.get_closed_change_code()
-            )
             if self.effective_from:
                 previous_approved_version.effective_to = (
                     self.effective_from - timedelta(days=1)
