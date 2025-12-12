@@ -95,6 +95,7 @@ class ConservationStatusImporter(BaseSheetImporter):
         path_map = self._parse_path_map(options.get("path_map"))
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
+        stats["extracted"] = 0
         all_rows: list[dict] = []
         warnings = []
 
