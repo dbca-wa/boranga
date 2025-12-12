@@ -82,7 +82,7 @@
                                                 "
                                                 type="text"
                                                 class="form-control"
-                                                readonly
+                                                disabled
                                             />
                                         </template>
                                     </div>
@@ -144,7 +144,7 @@
                                                 v-model="threatObj.threat_agent"
                                                 type="text"
                                                 class="form-control"
-                                                readonly
+                                                disabled
                                             />
                                         </template>
                                     </div>
@@ -470,7 +470,7 @@
                                             v-model="threatObj.source"
                                             type="text"
                                             class="form-control"
-                                            readonly
+                                            disabled
                                         />
                                     </div>
                                 </div>
