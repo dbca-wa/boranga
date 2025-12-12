@@ -64,6 +64,11 @@ body {
     background: gray;
 }
 
+.nav-pills {
+    margin-left: 5px;
+    margin-bottom: 0;
+}
+
 .page-item>.page-link {
     color: #226fbb;
 }
