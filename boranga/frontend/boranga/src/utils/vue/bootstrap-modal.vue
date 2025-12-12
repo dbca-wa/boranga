@@ -67,6 +67,8 @@
  * Bootstrap Style Modal Component for Vue
  * Depend on Bootstrap.css
  */
+import swal from 'sweetalert2';
+
 export default {
     props: {
         title: {
@@ -189,7 +191,12 @@ export default {
             }
         },
         cancel() {
-            if (!this.dataLossWarningOnCancel) {
+            let warn = this.dataLossWarningOnCancel;
+            if (warn && typeof this.$parent.hasUnsavedChanges === 'function') {
+                warn = this.$parent.hasUnsavedChanges();
+            }
+
+            if (!warn) {
                 this.$parent.close();
             } else {
                 swal.fire({

@@ -4,8 +4,8 @@
             transition="modal fade"
             :title="modalTitle"
             large
+            :data-loss-warning-on-cancel="modal_action !== 'view'"
             @ok="ok()"
-            @cancel="cancel()"
         >
             <div class="container-fluid">
                 <div class="row">
@@ -229,7 +229,7 @@
                         class="btn btn-secondary me-2"
                         @click="cancel"
                     >
-                        Cancel
+                        {{ isReadOnly ? 'Close' : 'Cancel' }}
                     </button>
                     <template v-if="modal_action != 'view'">
                         <template v-if="object_id">
@@ -293,6 +293,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import { helpers, api_endpoints } from '@/utils/hooks.js';
+import swal from 'sweetalert2';
 export default {
     name: 'OccurrenceTenureDatatable',
     components: {
@@ -337,6 +338,7 @@ export default {
             success: false,
             purposes: [],
             vestings: [],
+            originalTenureObj: null,
         };
     },
     computed: {
@@ -354,7 +356,17 @@ export default {
             return this.modal_action === 'view' ? true : false;
         },
     },
-    watch: {},
+    watch: {
+        isModalOpen: function (val) {
+            if (val) {
+                this.$nextTick(() => {
+                    this.originalTenureObj = JSON.parse(
+                        JSON.stringify(this.tenureObj)
+                    );
+                });
+            }
+        },
+    },
     created: async function () {
         this.fetchSelectionValues(
             api_endpoints.occurrence_tenure_list_of_values,
@@ -367,6 +379,12 @@ export default {
         vm.form = document.forms.modalForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.tenureObj) !==
+                JSON.stringify(this.originalTenureObj)
+            );
+        },
         fetchSelectionValues: function (url, payload, target_list_names) {
             fetch(url, payload)
                 .then(async (response) => {
@@ -393,6 +411,14 @@ export default {
             }
         },
         cancel: function () {
+            if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
+                this.close();
+                return;
+            }
             swal.fire({
                 title: 'Are you sure you want to close this pop-up?',
                 text: 'You will lose any unsaved changes.',

@@ -4,8 +4,8 @@
             transition="modal fade"
             :title="title"
             large
+            :data-loss-warning-on-cancel="threat_action !== 'view'"
             @ok="ok()"
-            @cancel="cancel()"
         >
             <div class="container-fluid">
                 <div class="row">
@@ -82,7 +82,7 @@
                                                 "
                                                 type="text"
                                                 class="form-control"
-                                                readonly
+                                                disabled
                                             />
                                         </template>
                                     </div>
@@ -144,7 +144,7 @@
                                                 v-model="threatObj.threat_agent"
                                                 type="text"
                                                 class="form-control"
-                                                readonly
+                                                disabled
                                             />
                                         </template>
                                     </div>
@@ -470,7 +470,7 @@
                                             v-model="threatObj.source"
                                             type="text"
                                             class="form-control"
-                                            readonly
+                                            disabled
                                         />
                                     </div>
                                 </div>
@@ -515,7 +515,7 @@
                         class="btn btn-secondary me-2"
                         @click="cancel"
                     >
-                        Cancel
+                        {{ isReadOnly ? 'Close' : 'Cancel' }}
                     </button>
                     <template v-if="threat_action != 'view'">
                         <template v-if="threat_id">
@@ -579,6 +579,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import { helpers } from '@/utils/hooks.js';
+import swal from 'sweetalert2';
 export default {
     name: 'ThreatDetail',
     components: {
@@ -614,6 +615,7 @@ export default {
             addingThreat: false,
             updatingThreat: false,
             errorString: '',
+            originalThreatObj: null,
         };
     },
     computed: {
@@ -629,6 +631,17 @@ export default {
         },
         isReadOnly: function () {
             return this.threat_action === 'view' ? true : false;
+        },
+    },
+    watch: {
+        isModalOpen: function (val) {
+            if (val) {
+                this.$nextTick(() => {
+                    this.originalThreatObj = JSON.parse(
+                        JSON.stringify(this.threatObj)
+                    );
+                });
+            }
         },
     },
     created: async function () {
@@ -659,6 +672,12 @@ export default {
         vm.form = document.forms.threatForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.threatObj) !==
+                JSON.stringify(this.originalThreatObj)
+            );
+        },
         ok: function () {
             let vm = this;
             if ($(vm.form).valid()) {
@@ -666,6 +685,14 @@ export default {
             }
         },
         cancel: function () {
+            if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
+                this.close();
+                return;
+            }
             swal.fire({
                 title: 'Are you sure you want to close this pop-up?',
                 text: 'You will lose any unsaved changes.',

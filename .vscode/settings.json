@@ -11,7 +11,7 @@
   ],
   "eslint.workingDirectories": [
     {
-      "directory": "frontend/boranga",
+      "directory": "boranga/frontend/boranga",
       "changeProcessCWD": true
     }
   ],

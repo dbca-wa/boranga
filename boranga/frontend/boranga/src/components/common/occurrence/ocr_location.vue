@@ -688,8 +688,8 @@ export default {
                     if (
                         choice.region_id ===
                             this.occurrence_report_obj.location.region_id &&
-                        !choice.archive_date &&
-                        !new Date(choice.archive_date) <= new Date()
+                        (!choice.archive_date ||
+                            new Date(choice.archive_date) > new Date())
                     ) {
                         this.filtered_district_list.push(choice);
                     }

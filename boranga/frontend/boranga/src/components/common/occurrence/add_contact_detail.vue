@@ -4,8 +4,8 @@
             transition="modal fade"
             :title="title"
             large
+            :data-loss-warning-on-cancel="contact_detail_action !== 'view'"
             @ok="ok()"
-            @cancel="cancel()"
         >
             <div class="container-fluid">
                 <div class="row">
@@ -122,14 +122,14 @@
             </div>
             <template #footer>
                 <div>
-                    <div v-if="!isReadOnly">
-                        <button
-                            type="button"
-                            class="btn btn-secondary me-2"
-                            @click="cancel"
-                        >
-                            Cancel
-                        </button>
+                    <button
+                        type="button"
+                        class="btn btn-secondary me-2"
+                        @click="cancel"
+                    >
+                        {{ isReadOnly ? 'Close' : 'Cancel' }}
+                    </button>
+                    <template v-if="!isReadOnly">
                         <template v-if="contact_detail_id">
                             <button
                                 v-if="updatingContact"
@@ -180,7 +180,7 @@
                                 Add Contact
                             </button>
                         </template>
-                    </div>
+                    </template>
                 </div>
             </template>
         </modal>
@@ -191,6 +191,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import { helpers } from '@/utils/hooks.js';
+import swal from 'sweetalert2';
 
 export default {
     name: 'ContactDetail',
@@ -223,6 +224,7 @@ export default {
             successString: '',
             success: false,
             validDate: false,
+            originalContactObj: null,
         };
     },
     computed: {
@@ -245,6 +247,9 @@ export default {
             if (val) {
                 this.$nextTick(() => {
                     this.$refs.contact_name.focus();
+                    this.originalContactObj = JSON.parse(
+                        JSON.stringify(this.contactObj)
+                    );
                 });
             }
         },
@@ -254,6 +259,12 @@ export default {
         vm.form = document.forms.contactDetailForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.contactObj) !==
+                JSON.stringify(this.originalContactObj)
+            );
+        },
         ok: function () {
             let vm = this;
             if ($(vm.form).valid()) {
@@ -261,6 +272,14 @@ export default {
             }
         },
         cancel: function () {
+            if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
+                this.close();
+                return;
+            }
             swal.fire({
                 title: 'Are you sure you want to close this pop-up?',
                 text: 'You will lose any unsaved changes.',

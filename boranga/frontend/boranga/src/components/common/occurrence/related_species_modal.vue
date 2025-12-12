@@ -249,6 +249,7 @@ export default {
             fetchingAssociatedSpeciesTaxonomy: false,
             updating: false,
             errors: null,
+            originalAssociatedSpeciesTaxonomy: null,
         };
     },
     watch: {
@@ -280,6 +281,12 @@ export default {
         vm.form = document.forms.threatForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.associatedSpeciesTaxonomy) !==
+                JSON.stringify(this.originalAssociatedSpeciesTaxonomy)
+            );
+        },
         fetchAssociatedSpeciesTaxonomy: function () {
             let vm = this;
             vm.fetchingAssociatedSpeciesTaxonomy = true;
@@ -295,6 +302,9 @@ export default {
                         return;
                     }
                     vm.associatedSpeciesTaxonomy = data;
+                    vm.originalAssociatedSpeciesTaxonomy = JSON.parse(
+                        JSON.stringify(data)
+                    );
                 })
                 .catch((error) => {
                     console.error('Error fetching associated species:', error);
@@ -326,6 +336,10 @@ export default {
         },
         cancel: function () {
             if (this.isReadOnly || this.viewMode) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
                 this.close();
                 return;
             }

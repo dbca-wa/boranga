@@ -5,8 +5,8 @@
             transition="modal fade"
             :title="title"
             large
+            :data-loss-warning-on-cancel="observer_detail_action !== 'view'"
             @ok="validateForm()"
-            @cancel="close()"
         >
             <div class="container-fluid">
                 <div class="row">
@@ -391,6 +391,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import { api_endpoints, helpers } from '@/utils/hooks.js';
+import swal from 'sweetalert2';
 
 export default {
     name: 'ObserverDetail',
@@ -419,6 +420,7 @@ export default {
             addingObserver: false,
             updatingObserver: false,
             errorString: '',
+            originalObserverObj: null,
         };
     },
     computed: {
@@ -464,15 +466,32 @@ export default {
                         this.observerObj.main_observer =
                             !this.occurrence_report.has_main_observer;
                     }
+                    this.originalObserverObj = JSON.parse(
+                        JSON.stringify(this.observerObj)
+                    );
                 });
             }
         },
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.observerObj) !==
+                JSON.stringify(this.originalObserverObj)
+            );
+        },
         ok: function () {
             this.validateForm();
         },
         cancel: function () {
+            if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
+                this.close();
+                return;
+            }
             swal.fire({
                 title: 'Are you sure you want to close this pop-up?',
                 text: 'You will lose any unsaved changes.',

@@ -2,6 +2,7 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
@@ -64,8 +65,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        BASE_DIR = Path(__file__).resolve().parent
-        default_csv_path = BASE_DIR / "legacy_data/TPFL/DRF_POP_SECTION_MAP.csv"
+        BASE_DIR = Path(settings.BASE_DIR)
+        default_csv_path = (
+            BASE_DIR / "private-media/legacy_data/TPFL/DRF_POP_SECTION_MAP.csv"
+        )
 
         # options['csv_path'] may be None when omitted; handle safely
         csv_path_opt = options.get("csv_path")

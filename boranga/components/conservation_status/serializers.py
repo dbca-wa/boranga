@@ -23,7 +23,7 @@ from boranga.components.main.serializers import (
     SafeFileUrlField,
 )
 from boranga.components.meetings.serializers import MeetingSerializer
-from boranga.components.species_and_communities.models import CommunityTaxonomy
+from boranga.components.species_and_communities.models import CommunityTaxonomy, Species
 from boranga.components.users.serializers import SubmitterInformationSerializer
 from boranga.helpers import (
     is_conservation_status_approver,
@@ -1222,6 +1222,21 @@ class SaveSpeciesConservationStatusSerializer(
     SaveConservationStatusValidationMixin, BaseConservationStatusSerializer
 ):
     species_taxonomy_id = serializers.IntegerField(required=True, write_only=True)
+    species_id = serializers.IntegerField(
+        required=False, allow_null=True, write_only=True
+    )
+
+    def validate(self, attrs):
+        validated_data = super().validate(attrs)
+        if "species_taxonomy_id" in validated_data:
+            try:
+                species = Species.objects.get(
+                    taxonomy_id=validated_data["species_taxonomy_id"]
+                )
+                validated_data["species_id"] = species.id
+            except Species.DoesNotExist:
+                validated_data["species_id"] = None
+        return validated_data
 
     wa_legislative_list_id = serializers.IntegerField(
         required=False, allow_null=True, write_only=True
@@ -1254,6 +1269,7 @@ class SaveSpeciesConservationStatusSerializer(
             "id",
             "application_type",
             "species_taxonomy_id",
+            "species_id",
             "wa_legislative_list_id",
             "wa_legislative_category_id",
             "iucn_version_id",

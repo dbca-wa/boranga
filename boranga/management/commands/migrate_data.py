@@ -34,7 +34,7 @@ class Command(BaseCommand):
         p_run.add_argument(
             "--error-csv",
             type=str,
-            help="Path to write error details CSV (default: auto-generated in handler_output/)",
+            help="Path to write error details CSV (default: auto-generated in private-media/handler_output/)",
         )
         p_run.add_argument(
             "--limit",
@@ -50,7 +50,7 @@ class Command(BaseCommand):
         p_multi.add_argument(
             "--error-csv",
             type=str,
-            help="Path to write error details CSV (default: auto-generated in handler_output/)",
+            help="Path to write error details CSV (default: auto-generated in private-media/handler_output/)",
         )
         p_multi.add_argument(
             "--wipe-targets",

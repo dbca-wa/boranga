@@ -220,7 +220,9 @@
                         </div>
                     </div>
                     <div
-                        v-else-if="hasUserEditMode"
+                        v-else-if="
+                            hasUserEditMode || (isCommunity && isHistorical)
+                        "
                         class="card-body border-top"
                     >
                         <div class="row">
@@ -279,6 +281,34 @@
                                                     "
                                                 >
                                                     Rename</button
+                                                ><br />
+                                            </div>
+                                        </div>
+                                        <div class="row mb-2">
+                                            <div class="col-sm-12">
+                                                <button
+                                                    class="btn btn-primary w-100"
+                                                    @click.prevent="
+                                                        deactivateCommunity()
+                                                    "
+                                                >
+                                                    Deactivate</button
+                                                ><br />
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                                <div v-if="isHistorical" class="row">
+                                    <template v-if="isCommunity">
+                                        <div class="row mb-2">
+                                            <div class="col-sm-12">
+                                                <button
+                                                    class="btn btn-primary w-100"
+                                                    @click.prevent="
+                                                        reactivateCommunity()
+                                                    "
+                                                >
+                                                    Reactivate</button
                                                 ><br />
                                             </div>
                                         </div>
@@ -744,6 +774,11 @@ export default {
         },
         isActive: function () {
             return this.species_community.processing_status === 'Active'
+                ? true
+                : false;
+        },
+        isHistorical: function () {
+            return this.species_community.processing_status === 'Historical'
                 ? true
                 : false;
         },
@@ -1519,6 +1554,142 @@ export default {
         },
         renameCommunity: async function () {
             this.$refs.community_rename.isModalOpen = true;
+        },
+        reactivateCommunity: function () {
+            let vm = this;
+            swal.fire({
+                title: 'Reactivate Community',
+                text: 'Are you sure you want to reactivate this community?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Reactivate',
+                customClass: {
+                    confirmButton: 'btn btn-primary',
+                    cancelButton: 'btn btn-secondary',
+                },
+                reverseButtons: true,
+            }).then((swalresult) => {
+                if (swalresult.isConfirmed) {
+                    fetch(
+                        helpers.add_endpoint_json(
+                            api_endpoints.community,
+                            vm.species_community.id + '/reactivate'
+                        ),
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                        }
+                    ).then(
+                        async (response) => {
+                            const data = await response.json();
+                            if (!response.ok) {
+                                swal.fire({
+                                    title: 'Error',
+                                    text: JSON.stringify(data),
+                                    icon: 'error',
+                                    customClass: {
+                                        confirmButton: 'btn btn-primary',
+                                    },
+                                });
+                                return;
+                            }
+                            vm.species_community = helpers.copyObject(data);
+                            vm.species_community_original = helpers.copyObject(
+                                vm.species_community
+                            );
+                            swal.fire({
+                                title: 'Reactivated',
+                                text: 'Community has been reactivated',
+                                icon: 'success',
+                                customClass: {
+                                    confirmButton: 'btn btn-primary',
+                                },
+                            });
+                        },
+                        (error) => {
+                            console.log(error);
+                            swal.fire({
+                                title: 'Error',
+                                text: 'There was an error reactivating the community',
+                                icon: 'error',
+                                customClass: {
+                                    confirmButton: 'btn btn-primary',
+                                },
+                            });
+                        }
+                    );
+                }
+            });
+        },
+        deactivateCommunity: function () {
+            let vm = this;
+            swal.fire({
+                title: 'Deactivate Community',
+                text: 'Are you sure you want to deactivate this community?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Deactivate',
+                customClass: {
+                    confirmButton: 'btn btn-primary',
+                    cancelButton: 'btn btn-secondary',
+                },
+                reverseButtons: true,
+            }).then((swalresult) => {
+                if (swalresult.isConfirmed) {
+                    fetch(
+                        helpers.add_endpoint_json(
+                            api_endpoints.community,
+                            vm.species_community.id + '/deactivate'
+                        ),
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                        }
+                    ).then(
+                        async (response) => {
+                            const data = await response.json();
+                            if (!response.ok) {
+                                swal.fire({
+                                    title: 'Error',
+                                    text: JSON.stringify(data),
+                                    icon: 'error',
+                                    customClass: {
+                                        confirmButton: 'btn btn-primary',
+                                    },
+                                });
+                                return;
+                            }
+                            vm.species_community = helpers.copyObject(data);
+                            vm.species_community_original = helpers.copyObject(
+                                vm.species_community
+                            );
+                            swal.fire({
+                                title: 'Deactivated',
+                                text: 'Community has been deactivated',
+                                icon: 'success',
+                                customClass: {
+                                    confirmButton: 'btn btn-primary',
+                                },
+                            });
+                        },
+                        (error) => {
+                            console.log(error);
+                            swal.fire({
+                                title: 'Error',
+                                text: 'There was an error deactivating the community',
+                                icon: 'error',
+                                customClass: {
+                                    confirmButton: 'btn btn-primary',
+                                },
+                            });
+                        }
+                    );
+                }
+            });
         },
         makePublic: async function () {
             this.$refs.make_public.isModalOpen = true;

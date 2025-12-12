@@ -29,14 +29,33 @@ from boranga.components.data_migration.registry import (
 )
 from boranga.components.occurrence.models import (
     AssociatedSpeciesTaxonomy,
+    Intensity,
+    OCCAssociatedSpecies,
+    OCCFireHistory,
+    OCCHabitatComposition,
+    OCCHabitatCondition,
+    OCCIdentification,
+    OCCLocation,
+    OCCObservationDetail,
+    OCCPlantCount,
+    Occurrence,
+    OccurrenceGeometry,
     OccurrenceReport,
+    OccurrenceReportGeometry,
+    OCCVegetationStructure,
     OCRAssociatedSpecies,
+    OCRFireHistory,
     OCRHabitatComposition,
     OCRHabitatCondition,
     OCRIdentification,
+    OCRLocation,
+    OCRObservationDetail,
     OCRObserverDetail,
+    OCRPlantCount,
+    OCRVegetationStructure,
 )
 from boranga.components.species_and_communities.models import Taxonomy
+from boranga.components.users.models import SubmitterInformation
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +126,47 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if not was_autocommit:
                 conn.set_autocommit(False)
 
+    def preload_pop_section_map(self, path: str) -> dict[str, list[tuple[str, str]]]:
+        """
+        Load DRF_POP_SECTION_MAP.csv into a dict:
+        SHEETNO -> [(POP_ID, SECT_CODE), ...]
+        """
+        import csv
+        import os
+
+        # Try to find the file in the same directory as the input path first.
+        base_dir = os.path.dirname(path)
+        map_path = os.path.join(base_dir, "DRF_POP_SECTION_MAP.csv")
+
+        if not os.path.exists(map_path):
+            # Fallback to the known location if the input path is different
+            map_path = "private-media/legacy_data/TPFL/DRF_POP_SECTION_MAP.csv"
+
+        if not os.path.exists(map_path):
+            logger.warning(
+                f"DRF_POP_SECTION_MAP.csv not found at {map_path}. Skipping section copying."
+            )
+            return {}
+
+        mapping = defaultdict(list)
+        try:
+            with open(map_path, encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    sheetno = row.get("SHEETNO", "").strip()
+                    pop_id = row.get("POP_ID", "").strip()
+                    sect_code = row.get("SECT_CODE", "").strip()
+                    is_active = row.get("IS_ACTIVE", "").strip()
+
+                    if sheetno and pop_id and sect_code and is_active == "Y":
+                        mapping[sheetno].append((pop_id, sect_code))
+
+            logger.info(f"Loaded {len(mapping)} entries from {map_path}")
+            return mapping
+        except Exception as e:
+            logger.exception(f"Failed to load DRF_POP_SECTION_MAP.csv: {e}")
+            return {}
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--sources",
@@ -143,6 +203,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
         path_map = self._parse_path_map(options.get("path_map"))
+
+        # Load pop_section_map early so we can use it for associated species filtering
+        pop_section_map = self.preload_pop_section_map(path)
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
@@ -498,16 +561,54 @@ class OccurrenceReportImporter(BaseSheetImporter):
             habitat_data = {}
             identification_data = {}
             habitat_condition = {}
+            submitter_information_data = {}
+            location_data = {}
+            observation_detail_data = {}
+            geometry_data = {}
+            plant_count_data = {}
+            vegetation_structure_data = {}
+            fire_history_data = {}
+
+            # Helper to extract .value from TransformResult if needed
+            def extract_value(v):
+                from boranga.components.data_migration.registry import TransformResult
+
+                if isinstance(v, TransformResult):
+                    return v.value
+                return v
+
             for k, v in merged.items():
                 if k.startswith("OCRHabitatComposition__"):
                     short = k.split("OCRHabitatComposition__", 1)[1]
-                    habitat_data[short] = v
+                    habitat_data[short] = extract_value(v)
                 if k.startswith("OCRHabitatCondition__"):
                     short = k.split("OCRHabitatCondition__", 1)[1]
-                    habitat_condition[short] = v
+                    habitat_condition[short] = extract_value(v)
                 if k.startswith("OCRIdentification__"):
                     short = k.split("OCRIdentification__", 1)[1]
-                    identification_data[short] = v
+                    identification_data[short] = extract_value(v)
+                if k.startswith("SubmitterInformation__"):
+                    short = k.split("SubmitterInformation__", 1)[1]
+                    submitter_information_data[short] = extract_value(v)
+                if k.startswith("OCRLocation__"):
+                    short = k.split("OCRLocation__", 1)[1]
+                    location_data[short] = extract_value(v)
+                if k.startswith("OCRObservationDetail__"):
+                    short = k.split("OCRObservationDetail__", 1)[1]
+                    observation_detail_data[short] = extract_value(v)
+                if k.startswith("OccurrenceReportGeometry__"):
+                    short = k.split("OccurrenceReportGeometry__", 1)[1]
+                    geometry_data[short] = extract_value(v)
+                    logger.debug(f"Extracted geometry field: {short}={type(v)}")
+                if k.startswith("OCRPlantCount__"):
+                    short = k.split("OCRPlantCount__", 1)[1]
+                    plant_count_data[short] = extract_value(v)
+                if k.startswith("OCRVegetationStructure__"):
+                    short = k.split("OCRVegetationStructure__", 1)[1]
+                    vegetation_structure_data[short] = extract_value(v)
+                if k.startswith("OCRFireHistory__"):
+                    short = k.split("OCRFireHistory__", 1)[1]
+                    fire_history_data[short] = extract_value(v)
 
             ops.append(
                 {
@@ -517,6 +618,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "habitat_data": habitat_data,
                     "habitat_condition": habitat_condition,
                     "identification_data": identification_data,
+                    "submitter_information_data": submitter_information_data,
+                    "location_data": location_data,
+                    "observation_detail_data": observation_detail_data,
+                    "geometry_data": geometry_data,
+                    "plant_count_data": plant_count_data,
+                    "vegetation_structure_data": vegetation_structure_data,
+                    "fire_history_data": fire_history_data,
                 }
             )
 
@@ -536,7 +644,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         migrated_keys = [o["migrated_from_id"] for o in ops]
         existing_by_migrated = {
             s.migrated_from_id: s
-            for s in OccurrenceReport.objects.filter(migrated_from_id__in=migrated_keys)
+            for s in OccurrenceReport.objects.filter(
+                migrated_from_id__in=migrated_keys
+            ).select_related("occurrence")
         }
 
         # Prepare lists for bulk ops
@@ -550,13 +660,33 @@ class OccurrenceReportImporter(BaseSheetImporter):
             defaults = op["defaults"]
             habitat_data = op.get("habitat_data") or {}
             habitat_condition = op.get("habitat_condition") or {}
+            submitter_information_data = op.get("submitter_information_data") or {}
+            location_data = op.get("location_data") or {}
+            observation_detail_data = op.get("observation_detail_data") or {}
+            geometry_data = op.get("geometry_data") or {}
+            plant_count_data = op.get("plant_count_data") or {}
+            vegetation_structure_data = op.get("vegetation_structure_data") or {}
+            fire_history_data = op.get("fire_history_data") or {}
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
                 # apply defaults to instance for later bulk_update
                 for k, v in defaults.items():
                     apply_value_to_instance(obj, k, v)
-                to_update.append((obj, habitat_data, habitat_condition))
+                to_update.append(
+                    (
+                        obj,
+                        habitat_data,
+                        habitat_condition,
+                        submitter_information_data,
+                        location_data,
+                        observation_detail_data,
+                        geometry_data,
+                        plant_count_data,
+                        vegetation_structure_data,
+                        fire_history_data,
+                    )
+                )
                 continue
 
             # create new instance (bulk_create later)
@@ -568,7 +698,20 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 **normalize_create_kwargs(OccurrenceReport, create_kwargs)
             )
             to_create.append(inst)
-            create_meta.append((migrated_from_id, habitat_data, habitat_condition))
+            create_meta.append(
+                (
+                    migrated_from_id,
+                    habitat_data,
+                    habitat_condition,
+                    submitter_information_data,
+                    location_data,
+                    observation_detail_data,
+                    geometry_data,
+                    plant_count_data,
+                    vegetation_structure_data,
+                    fire_history_data,
+                )
+            )
 
         # Bulk create new OccurrenceReports
         created_map = {}
@@ -585,7 +728,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Refresh created objects to get PKs
         if create_meta:
             created_keys = [m[0] for m in create_meta]
-            for s in OccurrenceReport.objects.filter(migrated_from_id__in=created_keys):
+            logger.info(f"created_keys for lookup: {created_keys[:5]}")
+            for s in OccurrenceReport.objects.filter(
+                migrated_from_id__in=created_keys
+            ).select_related("occurrence"):
+                logger.info(f"Adding to created_map: {s.migrated_from_id}={s.pk}")
                 created_map[s.migrated_from_id] = s
 
         # Populate occurrence_report_number for newly-created objects (bulk_update)
@@ -872,16 +1019,26 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # Create OCRAssociatedSpecies for occurrence reports that need them
             assoc_to_create = []
-            for sheetno, names in sheet_to_species.items():
-                ocr = target_map.get(sheetno)
-                if not ocr:
+            # Iterate over all target occurrence reports, not just those in sheet_to_species
+            for sheetno, ocr in target_map.items():
+                if ocr.pk in existing_assoc:
                     continue
-                if ocr.pk not in existing_assoc:
-                    # create only if there are resolved species
-                    resolved = [name_to_assoc[n] for n in names if n in name_to_assoc]
-                    if not resolved:
-                        continue
+
+                # Check if we have species
+                names = sheet_to_species.get(sheetno, [])
+                resolved = [name_to_assoc[n] for n in names if n in name_to_assoc]
+
+                # Check if we have comment
+                op = op_map.get(sheetno)
+                comment = None
+                if op:
+                    merged = op.get("merged") or {}
+                    comment = merged.get("OCRAssociatedSpecies__comment")
+
+                if resolved or comment:
                     assoc = OCRAssociatedSpecies(occurrence_report=ocr)
+                    if comment:
+                        assoc.comment = comment
                     assoc_to_create.append(assoc)
 
             if assoc_to_create:
@@ -909,6 +1066,31 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     occurrence_report__in=target_occs
                 )
             }
+
+            # Update existing OCRAssociatedSpecies with comments
+            assoc_to_update = []
+            for sheetno, ocr in target_map.items():
+                if ocr.pk not in existing_assoc:
+                    continue
+
+                assoc = existing_assoc[ocr.pk]
+                op = op_map.get(sheetno)
+                if op:
+                    merged = op.get("merged") or {}
+                    comment = merged.get("OCRAssociatedSpecies__comment")
+                    if comment and assoc.comment != comment:
+                        assoc.comment = comment
+                        assoc_to_update.append(assoc)
+
+            if assoc_to_update:
+                try:
+                    OCRAssociatedSpecies.objects.bulk_update(
+                        assoc_to_update, ["comment"], batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_update OCRAssociatedSpecies comments"
+                    )
 
             # Prepare through model info for bulk operations
             through = OCRAssociatedSpecies.related_species.through
@@ -1007,9 +1189,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         from boranga.components.occurrence.models import (
                             AssociatedSpeciesTaxonomy as _AST,
                         )
-                        from boranga.components.occurrence.models import (
-                            OCCAssociatedSpecies,
-                        )
 
                         # Build set of occurrence ids
                         occ_ids = {o.occurrence_id for o in occ_reports_with_occ}
@@ -1061,16 +1240,49 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         dup_create_list = []
                         import uuid
 
+                        occ_assoc_to_update = []
                         for o in occ_reports_with_occ:
                             occ = getattr(o, "occurrence", None)
                             if not occ:
                                 continue
+
+                            # Check if HABITAT section exists for this sheetno
+                            sheetno = o.migrated_from_id
+                            is_habitat = False
+                            if sheetno and sheetno in pop_section_map:
+                                for _, code in pop_section_map[sheetno]:
+                                    if code == "HABITAT":
+                                        is_habitat = True
+                                        break
+
+                            if not is_habitat:
+                                continue
+
                             ocr_assoc = existing_assoc.get(o.pk)
                             if not ocr_assoc:
                                 continue
                             occ_assoc = existing_occ_assoc.get(occ.id)
                             if not occ_assoc:
                                 continue
+
+                            # Update OCCAssociatedSpecies fields (comment and link)
+                            updated = False
+                            if (
+                                ocr_assoc.comment
+                                and occ_assoc.comment != ocr_assoc.comment
+                            ):
+                                occ_assoc.comment = ocr_assoc.comment
+                                updated = True
+                            if (
+                                occ_assoc.copied_ocr_associated_species_id
+                                != ocr_assoc.pk
+                            ):
+                                occ_assoc.copied_ocr_associated_species = ocr_assoc
+                                updated = True
+
+                            if updated:
+                                occ_assoc_to_update.append(occ_assoc)
+
                             for ast in ocr_assoc.related_species.all():
                                 marker = f"__dm_dup__{uuid.uuid4().hex}"
                                 comments = (ast.comments or "") + " " + marker
@@ -1082,6 +1294,26 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     comments=comments.strip(),
                                 )
                                 dup_create_list.append((occ_assoc.pk, inst, marker))
+
+                        if occ_assoc_to_update:
+                            try:
+                                OCCAssociatedSpecies.objects.bulk_update(
+                                    occ_assoc_to_update,
+                                    ["comment", "copied_ocr_associated_species"],
+                                    batch_size=BATCH,
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "Failed to bulk_update OCCAssociatedSpecies; falling back to individual saves"
+                                )
+                                for a in occ_assoc_to_update:
+                                    try:
+                                        a.save()
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to update OCCAssociatedSpecies %s",
+                                            getattr(a, "pk", None),
+                                        )
 
                         if dup_create_list:
                             # Bulk create AST duplicates
@@ -1109,7 +1341,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 dup_create_list = created
 
                             # Map markers -> created AST instances by querying comments ending with marker
-                            created_map = {}
+                            ast_created_map = {}
                             for occ_assoc_pk, inst, marker in dup_create_list:
                                 try:
                                     created_inst = _AST.objects.get(
@@ -1118,7 +1350,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 except _AST.DoesNotExist:
                                     created_inst = None
                                 if created_inst:
-                                    created_map.setdefault(occ_assoc_pk, []).append(
+                                    ast_created_map.setdefault(occ_assoc_pk, []).append(
                                         (marker, created_inst)
                                     )
 
@@ -1144,7 +1376,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 occ_fk_id = occ_fk_field + "_id"
                                 tax_fk_id = tax_fk_field + "_id"
                                 through_to_create = []
-                                for occ_assoc_pk, items in created_map.items():
+                                for occ_assoc_pk, items in ast_created_map.items():
                                     for marker, ast_inst in items:
                                         through_to_create.append(
                                             through_occ(
@@ -1180,7 +1412,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                                 # Cleanup: remove markers from comments on created ASTs
                                 try:
-                                    for items in created_map.values():
+                                    for items in ast_created_map.values():
                                         for marker, ast_inst in items:
                                             if (
                                                 ast_inst
@@ -1201,6 +1433,300 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     logger.exception(
                         "Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences"
                     )
+
+        # SubmitterInformation: OneToOne - create or update submitter information
+        # Note: OneToOne relationship is defined on OccurrenceReport side (submitter_information field)
+        # Fetch existing submitter information (keyed by occurrence_report.pk)
+        existing_submitter_info = {}
+        for s in SubmitterInformation.objects.filter(occurrence_report__in=target_occs):
+            # The relationship is OneToOne from OccurrenceReport to SubmitterInformation
+            # Access the related OccurrenceReport through the related_name
+            try:
+                ocr_id = s.occurrence_report.pk
+                existing_submitter_info[ocr_id] = s
+            except Exception:
+                # If occurrence_report is None or deleted, skip
+                pass
+
+        submitter_info_to_create = []
+        submitter_info_create_map = (
+            {}
+        )  # Maps (ocr_id, mig_id) -> SubmitterInformation instance
+        submitter_info_to_update = []
+
+        for up in to_update:
+            (
+                inst,
+                habitat_data,
+                habitat_condition,
+                submitter_information_data,
+                location_data,
+                observation_detail_data,
+                geometry_data,
+                plant_count_data,
+                vegetation_structure_data,
+                fire_history_data,
+            ) = up
+            sid = inst.pk
+            si_data = submitter_information_data or {}
+
+            # SubmitterInformation: update existing or schedule create
+            if sid in existing_submitter_info:
+                si = existing_submitter_info[sid]
+                valid_si_fields = {f.name for f in SubmitterInformation._meta.fields}
+                for field_name, val in si_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_si_fields:
+                        apply_value_to_instance(si, field_name, val)
+
+                # Ensure defaults are set if not already present
+                if not si.organisation:
+                    si.organisation = "DBCA"
+                if not si.submitter_category_id:
+                    try:
+                        from boranga.components.users.models import SubmitterCategory
+
+                        dbca_cat = SubmitterCategory.objects.filter(
+                            name__iexact="DBCA"
+                        ).first()
+                        if dbca_cat:
+                            si.submitter_category_id = dbca_cat.pk
+                    except Exception:
+                        pass
+
+                submitter_info_to_update.append(si)
+            else:
+                # Create new SubmitterInformation (DON'T pass occurrence_report in create_kwargs)
+                # We'll link it to OccurrenceReport after creation
+                si_create = {}
+                valid_si_fields = {f.name for f in SubmitterInformation._meta.fields}
+                for field_name, val in si_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_si_fields:
+                        si_create[field_name] = val
+
+                # Ensure defaults for organisation and submitter_category
+                if (
+                    "organisation" not in si_create
+                    or si_create.get("organisation") is None
+                ):
+                    si_create["organisation"] = "DBCA"
+
+                if (
+                    "submitter_category_id" not in si_create
+                    or si_create.get("submitter_category_id") is None
+                ):
+                    try:
+                        from boranga.components.users.models import SubmitterCategory
+
+                        dbca_cat = SubmitterCategory.objects.filter(
+                            name__iexact="DBCA"
+                        ).first()
+                        if dbca_cat:
+                            si_create["submitter_category_id"] = dbca_cat.pk
+                    except Exception:
+                        pass
+
+                if si_data:  # only create if we have data
+                    si_instance = SubmitterInformation(
+                        **normalize_create_kwargs(SubmitterInformation, si_create)
+                    )
+                    submitter_info_to_create.append(si_instance)
+                    submitter_info_create_map[(sid, None)] = (
+                        si_instance  # track for linking later
+                    )
+
+        # Handle created ones (from create_meta)
+        for (
+            mig,
+            habitat_data,
+            habitat_condition,
+            submitter_information_data,
+            location_data,
+            observation_detail_data,
+            geometry_data,
+            plant_count_data,
+            vegetation_structure_data,
+            fire_history_data,
+        ) in create_meta:
+            ocr = target_map.get(mig)
+            if not ocr:
+                continue
+            si_data = submitter_information_data or {}
+
+            # Check if submitter_information already exists (shouldn't normally happen for created)
+            if ocr.pk in existing_submitter_info:
+                si = existing_submitter_info[ocr.pk]
+                valid_si_fields = {f.name for f in SubmitterInformation._meta.fields}
+                for field_name, val in si_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_si_fields:
+                        apply_value_to_instance(si, field_name, val)
+
+                # Ensure defaults are set if not already present
+                if not si.organisation:
+                    si.organisation = "DBCA"
+                if not si.submitter_category_id:
+                    try:
+                        from boranga.components.users.models import SubmitterCategory
+
+                        dbca_cat = SubmitterCategory.objects.filter(
+                            name__iexact="DBCA"
+                        ).first()
+                        if dbca_cat:
+                            si.submitter_category_id = dbca_cat.pk
+                    except Exception:
+                        pass
+
+                submitter_info_to_update.append(si)
+            else:
+                # Create new SubmitterInformation (DON'T pass occurrence_report in create_kwargs)
+                si_create = {}
+                valid_si_fields = {f.name for f in SubmitterInformation._meta.fields}
+                for field_name, val in si_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_si_fields:
+                        si_create[field_name] = val
+
+                # Ensure organisation defaults to 'DBCA' if not provided
+                if (
+                    "organisation" not in si_create
+                    or si_create.get("organisation") is None
+                ):
+                    si_create["organisation"] = "DBCA"
+
+                # Ensure submitter_category defaults to DBCA category if not provided
+                if (
+                    "submitter_category_id" not in si_create
+                    or si_create.get("submitter_category_id") is None
+                ):
+                    try:
+                        from boranga.components.users.models import SubmitterCategory
+
+                        dbca_cat = SubmitterCategory.objects.filter(
+                            name__iexact="DBCA"
+                        ).first()
+                        if dbca_cat:
+                            si_create["submitter_category_id"] = dbca_cat.pk
+                    except Exception:
+                        pass
+
+                if si_data:  # only create if we have data
+                    si_instance = SubmitterInformation(
+                        **normalize_create_kwargs(SubmitterInformation, si_create)
+                    )
+                    submitter_info_to_create.append(si_instance)
+                    submitter_info_create_map[(ocr.pk, mig)] = (
+                        si_instance  # track for linking later
+                    )
+
+        # Bulk update existing SubmitterInformation records with defaults
+        if submitter_info_to_update:
+            logger.info(
+                "OccurrenceReportImporter: bulk-updating %d SubmitterInformation records",
+                len(submitter_info_to_update),
+            )
+
+            # Determine which fields have been modified (non-None values)
+            update_fields = set()
+            for si in submitter_info_to_update:
+                for f in SubmitterInformation._meta.fields:
+                    if f.name not in ("id", "occurrence_report"):
+                        val = getattr(si, f.name, None)
+                        if val is not None or f.name in (
+                            "organisation",
+                            "submitter_category_id",
+                        ):
+                            update_fields.add(f.name)
+
+            update_fields = list(update_fields)
+
+            try:
+                SubmitterInformation.objects.bulk_update(
+                    submitter_info_to_update, update_fields, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update SubmitterInformation; falling back to individual saves"
+                )
+                for obj in submitter_info_to_update:
+                    try:
+                        obj.save(update_fields=update_fields)
+                    except Exception:
+                        logger.exception(
+                            "Failed to update SubmitterInformation %s", obj.pk
+                        )
+
+        if submitter_info_to_create:
+            logger.info(
+                "OccurrenceReportImporter: bulk-creating %d SubmitterInformation records",
+                len(submitter_info_to_create),
+            )
+            try:
+                SubmitterInformation.objects.bulk_create(
+                    submitter_info_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create SubmitterInformation; falling back to individual creates"
+                )
+                for obj in submitter_info_to_create:
+                    try:
+                        obj.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create SubmitterInformation for occurrence_report %s",
+                            getattr(obj.pk, "pk", None),
+                        )
+
+        # After bulk_create, refresh created SubmitterInformation instances to get their IDs
+        # and link them to OccurrenceReports
+        if submitter_info_create_map:
+            occs_to_link_si = []
+
+            # Pre-fetch any OccurrenceReports that might be missing from target_map
+            missing_ocr_ids = {
+                ocr_id
+                for (ocr_id, mig) in submitter_info_create_map.keys()
+                if (not mig or mig not in target_map) and ocr_id
+            }
+            fetched_ocrs = {}
+            if missing_ocr_ids:
+                fetched_ocrs = OccurrenceReport.objects.in_bulk(list(missing_ocr_ids))
+
+            for (ocr_id, mig), si_instance in submitter_info_create_map.items():
+                # No need to refresh_from_db() as bulk_create populates PKs in Django 5.x+ with Postgres
+
+                ocr = target_map.get(mig) if mig else None
+                if not ocr and ocr_id:
+                    ocr = fetched_ocrs.get(ocr_id)
+
+                if ocr:
+                    ocr.submitter_information_id = si_instance.pk
+                    occs_to_link_si.append(ocr)
+
+            if occs_to_link_si:
+                try:
+                    OccurrenceReport.objects.bulk_update(
+                        occs_to_link_si, ["submitter_information_id"], batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to link SubmitterInformation to OccurrenceReport"
+                    )
+                    # Fallback to individual saves if bulk_update fails
+                    for ocr in occs_to_link_si:
+                        try:
+                            ocr.save(update_fields=["submitter_information_id"])
+                        except Exception:
+                            logger.exception(
+                                "Failed to link SubmitterInformation for OccurrenceReport %s",
+                                ocr.pk,
+                            )
 
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report
         want_obs_create = []
@@ -1279,14 +1805,94 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 occurrence_report__in=target_occs
             )
         }
+        # Fetch existing locations
+        existing_locations = {
+            loc.occurrence_report_id: loc
+            for loc in OCRLocation.objects.filter(occurrence_report__in=target_occs)
+        }
+        # Fetch existing observation details
+        existing_observations = {
+            od.occurrence_report_id: od
+            for od in OCRObservationDetail.objects.filter(
+                occurrence_report__in=target_occs
+            )
+        }
+        existing_plant_counts = {
+            pc.occurrence_report_id: pc
+            for pc in OCRPlantCount.objects.filter(occurrence_report__in=target_occs)
+        }
+        existing_vegetation_structures = {
+            vs.occurrence_report_id: vs
+            for vs in OCRVegetationStructure.objects.filter(
+                occurrence_report__in=target_occs
+            )
+        }
+        existing_fire_histories = {
+            fh.occurrence_report_id: fh
+            for fh in OCRFireHistory.objects.filter(occurrence_report__in=target_occs)
+        }
+        intensity_map = {i.name: i for i in Intensity.objects.all()}
+        intensity_id_map = {i.id: i for i in Intensity.objects.all()}
         habs_to_create = []
         habs_to_update = []
         conds_to_create = []
         conds_to_update = []
         idents_to_create = []
         idents_to_update = []
+        locs_to_create = []
+        locs_to_update = []
+        obs_to_create = []
+        obs_to_update = []
+        plant_counts_to_create = []
+        plant_counts_to_update = []
+        vegetation_structures_to_create = []
+        vegetation_structures_to_update = []
+        fire_history_to_create = []
+        fire_history_to_update = []
+
+        # Fetch ContentType once before processing geometries
+        from django.contrib.contenttypes.models import ContentType
+
+        ocr_content_type = ContentType.objects.get_for_model(OccurrenceReport)
+        occ_content_type = ContentType.objects.get_for_model(Occurrence)
+
+        # Pre-fetch existing geometries for bulk lookup
+        # For updates:
+        update_ocr_ids = [t[0].pk for t in to_update]
+        update_occ_ids = [t[0].occurrence_id for t in to_update if t[0].occurrence_id]
+        # For creates:
+        create_ocr_ids = [s.pk for s in created_map.values()]
+        create_occ_ids = [
+            s.occurrence_id for s in created_map.values() if s.occurrence_id
+        ]
+
+        all_ocr_ids = update_ocr_ids + create_ocr_ids
+        all_occ_ids = update_occ_ids + create_occ_ids
+
+        existing_ocr_geoms = {
+            g.occurrence_report_id: g
+            for g in OccurrenceReportGeometry.objects.filter(
+                occurrence_report_id__in=all_ocr_ids
+            )
+        }
+        existing_occ_geoms = {
+            g.occurrence_id: g
+            for g in OccurrenceGeometry.objects.filter(occurrence_id__in=all_occ_ids)
+        }
+
         for up in to_update:
-            inst, habitat_data, habitat_condition = up
+            (
+                inst,
+                habitat_data,
+                habitat_condition,
+                submitter_information_data,
+                location_data,
+                observation_detail_data,
+                geometry_data,
+                plant_count_data,
+                vegetation_structure_data,
+                fire_history_data,
+            ) = up
             hid = inst.pk
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
             hd = habitat_data or {}
@@ -1375,11 +1981,315 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     )
                 )
 
+            # OCRLocation handling for updates
+            ld = location_data or {}
+            # Fetch existing location for this occurrence_report if not already fetched
+            if hid in existing_locations:
+                loc_obj = existing_locations[hid]
+                valid_loc_fields = {f.name for f in OCRLocation._meta.fields}
+                for field_name, val in ld.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_loc_fields:
+                        apply_value_to_instance(loc_obj, field_name, val)
+                locs_to_update.append(loc_obj)
+            else:
+                create_kwargs = {"occurrence_report_id": hid}
+                valid_loc_fields = {f.name for f in OCRLocation._meta.fields}
+                for field_name, val in ld.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_loc_fields:
+                        create_kwargs[field_name] = val
+                locs_to_create.append(
+                    OCRLocation(**normalize_create_kwargs(OCRLocation, create_kwargs))
+                )
+
+            # OCRObservationDetail handling for updates
+            od = observation_detail_data or {}
+            if hid in existing_observations:
+                obs_obj = existing_observations[hid]
+                valid_obs_fields = {f.name for f in OCRObservationDetail._meta.fields}
+                for field_name, val in od.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_obs_fields:
+                        apply_value_to_instance(obs_obj, field_name, val)
+                obs_to_update.append(obs_obj)
+            else:
+                obs_create = {"occurrence_report": inst}
+                valid_obs_fields = {f.name for f in OCRObservationDetail._meta.fields}
+                for field_name, val in od.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_obs_fields:
+                        obs_create[field_name] = val
+                if len(od) > 0:
+                    obs_to_create.append(
+                        OCRObservationDetail(
+                            **normalize_create_kwargs(OCRObservationDetail, obs_create)
+                        )
+                    )
+
+            # OCRPlantCount handling for updates
+            pcd = plant_count_data or {}
+            if hid in existing_plant_counts:
+                pc_obj = existing_plant_counts[hid]
+                valid_pc_fields = {f.name for f in OCRPlantCount._meta.fields}
+                for field_name, val in pcd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_pc_fields:
+                        apply_value_to_instance(pc_obj, field_name, val)
+                plant_counts_to_update.append(pc_obj)
+            else:
+                pc_create = {"occurrence_report": inst}
+                valid_pc_fields = {f.name for f in OCRPlantCount._meta.fields}
+                for field_name, val in pcd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_pc_fields:
+                        pc_create[field_name] = val
+                if len(pcd) > 0:
+                    plant_counts_to_create.append(
+                        OCRPlantCount(
+                            **normalize_create_kwargs(OCRPlantCount, pc_create)
+                        )
+                    )
+
+            # OCRVegetationStructure handling for updates
+            vsd = vegetation_structure_data or {}
+            if hid in existing_vegetation_structures:
+                vs_obj = existing_vegetation_structures[hid]
+                valid_vs_fields = {f.name for f in OCRVegetationStructure._meta.fields}
+                for field_name, val in vsd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_vs_fields:
+                        apply_value_to_instance(vs_obj, field_name, val)
+                vegetation_structures_to_update.append(vs_obj)
+            else:
+                vs_create = {"occurrence_report": inst}
+                valid_vs_fields = {f.name for f in OCRVegetationStructure._meta.fields}
+                for field_name, val in vsd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_vs_fields:
+                        vs_create[field_name] = val
+                if len(vsd) > 0:
+                    vegetation_structures_to_create.append(
+                        OCRVegetationStructure(
+                            **normalize_create_kwargs(OCRVegetationStructure, vs_create)
+                        )
+                    )
+
+            # OCRFireHistory handling for updates
+            fhd = fire_history_data or {}
+
+            # Transform fields
+            comment = fhd.get("comment")
+            intensity_name = fhd.get("intensity")
+
+            intensity_obj = None
+            if intensity_name:
+                intensity_obj = intensity_map.get(intensity_name)
+
+            fh_fields = {}
+            if comment:
+                fh_fields["comment"] = comment
+            if intensity_obj:
+                fh_fields["intensity"] = intensity_obj
+
+            if hid in existing_fire_histories:
+                fh_obj = existing_fire_histories[hid]
+                valid_fh_fields = {f.name for f in OCRFireHistory._meta.fields}
+                for field_name, val in fh_fields.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fh_fields:
+                        apply_value_to_instance(fh_obj, field_name, val)
+                fire_history_to_update.append(fh_obj)
+            else:
+                fh_create = {"occurrence_report": inst}
+                valid_fh_fields = {f.name for f in OCRFireHistory._meta.fields}
+                for field_name, val in fh_fields.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fh_fields:
+                        fh_create[field_name] = val
+                if len(fh_fields) > 0:
+                    fire_history_to_create.append(
+                        OCRFireHistory(
+                            **normalize_create_kwargs(OCRFireHistory, fh_create)
+                        )
+                    )
+
+            # OccurrenceReportGeometry handling for updates
+            gd = geometry_data or {}
+            if gd.get("geometry"):
+                existing_geom = existing_ocr_geoms.get(inst.pk)
+
+                if existing_geom:
+                    # Update existing geometry
+                    valid_geom_fields = {
+                        f.name for f in OccurrenceReportGeometry._meta.fields
+                    }
+                    for field_name, val in gd.items():
+                        if field_name == "occurrence_report":
+                            continue
+                        if val is not None and field_name in valid_geom_fields:
+                            apply_value_to_instance(existing_geom, field_name, val)
+                    try:
+                        existing_geom.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to update OccurrenceReportGeometry for occurrence_report %s",
+                            inst.pk,
+                        )
+                else:
+                    # Create new geometry
+                    geom_create_kwargs = {
+                        "occurrence_report_id": inst.pk,
+                        "content_type": ocr_content_type,
+                        "object_id": inst.pk,
+                    }
+                    valid_geom_fields = {
+                        f.name for f in OccurrenceReportGeometry._meta.fields
+                    }
+                    for field_name, val in gd.items():
+                        if field_name == "occurrence_report":
+                            continue
+                        if val is not None and field_name in valid_geom_fields:
+                            geom_create_kwargs[field_name] = val
+
+                    try:
+                        buffered_geom = gd.get("geometry")
+                        if buffered_geom and hasattr(buffered_geom, "centroid"):
+                            original_point = buffered_geom.centroid
+                            if original_point:
+                                geom_create_kwargs["original_geometry_ewkb"] = (
+                                    original_point.ewkb
+                                )
+                    except Exception:
+                        logger.debug("Could not extract original point geometry")
+
+                    try:
+                        new_geom = OccurrenceReportGeometry.objects.create(
+                            **normalize_create_kwargs(
+                                OccurrenceReportGeometry, geom_create_kwargs
+                            )
+                        )
+                        existing_ocr_geoms[inst.pk] = new_geom
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OccurrenceReportGeometry for occurrence_report %s",
+                            inst.pk,
+                        )
+
+                # If there is a related Occurrence, copy the geometry to it
+                if inst.occurrence_id:
+                    try:
+                        occ = inst.occurrence
+                        if occ.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE:
+                            existing_occ_geom = existing_occ_geoms.get(occ.pk)
+
+                            if existing_occ_geom:
+                                valid_geom_fields = {
+                                    f.name for f in OccurrenceGeometry._meta.fields
+                                }
+                                for field_name, val in gd.items():
+                                    if field_name == "occurrence_report":
+                                        continue
+                                    if (
+                                        val is not None
+                                        and field_name in valid_geom_fields
+                                    ):
+                                        apply_value_to_instance(
+                                            existing_occ_geom, field_name, val
+                                        )
+                                try:
+                                    existing_occ_geom.save()
+                                except Exception:
+                                    logger.exception(
+                                        "Failed to update OccurrenceGeometry for occurrence %s",
+                                        occ.pk,
+                                    )
+                            else:
+                                geom_create_kwargs = {
+                                    "occurrence_id": occ.pk,
+                                    "content_type": occ_content_type,
+                                    "object_id": occ.pk,
+                                }
+                                valid_geom_fields = {
+                                    f.name for f in OccurrenceGeometry._meta.fields
+                                }
+                                for field_name, val in gd.items():
+                                    if field_name == "occurrence_report":
+                                        continue
+                                    if (
+                                        val is not None
+                                        and field_name in valid_geom_fields
+                                    ):
+                                        geom_create_kwargs[field_name] = val
+
+                                try:
+                                    buffered_geom = gd.get("geometry")
+                                    if buffered_geom and hasattr(
+                                        buffered_geom, "centroid"
+                                    ):
+                                        original_point = buffered_geom.centroid
+                                        if original_point:
+                                            geom_create_kwargs[
+                                                "original_geometry_ewkb"
+                                            ] = original_point.ewkb
+                                except Exception:
+                                    logger.debug(
+                                        "Could not extract original point geometry for Occurrence"
+                                    )
+
+                                try:
+                                    new_occ_geom = OccurrenceGeometry.objects.create(
+                                        **normalize_create_kwargs(
+                                            OccurrenceGeometry, geom_create_kwargs
+                                        )
+                                    )
+                                    existing_occ_geoms[occ.pk] = new_occ_geom
+                                except Exception:
+                                    logger.exception(
+                                        "Failed to create OccurrenceGeometry for occurrence %s",
+                                        occ.pk,
+                                    )
+                    except Exception:
+                        logger.exception(
+                            "Failed to process OccurrenceGeometry for linked Occurrence"
+                        )
+
         # Handle created ones
-        for mig, habitat_data, habitat_condition in create_meta:
+        logger.debug(
+            f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}"
+        )
+        logger.info(f"created_map keys: {list(created_map.keys())}")
+
+        for (
+            mig,
+            habitat_data,
+            habitat_condition,
+            submitter_information_data,
+            location_data,
+            observation_detail_data,
+            geometry_data,
+            plant_count_data,
+            vegetation_structure_data,
+            fire_history_data,
+        ) in create_meta:
+            logger.info(
+                f"Processing create_meta item: mig={mig}, has_geometry_data={bool(geometry_data)}"
+            )
             ocr = created_map.get(mig)
             if not ocr:
+                logger.info(f"Skipping {mig}: not in created_map")
                 continue
+            logger.info(f"Continuing with mig={mig}, ocr.pk={ocr.pk}")
             hd = habitat_data or {}
             hc = habitat_condition or {}
             # also pull identification_data from create_meta mapping (create_meta entries are tuples of
@@ -1388,6 +2298,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # we need to find the op to get identification_data
             ident_data = {}
             ident_data = op_map.get(mig, {}).get("identification_data") or {}
+            ld = location_data or {}
             if ocr.pk in existing_habs:
                 h = existing_habs[ocr.pk]
                 valid_fields = {f.name for f in OCRHabitatComposition._meta.fields}
@@ -1456,6 +2367,301 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         **normalize_create_kwargs(OCRIdentification, create_kwargs)
                     )
                 )
+
+            # OCRObservationDetail: OneToOne - create or update survey fields
+            od = observation_detail_data or {}
+            if ocr.pk in existing_observations:
+                obs_obj = existing_observations[ocr.pk]
+                valid_obs_fields = {f.name for f in OCRObservationDetail._meta.fields}
+                for field_name, val in od.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_obs_fields:
+                        apply_value_to_instance(obs_obj, field_name, val)
+                obs_to_update.append(obs_obj)
+            else:
+                obs_create = {"occurrence_report": ocr}
+                valid_obs_fields = {f.name for f in OCRObservationDetail._meta.fields}
+                for field_name, val in od.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_obs_fields:
+                        obs_create[field_name] = val
+                # Only create OCRObservationDetail if we have data
+                if len(od) > 0:
+                    obs_to_create.append(
+                        OCRObservationDetail(
+                            **normalize_create_kwargs(OCRObservationDetail, obs_create)
+                        )
+                    )
+
+            # OCRPlantCount handling for newly created ocr
+            pcd = plant_count_data or {}
+            if ocr.pk in existing_plant_counts:
+                pc_obj = existing_plant_counts[ocr.pk]
+                valid_pc_fields = {f.name for f in OCRPlantCount._meta.fields}
+                for field_name, val in pcd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_pc_fields:
+                        apply_value_to_instance(pc_obj, field_name, val)
+                plant_counts_to_update.append(pc_obj)
+            else:
+                pc_create = {"occurrence_report": ocr}
+                valid_pc_fields = {f.name for f in OCRPlantCount._meta.fields}
+                for field_name, val in pcd.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_pc_fields:
+                        pc_create[field_name] = val
+                if len(pcd) > 0:
+                    plant_counts_to_create.append(
+                        OCRPlantCount(
+                            **normalize_create_kwargs(OCRPlantCount, pc_create)
+                        )
+                    )
+
+            # OCRVegetationStructure handling for newly created ocr
+            vsd = vegetation_structure_data or {}
+            # Note: existing_vegetation_structures is keyed by occurrence_report_id
+            # but for newly created OCRs, we might not have them in existing_vegetation_structures
+            # unless we re-fetched them (which we didn't).
+            # However, since these are newly created OCRs, they shouldn't have existing VS unless
+            # something weird happened.
+            # But let's check anyway if we want to be safe, or just assume create.
+            # Actually, we are iterating over create_meta, so these are definitely new OCRs.
+            # So we just create.
+
+            vs_create = {"occurrence_report": ocr}
+            valid_vs_fields = {f.name for f in OCRVegetationStructure._meta.fields}
+            for field_name, val in vsd.items():
+                if field_name == "occurrence_report":
+                    continue
+                if val is not None and field_name in valid_vs_fields:
+                    vs_create[field_name] = val
+            if len(vsd) > 0:
+                vegetation_structures_to_create.append(
+                    OCRVegetationStructure(
+                        **normalize_create_kwargs(OCRVegetationStructure, vs_create)
+                    )
+                )
+
+            # OCRFireHistory handling for newly created ocr
+            fhd = fire_history_data or {}
+
+            # Transform fields
+            comment = fhd.get("comment")
+            intensity_val = fhd.get("intensity")
+
+            intensity_obj = None
+            if intensity_val:
+                if isinstance(intensity_val, int):
+                    intensity_obj = intensity_id_map.get(intensity_val)
+                else:
+                    intensity_obj = intensity_map.get(intensity_val)
+
+            fh_fields = {}
+            if comment:
+                fh_fields["comment"] = comment
+            if intensity_obj:
+                fh_fields["intensity"] = intensity_obj
+
+            if ocr.pk in existing_fire_histories:
+                fh_obj = existing_fire_histories[ocr.pk]
+                valid_fh_fields = {f.name for f in OCRFireHistory._meta.fields}
+                for field_name, val in fh_fields.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fh_fields:
+                        apply_value_to_instance(fh_obj, field_name, val)
+                fire_history_to_update.append(fh_obj)
+            else:
+                fh_create = {"occurrence_report": ocr}
+                valid_fh_fields = {f.name for f in OCRFireHistory._meta.fields}
+                for field_name, val in fh_fields.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_fh_fields:
+                        fh_create[field_name] = val
+                if len(fh_fields) > 0:
+                    fire_history_to_create.append(
+                        OCRFireHistory(
+                            **normalize_create_kwargs(OCRFireHistory, fh_create)
+                        )
+                    )
+
+            # OCRLocation create/update for newly created ocr
+            if ocr.pk in existing_locations:
+                loc_obj = existing_locations[ocr.pk]
+                valid_loc_fields = {f.name for f in OCRLocation._meta.fields}
+                for field_name, val in ld.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_loc_fields:
+                        apply_value_to_instance(loc_obj, field_name, val)
+                locs_to_update.append(loc_obj)
+            else:
+                create_kwargs = {"occurrence_report": ocr}
+                valid_loc_fields = {f.name for f in OCRLocation._meta.fields}
+                for field_name, val in ld.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_loc_fields:
+                        create_kwargs[field_name] = val
+                locs_to_create.append(
+                    OCRLocation(**normalize_create_kwargs(OCRLocation, create_kwargs))
+                )
+
+            # OccurrenceReportGeometry: OneToOne - create geometry with locked=True and content_type set
+            logger.info(f"About to process geometry for mig={mig}, ocr.pk={ocr.pk}")
+            gd = geometry_data or {}
+            if gd:
+                logger.info(
+                    f"Creating geometry for OCR {ocr.migrated_from_id} (pk={ocr.pk}): gd keys={list(gd.keys())}"
+                )
+            # Only create geometry if we have at least a geometry field
+            if gd.get("geometry"):
+                logger.debug(
+                    f"Creating geometry for OCR {ocr.pk}: {type(gd.get('geometry'))}"
+                )
+                existing_geom = existing_ocr_geoms.get(ocr.pk)
+
+                if existing_geom:
+                    # Update existing geometry
+                    valid_geom_fields = {
+                        f.name for f in OccurrenceReportGeometry._meta.fields
+                    }
+                    for field_name, val in gd.items():
+                        if field_name == "occurrence_report":
+                            continue
+                        if val is not None and field_name in valid_geom_fields:
+                            apply_value_to_instance(existing_geom, field_name, val)
+                    try:
+                        existing_geom.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to update OccurrenceReportGeometry for occurrence_report %s",
+                            ocr.pk,
+                        )
+                else:
+                    # Create new geometry
+                    geom_create_kwargs = {
+                        "occurrence_report_id": ocr.pk,
+                        "content_type": ocr_content_type,
+                        "object_id": ocr.pk,
+                    }
+                    # Add geometry fields from gd
+                    valid_geom_fields = {
+                        f.name for f in OccurrenceReportGeometry._meta.fields
+                    }
+                    for field_name, val in gd.items():
+                        if field_name == "occurrence_report":
+                            continue
+                        if val is not None and field_name in valid_geom_fields:
+                            geom_create_kwargs[field_name] = val
+
+                    # Store the original point geometry (before buffering) in EWKB format
+                    # The buffered polygon is in gd['geometry'], but we also want to preserve
+                    # the original point for reference
+                    try:
+                        buffered_geom = gd.get("geometry")
+                        if buffered_geom and hasattr(buffered_geom, "centroid"):
+                            # Extract the centroid of the buffered polygon as the original point
+                            original_point = buffered_geom.centroid
+                            if original_point:
+                                geom_create_kwargs["original_geometry_ewkb"] = (
+                                    original_point.ewkb
+                                )
+                    except Exception:
+                        logger.debug("Could not extract original point geometry")
+
+                    try:
+                        new_geom = OccurrenceReportGeometry.objects.create(
+                            **normalize_create_kwargs(
+                                OccurrenceReportGeometry, geom_create_kwargs
+                            )
+                        )
+                        existing_ocr_geoms[ocr.pk] = new_geom
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OccurrenceReportGeometry for occurrence_report %s",
+                            ocr.pk,
+                        )
+
+            # If there is a related Occurrence, copy the geometry to it
+            if ocr.occurrence_id and gd.get("geometry"):
+                try:
+                    occ = ocr.occurrence
+                    if occ.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE:
+                        # Check if OccurrenceGeometry already exists
+                        existing_occ_geom = existing_occ_geoms.get(occ.pk)
+
+                        if existing_occ_geom:
+                            # Update existing geometry
+                            valid_geom_fields = {
+                                f.name for f in OccurrenceGeometry._meta.fields
+                            }
+                            for field_name, val in gd.items():
+                                if field_name == "occurrence_report":
+                                    continue
+                                if val is not None and field_name in valid_geom_fields:
+                                    apply_value_to_instance(
+                                        existing_occ_geom, field_name, val
+                                    )
+                            try:
+                                existing_occ_geom.save()
+                            except Exception:
+                                logger.exception(
+                                    "Failed to update OccurrenceGeometry for occurrence %s",
+                                    occ.pk,
+                                )
+                        else:
+                            # Create new geometry
+                            geom_create_kwargs = {
+                                "occurrence_id": occ.pk,
+                                "content_type": occ_content_type,
+                                "object_id": occ.pk,
+                            }
+                            # Add geometry fields from gd
+                            valid_geom_fields = {
+                                f.name for f in OccurrenceGeometry._meta.fields
+                            }
+                            for field_name, val in gd.items():
+                                if field_name == "occurrence_report":
+                                    continue
+                                if val is not None and field_name in valid_geom_fields:
+                                    geom_create_kwargs[field_name] = val
+
+                            # Store the original point geometry (before buffering) in EWKB format
+                            try:
+                                buffered_geom = gd.get("geometry")
+                                if buffered_geom and hasattr(buffered_geom, "centroid"):
+                                    original_point = buffered_geom.centroid
+                                    if original_point:
+                                        geom_create_kwargs["original_geometry_ewkb"] = (
+                                            original_point.ewkb
+                                        )
+                            except Exception:
+                                logger.debug(
+                                    "Could not extract original point geometry for Occurrence"
+                                )
+
+                            try:
+                                new_occ_geom = OccurrenceGeometry.objects.create(
+                                    **normalize_create_kwargs(
+                                        OccurrenceGeometry, geom_create_kwargs
+                                    )
+                                )
+                                existing_occ_geoms[occ.pk] = new_occ_geom
+                            except Exception:
+                                logger.exception(
+                                    "Failed to create OccurrenceGeometry for occurrence %s",
+                                    occ.pk,
+                                )
+                except Exception:
+                    logger.exception(
+                        "Failed to process OccurrenceGeometry for linked Occurrence"
+                    )
 
         if habs_to_create:
             try:
@@ -1600,9 +2806,416 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             getattr(i, "pk", None),
                         )
 
+        # OCRLocation: OneToOne - create or update location records
+        if locs_to_create:
+            try:
+                OCRLocation.objects.bulk_create(locs_to_create, batch_size=BATCH)
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRLocation; falling back to individual creates"
+                )
+                for loc in locs_to_create:
+                    try:
+                        loc.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRLocation for occurrence_report %s",
+                            getattr(loc.occurrence_report, "pk", None),
+                        )
+
+        if locs_to_update:
+            try:
+                loc_fields = set()
+                for inst in locs_to_update:
+                    loc_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                loc_fields = {
+                    f
+                    for f in loc_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if loc_fields:
+                    OCRLocation.objects.bulk_update(
+                        locs_to_update, list(loc_fields), batch_size=BATCH
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRLocation; falling back to individual saves"
+                )
+                for loc in locs_to_update:
+                    try:
+                        loc.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRLocation %s",
+                            getattr(loc, "pk", None),
+                        )
+
+        # OCRObservationDetail: OneToOne - create or update observation detail records
+        if obs_to_create:
+            try:
+                OCRObservationDetail.objects.bulk_create(
+                    obs_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRObservationDetail; falling back to individual creates"
+                )
+                for obs in obs_to_create:
+                    try:
+                        obs.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRObservationDetail for occurrence_report %s",
+                            getattr(obs.occurrence_report, "pk", None),
+                        )
+
+        if obs_to_update:
+            try:
+                obs_fields = set()
+                for inst in obs_to_update:
+                    obs_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                obs_fields = {
+                    f
+                    for f in obs_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if obs_fields:
+                    OCRObservationDetail.objects.bulk_update(
+                        obs_to_update, list(obs_fields), batch_size=BATCH
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRObservationDetail; falling back to individual saves"
+                )
+                for obs in obs_to_update:
+                    try:
+                        obs.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRObservationDetail %s",
+                            getattr(obs, "pk", None),
+                        )
+
+        # OCRPlantCount: OneToOne - create or update plant count records
+        if plant_counts_to_create:
+            try:
+                OCRPlantCount.objects.bulk_create(
+                    plant_counts_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRPlantCount; falling back to individual creates"
+                )
+                for pc in plant_counts_to_create:
+                    try:
+                        pc.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRPlantCount for occurrence_report %s",
+                            getattr(pc.occurrence_report, "pk", None),
+                        )
+
+        if plant_counts_to_update:
+            try:
+                pc_fields = set()
+                for inst in plant_counts_to_update:
+                    pc_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                pc_fields = {
+                    f
+                    for f in pc_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if pc_fields:
+                    OCRPlantCount.objects.bulk_update(
+                        plant_counts_to_update, list(pc_fields), batch_size=BATCH
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRPlantCount; falling back to individual saves"
+                )
+                for pc in plant_counts_to_update:
+                    try:
+                        pc.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRPlantCount %s",
+                            getattr(pc, "pk", None),
+                        )
+
+        # OCRVegetationStructure: OneToOne - create or update vegetation structure records
+        if vegetation_structures_to_create:
+            try:
+                OCRVegetationStructure.objects.bulk_create(
+                    vegetation_structures_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRVegetationStructure; falling back to individual creates"
+                )
+                for vs in vegetation_structures_to_create:
+                    try:
+                        vs.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRVegetationStructure for occurrence_report %s",
+                            getattr(vs.occurrence_report, "pk", None),
+                        )
+
+        if vegetation_structures_to_update:
+            try:
+                vs_fields = set()
+                for inst in vegetation_structures_to_update:
+                    vs_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                vs_fields = {
+                    f
+                    for f in vs_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if vs_fields:
+                    OCRVegetationStructure.objects.bulk_update(
+                        vegetation_structures_to_update,
+                        list(vs_fields),
+                        batch_size=BATCH,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRVegetationStructure; falling back to individual saves"
+                )
+                for vs in vegetation_structures_to_update:
+                    try:
+                        vs.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRVegetationStructure %s",
+                            getattr(vs, "pk", None),
+                        )
+
+        # OCRFireHistory: OneToOne - create or update fire history records
+        if fire_history_to_create:
+            try:
+                OCRFireHistory.objects.bulk_create(
+                    fire_history_to_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create OCRFireHistory; falling back to individual creates"
+                )
+                for fh in fire_history_to_create:
+                    try:
+                        fh.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create OCRFireHistory for occurrence_report %s",
+                            getattr(fh.occurrence_report, "pk", None),
+                        )
+
+        if fire_history_to_update:
+            try:
+                fh_fields = set()
+                for inst in fire_history_to_update:
+                    fh_fields.update(
+                        [
+                            f.name
+                            for f in inst._meta.fields
+                            if getattr(inst, f.name, None) is not None
+                        ]
+                    )
+                # exclude id or FK reference
+                fh_fields = {
+                    f
+                    for f in fh_fields
+                    if f not in ("id", "occurrence_report", "occurrence_report_id")
+                }
+                if fh_fields:
+                    OCRFireHistory.objects.bulk_update(
+                        fire_history_to_update,
+                        list(fh_fields),
+                        batch_size=BATCH,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_update OCRFireHistory; falling back to individual saves"
+                )
+                for fh in fire_history_to_update:
+                    try:
+                        fh.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to save OCRFireHistory %s",
+                            getattr(fh, "pk", None),
+                        )
+
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)
         updated += len(to_update)
+
+        # ---------------------------------------------------------------------
+        # Populate Occurrence 1-to-1 objects by cloning from OccurrenceReport
+        # based on DRF_POP_SECTION_MAP.csv
+        # ---------------------------------------------------------------------
+        if pop_section_map:
+            logger.info(
+                "Starting population of Occurrence 1-to-1 objects from OccurrenceReports..."
+            )
+            # We iterate over all processed OccurrenceReports (both created and updated)
+            # For each OCR, we check if its SHEETNO (migrated_from_id) is in the map.
+            # If so, we clone the relevant sections to the parent Occurrence.
+
+            # Combine created and updated OCRs into a single list for processing
+            all_processed_ocrs = []
+            if created_map:
+                all_processed_ocrs.extend(created_map.values())
+            if to_update:
+                all_processed_ocrs.extend([t[0] for t in to_update])
+
+            # Map SECT_CODE to list of (OCR_Model, OCC_Model, copied_ocr_field_name)
+            section_config = {
+                "LOCATION": [
+                    (OCRLocation, OCCLocation, "copied_ocr_location"),
+                ],
+                "PLNT_CNT": [
+                    (OCRPlantCount, OCCPlantCount, "copied_ocr_plant_count"),
+                    (
+                        OCRObservationDetail,
+                        OCCObservationDetail,
+                        "copied_ocr_observation_detail",
+                    ),
+                ],
+                "HABITAT": [
+                    (
+                        OCRHabitatCondition,
+                        OCCHabitatCondition,
+                        "copied_ocr_habitat_condition",
+                    ),
+                    (
+                        OCRHabitatComposition,
+                        OCCHabitatComposition,
+                        "copied_ocr_habitat_composition",
+                    ),
+                    (
+                        OCRVegetationStructure,
+                        OCCVegetationStructure,
+                        "copied_ocr_vegetation_structure",
+                    ),
+                    (OCRFireHistory, OCCFireHistory, "copied_ocr_fire_history"),
+                ],
+                "VOUCHER": [
+                    (OCRIdentification, OCCIdentification, "copied_ocr_identification"),
+                ],
+            }
+
+            cloned_count = 0
+            for ocr in all_processed_ocrs:
+                sheetno = ocr.migrated_from_id
+                if not sheetno or sheetno not in pop_section_map:
+                    continue
+
+                # Get the list of sections to copy for this SHEETNO
+                # Each entry is (POP_ID, SECT_CODE)
+                entries = pop_section_map[sheetno]
+
+                for pop_id, sect_code in entries:
+                    if sect_code not in section_config:
+                        # Some codes might not be implemented or relevant
+                        continue
+
+                    configs = section_config[sect_code]
+
+                    for ocr_model, occ_model, copied_field in configs:
+                        # 1. Find the source OCR child object
+                        try:
+                            source_obj = ocr_model.objects.get(occurrence_report=ocr)
+                        except ocr_model.DoesNotExist:
+                            # Source doesn't exist, nothing to clone
+                            continue
+                        except ocr_model.MultipleObjectsReturned:
+                            source_obj = ocr_model.objects.filter(
+                                occurrence_report=ocr
+                            ).first()
+
+                        if not source_obj:
+                            continue
+
+                        # 2. Find or create the target OCC child object
+                        occurrence = ocr.occurrence
+                        if not occurrence:
+                            logger.warning(
+                                f"OCR {ocr.pk} (SHEETNO={sheetno}) has no parent Occurrence. "
+                                f"Skipping clone for {sect_code}."
+                            )
+                            continue
+
+                        # Check if target already exists on the occurrence
+                        target_obj = occ_model.objects.filter(
+                            occurrence=occurrence
+                        ).first()
+
+                        if not target_obj:
+                            # Create new instance
+                            target_obj = occ_model(occurrence=occurrence)
+
+                        # 3. Clone data
+                        try:
+                            # Copy fields that exist in both models
+                            source_fields = {f.name for f in source_obj._meta.fields}
+                            target_fields = {f.name for f in target_obj._meta.fields}
+                            common_fields = source_fields.intersection(target_fields)
+
+                            for field_name in common_fields:
+                                if field_name in [
+                                    "id",
+                                    "occurrence_report",
+                                    "occurrence",
+                                    "migrated_from_id",
+                                ]:
+                                    continue
+                                val = getattr(source_obj, field_name)
+                                setattr(target_obj, field_name, val)
+
+                            # Set the traceability field
+                            if hasattr(target_obj, copied_field):
+                                setattr(target_obj, copied_field, source_obj)
+
+                            target_obj.save()
+                            cloned_count += 1
+
+                        except Exception:
+                            logger.exception(
+                                f"Failed to clone {sect_code} ({ocr_model.__name__}) from OCR "
+                                f"{ocr.pk} to OCC {occurrence.pk}"
+                            )
+
+            logger.info(
+                f"Finished populating Occurrence 1-to-1 objects. Cloned {cloned_count} sections."
+            )
 
         persist_end = timezone.now()
         persist_duration = persist_end - transform_end
@@ -1636,7 +3249,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 ts = timezone.now().strftime("%Y%m%d_%H%M%S")
                 csv_path = os.path.join(
                     os.getcwd(),
-                    "boranga/components/data_migration/handlers/handler_output",
+                    "private-media/handler_output",
                     f"{self.slug}_errors_{ts}.csv",
                 )
             try:

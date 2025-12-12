@@ -114,6 +114,18 @@ def t_Y_to_active_else_historical(value, ctx):
     return _result("historical")
 
 
+@registry.register("y_to_true_n_to_none")
+def t_y_to_true_n_to_none(value, ctx):
+    if not value:
+        return _result(None)
+    val = str(value).strip().upper()
+    if val == "Y":
+        return _result(True)
+    if val == "N":
+        return _result(None)
+    return _result(None)
+
+
 @registry.register("strip")
 def t_strip(value, ctx):
     if value is None:
@@ -139,6 +151,11 @@ def t_blank_to_none(value, ctx):
 def t_null_to_none(value, ctx):
     if value in ("Null", "NULL", "null", "None", "none"):
         return _result(None)
+    return _result(value)
+
+
+@registry.register("identity")
+def t_identity(value, ctx):
     return _result(value)
 
 
@@ -557,6 +574,109 @@ def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
     return key
 
 
+def fk_lookup_static(
+    model: type[models.Model], lookup_field: str, static_value: Any
+) -> str:
+    """
+    Return a registered transform name that looks up a foreign key using a
+    static/constant value (ignoring the incoming row value).
+
+    This is useful when every row should map to the same FK object.
+
+    The lookup result is cached for the duration of the data migration (per transform name),
+    so the database query only happens once.
+
+    Parameters:
+      - model: the Django model to query
+      - lookup_field: the field name to filter by (e.g. 'id', 'name', 'code')
+      - static_value: the constant value to use for lookup
+
+    Usage:
+      FK_STATIC_GROUP = fk_lookup_static(GroupType, "name", "Flora")
+      PIPELINES["group_type_id"] = [FK_STATIC_GROUP]
+
+    Returns the primary key (id) of the matched object, or an error TransformIssue
+    if the object is not found or multiple objects match.
+    """
+    key = (
+        f"fk_static_{model._meta.label_lower}_{lookup_field}"
+        + "_"
+        + hashlib.sha1(str(static_value).encode()).hexdigest()[:8]
+    )
+
+    # Check if already registered (cached by value)
+    if key in registry._fns:
+        return key
+
+    # Closure variable to cache the lookup result and any error
+    cached_result = {"result": None, "error": None, "cached": False}
+
+    @registry.register(key)
+    def inner(value, ctx):
+        # Return cached result if available
+        if cached_result["cached"]:
+            if cached_result["error"]:
+                return _result(value, cached_result["error"])
+            return _result(cached_result["result"])
+
+        # Perform lookup on first call
+        qs = model._default_manager
+
+        try:
+            obj = qs.get(**{lookup_field: static_value})
+            cached_result["result"] = obj.pk
+            cached_result["cached"] = True
+            return _result(obj.pk)
+        except model.DoesNotExist:
+            error = TransformIssue(
+                "error",
+                f"{model.__name__} with {lookup_field}='{static_value}' not found",
+            )
+            cached_result["error"] = error
+            cached_result["cached"] = True
+            return _result(value, error)
+        except model.MultipleObjectsReturned:
+            error = TransformIssue(
+                "error",
+                f"Multiple {model.__name__} objects with {lookup_field}='{static_value}' found",
+            )
+            cached_result["error"] = error
+            cached_result["cached"] = True
+            return _result(value, error)
+
+    return key
+
+
+def static_value_factory(static_value: Any) -> str:
+    """
+    Return a registered transform name that always returns the same static value,
+    ignoring the incoming row data.
+
+    This is useful for populating fields with a constant value across all imported rows.
+
+    Parameters:
+      - static_value: the constant value to return for every row
+
+    Usage:
+      STATIC_DBCA = static_value_factory("DBCA")
+      PIPELINES["organization"] = [STATIC_DBCA]
+
+    Returns the static value for every row.
+    """
+    key = "static_value_" + hashlib.sha1(str(static_value).encode()).hexdigest()[:8]
+
+    # Check if already registered (cached by value)
+    if key in registry._fns:
+        return key
+
+    @registry.register(key)
+    def inner(value, ctx):
+        # Always return the static value, ignore incoming data
+        return _result(static_value)
+
+    return key
+
+
 def taxonomy_lookup(
     group_type_name: str | None = None,
     lookup_field: str = "scientific_name",
@@ -798,9 +918,12 @@ def _load_tpfl_name_to_nomos() -> dict:
 
     mapping = {}
     try:
-        base_dir = os.path.dirname(__file__)
+        from django.conf import settings
+
+        base_dir = getattr(settings, "BASE_DIR", os.getcwd())
         csv_path = os.path.join(
             base_dir,
+            "private-media",
             "legacy_data",
             "TPFL",
             "TPFL_CS_LISTING_NAME_TO_NOMOS_CANONICAL_NAME.csv",
@@ -901,6 +1024,21 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
             Species = None
 
         qs = LegacyTaxonomyMapping.objects.filter(list_name=list_name)
+
+        # Pre-fetch species mapping: taxonomy_id -> species_id
+        taxonomy_ids = set(qs.values_list("taxonomy_id", flat=True))
+        taxonomy_ids.discard(None)
+
+        tax_to_species = {}
+        if Species and taxonomy_ids:
+            # Fetch all species linked to these taxonomy_ids
+            # Note: Assuming one species per taxonomy_id, or taking one arbitrarily if multiple
+            sp_qs = Species.objects.filter(taxonomy_id__in=taxonomy_ids).values(
+                "taxonomy_id", "id"
+            )
+            for sp in sp_qs:
+                tax_to_species[sp["taxonomy_id"]] = sp["id"]
+
         for rec in qs.only("legacy_canonical_name", "taxonomy_id", "taxon_name_id"):
             key = _norm_legacy_canonical_name(rec.legacy_canonical_name)
             if not key:
@@ -908,18 +1046,9 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
             entry = {"taxonomy_id": rec.taxonomy_id, "taxon_name_id": rec.taxon_name_id}
             # If possible, resolve a linked Species id so lookups can be answered
             # from memory without further DB queries during import pipelines.
-            try:
-                if Species and rec.taxonomy_id:
-                    sp_id = (
-                        Species.objects.filter(taxonomy_id=rec.taxonomy_id)
-                        .values_list("id", flat=True)
-                        .first()
-                    )
-                    if sp_id:
-                        entry["species_id"] = sp_id
-            except Exception:
-                # be conservative: ignore errors resolving species and continue
-                pass
+            if rec.taxonomy_id in tax_to_species:
+                entry["species_id"] = tax_to_species[rec.taxonomy_id]
+
             # store both the canonical key and a casefold variant for case-insensitive lookups
             mapping.setdefault(key, entry)
             kcf = key.casefold()
@@ -1323,6 +1452,94 @@ def emailuser_by_legacy_username_factory(legacy_system: str) -> str:
                     f"Multiple users with legacy username='{value}' for system='{legacy_system}'",
                 ),
             )
+
+    registry._fns[name] = inner
+    return name
+
+
+def emailuser_object_by_legacy_username_factory(legacy_system: str) -> str:
+    """
+    Return a registered transform name that resolves legacy username -> EmailUser object
+    (the full EmailUser model instance, not just the ID).
+
+    This is useful when you need to extract attributes from the EmailUser object
+    using pluck_attribute_factory, e.g., to get the full name.
+
+    Results are cached for the duration of the data migration to avoid repeated
+    database queries for the same legacy username.
+
+    Usage:
+      EMAILUSER_OBJ_TPFL = emailuser_object_by_legacy_username_factory("TPFL")
+      SUBMITTER_NAME = pluck_attribute_factory("get_full_name")
+      PIPELINES["submitter_information_name"] = [EMAILUSER_OBJ_TPFL, SUBMITTER_NAME]
+    """
+    if not legacy_system:
+        raise ValueError("legacy_system must be provided to bind this transform")
+
+    key = f"emailuser_object_by_legacy_username:{legacy_system}"
+    name = (
+        "emailuser_object_by_legacy_username_"
+        + hashlib.sha1(key.encode()).hexdigest()[:8]
+    )
+    if name in registry._fns:
+        return name
+
+    # Cache for EmailUser objects keyed by (legacy_system, username)
+    cache: dict = {}
+
+    def inner(value, ctx):
+        if value in (None, ""):
+            return _result(None)
+        username = str(value).strip()
+        cache_key = (str(legacy_system).lower(), username.lower())
+
+        # Return cached result if available
+        if cache_key in cache:
+            cached = cache[cache_key]
+            if isinstance(cached, TransformResult):
+                return cached
+            return _result(cached)
+
+        qs = LegacyUsernameEmailuserMapping.objects.filter(
+            legacy_system__iexact=str(legacy_system), legacy_username__iexact=username
+        )
+        try:
+            mapping = qs.get()
+            # Fetch and return the actual EmailUser object
+            email_user = EmailUserRO.objects.get(id=mapping.emailuser_id)
+            result = _result(email_user)
+            cache[cache_key] = result
+            return result
+        except LegacyUsernameEmailuserMapping.DoesNotExist:
+            result = _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"User with legacy username='{value}' not found for system='{legacy_system}'",
+                ),
+            )
+            cache[cache_key] = result
+            return result
+        except LegacyUsernameEmailuserMapping.MultipleObjectsReturned:
+            result = _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"Multiple users with legacy username='{value}' for system='{legacy_system}'",
+                ),
+            )
+            cache[cache_key] = result
+            return result
+        except EmailUserRO.DoesNotExist:
+            result = _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"EmailUser with id={mapping.emailuser_id} not found for legacy username='{value}'",
+                ),
+            )
+            cache[cache_key] = result
+            return result
 
     registry._fns[name] = inner
     return name
@@ -2096,3 +2313,473 @@ def to_int_trailing_factory(prefix: str, required: bool = False):
             )
 
     return _transform
+
+
+def conditional_transform_factory(
+    condition_column: str,
+    condition_value: Any,
+    true_column: str,
+    true_transform: str | None = None,
+    false_value: Any = None,
+) -> str:
+    """
+    Return a registered transform name that applies conditional logic:
+    - If condition_column equals condition_value, apply true_transform to true_column value
+    - Otherwise return false_value
+
+    Parameters:
+      - condition_column: column name to check in the row
+      - condition_value: value to compare against (uses == comparison)
+      - true_column: column name to use when condition is true
+      - true_transform: registered transform name to apply to true_column value (optional)
+      - false_value: value to return when condition is false (default None)
+
+    Usage:
+      APPROVED_BY_IF_ACCEPTED = conditional_transform_factory(
+          condition_column="processing_status",
+          condition_value="PROCESSING_STATUS_APPROVED",
+          true_column="modified_by",
+          true_transform="emailuser_by_legacy_username_tpfl"
+      )
+      PIPELINES["approved_by"] = [APPROVED_BY_IF_ACCEPTED]
+    """
+    if not condition_column or not true_column:
+        raise ValueError("condition_column and true_column must be provided")
+
+    key_repr = f"conditional:{condition_column}:{condition_value}:{true_column}:{true_transform or ''}:{false_value!r}"
+    name = "conditional_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        # Get condition and true column values from row
+        row = ctx.row if ctx and isinstance(ctx.row, dict) else {}
+        condition_val = row.get(condition_column)
+        true_val = row.get(true_column)
+
+        # Check condition
+        if condition_val != condition_value:
+            return _result(false_value)
+
+        # If no true_column value, return false_value
+        if true_val in (None, ""):
+            return _result(false_value)
+
+        # If no transform specified, return the value as-is
+        if true_transform is None:
+            return _result(true_val)
+
+        # Apply the registered transform to the true_column value
+        fn = registry._fns.get(true_transform)
+        if fn is None:
+            return _result(
+                value,
+                TransformIssue("error", f"Unknown transform '{true_transform}'"),
+            )
+
+        try:
+            res = fn(true_val, ctx)
+            if isinstance(res, TransformResult):
+                return res
+            return _result(res)
+        except Exception as e:
+            return _result(
+                value, TransformIssue("error", f"conditional transform error: {e}")
+            )
+
+    registry._fns[name] = _inner
+    return name
+
+
+def region_from_district_factory():
+    """
+    Factory that returns a registered transform name for deriving region_id from district_id.
+
+    This transform looks up a District by its ID and extracts the associated region_id.
+    Results are cached for the duration of the migration run to avoid repeated DB lookups.
+
+    IMPORTANT: This transform is designed to work with the raw CSV row and extracts the
+    OCRLocation__district value from the row context, applies the district transform to it,
+    then derives the region from the transformed district ID.
+
+    Usage:
+      REGION_FROM_DISTRICT_TRANSFORM = region_from_district_factory()
+      PIPELINES["OCRLocation__region"] = [REGION_FROM_DISTRICT_TRANSFORM]
+
+    The transform ignores the input value (OCRLocation__region from CSV) and instead derives
+    the region from the OCRLocation__district in the same row. Returns None if district is
+    not found or cannot be transformed.
+    """
+    key = "region_from_district"
+    name = "region_from_district_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Create a cache dict that persists for the migration run
+    district_to_region_cache = {}
+
+    def inner(value, ctx: TransformContext):
+        # Ignore the input value (OCRLocation__region from CSV, which is usually empty)
+        # Instead, derive region from OCRLocation__district in the row
+        if not ctx or not isinstance(ctx.row, dict):
+            return _result(None)
+
+        # Get the raw district value from the row (this will be a legacy code like "5", "67")
+        raw_district_value = ctx.row.get("OCRLocation__district")
+        if raw_district_value is None or raw_district_value == "":
+            return _result(None)
+
+        # Derive region from the raw district value by looking it up in LegacyValueMap
+        try:
+            from django.contrib.contenttypes.models import ContentType
+
+            from boranga.components.main.models import LegacyValueMap
+            from boranga.components.species_and_communities.models import District
+
+            # Get the District content type and look up the legacy mapping
+            district_ct = ContentType.objects.get_for_model(District)
+            lvm = LegacyValueMap.objects.filter(
+                legacy_system="TPFL",
+                list_name="DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
+                legacy_value=str(raw_district_value).strip(),
+                target_content_type=district_ct,
+                active=True,
+            ).first()
+
+            if lvm:
+                district_id = lvm.target_object_id
+                # Check cache
+                if district_id in district_to_region_cache:
+                    return _result(district_to_region_cache[district_id])
+
+                # Look up district and extract region_id
+                district = District.objects.get(pk=district_id)
+                region_id = district.region_id
+                # Cache the result
+                district_to_region_cache[district_id] = region_id
+                return _result(region_id)
+            else:
+                return _result(
+                    None,
+                    TransformIssue(
+                        "warning",
+                        f"No legacy mapping found for DISTRICT value '{raw_district_value}'",
+                    ),
+                )
+        except Exception as e:
+            return _result(
+                None,
+                TransformIssue(
+                    "warning",
+                    f"Could not derive region from district value '{raw_district_value}': {e}",
+                ),
+            )
+
+    registry._fns[name] = inner
+    return name
+
+
+def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
+    """
+    Factory that returns a registered transform name for mapping POP_ID to Occurrence ID.
+
+    This transform uses an in-memory cache (populated on first call) that maps
+    POP_ID (Occurrence.migrated_from_id) to Occurrence.pk for fast lookups without
+    repeated DB queries. The cache persists for the entire migration run.
+
+    Usage:
+      OCCURRENCE_FROM_POP_ID = occurrence_from_pop_id_factory("TPFL")
+      PIPELINES["Occurrence__migrated_from_id"] = [OCCURRENCE_FROM_POP_ID]
+
+    The transform takes a SHEETNO (read from the row's migrated_from_id field),
+    converts it to POP_ID via the legacy mapping, then returns the corresponding
+    Occurrence instance.
+    """
+    key = f"occurrence_from_pop_id_{legacy_system}"
+    name = "occurrence_from_pop_id_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Create a cache dict that persists for the migration run
+    # Maps: POP_ID (string) -> Occurrence PK (int)
+    pop_id_to_occurrence_pk_cache = {}
+    cache_initialized = [False]  # Use list to allow modification in nested function
+
+    def inner(value, ctx: TransformContext):
+        # The input value should be ignored; we read SHEETNO from the row context
+        if not ctx or not isinstance(ctx.row, dict):
+            return _result(None)
+
+        try:
+            from boranga.components.occurrence.models import Occurrence
+
+            # Initialize cache on first call: preload all Occurrences
+            if not cache_initialized[0]:
+                for occ in Occurrence.objects.filter(
+                    migrated_from_id__isnull=False
+                ).values("pk", "migrated_from_id"):
+                    pop_id_to_occurrence_pk_cache[str(occ["migrated_from_id"])] = occ[
+                        "pk"
+                    ]
+                cache_initialized[0] = True
+                logger.debug(
+                    "occurrence_from_pop_id: initialized cache with %d entries",
+                    len(pop_id_to_occurrence_pk_cache),
+                )
+
+            # Get SHEETNO (migrated_from_id) from the row
+            sheetno = ctx.row.get("migrated_from_id")
+            if sheetno in (None, ""):
+                return _result(None)
+
+            # Get POP_ID from SHEETNO using the mapping
+            pop_id = dm_mappings.get_pop_id_for_sheetno(
+                sheetno, legacy_system=legacy_system
+            )
+            if not pop_id:
+                return _result(None)
+
+            pop_id_str = str(pop_id).strip()
+
+            # Check cache for the occurrence PK
+            occ_pk = pop_id_to_occurrence_pk_cache.get(pop_id_str)
+            if occ_pk:
+                # Return the Occurrence instance for normalize_create_kwargs to handle
+                occurrence = Occurrence.objects.get(pk=occ_pk)
+                return _result(occurrence)
+            else:
+                return _result(None)
+
+        except Exception as e:
+            logger.exception("Error in occurrence_from_pop_id_factory: %s", e)
+            return _result(None)
+
+    registry._fns[name] = inner
+    return name
+
+
+def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
+    """
+    Factory that returns a registered transform name for mapping POP_ID to occurrence_number.
+
+    This transform uses an in-memory cache (populated on first call) that maps
+    POP_ID (Occurrence.migrated_from_id) to Occurrence.occurrence_number for fast
+    lookups without repeated DB queries. The cache persists for the entire migration run.
+
+    Usage:
+      OCCURRENCE_NUMBER_FROM_POP_ID = occurrence_number_from_pop_id_factory("TPFL")
+      PIPELINES["ocr_for_occ_number"] = [OCCURRENCE_NUMBER_FROM_POP_ID]
+
+    The transform takes a SHEETNO (read from the row's migrated_from_id field),
+    converts it to POP_ID via the legacy mapping, then returns the corresponding
+    Occurrence's occurrence_number.
+    """
+    key = f"occurrence_number_from_pop_id_{legacy_system}"
+    name = "occurrence_number_from_pop_id_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Create a cache dict that persists for the migration run
+    # Maps: POP_ID (string) -> occurrence_number (string)
+    pop_id_to_occurrence_number_cache = {}
+    cache_initialized = [False]  # Use list to allow modification in nested function
+
+    def inner(value, ctx: TransformContext):
+        # The input value should be ignored; we read SHEETNO from the row context
+        if not ctx or not isinstance(ctx.row, dict):
+            return _result(None)
+
+        try:
+            from boranga.components.occurrence.models import Occurrence
+
+            # Initialize cache on first call: preload all Occurrences
+            if not cache_initialized[0]:
+                for occ in Occurrence.objects.filter(
+                    migrated_from_id__isnull=False, occurrence_number__isnull=False
+                ).values("occurrence_number", "migrated_from_id"):
+                    pop_id_to_occurrence_number_cache[str(occ["migrated_from_id"])] = (
+                        occ["occurrence_number"]
+                    )
+                cache_initialized[0] = True
+                logger.debug(
+                    "occurrence_number_from_pop_id: initialized cache with %d entries",
+                    len(pop_id_to_occurrence_number_cache),
+                )
+
+            # Get SHEETNO (migrated_from_id) from the row
+            sheetno = ctx.row.get("migrated_from_id")
+            if sheetno in (None, ""):
+                return _result(None)
+
+            # Get POP_ID from SHEETNO using the mapping
+            pop_id = dm_mappings.get_pop_id_for_sheetno(
+                sheetno, legacy_system=legacy_system
+            )
+            if not pop_id:
+                return _result(None)
+
+            pop_id_str = str(pop_id).strip()
+
+            # Check cache for the occurrence_number
+            occurrence_number = pop_id_to_occurrence_number_cache.get(pop_id_str)
+            if occurrence_number:
+                return _result(occurrence_number)
+            else:
+                return _result(None)
+
+        except Exception as e:
+            logger.exception("Error in occurrence_number_from_pop_id_factory: %s", e)
+            return _result(None)
+
+    registry._fns[name] = inner
+    return name
+
+
+def pop_id_from_sheetno_factory(legacy_system: str = "TPFL"):
+    """
+    Factory that returns a registered transform name for mapping SHEETNO to POP_ID directly.
+
+    This transform converts SHEETNO to POP_ID via the legacy mapping, returning the
+    POP_ID string itself (not the occurrence_number).
+
+    Usage:
+      POP_ID_FROM_SHEETNO = pop_id_from_sheetno_factory("TPFL")
+      PIPELINES["ocr_for_occ_number"] = [POP_ID_FROM_SHEETNO]
+
+    The transform takes a SHEETNO (read from the row's migrated_from_id field),
+    converts it to POP_ID via the legacy mapping, then returns the POP_ID string.
+    """
+    key = f"pop_id_from_sheetno_{legacy_system}"
+    name = "pop_id_from_sheetno_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    def inner(value, ctx: TransformContext):
+        # The input value should be ignored; we read SHEETNO from the row context
+        if not ctx or not isinstance(ctx.row, dict):
+            return _result(None)
+
+        try:
+            # Get SHEETNO (migrated_from_id) from the row
+            sheetno = ctx.row.get("migrated_from_id")
+            if sheetno in (None, ""):
+                return _result(None)
+
+            # Get POP_ID from SHEETNO using the mapping
+            pop_id = dm_mappings.get_pop_id_for_sheetno(
+                sheetno, legacy_system=legacy_system
+            )
+            if not pop_id:
+                return _result(None)
+
+            # Return POP_ID as string
+            return _result(str(pop_id).strip())
+
+        except Exception as e:
+            logger.exception("Error in pop_id_from_sheetno_factory: %s", e)
+            return _result(None)
+
+    registry._fns[name] = inner
+    return name
+
+
+def geometry_from_coords_factory(
+    latitude_field: str = "GDA94LAT",
+    longitude_field: str = "GDA94LONG",
+    datum_field: str | None = None,
+    radius_m: float = 1.0,
+):
+    """
+    Factory that returns a registered transform name for creating WGS84 geometries from lat/lon coordinates.
+
+    This transform reads latitude and longitude from the row context and creates a small buffered
+    polygon (default 1m radius) around the point. It handles coordinate transformation from the
+    source datum (GDA94, AGD84, WGS84, GPS, etc.) to WGS84 (EPSG:4326).
+
+    Usage:
+      GEOMETRY_FROM_COORDS = geometry_from_coords_factory("GDA94LAT", "GDA94LONG", "DATUM", radius_m=1.0)
+      PIPELINES["OccurrenceReportGeometry__geometry"] = [GEOMETRY_FROM_COORDS]
+
+    Args:
+        latitude_field: The row column name containing latitude (default: GDA94LAT)
+        longitude_field: The row column name containing longitude (default: GDA94LONG)
+        datum_field: The row column name containing datum/CRS info (optional, default: None)
+        radius_m: Buffer radius in meters (default: 1.0m)
+
+    Returns:
+        A registered transform name that converts point coordinates to WGS84 polygon geometry
+    """
+    from django.contrib.gis.geos import Point
+    from pyproj import Transformer
+
+    # Map legacy datum values to EPSG codes
+    DATUM_TO_EPSG = {
+        "GDA94": "EPSG:4283",  # Geocentric Datum of Australia 1994 (modern standard)
+        "AGD84": "EPSG:4202",  # Australian Geodetic Datum 1984 (older, superseded)
+        "WGS84": "EPSG:4326",  # World Geodetic System 1984
+        "GPS": "EPSG:4326",  # GPS typically uses WGS84
+        "UNKNOWN": "EPSG:4326",  # Default to WGS84 when datum is unknown
+    }
+
+    key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}"
+    name = "geometry_from_coords_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    def inner(value, ctx: TransformContext):
+        if not ctx or not isinstance(ctx.row, dict):
+            return _result(None)
+
+        try:
+            lat_str = ctx.row.get(latitude_field)
+            lng_str = ctx.row.get(longitude_field)
+
+            if not lat_str or not lng_str:
+                return _result(None)
+
+            lat = float(lat_str)
+            lng = float(lng_str)
+
+            # Determine source CRS from datum field or default to WGS84
+            source_epsg = "EPSG:4326"  # default
+            if datum_field:
+                datum_str = ctx.row.get(datum_field, "").strip().upper()
+                source_epsg = DATUM_TO_EPSG.get(datum_str, "EPSG:4326")
+
+            # Transform coordinates to WGS84 if necessary
+            if source_epsg != "EPSG:4326":
+                try:
+                    transformer = Transformer.from_crs(
+                        source_epsg, "EPSG:4326", always_xy=True
+                    )
+                    lng, lat = transformer.transform(lng, lat)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to transform coordinates from %s to EPSG:4326: %s. Using as-is.",
+                        source_epsg,
+                        e,
+                    )
+
+            # Create a point from the coordinates
+            point = Point(lng, lat, srid=4326)
+
+            # Create a small buffer. Convert radius in meters to degrees (approximate):
+            # 1 degree ≈ 111,320 meters at the equator
+            radius_degrees = radius_m / 111320.0
+            buffered = point.buffer(radius_degrees)
+
+            # Ensure SRID is set
+            buffered.srid = 4326
+            return _result(buffered)
+
+        except Exception as e:
+            logger.exception("Error in geometry_from_coords_factory: %s", e)
+            return _result(None)
+
+    registry._fns[name] = inner
+    return name

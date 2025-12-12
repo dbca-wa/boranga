@@ -71,6 +71,7 @@ export default {
                 reason: '',
             },
             errorString: '',
+            originalBackToAssessor: null,
         };
     },
     watch: {
@@ -78,6 +79,9 @@ export default {
             if (val) {
                 this.$nextTick(() => {
                     this.$refs.reason.focus();
+                    this.originalBackToAssessor = JSON.parse(
+                        JSON.stringify(this.back_to_assessor)
+                    );
                 });
             }
         },
@@ -86,6 +90,12 @@ export default {
         this.form = document.forms['back-to-assessor-form'];
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.back_to_assessor) !==
+                JSON.stringify(this.originalBackToAssessor)
+            );
+        },
         ok: function () {
             if (this.form.checkValidity()) {
                 this.backToAssessor();

@@ -2764,6 +2764,62 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
+    @detail_route(methods=["post"], detail=True)
+    @renderer_classes((JSONRenderer,))
+    @transaction.atomic
+    def reactivate(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.processing_status != Community.PROCESSING_STATUS_HISTORICAL:
+            raise serializers.ValidationError("Community is not historical")
+
+        instance.processing_status = Community.PROCESSING_STATUS_ACTIVE
+        instance.save(version_user=request.user)
+
+        # Log user action
+        instance.log_user_action(
+            CommunityUserAction.ACTION_REACTIVATE_COMMUNITY.format(
+                instance.community_number
+            ),
+            request,
+        )
+        request.user.log_user_action(
+            CommunityUserAction.ACTION_REACTIVATE_COMMUNITY.format(
+                instance.community_number
+            ),
+            request,
+        )
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    @detail_route(methods=["post"], detail=True)
+    @renderer_classes((JSONRenderer,))
+    @transaction.atomic
+    def deactivate(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.processing_status != Community.PROCESSING_STATUS_ACTIVE:
+            raise serializers.ValidationError("Community is not active")
+
+        instance.processing_status = Community.PROCESSING_STATUS_HISTORICAL
+        instance.save(version_user=request.user)
+
+        # Log user action
+        instance.log_user_action(
+            CommunityUserAction.ACTION_DEACTIVATE_COMMUNITY.format(
+                instance.community_number
+            ),
+            request,
+        )
+        request.user.log_user_action(
+            CommunityUserAction.ACTION_DEACTIVATE_COMMUNITY.format(
+                instance.community_number
+            ),
+            request,
+        )
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         request_data = request.data
@@ -3564,8 +3620,13 @@ class ConservationThreatFilterBackend(DatatablesFilterBackend):
 class ConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = ConservationThreat.objects.order_by("id")
     serializer_class = ConservationThreatSerializer
-    filter_backends = (ConservationThreatFilterBackend,)
+    # filter_backends = (ConservationThreatFilterBackend,)
     permission_classes = [IsSuperuser | IsAuthenticated & ConservationThreatPermission]
+
+    def get_permissions(self):
+        if self.action == "retrieve":
+            return [AllowAny()]
+        return super().get_permissions()
 
     def get_queryset(self):
         qs = super().get_queryset()

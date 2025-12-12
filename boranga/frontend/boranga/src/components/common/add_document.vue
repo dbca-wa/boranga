@@ -359,6 +359,7 @@ export default {
             success: false,
             validDate: false,
             title: null,
+            originalDocumentObj: null,
         };
     },
     computed: {
@@ -374,6 +375,9 @@ export default {
             if (val) {
                 this.$nextTick(() => {
                     this.$refs.document_category.focus();
+                    this.originalDocumentObj = JSON.parse(
+                        JSON.stringify(this.documentObj)
+                    );
                 });
             }
         },
@@ -403,6 +407,12 @@ export default {
         vm.form = document.forms.documentForm;
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.documentObj) !==
+                JSON.stringify(this.originalDocumentObj)
+            );
+        },
         focusDescription: function () {
             this.$nextTick(() => {
                 this.$refs['description'].focus();
@@ -461,6 +471,11 @@ export default {
             }
         },
         cancel: function () {
+            if (!this.hasUnsavedChanges()) {
+                this.close();
+                this.$refs.filefield.reset_files();
+                return;
+            }
             swal.fire({
                 title: 'Are you sure you want to close this pop-up?',
                 text: 'You will lose any unsaved changes.',

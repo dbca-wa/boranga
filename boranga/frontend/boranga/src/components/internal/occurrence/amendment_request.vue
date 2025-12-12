@@ -118,6 +118,7 @@ export default {
             reason_choices: {},
             errorString: '',
             validation_form: null,
+            originalAmendment: null,
         };
     },
     computed: {
@@ -135,6 +136,9 @@ export default {
                 this.$nextTick(() => {
                     $(this.$refs.reason).select2('open');
                 });
+                this.originalAmendment = JSON.parse(
+                    JSON.stringify(this.amendment)
+                );
             }
         },
     },
@@ -148,6 +152,12 @@ export default {
         });
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.amendment) !==
+                JSON.stringify(this.originalAmendment)
+            );
+        },
         ok: function () {
             let vm = this;
             if ($(vm.form).valid()) {

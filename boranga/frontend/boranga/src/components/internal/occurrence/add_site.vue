@@ -245,7 +245,7 @@
                         class="btn btn-secondary me-2"
                         @click="cancel"
                     >
-                        Cancel
+                        {{ isReadOnly ? 'Close' : 'Cancel' }}
                     </button>
                     <template v-if="site_action != 'view'">
                         <template v-if="site_id">
@@ -310,6 +310,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import { helpers } from '@/utils/hooks.js';
+import swal from 'sweetalert2';
 export default {
     name: 'SiteDetail',
     components: {
@@ -348,6 +349,7 @@ export default {
             success: false,
             site_type_list: [],
             datum_list: [],
+            originalSiteObj: null,
         };
     },
     computed: {
@@ -380,6 +382,7 @@ export default {
                 this.$nextTick(() => {
                     this.$refs.site_name.focus();
                 });
+                this.originalSiteObj = JSON.parse(JSON.stringify(this.siteObj));
             }
         },
         siteObj: function () {
@@ -414,6 +417,12 @@ export default {
         });
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.siteObj) !==
+                JSON.stringify(this.originalSiteObj)
+            );
+        },
         ok: function () {
             let vm = this;
             if ($(vm.form).valid()) {
@@ -422,6 +431,10 @@ export default {
         },
         cancel: function () {
             if (this.isReadOnly) {
+                this.close();
+                return;
+            }
+            if (!this.hasUnsavedChanges()) {
                 this.close();
                 return;
             }

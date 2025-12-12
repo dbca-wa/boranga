@@ -1113,6 +1113,81 @@ class SpeciesImporter(BaseSheetImporter):
                     except Exception:
                         logger.exception("Fallback M2M set failed for species %s", sid)
 
+        # Now create action logs for created/updated species when modified_by and datetime_updated provided
+        from boranga.components.species_and_communities.models import SpeciesUserAction
+
+        # Fetch all target species for action logging
+        target_mig_ids = [o["migrated_from_id"] for o in ops]
+        target_species = list(
+            Species.objects.filter(migrated_from_id__in=target_mig_ids)
+        )
+        target_map = {s.migrated_from_id: s for s in target_species}
+
+        existing_actions = set(
+            SpeciesUserAction.objects.filter(species__in=target_species).values_list(
+                "species_id", flat=True
+            )
+        )
+
+        want_action_create = []
+        # Process created species action logs
+        for mig, merged, districts_raw in create_meta:
+            species = created_map.get(mig)
+            if not species:
+                continue
+            if species.pk in existing_actions:
+                continue
+            modified_by = merged.get("modified_by")
+            datetime_updated = merged.get("datetime_updated")
+            if modified_by and datetime_updated:
+                want_action_create.append(
+                    SpeciesUserAction(
+                        species=species,
+                        what="Edited in TPFL",
+                        when=datetime_updated,
+                        who=modified_by,
+                    )
+                )
+
+        # Process updated species action logs (ops where species existed)
+        for op in ops:
+            mig = op["migrated_from_id"]
+            merged = op.get("merged") or {}
+            species = target_map.get(mig)
+            if not species:
+                continue
+            if species.pk in existing_actions:
+                continue
+            modified_by = merged.get("modified_by")
+            datetime_updated = merged.get("datetime_updated")
+            if modified_by and datetime_updated:
+                want_action_create.append(
+                    SpeciesUserAction(
+                        species=species,
+                        what="Edited in TPFL",
+                        when=datetime_updated,
+                        who=modified_by,
+                    )
+                )
+
+        if want_action_create:
+            try:
+                SpeciesUserAction.objects.bulk_create(
+                    want_action_create, batch_size=BATCH
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to bulk_create SpeciesUserAction; falling back to individual creates"
+                )
+                for obj in want_action_create:
+                    try:
+                        obj.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create SpeciesUserAction for species %s",
+                            getattr(obj.species, "pk", None),
+                        )
+
         stats.update(
             processed=processed,
             created=created,
@@ -1156,7 +1231,7 @@ class SpeciesImporter(BaseSheetImporter):
         # write detailed errors to CSV (if any) but only log a concise count summary
         if errors_details:
             # allow override via options, otherwise write to
-            # <cwd>/boranga/components/data_migration/handlers/handler_output with timestamp
+            # <cwd>/private-media/handler_output with timestamp
             csv_path = options.get("error_csv")
             if csv_path:
                 csv_path = os.path.abspath(csv_path)
@@ -1164,7 +1239,7 @@ class SpeciesImporter(BaseSheetImporter):
                 ts = timezone.now().strftime("%Y%m%d_%H%M%S")
                 csv_path = os.path.join(
                     os.getcwd(),
-                    "boranga/components/data_migration/handlers/handler_output",
+                    "private-media/handler_output",
                     f"{self.slug}_errors_{ts}.csv",
                 )
 

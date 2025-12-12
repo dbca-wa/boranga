@@ -83,6 +83,7 @@ export default {
                 cc_email: '',
             },
             errorString: '',
+            originalDecline: null,
         };
     },
     watch: {
@@ -94,6 +95,9 @@ export default {
                         this.decline.reason = this.declined_details.reason;
                         this.decline.cc_email = this.declined_details.cc_email;
                     }
+                    this.originalDecline = JSON.parse(
+                        JSON.stringify(this.decline)
+                    );
                 });
             }
         },
@@ -102,6 +106,12 @@ export default {
         this.form = document.forms['decline-form'];
     },
     methods: {
+        hasUnsavedChanges: function () {
+            return (
+                JSON.stringify(this.decline) !==
+                JSON.stringify(this.originalDecline)
+            );
+        },
         ok: function () {
             let vm = this;
             if (vm.form.checkValidity()) {
