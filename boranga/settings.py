@@ -3,7 +3,6 @@ import os
 import shutil
 import subprocess
 import sys
-
 from pathlib import Path
 
 import confy
@@ -19,6 +18,11 @@ if os.path.exists(BASE_DIR + "/.env"):
 os.environ.setdefault("BASE_DIR", BASE_DIR)
 
 from ledger_api_client.settings_base import *  # noqa: F403
+
+if "default" in DATABASES:
+    # Enable persistent database connections to reduce DNS lookups and overhead
+    # Default to 600 seconds (10 minutes)
+    DATABASES["default"]["CONN_MAX_AGE"] = env("CONN_MAX_AGE", 600)
 
 WORKING_FROM_HOME = env("WORKING_FROM_HOME", False)
 
@@ -390,7 +394,9 @@ DJANGO_VITE = {
             BASE_DIR, "boranga", "static", "boranga_vue", "manifest.json"
         ),
         "dev_server_host": "localhost",  # Default host for vite (can change if needed)
-        "dev_server_port": config("DEV_SERVER_PORT", default=9002, cast=int),  # Default port for vite (can change if needed)
+        "dev_server_port": config(
+            "DEV_SERVER_PORT", default=9002, cast=int
+        ),  # Default port for vite (can change if needed)
         "static_url_prefix": STATIC_URL_PREFIX,
     }
 }
