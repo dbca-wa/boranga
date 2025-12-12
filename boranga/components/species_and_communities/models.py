@@ -2327,6 +2327,8 @@ class CommunityUserAction(UserAction):
     ACTION_REACTIVATED_FROM_RENAME_COMMUNITY = (
         "Historical Community {} reactivated by renaming Community {}"
     )
+    ACTION_REACTIVATE_COMMUNITY = "Reactivate Community {}"
+    ACTION_DEACTIVATE_COMMUNITY = "Deactivate Community {}"
 
     # Document
     ACTION_ADD_DOCUMENT = "Document {} added for Community {}"
