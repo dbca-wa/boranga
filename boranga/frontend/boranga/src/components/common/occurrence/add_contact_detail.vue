@@ -4,8 +4,8 @@
             transition="modal fade"
             :title="title"
             large
+            :data-loss-warning-on-cancel="contact_detail_action !== 'view'"
             @ok="ok()"
-            @cancel="cancel()"
         >
             <div class="container-fluid">
                 <div class="row">
@@ -191,6 +191,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import { helpers } from '@/utils/hooks.js';
+import swal from 'sweetalert2';
 
 export default {
     name: 'ContactDetail',
@@ -261,6 +262,10 @@ export default {
             }
         },
         cancel: function () {
+            if (this.isReadOnly) {
+                this.close();
+                return;
+            }
             swal.fire({
                 title: 'Are you sure you want to close this pop-up?',
                 text: 'You will lose any unsaved changes.',

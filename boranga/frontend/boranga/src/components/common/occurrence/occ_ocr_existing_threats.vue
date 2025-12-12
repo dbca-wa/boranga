@@ -7,6 +7,7 @@
             :full="true"
             :show-o-k="false"
             cancel-text="Close"
+            :data-loss-warning-on-cancel="false"
             @cancel="close()"
         >
             <div class="container-fluid">

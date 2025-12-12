@@ -67,6 +67,8 @@
  * Bootstrap Style Modal Component for Vue
  * Depend on Bootstrap.css
  */
+import swal from 'sweetalert2';
+
 export default {
     props: {
         title: {
