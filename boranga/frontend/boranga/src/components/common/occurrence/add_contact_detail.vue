@@ -122,14 +122,14 @@
             </div>
             <template #footer>
                 <div>
-                    <div v-if="!isReadOnly">
-                        <button
-                            type="button"
-                            class="btn btn-secondary me-2"
-                            @click="cancel"
-                        >
-                            Cancel
-                        </button>
+                    <button
+                        type="button"
+                        class="btn btn-secondary me-2"
+                        @click="cancel"
+                    >
+                        {{ isReadOnly ? 'Close' : 'Cancel' }}
+                    </button>
+                    <template v-if="!isReadOnly">
                         <template v-if="contact_detail_id">
                             <button
                                 v-if="updatingContact"
@@ -180,7 +180,7 @@
                                 Add Contact
                             </button>
                         </template>
-                    </div>
+                    </template>
                 </div>
             </template>
         </modal>

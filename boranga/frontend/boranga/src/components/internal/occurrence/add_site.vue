@@ -245,7 +245,7 @@
                         class="btn btn-secondary me-2"
                         @click="cancel"
                     >
-                        Cancel
+                        {{ isReadOnly ? 'Close' : 'Cancel' }}
                     </button>
                     <template v-if="site_action != 'view'">
                         <template v-if="site_id">
@@ -310,6 +310,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import { helpers } from '@/utils/hooks.js';
+import swal from 'sweetalert2';
 export default {
     name: 'SiteDetail',
     components: {

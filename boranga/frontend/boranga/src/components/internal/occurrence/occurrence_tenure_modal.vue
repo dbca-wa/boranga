@@ -229,7 +229,7 @@
                         class="btn btn-secondary me-2"
                         @click="cancel"
                     >
-                        Cancel
+                        {{ isReadOnly ? 'Close' : 'Cancel' }}
                     </button>
                     <template v-if="modal_action != 'view'">
                         <template v-if="object_id">
