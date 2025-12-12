@@ -1222,6 +1222,7 @@ class SaveSpeciesConservationStatusSerializer(
     SaveConservationStatusValidationMixin, BaseConservationStatusSerializer
 ):
     species_taxonomy_id = serializers.IntegerField(required=True, write_only=True)
+    species_id = serializers.IntegerField(required=True, write_only=True)
 
     wa_legislative_list_id = serializers.IntegerField(
         required=False, allow_null=True, write_only=True
@@ -1254,6 +1255,7 @@ class SaveSpeciesConservationStatusSerializer(
             "id",
             "application_type",
             "species_taxonomy_id",
+            "species_id",
             "wa_legislative_list_id",
             "wa_legislative_category_id",
             "iucn_version_id",
