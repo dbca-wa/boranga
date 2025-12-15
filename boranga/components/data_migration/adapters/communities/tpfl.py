@@ -1,35 +1,13 @@
-from boranga.components.data_migration.registry import choices_transform
-from boranga.components.occurrence.models import Occurrence
-
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 from . import schema
 
 # TPFL-specific transforms and pipelines
-PROCESSING_STATUS = choices_transform(
-    [c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES]
-)
-
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
-    "community_number": ["strip", "blank_to_none"],
-    "group_type": ["strip", "blank_to_none", "group_type_by_name", "required"],
-    # taxonomy/community name -> create/lookup CommunityTaxonomy
-    # species list: split multiselect and resolve to species ids (implement split/validate in registry)
-    "species": [
-        "strip",
-        "blank_to_none",
-        "split_multiselect_species",
-        "validate_species_list",
-    ],
-    "submitter": ["strip", "blank_to_none"],
-    "processing_status": ["strip", "required", PROCESSING_STATUS],
-    "lodgement_date": ["strip", "blank_to_none", "date_iso"],
-    "last_data_curation_date": ["strip", "blank_to_none", "date_iso"],
-    "conservation_plan_exists": ["strip", "blank_to_none", "bool"],
-    "conservation_plan_reference": ["strip", "blank_to_none"],
-    "comment": ["strip", "blank_to_none"],
-    "department_file_numbers": ["strip", "blank_to_none"],
+    "former_range": ["strip", "blank_to_none"],
+    "range_decline": ["strip", "blank_to_none"],
+    "occ_decline": ["strip", "blank_to_none"],
 }
 
 
@@ -46,6 +24,23 @@ class CommunityTpflAdapter(SourceAdapter):
 
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
+
+            # Construct comment from 3 legacy fields
+            comment_parts = []
+            former_range = (canonical.get("former_range") or "").strip()
+            range_decline = (canonical.get("range_decline") or "").strip()
+            occ_decline = (canonical.get("occ_decline") or "").strip()
+
+            if former_range:
+                comment_parts.append(f"Former Range: {former_range}")
+            if range_decline:
+                comment_parts.append(f"Range Decline: {range_decline}")
+            if occ_decline:
+                comment_parts.append(f"Occurrence Decline: {occ_decline}")
+
+            if comment_parts:
+                canonical["comment"] = "; ".join(comment_parts)
+
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)
 
