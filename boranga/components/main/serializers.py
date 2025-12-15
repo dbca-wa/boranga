@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse
 
 import nh3
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -135,7 +136,7 @@ class CommunicationLogEntrySerializer(BaseModelSerializer):
         )
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class EmailUserROSerializerForReferral(BaseModelSerializer):
@@ -336,10 +337,16 @@ class IntegerFieldEmptytoNullSerializerMixin:
         return super().to_internal_value(data)
 
 
+def get_relative_url(url):
+    if url and url.startswith("http"):
+        return urlparse(url).path
+    return url
+
+
 class SafeFileUrlField(serializers.CharField):
     def to_representation(self, value):
         try:
-            return value.url
+            return get_relative_url(value.url)
         except (ValueError, AttributeError):
             return None
 

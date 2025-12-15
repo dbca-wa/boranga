@@ -76,6 +76,7 @@ from boranga.components.conservation_status.utils import cs_proposal_submit
 from boranga.components.main.api import CheckUpdatedActionMixin
 from boranga.components.main.permissions import CommsLogPermission
 from boranga.components.main.related_item import RelatedItemsSerializer
+from boranga.components.main.serializers import get_relative_url
 from boranga.components.species_and_communities.models import (
     ClassificationSystem,
     CommunityTaxonomy,
@@ -2233,7 +2234,7 @@ class ConservationStatusAmendmentRequestViewSet(
         ).delete()
         return Response(
             [
-                dict(id=i.id, name=i.name, _file=i._file.url)
+                dict(id=i.id, name=i.name, _file=get_relative_url(i._file.url))
                 for i in instance.cs_amendment_request_documents.all()
             ]
         )

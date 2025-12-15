@@ -13,6 +13,7 @@ from boranga.components.main.serializers import (
     EmailUserSerializer,
     ListMultipleChoiceField,
     SafeFileUrlField,
+    get_relative_url,
 )
 from boranga.components.species_and_communities.models import (
     Community,
@@ -815,7 +816,7 @@ class BaseSpeciesSerializer(BaseModelSerializer):
 
     def get_image_doc(self, obj):
         if obj.image_doc and obj.image_doc._file:
-            return obj.image_doc._file.url
+            return get_relative_url(obj.image_doc._file.url)
         return None
 
     def get_processing_status(self, obj):
@@ -1320,7 +1321,7 @@ class BaseCommunitySerializer(BaseModelSerializer):
 
     def get_image_doc(self, obj):
         if obj.image_doc and obj.image_doc._file:
-            return obj.image_doc._file.url
+            return get_relative_url(obj.image_doc._file.url)
         return None
 
     def get_processing_status(self, obj):
@@ -1834,7 +1835,7 @@ class SpeciesLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class SpeciesUserActionSerializer(BaseModelSerializer):
@@ -1956,7 +1957,7 @@ class CommunityLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class CommunityUserActionSerializer(BaseModelSerializer):

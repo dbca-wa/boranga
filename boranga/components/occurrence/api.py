@@ -36,6 +36,7 @@ from boranga.components.main.api import (
 from boranga.components.main.models import ArchivableModel
 from boranga.components.main.permissions import CommsLogPermission
 from boranga.components.main.related_item import RelatedItemsSerializer
+from boranga.components.main.serializers import get_relative_url
 from boranga.components.main.utils import validate_threat_request
 from boranga.components.occurrence.email import send_external_referee_invite_email
 from boranga.components.occurrence.filters import OccurrenceReportReferralFilterBackend
@@ -2492,7 +2493,7 @@ class OccurrenceReportAmendmentRequestViewSet(
         ).delete()
         return Response(
             [
-                dict(id=i.id, name=i.name, _file=i._file.url)
+                dict(id=i.id, name=i.name, _file=get_relative_url(i._file.url))
                 for i in instance.cs_amendment_request_documents.all()
             ]
         )

@@ -13,7 +13,11 @@ from boranga.components.main.models import (
     Document,
     UserSystemSettings,
 )
-from boranga.components.main.serializers import BaseModelSerializer, BaseSerializer
+from boranga.components.main.serializers import (
+    BaseModelSerializer,
+    BaseSerializer,
+    get_relative_url,
+)
 from boranga.components.occurrence.models import (
     OccurrenceReport,
     OccurrenceReportReferral,
@@ -234,7 +238,7 @@ class CommunicationLogEntrySerializer(BaseModelSerializer):
         )
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class EmailUserLogEntrySerializer(CommunicationLogEntrySerializer):
@@ -246,7 +250,7 @@ class EmailUserLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class SubmitterCategorySerializer(BaseModelSerializer):
