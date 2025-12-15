@@ -6,15 +6,15 @@ from boranga.components.data_migration.adapters.schema_base import Schema
 
 # Column header → canonical key map (adjust headers to match CSV)
 COLUMN_MAP = {
-    "SHEETNO": "migrated_from_id",
-    "SPECIES_NAME": "species_name",
-    "WA_LEGISLATIVE_CATEGORY": "wa_legislative_category",
-    "WA_PRIORITY_LIST": "wa_priority_list",
-    "PROCESSING_STATUS": "processing_status",
-    "EFFECTIVE_FROM_DATE": "effective_from_date",
-    "SUBMITTER": "submitter",
-    "ASSIGNED_APPROVER": "assigned_approver",
-    "COMMENT": "comment",
+    "migrated_from_id": "migrated_from_id",
+    "species": "species_name",
+    "wa_legislative_category": "wa_legislative_category",
+    "wa_legislative_list": "wa_legislative_list",
+    "wa_priority_category": "wa_priority_category",
+    "processing_status": "processing_status",
+    "effective_from": "effective_from_date",
+    "submitter": "submitter",
+    "comment": "comment",
 }
 
 # Minimal required canonical fields for migration
@@ -52,8 +52,17 @@ class ConservationStatusRow:
     processing_status: str
     species_name: str
     wa_legislative_category: str | None = None
+    wa_legislative_list: str | None = None
     wa_priority_list: str | None = None
+    wa_priority_category: str | None = None
     effective_from_date: object | None = None
     submitter: str | None = None
     assigned_approver: str | None = None
+    approved_by: str | None = None
     comment: str | None = None
+    group_type_id: int | None = None
+    customer_status: str | None = None
+    locked: bool = False
+    internal_application: bool = False
+    approval_level: str | None = None
+    review_due_date: object | None = None

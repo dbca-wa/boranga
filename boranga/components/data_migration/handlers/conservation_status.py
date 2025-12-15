@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import csv
+import json
 import logging
+import os
+from pathlib import Path
 
 from django.apps import apps
+from django.conf import settings
+from django.utils import timezone
 
 from boranga.components.data_migration.adapters.conservation_status.tpfl import (
     ConservationStatusTpflAdapter,
@@ -91,6 +97,7 @@ class ConservationStatusImporter(BaseSheetImporter):
         return out
 
     def run(self, path: str, ctx: ImportContext, **options):
+        start_time = timezone.now()
         sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
         path_map = self._parse_path_map(options.get("path_map"))
 
@@ -98,6 +105,7 @@ class ConservationStatusImporter(BaseSheetImporter):
         stats["extracted"] = 0
         all_rows: list[dict] = []
         warnings = []
+        errors_details = []
 
         # 1. Extract
         for source_key in sources:
@@ -117,42 +125,56 @@ class ConservationStatusImporter(BaseSheetImporter):
         # 2. Load dependencies
         Species = apps.get_model("boranga", "Species")
         WAPriorityList = apps.get_model("boranga", "WAPriorityList")
+        WAPriorityCategory = apps.get_model("boranga", "WAPriorityCategory")
+        WALegislativeList = apps.get_model("boranga", "WALegislativeList")
         WALegislativeCategory = apps.get_model("boranga", "WALegislativeCategory")
         SubmitterInformation = apps.get_model("boranga", "SubmitterInformation")
         SubmitterCategory = apps.get_model("boranga", "SubmitterCategory")
 
         # Cache lookups
         # Species lookup by name (via taxonomy)
-        # Assuming species_name in CSV matches taxonomy.scientific_name
-        # And we need the Species object that links to that Taxonomy.
-        # Note: Multiple species might link to same taxonomy? No, usually 1:1 or N:1.
-        # Species has taxonomy FK.
-
-        # Let's build a map: scientific_name -> Species object
-        # We only care about FLORA species since we set group_type_id=FLORA
         species_map = {}
         qs = Species.objects.filter(group_type__name="flora").select_related("taxonomy")
         for s in qs:
             if s.taxonomy and s.taxonomy.scientific_name:
                 species_map[s.taxonomy.scientific_name.strip().lower()] = s
 
-        # WA Priority List
-        # Try to find 'FLORA' list
-        wa_priority_list_obj = WAPriorityList.objects.filter(
-            code__iexact="FLORA"
-        ).first()
-        if not wa_priority_list_obj:
-            wa_priority_list_obj = WAPriorityList.objects.filter(
-                label__iexact="FLORA"
-            ).first()
+        # Load legacy name map
+        legacy_name_map = {}
+        try:
+            map_path = (
+                Path(settings.BASE_DIR)
+                / "private-media"
+                / "legacy_data"
+                / "TPFL"
+                / "tpfl-legacy-name-to-taxon-name-id.csv"
+            )
+            if map_path.exists():
+                with open(map_path, encoding="utf-8-sig") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if row.get("NAME") and row.get("nomos_canonical_name"):
+                            legacy_name_map[row["NAME"].strip().lower()] = row[
+                                "nomos_canonical_name"
+                            ].strip()
+            else:
+                logger.warning(f"Legacy name map not found at {map_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load legacy name map: {e}")
 
-        if not wa_priority_list_obj:
-            logger.warning("Could not find WAPriorityList with code/label 'FLORA'.")
-
-        # WA Legislative Category Cache
-        wa_leg_cat_map = {}
-        for cat in WALegislativeCategory.objects.all():
-            wa_leg_cat_map[cat.code.strip().upper()] = cat
+        # Lists and Categories Caches
+        wa_priority_list_map = {
+            pl.code.strip().upper(): pl for pl in WAPriorityList.objects.all()
+        }
+        wa_priority_category_map = {
+            pc.code.strip().upper(): pc for pc in WAPriorityCategory.objects.all()
+        }
+        wa_legislative_list_map = {
+            ll.code.strip().upper(): ll for ll in WALegislativeList.objects.all()
+        }
+        wa_legislative_category_map = {
+            lc.code.strip().upper(): lc for lc in WALegislativeCategory.objects.all()
+        }
 
         # Submitter Category 'DBCA'
         submitter_category_dbca = SubmitterCategory.objects.filter(name="DBCA").first()
@@ -178,23 +200,66 @@ class ConservationStatusImporter(BaseSheetImporter):
                 taxonomy_obj = None
 
                 if species_name:
-                    species_obj = species_map.get(species_name.strip().lower())
+                    clean_name = species_name.strip().lower()
+                    species_obj = species_map.get(clean_name)
+
+                    # Try legacy map if not found
+                    if not species_obj and clean_name in legacy_name_map:
+                        mapped_name = legacy_name_map[clean_name]
+                        species_obj = species_map.get(mapped_name.lower())
+                        if species_obj:
+                            # logger.info(f"Mapped legacy name '{species_name}' to '{mapped_name}'")
+                            pass
+
                     if species_obj:
                         taxonomy_obj = species_obj.taxonomy
                     else:
-                        logger.warning(f"Species not found for name: {species_name}")
+                        msg = f"Species not found for name: {species_name}"
+                        logger.warning(msg)
                         stats["skipped"] += 1
+                        stats["errors"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": row.get("migrated_from_id"),
+                                "column": "species_name",
+                                "level": "error",
+                                "message": msg,
+                                "raw_value": species_name,
+                                "reason": "Species lookup failed",
+                                "row_json": json.dumps(row, default=str),
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
                         continue
 
-                # Resolve WA Legislative Category
-                wa_leg_cat_code = row.get("wa_legislative_category")
-                wa_leg_cat_obj = None
-                if wa_leg_cat_code:
-                    wa_leg_cat_obj = wa_leg_cat_map.get(wa_leg_cat_code.strip().upper())
-                    if not wa_leg_cat_obj:
-                        logger.warning(
-                            f"WA Legislative Category not found for code: {wa_leg_cat_code}"
-                        )
+                # Resolve Lists and Categories
+                wa_pl_code = row.get("wa_priority_list")
+                wa_pl_obj = (
+                    wa_priority_list_map.get(wa_pl_code.strip().upper())
+                    if wa_pl_code
+                    else None
+                )
+
+                wa_pc_code = row.get("wa_priority_category")
+                wa_pc_obj = (
+                    wa_priority_category_map.get(wa_pc_code.strip().upper())
+                    if wa_pc_code
+                    else None
+                )
+
+                wa_ll_code = row.get("wa_legislative_list")
+                wa_ll_obj = (
+                    wa_legislative_list_map.get(wa_ll_code.strip().upper())
+                    if wa_ll_code
+                    else None
+                )
+
+                wa_lc_code = row.get("wa_legislative_category")
+                wa_lc_obj = (
+                    wa_legislative_category_map.get(wa_lc_code.strip().upper())
+                    if wa_lc_code
+                    else None
+                )
 
                 # Create SubmitterInformation instance (do not save yet)
                 sub_info = SubmitterInformation(
@@ -211,12 +276,10 @@ class ConservationStatusImporter(BaseSheetImporter):
                     customer_status=row.get("customer_status"),
                     species=species_obj,
                     species_taxonomy=taxonomy_obj,
-                    wa_priority_list=(
-                        wa_priority_list_obj
-                        if row.get("wa_priority_list") == "FLORA"
-                        else None
-                    ),
-                    wa_legislative_category=wa_leg_cat_obj,
+                    wa_priority_list=wa_pl_obj,
+                    wa_priority_category=wa_pc_obj,
+                    wa_legislative_list=wa_ll_obj,
+                    wa_legislative_category=wa_lc_obj,
                     review_due_date=row.get("review_due_date"),
                     effective_from=row.get("effective_from_date"),
                     submitter=row.get("submitter"),  # ID
@@ -234,6 +297,18 @@ class ConservationStatusImporter(BaseSheetImporter):
             except Exception as e:
                 logger.error(f"Error preparing row {row.get('migrated_from_id')}: {e}")
                 stats["errors"] += 1
+                errors_details.append(
+                    {
+                        "migrated_from_id": row.get("migrated_from_id"),
+                        "column": "N/A",
+                        "level": "error",
+                        "message": str(e),
+                        "raw_value": "N/A",
+                        "reason": "Exception during preparation",
+                        "row_json": json.dumps(row, default=str),
+                        "timestamp": timezone.now().isoformat(),
+                    }
+                )
 
         # Bulk create SubmitterInformation
         if submitter_infos:
@@ -273,4 +348,42 @@ class ConservationStatusImporter(BaseSheetImporter):
 
             stats["created"] += len(created_cs)
 
-        logger.info(f"Import complete. Stats: {stats}")
+        # Write errors to CSV
+        if errors_details:
+            csv_path = options.get("error_csv")
+            if csv_path:
+                csv_path = os.path.abspath(csv_path)
+            else:
+                ts = timezone.now().strftime("%Y%m%d_%H%M%S")
+                csv_path = os.path.join(
+                    os.getcwd(),
+                    "private-media/handler_output",
+                    f"{self.slug}_errors_{ts}.csv",
+                )
+
+            logger.info("Writing ConservationStatusImporter error CSV to %s", csv_path)
+            print(f"Writing error CSV to: {csv_path}")
+
+            try:
+                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+                with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+                    fieldnames = [
+                        "migrated_from_id",
+                        "column",
+                        "level",
+                        "message",
+                        "raw_value",
+                        "reason",
+                        "row_json",
+                        "timestamp",
+                    ]
+                    writer = csv.DictWriter(fh, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(errors_details)
+                print(f"Successfully wrote {len(errors_details)} error records to CSV.")
+            except Exception as e:
+                logger.error(f"Failed to write error CSV: {e}")
+                print(f"Failed to write error CSV: {e}")
+
+        elapsed = timezone.now() - start_time
+        logger.info(f"Import complete. Stats: {stats} time_taken={elapsed}")
