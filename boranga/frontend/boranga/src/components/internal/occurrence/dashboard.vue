@@ -94,7 +94,11 @@
                     />
                 </FormSection>
                 <FormSection
-                    v-if="profile && profile.ocr_referral_count > 0"
+                    v-if="
+                        profile &&
+                        profile.user &&
+                        profile.user.ocr_referral_count > 0
+                    "
                     :form-collapse="
                         getSectionCollapsed(
                             'occurrence-report-flora-referred-to-me'
@@ -182,7 +186,11 @@
                     />
                 </FormSection>
                 <FormSection
-                    v-if="profile && profile.ocr_referral_count > 0"
+                    v-if="
+                        profile &&
+                        profile.user &&
+                        profile.user.ocr_referral_count > 0
+                    "
                     :form-collapse="
                         getSectionCollapsed(
                             'occurrence-report-fauna-referred-to-me'
@@ -275,7 +283,11 @@
                     />
                 </FormSection>
                 <FormSection
-                    v-if="profile && profile.ocr_referral_count > 0"
+                    v-if="
+                        profile &&
+                        profile.user &&
+                        profile.user.ocr_referral_count > 0
+                    "
                     :form-collapse="
                         getSectionCollapsed(
                             'occurrence-report-community-referred-to-me'
