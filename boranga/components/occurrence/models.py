@@ -3022,6 +3022,7 @@ class OCRObservationDetail(BaseModel):
         AreaAssessment, on_delete=models.SET_NULL, null=True, blank=True
     )
     area_surveyed = models.DecimalField(
+        null=True,
         blank=True,
         max_digits=14,
         decimal_places=4,
@@ -3222,6 +3223,7 @@ class OCRPlantCount(BaseModel):
         validators=[MinValueValidator(Decimal("0.00"))],
     )
     flowering_plants_per = models.DecimalField(
+        null=True,
         blank=True,
         max_digits=5,
         decimal_places=2,
@@ -5561,6 +5563,7 @@ class OCCObservationDetail(BaseModel):
         AreaAssessment, on_delete=models.SET_NULL, null=True, blank=True
     )
     area_surveyed = models.DecimalField(
+        null=True,
         blank=True,
         max_digits=14,
         decimal_places=4,
@@ -5652,6 +5655,7 @@ class OCCPlantCount(BaseModel):
         validators=[MinValueValidator(Decimal("0.00"))],
     )
     flowering_plants_per = models.DecimalField(
+        null=True,
         blank=True,
         max_digits=5,
         decimal_places=2,
