@@ -60,7 +60,14 @@ class NH3SanitizeSerializerMixin:
                     elif isinstance(field, serializers.ManyRelatedField):
                         new_data[key] = value
                     else:
-                        new_data[key] = value[-1]
+                        val = value[-1]
+                        if (
+                            val == ""
+                            and isinstance(field, serializers.ChoiceField)
+                            and not field.allow_blank
+                        ):
+                            continue
+                        new_data[key] = val
                 else:
                     new_data[key] = value[-1]
             data = new_data
