@@ -782,12 +782,10 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         previous_submitter = EmailUser.objects.get(id=self.submitter)
 
         # Check if we're transitioning between internal and external users
-        previous_is_internal = is_internal_by_user_id(self.submitter)
         new_is_internal = is_internal_by_user_id(user_id)
 
         # If transitioning between internal and external, flip the internal_application flag
-        if previous_is_internal != new_is_internal:
-            self.internal_application = not self.internal_application
+        self.internal_application = new_is_internal
 
         self.submitter = new_submitter.id
         old_submitter_information = SubmitterInformation.objects.filter(
