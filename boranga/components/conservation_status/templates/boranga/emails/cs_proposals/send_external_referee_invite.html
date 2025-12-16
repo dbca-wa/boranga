@@ -7,7 +7,7 @@
 {% endblock %}
 
 {%  block content %}
-        {% if reminder %}
+    {% if reminder %}
         <p>
             <strong>Reminder:</strong> You have been invited to complete a referral for Conservation Status Proposal: <strong>{{conservation_status.conservation_status_number}} in DBCA's Boranga System</strong>.
         </p>
@@ -24,6 +24,10 @@
     <p>
         In order to submit your comments regarding the proposal you will need to create an account with
         our system. (If you already have an account with us you can simply log in as usual).
+    </p>
+
+    <p>
+        If you are already logged in to the system you will need to log out and back in before your referral will be visible.
     </p>
 
     <p>

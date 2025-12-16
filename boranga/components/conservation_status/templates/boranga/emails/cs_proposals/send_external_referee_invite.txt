@@ -19,6 +19,8 @@
     In order to submit your comments regarding the proposal you will need to create an account with
     our system. (If you already have an account with us you can simply log in as usual).
 
+    If you are already logged in to the system you will need to log out and back in before your referral will be visible.
+
     When you register and log in you will be able to see any proposals that have been referred to you.
 
     To register and log in use the following link:
