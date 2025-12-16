@@ -14,7 +14,7 @@
                             @click.prevent="addMinutes"
                         >
                             <i class="fa-solid fa-circle-plus"></i>
-                            Add Minutes
+                            Add Document
                         </button>
                     </div>
                 </div>
