@@ -23,6 +23,7 @@ from boranga.components.occurrence.models import (
     OccurrenceReportUserAction,
 )
 from boranga.components.species_and_communities.models import Species
+from boranga.helpers import is_internal
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +33,18 @@ def ocr_proposal_submit(ocr_proposal, request):
 
     ocr_proposal.validate_submit()
 
-    if not ocr_proposal.can_user_edit:
+    if not ocr_proposal.can_user_edit(request):
         raise ValidationError(
             "You can't submit this report at the moment due to the status or a permission issue"
         )
 
     ocr_proposal.submitter = request.user.id
+
+    if is_internal(request):
+        ocr_proposal.internal_application = True
+    else:
+        ocr_proposal.internal_application = False
+
     ocr_proposal.lodgement_date = timezone.now()
 
     # Set the status of any pending amendment requests to 'amended'
