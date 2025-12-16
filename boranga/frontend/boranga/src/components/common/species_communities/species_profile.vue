@@ -325,7 +325,7 @@
                 </div>
             </FormSection>
             <FormSection
-                v-if="distribution_public || is_internal"
+                v-if="species_community.distribution"
                 :form-collapse="false"
                 label="Distribution"
                 :Index="distributionBody"
@@ -752,6 +752,7 @@
             <BasicConservationStatus
                 :conservation_status="species_community.conservation_status"
                 :is_internal="is_internal"
+                :is_external="is_external"
                 :is-conservation-status-public="conservation_status_public"
             />
             <FormSection
@@ -1073,6 +1074,10 @@ export default {
             default: false,
         },
         is_internal: {
+            type: Boolean,
+            default: false,
+        },
+        is_external: {
             type: Boolean,
             default: false,
         },

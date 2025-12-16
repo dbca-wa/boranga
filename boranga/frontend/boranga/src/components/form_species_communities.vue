@@ -1,12 +1,7 @@
 <template lang="html">
     <div>
         <div class="col-md-12">
-            <ul
-                v-if="is_internal || is_public"
-                id="pills-tab"
-                class="nav nav-pills"
-                role="tablist"
-            >
+            <ul id="pills-tab" class="nav nav-pills" role="tablist">
                 <li class="nav-item">
                     <a
                         id="pills-profile-tab"
@@ -34,7 +29,10 @@
                         Documents
                     </a>
                 </li>
-                <li v-if="is_internal || threats_public" class="nav-item">
+                <li
+                    v-if="is_internal || threats_public || is_external"
+                    class="nav-item"
+                >
                     <a
                         id="pills-threats-tab"
                         class="nav-link"
@@ -65,7 +63,6 @@
             </ul>
             <div id="pills-tabContent" class="tab-content">
                 <div
-                    v-if="is_internal || is_public"
                     :id="profileBody"
                     class="tab-pane fade show active"
                     role="tabpanel"
@@ -76,6 +73,7 @@
                         id="communityInformation"
                         ref="community_information"
                         :is_internal="is_internal"
+                        :is_external="is_external"
                         :species_community="species_community"
                         :species_community_original="species_community_original"
                         :is_readonly="is_readonly"
@@ -87,6 +85,7 @@
                         id="speciesInformation"
                         ref="species_information"
                         :is_internal="is_internal"
+                        :is_external="is_external"
                         :species_community="species_community"
                         :species_community_original="species_community_original"
                         :is_readonly="is_readonly"
@@ -124,7 +123,7 @@
                     </SpeciesDocuments>
                 </div>
                 <div
-                    v-if="is_internal || threats_public"
+                    v-if="is_internal || threats_public || is_external"
                     :id="threatBody"
                     class="tab-pane fade"
                     role="tabpanel"
@@ -136,6 +135,7 @@
                         :key="reloadcount"
                         ref="community_threats"
                         :is_internal="is_internal"
+                        :is_external="is_external"
                         :species_community="species_community"
                         :is_readonly="is_readonly"
                     >
@@ -146,6 +146,7 @@
                         :key="`${reloadcount}-else`"
                         ref="species_threats"
                         :is_internal="is_internal"
+                        :is_external="is_external"
                         :species_community="species_community"
                         :is_readonly="is_readonly"
                     >
