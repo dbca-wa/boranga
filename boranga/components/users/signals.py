@@ -29,14 +29,14 @@ def ocr_process_ocr_external_referee_invite(sender, user, request, **kwargs):
     )
     logger.info("Checking if there are any external referee invites for user: %s", user)
     if not OCRExternalRefereeInvite.objects.filter(
-        archived=False, email=user.email, datetime_first_logged_in__isnull=True
+        archived=False, email__iexact=user.email, datetime_first_logged_in__isnull=True
     ).exists():
         return
 
     logger.info("External occurrence report referee invite found for user: %s", user)
 
     ocr_external_referee_invites = OCRExternalRefereeInvite.objects.filter(
-        email=user.email, archived=False
+        email__iexact=user.email, archived=False, datetime_first_logged_in__isnull=True
     )
     if ocr_external_referee_invites.count() > 1:
         logger.warning(
@@ -71,14 +71,14 @@ def cs_process_cs_external_referee_invite(sender, user, request, **kwargs):
     )
     logger.info("Checking if there are any external referee invites for user: %s", user)
     if not CSExternalRefereeInvite.objects.filter(
-        archived=False, email=user.email, datetime_first_logged_in__isnull=True
+        archived=False, email__iexact=user.email, datetime_first_logged_in__isnull=True
     ).exists():
         return
 
     logger.info("External conservation status referee invite found for user: %s", user)
 
     cs_external_referee_invites = CSExternalRefereeInvite.objects.filter(
-        email=user.email, archived=False
+        email__iexact=user.email, archived=False, datetime_first_logged_in__isnull=True
     )
     if cs_external_referee_invites.count() > 1:
         logger.warning(
