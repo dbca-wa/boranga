@@ -782,12 +782,10 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         previous_submitter = EmailUser.objects.get(id=self.submitter)
 
         # Check if we're transitioning between internal and external users
-        previous_is_internal = is_internal_by_user_id(self.submitter)
         new_is_internal = is_internal_by_user_id(user_id)
 
         # If transitioning between internal and external, flip the internal_application flag
-        if previous_is_internal != new_is_internal:
-            self.internal_application = not self.internal_application
+        self.internal_application = new_is_internal
 
         self.submitter = new_submitter.id
         old_submitter_information = SubmitterInformation.objects.filter(
@@ -3024,6 +3022,7 @@ class OCRObservationDetail(BaseModel):
         AreaAssessment, on_delete=models.SET_NULL, null=True, blank=True
     )
     area_surveyed = models.DecimalField(
+        null=True,
         blank=True,
         max_digits=14,
         decimal_places=4,
@@ -3224,6 +3223,7 @@ class OCRPlantCount(BaseModel):
         validators=[MinValueValidator(Decimal("0.00"))],
     )
     flowering_plants_per = models.DecimalField(
+        null=True,
         blank=True,
         max_digits=5,
         decimal_places=2,
@@ -5563,6 +5563,7 @@ class OCCObservationDetail(BaseModel):
         AreaAssessment, on_delete=models.SET_NULL, null=True, blank=True
     )
     area_surveyed = models.DecimalField(
+        null=True,
         blank=True,
         max_digits=14,
         decimal_places=4,
@@ -5654,6 +5655,7 @@ class OCCPlantCount(BaseModel):
         validators=[MinValueValidator(Decimal("0.00"))],
     )
     flowering_plants_per = models.DecimalField(
+        null=True,
         blank=True,
         max_digits=5,
         decimal_places=2,

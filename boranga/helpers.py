@@ -2,6 +2,7 @@ import logging
 import os
 import tarfile
 import zipfile
+from urllib.parse import urlparse
 
 import py7zr
 from django.conf import settings
@@ -222,6 +223,12 @@ def belongs_to_by_user_id(user_id, group_name):
         )
         cache.set(cache_key, belongs_to, settings.CACHE_TIMEOUT_5_SECONDS)
     return belongs_to
+
+
+def get_relative_url(url):
+    if url and url.startswith("http"):
+        return urlparse(url).path
+    return url
 
 
 def belongs_to(request, group_name, internal_only=False, external_only=False):

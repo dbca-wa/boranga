@@ -174,6 +174,10 @@ export default {
             type: Boolean,
             default: false,
         },
+        is_external: {
+            type: Boolean,
+            default: false,
+        },
         isConservationStatusPublic: {
             type: Boolean,
             default: false,
@@ -183,11 +187,17 @@ export default {
         noApprovedConservationStatus() {
             return (
                 !this.conservation_status ||
-                (!this.isConservationStatusPublic && !this.is_internal)
+                (!this.isConservationStatusPublic &&
+                    !this.is_internal &&
+                    !this.is_external)
             );
         },
         showConservationStatusFields() {
-            return this.is_internal || this.isConservationStatusPublic;
+            return (
+                this.is_internal ||
+                this.isConservationStatusPublic ||
+                this.is_external
+            );
         },
     },
 };

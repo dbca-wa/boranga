@@ -7,6 +7,7 @@ from boranga.components.main.serializers import (
     CommunicationLogEntrySerializer,
     EmailUserSerializer,
     SafeFileUrlField,
+    get_relative_url,
 )
 from boranga.components.meetings.models import (
     AgendaItem,
@@ -318,7 +319,7 @@ class MeetingLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class MeetingUserActionSerializer(BaseModelSerializer):

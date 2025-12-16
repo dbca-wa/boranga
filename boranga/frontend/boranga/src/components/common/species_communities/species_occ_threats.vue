@@ -412,8 +412,8 @@ export default {
                             let links = '';
                             if (full.visible) {
                                 links += `<a href='#${full.id}' data-view-threat='${full.id}'>View</a><br/>`;
-                                links += `<a href='#' data-history-threat='${full.id}'>History</a><br>`;
-                            } else {
+                            }
+                            if (vm.is_internal) {
                                 links += `<a href='#' data-history-threat='${full.id}'>History</a><br>`;
                             }
                             return links;

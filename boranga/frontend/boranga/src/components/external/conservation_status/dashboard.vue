@@ -13,7 +13,7 @@
             />
         </FormSection>
         <FormSection
-            v-if="profile && profile.cs_referral_count > 0"
+            v-if="profile && profile.user && profile.user.cs_referral_count > 0"
             :form-collapse="false"
             label="Conservation Status Proposals Referred to Me"
             Index="cs_referred_to_me"

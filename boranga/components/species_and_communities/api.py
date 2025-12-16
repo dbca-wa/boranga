@@ -22,6 +22,7 @@ from boranga.components.conservation_status.models import (
     CommonwealthConservationList,
     ConservationChangeCode,
     ConservationStatus,
+    ConservationStatusReferral,
     ConservationStatusUserAction,
     WALegislativeCategory,
     WALegislativeList,
@@ -1206,13 +1207,31 @@ class CommunitiesPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Community.objects.select_related("group_type", "community_publishing_status")
-        .filter(processing_status=Species.PROCESSING_STATUS_ACTIVE)
-        .filter(community_publishing_status__community_public=True)
-    )
     serializer_class = CommunitySerializer
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        qs = Community.objects.select_related(
+            "group_type", "community_publishing_status"
+        )
+        user = self.request.user
+        if user.is_authenticated:
+            referral_community_ids = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__community__isnull=False
+            ).values_list("conservation_status__community__id", flat=True)
+            qs = qs.filter(
+                Q(
+                    processing_status=Species.PROCESSING_STATUS_ACTIVE,
+                    community_publishing_status__community_public=True,
+                )
+                | Q(id__in=referral_community_ids)
+            )
+        else:
+            qs = qs.filter(
+                processing_status=Species.PROCESSING_STATUS_ACTIVE,
+                community_publishing_status__community_public=True,
+            )
+        return qs
 
     @detail_route(
         methods=[
@@ -1222,7 +1241,14 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def threats(self, request, *args, **kwargs):
         instance = self.get_object()
-        if not instance.community_publishing_status.threats_public:
+        user = self.request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__community=instance
+            ).exists()
+
+        if not instance.community_publishing_status.threats_public and not is_referred:
             raise serializers.ValidationError(
                 "Threats are not publicly visible for this record"
             )
@@ -1246,7 +1272,14 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
     def occurrence_threats(self, request, *args, **kwargs):
         instance = self.get_object()
         publishing_status = instance.community_publishing_status
-        if not publishing_status.threats_public:
+        user = self.request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__community=instance
+            ).exists()
+
+        if not publishing_status.threats_public and not is_referred:
             raise serializers.ValidationError(
                 "Threats are not publicly visible for this record"
             )
@@ -1263,7 +1296,14 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
     def occurrence_threat_source_list(self, request, *args, **kwargs):
         instance = self.get_object()
         publishing_status = instance.community_publishing_status
-        if not publishing_status.threats_public:
+        user = self.request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__community=instance
+            ).exists()
+
+        if not publishing_status.threats_public and not is_referred:
             raise serializers.ValidationError(
                 "Threats are not publicly visible for this record"
             )
@@ -1302,22 +1342,35 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Species.objects.select_related(
+    serializer_class = SpeciesSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        qs = Species.objects.select_related(
             "taxonomy",
             "group_type",
             "species_publishing_status",
-        )
-        .prefetch_related(
+        ).prefetch_related(
             "conservation_status",
         )
-        .filter(
-            processing_status=Species.PROCESSING_STATUS_ACTIVE,
-            species_publishing_status__species_public=True,
-        )
-    )
-    serializer_class = SpeciesSerializer
-    permission_classes = [AllowAny]
+        user = self.request.user
+        if user.is_authenticated:
+            referral_species_ids = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__species__isnull=False
+            ).values_list("conservation_status__species__id", flat=True)
+            qs = qs.filter(
+                Q(
+                    processing_status=Species.PROCESSING_STATUS_ACTIVE,
+                    species_publishing_status__species_public=True,
+                )
+                | Q(id__in=referral_species_ids)
+            )
+        else:
+            qs = qs.filter(
+                processing_status=Species.PROCESSING_STATUS_ACTIVE,
+                species_publishing_status__species_public=True,
+            )
+        return qs
 
     @detail_route(
         methods=[
@@ -1327,7 +1380,14 @@ class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def threats(self, request, *args, **kwargs):
         instance = self.get_object()
-        if not instance.species_publishing_status.threats_public:
+        user = self.request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__species=instance
+            ).exists()
+
+        if not instance.species_publishing_status.threats_public and not is_referred:
             raise serializers.ValidationError(
                 "Threats are not publicly visible for this record"
             )
@@ -1351,7 +1411,14 @@ class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     def occurrence_threats(self, request, *args, **kwargs):
         instance = self.get_object()
         publishing_status = instance.species_publishing_status
-        if not publishing_status.threats_public:
+        user = self.request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__species=instance
+            ).exists()
+
+        if not publishing_status.threats_public and not is_referred:
             raise serializers.ValidationError(
                 "Threats are not publicly visible for this record"
             )
@@ -1368,7 +1435,14 @@ class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     def occurrence_threat_source_list(self, request, *args, **kwargs):
         instance = self.get_object()
         publishing_status = instance.species_publishing_status
-        if not publishing_status.threats_public:
+        user = self.request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__species=instance
+            ).exists()
+
+        if not publishing_status.threats_public and not is_referred:
             raise serializers.ValidationError(
                 "Threats are not publicly visible for this record"
             )
@@ -3630,7 +3704,20 @@ class ConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if not (is_internal(self.request) or self.request.user.is_superuser):
+        user = self.request.user
+        if not (is_internal(self.request) or user.is_superuser):
+            referral_q = Q()
+            if user.is_authenticated:
+                referral_species_ids = ConservationStatusReferral.objects.filter(
+                    referral=user.id, conservation_status__species__isnull=False
+                ).values_list("conservation_status__species__id", flat=True)
+                referral_community_ids = ConservationStatusReferral.objects.filter(
+                    referral=user.id, conservation_status__community__isnull=False
+                ).values_list("conservation_status__community__id", flat=True)
+                referral_q = Q(species__id__in=referral_species_ids) | Q(
+                    community__id__in=referral_community_ids
+                )
+
             qs = (
                 qs.filter(visible=True)
                 .filter(
@@ -3642,6 +3729,7 @@ class ConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
                         Q(community__community_publishing_status__community_public=True)
                         & Q(community__community_publishing_status__threats_public=True)
                     )
+                    | referral_q
                 )
                 .order_by("id")
             )

@@ -21,6 +21,7 @@ from boranga.components.main.serializers import (
     CommunicationLogEntrySerializer,
     EmailUserSerializer,
     SafeFileUrlField,
+    get_relative_url,
 )
 from boranga.components.meetings.serializers import MeetingSerializer
 from boranga.components.species_and_communities.models import CommunityTaxonomy, Species
@@ -1070,7 +1071,9 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
             ):
                 return [
                     obj.conservationstatusissuanceapprovaldetails.conservation_status_approval_document.name,
-                    obj.conservationstatusissuanceapprovaldetails.conservation_status_approval_document._file.url,
+                    get_relative_url(
+                        obj.conservationstatusissuanceapprovaldetails.conservation_status_approval_document._file.url
+                    ),
                 ]
             else:
                 return (
@@ -1483,7 +1486,7 @@ class ConservationStatusLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class SendReferralSerializer(BaseSerializer):

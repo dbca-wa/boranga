@@ -27,6 +27,7 @@ from rest_framework_datatables.filters import DatatablesFilterBackend
 from rest_framework_datatables.pagination import DatatablesPageNumberPagination
 
 from boranga import settings
+from boranga.components.conservation_status.models import ConservationStatusReferral
 from boranga.components.conservation_status.serializers import SendReferralSerializer
 from boranga.components.main.api import (
     CheckUpdatedActionMixin,
@@ -36,6 +37,7 @@ from boranga.components.main.api import (
 from boranga.components.main.models import ArchivableModel
 from boranga.components.main.permissions import CommsLogPermission
 from boranga.components.main.related_item import RelatedItemsSerializer
+from boranga.components.main.serializers import get_relative_url
 from boranga.components.main.utils import validate_threat_request
 from boranga.components.occurrence.email import send_external_referee_invite_email
 from boranga.components.occurrence.filters import OccurrenceReportReferralFilterBackend
@@ -2135,7 +2137,7 @@ class OccurrenceReportViewSet(
         )
         serializer.is_valid(raise_exception=True)
         if OCRExternalRefereeInvite.objects.filter(
-            archived=False, email=request.data["email"]
+            archived=False, email__iexact=request.data["email"]
         ).exists():
             raise serializers.ValidationError(
                 "An external referee invitation has already been sent to {email}".format(
@@ -2492,7 +2494,7 @@ class OccurrenceReportAmendmentRequestViewSet(
         ).delete()
         return Response(
             [
-                dict(id=i.id, name=i.name, _file=i._file.url)
+                dict(id=i.id, name=i.name, _file=get_relative_url(i._file.url))
                 for i in instance.cs_amendment_request_documents.all()
             ]
         )
@@ -3630,6 +3632,16 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         if is_internal(self.request) or self.request.user.is_superuser:
             qs = OCCConservationThreat.objects.all().order_by("id")
         else:
+            user_id = self.request.user.id
+            referral_qs = ConservationStatusReferral.objects.filter(
+                referral=user_id
+            ).values_list(
+                "conservation_status__species", "conservation_status__community"
+            )
+
+            species_ids = [r[0] for r in referral_qs if r[0]]
+            community_ids = [r[1] for r in referral_qs if r[1]]
+
             qs = (
                 OCCConservationThreat.objects.filter(visible=True)
                 .filter(
@@ -3649,6 +3661,8 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
                             occurrence__community__community_publishing_status__threats_public=True
                         )
                     )
+                    | Q(occurrence__species__in=species_ids)
+                    | Q(occurrence__community__in=community_ids)
                 )
                 .order_by("id")
             )

@@ -2,7 +2,10 @@ import logging
 
 from rest_framework import serializers
 
-from boranga.components.conservation_status.models import ConservationStatus
+from boranga.components.conservation_status.models import (
+    ConservationStatus,
+    ConservationStatusReferral,
+)
 from boranga.components.conservation_status.serializers import (
     BasicConservationStatusSerializer,
 )
@@ -13,6 +16,7 @@ from boranga.components.main.serializers import (
     EmailUserSerializer,
     ListMultipleChoiceField,
     SafeFileUrlField,
+    get_relative_url,
 )
 from boranga.components.species_and_communities.models import (
     Community,
@@ -762,9 +766,20 @@ class BaseSpeciesSerializer(BaseModelSerializer):
 
     def get_conservation_status(self, obj):
         request = self.context["request"]
-        if is_internal(request) or (
-            obj.species_publishing_status.species_public
-            and obj.species_publishing_status.conservation_status_public
+        user = request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__species=obj
+            ).exists()
+
+        if (
+            is_internal(request)
+            or is_referred
+            or (
+                obj.species_publishing_status.species_public
+                and obj.species_publishing_status.conservation_status_public
+            )
         ):
             try:
                 qs = ConservationStatus.objects.get(
@@ -779,9 +794,20 @@ class BaseSpeciesSerializer(BaseModelSerializer):
 
     def get_conservation_attributes(self, obj):
         request = self.context["request"]
-        if is_internal(request) or (
-            obj.species_publishing_status.species_public
-            and obj.species_publishing_status.conservation_attributes_public
+        user = request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__species=obj
+            ).exists()
+
+        if (
+            is_internal(request)
+            or is_referred
+            or (
+                obj.species_publishing_status.species_public
+                and obj.species_publishing_status.conservation_attributes_public
+            )
         ):
             try:
                 qs = SpeciesConservationAttributes.objects.get(species=obj)
@@ -793,9 +819,20 @@ class BaseSpeciesSerializer(BaseModelSerializer):
 
     def get_distribution(self, obj):
         request = self.context["request"]
-        if is_internal(request) or (
-            obj.species_publishing_status.species_public
-            and obj.species_publishing_status.distribution_public
+        user = request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__species=obj
+            ).exists()
+
+        if (
+            is_internal(request)
+            or is_referred
+            or (
+                obj.species_publishing_status.species_public
+                and obj.species_publishing_status.distribution_public
+            )
         ):
             try:
                 # to create the distribution instance for fetching the calculated values from serializer
@@ -815,7 +852,7 @@ class BaseSpeciesSerializer(BaseModelSerializer):
 
     def get_image_doc(self, obj):
         if obj.image_doc and obj.image_doc._file:
-            return obj.image_doc._file.url
+            return get_relative_url(obj.image_doc._file.url)
         return None
 
     def get_processing_status(self, obj):
@@ -1255,9 +1292,20 @@ class BaseCommunitySerializer(BaseModelSerializer):
 
     def get_conservation_status(self, obj):
         request = self.context["request"]
-        if is_internal(request) or (
-            obj.community_publishing_status.community_public
-            and obj.community_publishing_status.conservation_status_public
+        user = request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__community=obj
+            ).exists()
+
+        if (
+            is_internal(request)
+            or is_referred
+            or (
+                obj.community_publishing_status.community_public
+                and obj.community_publishing_status.conservation_status_public
+            )
         ):
             try:
                 qs = ConservationStatus.objects.get(
@@ -1272,9 +1320,20 @@ class BaseCommunitySerializer(BaseModelSerializer):
 
     def get_distribution(self, obj):
         request = self.context["request"]
-        if is_internal(request) or (
-            obj.community_publishing_status.community_public
-            and obj.community_publishing_status.distribution_public
+        user = request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__community=obj
+            ).exists()
+
+        if (
+            is_internal(request)
+            or is_referred
+            or (
+                obj.community_publishing_status.community_public
+                and obj.community_publishing_status.distribution_public
+            )
         ):
             try:
                 # to create the distribution instance for fetching the calculated values from serializer
@@ -1295,9 +1354,20 @@ class BaseCommunitySerializer(BaseModelSerializer):
 
     def get_conservation_attributes(self, obj):
         request = self.context["request"]
-        if is_internal(request) or (
-            obj.community_publishing_status.community_public
-            and obj.community_publishing_status.conservation_attributes_public
+        user = request.user
+        is_referred = False
+        if user.is_authenticated:
+            is_referred = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__community=obj
+            ).exists()
+
+        if (
+            is_internal(request)
+            or is_referred
+            or (
+                obj.community_publishing_status.community_public
+                and obj.community_publishing_status.conservation_attributes_public
+            )
         ):
             try:
                 qs = CommunityConservationAttributes.objects.get(community=obj)
@@ -1320,7 +1390,7 @@ class BaseCommunitySerializer(BaseModelSerializer):
 
     def get_image_doc(self, obj):
         if obj.image_doc and obj.image_doc._file:
-            return obj.image_doc._file.url
+            return get_relative_url(obj.image_doc._file.url)
         return None
 
     def get_processing_status(self, obj):
@@ -1834,7 +1904,7 @@ class SpeciesLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class SpeciesUserActionSerializer(BaseModelSerializer):
@@ -1956,7 +2026,7 @@ class CommunityLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class CommunityUserActionSerializer(BaseModelSerializer):

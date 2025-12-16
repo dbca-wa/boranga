@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse
 
 import nh3
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -46,8 +47,33 @@ class NH3SanitizeSerializerMixin:
                 return [self.child.to_internal_value(item) for item in data]
             raise serializers.ValidationError("Expected an object but received a list.")
 
-        # Use dict() for shallow copy to avoid deep copy issues with file handles
-        data = dict(data.lists()) if hasattr(data, "lists") else dict(data)
+        if hasattr(data, "lists"):
+            # Handle QueryDict
+            new_data = {}
+            for key, value in data.lists():
+                field = self.fields.get(key)
+                if field:
+                    if isinstance(
+                        field, (serializers.ListField, serializers.MultipleChoiceField)
+                    ):
+                        new_data[key] = value
+                    elif isinstance(field, serializers.ManyRelatedField):
+                        new_data[key] = value
+                    else:
+                        val = value[-1]
+                        if (
+                            val == ""
+                            and isinstance(field, serializers.ChoiceField)
+                            and not field.allow_blank
+                        ):
+                            continue
+                        new_data[key] = val
+                else:
+                    new_data[key] = value[-1]
+            data = new_data
+        else:
+            data = dict(data)
+
         for field_name, field in self.fields.items():
             if isinstance(field, serializers.CharField):
                 value = data.get(field_name)
@@ -68,10 +94,10 @@ class NH3SanitizeSerializerMixin:
         return rep
 
 
-class AbsoluteFileUrlSerializerMixin:
+class RelativeFileUrlSerializerMixin:
     """
-    Mixin to make all FileField and ImageField URLs absolute using request.build_absolute_uri.
-    This is main to ensure that file urls include the same scheme as the request
+    Mixin to make all FileField and ImageField URLs relative.
+    This is to ensure that file urls do not include the scheme, allowing the browser to use the current scheme.
     """
 
     def to_representation(self, instance):
@@ -81,14 +107,14 @@ class AbsoluteFileUrlSerializerMixin:
             for field_name, field in self.fields.items():
                 if isinstance(field, (serializers.FileField, serializers.ImageField)):
                     url = data.get(field_name)
-                    if url and not url.startswith("http"):
-                        data[field_name] = request.build_absolute_uri(url)
+                    if url and url.startswith("http"):
+                        data[field_name] = urlparse(url).path
         return data
 
 
 class BaseModelSerializer(
     NH3SanitizeSerializerMixin,
-    AbsoluteFileUrlSerializerMixin,
+    RelativeFileUrlSerializerMixin,
     serializers.ModelSerializer,
 ):
     """
@@ -101,7 +127,7 @@ class BaseModelSerializer(
 
 class BaseSerializer(
     NH3SanitizeSerializerMixin,
-    AbsoluteFileUrlSerializerMixin,
+    RelativeFileUrlSerializerMixin,
     serializers.Serializer,
 ):
     """
@@ -135,7 +161,7 @@ class CommunicationLogEntrySerializer(BaseModelSerializer):
         )
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class EmailUserROSerializerForReferral(BaseModelSerializer):
@@ -336,10 +362,16 @@ class IntegerFieldEmptytoNullSerializerMixin:
         return super().to_internal_value(data)
 
 
+def get_relative_url(url):
+    if url and url.startswith("http"):
+        return urlparse(url).path
+    return url
+
+
 class SafeFileUrlField(serializers.CharField):
     def to_representation(self, value):
         try:
-            return value.url
+            return get_relative_url(value.url)
         except (ValueError, AttributeError):
             return None
 

@@ -2174,7 +2174,7 @@ class ConservationStatusUserAction(UserAction):
     )
     ACTION_DISCARD_PROPOSAL = "Discard conservation status proposal {}"
     ACTION_PROPOSE_DELIST_PROPOSAL = (
-        "Propose discard conservation status proposal {}. Reason: {}"
+        "Propose Delist conservation status proposal {}. Reason: {}"
     )
     ACTION_PROPOSED_FOR_AGENDA = (
         "Conservation status proposal {} "

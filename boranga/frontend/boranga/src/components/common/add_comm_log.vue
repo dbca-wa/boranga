@@ -9,7 +9,11 @@
         >
             <div class="container-fluid">
                 <div class="row">
-                    <form class="form-horizontal" name="commsForm">
+                    <form
+                        class="form-horizontal needs-validation"
+                        name="commsForm"
+                        novalidate
+                    >
                         <alert v-if="errorString" type="danger"
                             ><strong>{{ errorString }}</strong></alert
                         >
@@ -30,7 +34,11 @@
                                             type="text"
                                             class="form-control"
                                             name="to"
+                                            required
                                         />
+                                        <div class="invalid-feedback">
+                                            Please enter the recipient.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -49,7 +57,11 @@
                                             type="text"
                                             class="form-control"
                                             name="fromm"
+                                            required
                                         />
+                                        <div class="invalid-feedback">
+                                            Please enter the sender.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -67,6 +79,7 @@
                                             v-model="comms.type"
                                             class="form-select"
                                             name="type"
+                                            required
                                         >
                                             <option value="">
                                                 Select Type
@@ -75,6 +88,9 @@
                                             <option value="mail">Mail</option>
                                             <option value="phone">Phone</option>
                                         </select>
+                                        <div class="invalid-feedback">
+                                            Please select a type.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -94,7 +110,11 @@
                                             class="form-control"
                                             name="subject"
                                             style="width: 70%"
+                                            required
                                         />
+                                        <div class="invalid-feedback">
+                                            Please enter a subject/description.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -113,12 +133,16 @@
                                             name="text"
                                             class="form-control"
                                             style="width: 70%"
+                                            required
                                         ></textarea>
+                                        <div class="invalid-feedback">
+                                            Please enter text.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                             <div class="form-group">
-                                <div class="row mb-3">
+                                <div class="row mb-3 border-top pt-3">
                                     <div class="col-sm-3">
                                         <label
                                             class="control-label pull-left"
@@ -127,90 +151,64 @@
                                         >
                                     </div>
                                     <div class="col-sm-9">
+                                        <button
+                                            class="btn btn-primary btn-sm"
+                                            @click.prevent="attachAnother"
+                                        >
+                                            <i class="bi bi-plus-lg"></i> Add
+                                            Another File
+                                        </button>
+                                        <hr class="my-3" />
                                         <template
                                             v-for="(f, i) in files"
-                                            :key="i"
+                                            :key="f.id"
                                         >
-                                            <div
-                                                :class="
-                                                    'row top-buffer file-row-' +
-                                                    i
-                                                "
-                                            >
-                                                <div class="col-sm-3">
-                                                    <span
-                                                        v-if="f.file == null"
-                                                        class="btn btn-primary btn-file pull-left"
-                                                    >
-                                                        Attach File
-                                                        <input
-                                                            type="file"
-                                                            :name="
-                                                                'file-upload-' +
-                                                                i
-                                                            "
-                                                            :class="
-                                                                'file-upload-' +
-                                                                i
-                                                            "
-                                                            @change="
-                                                                uploadFile(
-                                                                    'file-upload-' +
-                                                                        i,
-                                                                    f
-                                                                )
-                                                            "
-                                                        />
-                                                    </span>
-                                                    <span
-                                                        v-else
-                                                        class="btn btn-primary btn-file pull-left"
-                                                    >
-                                                        Update File
-                                                        <input
-                                                            type="file"
-                                                            :name="
-                                                                'file-upload-' +
-                                                                i
-                                                            "
-                                                            :class="
-                                                                'file-upload-' +
-                                                                i
-                                                            "
-                                                            @change="
-                                                                uploadFile(
-                                                                    'file-upload-' +
-                                                                        i,
-                                                                    f
-                                                                )
-                                                            "
-                                                        />
-                                                    </span>
-                                                </div>
-                                                <div
-                                                    class="col-sm-6 truncate-text"
+                                            <div class="input-group mb-2">
+                                                <span
+                                                    class="btn btn-primary btn-file"
+                                                    :title="
+                                                        f.file
+                                                            ? 'Change file'
+                                                            : 'Select file'
+                                                    "
                                                 >
-                                                    <span>{{ f.name }}</span>
-                                                </div>
-                                                <div class="col-sm-3">
-                                                    <a
-                                                        href=""
-                                                        style="color: red"
-                                                        @click.prevent="
-                                                            removeFile(i)
+                                                    <i class="bi bi-upload"></i>
+                                                    {{
+                                                        f.file
+                                                            ? 'Change'
+                                                            : 'Attach'
+                                                    }}
+                                                    <input
+                                                        type="file"
+                                                        @change="
+                                                            uploadFile(
+                                                                $event,
+                                                                f
+                                                            )
                                                         "
-                                                        >Remove</a
-                                                    >
-                                                </div>
+                                                    />
+                                                </span>
+                                                <input
+                                                    type="text"
+                                                    class="form-control"
+                                                    :value="f.name"
+                                                    readonly
+                                                    placeholder="No file selected"
+                                                />
+                                                <button
+                                                    v-if="
+                                                        files.length > 1 ||
+                                                        f.file
+                                                    "
+                                                    class="btn btn-danger"
+                                                    type="button"
+                                                    @click="removeFile(i)"
+                                                    title="Remove file"
+                                                >
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
                                             </div>
                                         </template>
-                                        <a
-                                            href=""
-                                            @click.prevent="attachAnother"
-                                            ><i
-                                                class="fa fa-lg fa-plus top-buffer-2x"
-                                            ></i
-                                        ></a>
                                     </div>
                                 </div>
                             </div>
@@ -259,11 +257,13 @@ export default {
             },
             files: [
                 {
+                    id: 1,
                     file: null,
                     name: '',
                 },
             ],
             originalComms: null,
+            fileIdCounter: 1,
         };
     },
     watch: {
@@ -290,13 +290,15 @@ export default {
         },
         ok: function () {
             let vm = this;
-            if ($(vm.form).valid()) {
+            if (vm.form.checkValidity()) {
                 vm.sendData();
+            } else {
+                vm.form.classList.add('was-validated');
             }
         },
-        uploadFile(target, file_obj) {
+        uploadFile(e, file_obj) {
             let _file = null;
-            var input = $('.' + target)[0];
+            var input = e.target;
             if (input.files && input.files[0]) {
                 var reader = new FileReader();
                 reader.readAsDataURL(input.files[0]);
@@ -309,15 +311,15 @@ export default {
             file_obj.name = _file.name;
         },
         removeFile(index) {
-            let length = this.files.length;
-            $('.file-row-' + index).remove();
             this.files.splice(index, 1);
-            this.$nextTick(() => {
-                length == 1 ? this.attachAnother() : '';
-            });
+            if (this.files.length === 0) {
+                this.attachAnother();
+            }
         },
         attachAnother() {
+            this.fileIdCounter++;
             this.files.push({
+                id: this.fileIdCounter,
                 file: null,
                 name: '',
             });
@@ -331,13 +333,8 @@ export default {
             this.comms = {};
             this.errorString = '';
             $('.has-error').removeClass('has-error');
-            let file_length = vm.files.length;
+            $(vm.form).removeClass('was-validated');
             this.files = [];
-            for (var i = 0; i < file_length; i++) {
-                vm.$nextTick(() => {
-                    $('.file-row-' + i).remove();
-                });
-            }
             this.attachAnother();
         },
         sendData: function () {
@@ -360,41 +357,6 @@ export default {
                 }
                 vm.addingComms = false;
                 vm.close();
-            });
-        },
-        addFormValidations: function () {
-            let vm = this;
-            vm.validation_form = $(vm.form).validate({
-                rules: {
-                    to: 'required',
-                    fromm: 'required',
-                    type: 'required',
-                    subject: 'required',
-                    text: 'required',
-                },
-                messages: {},
-                showErrors: function (errorMap, errorList) {
-                    $.each(this.validElements(), function (index, element) {
-                        var $element = $(element);
-                        $element
-                            .attr('data-original-title', '')
-                            .parents('.form-group')
-                            .removeClass('has-error');
-                    });
-                    // destroy tooltips on valid elements
-                    $('.' + this.settings.validClass).tooltip('destroy');
-                    // add or update tooltips
-                    for (var i = 0; i < errorList.length; i++) {
-                        var error = errorList[i];
-                        $(error.element)
-                            .tooltip({
-                                trigger: 'focus',
-                            })
-                            .attr('data-original-title', error.message)
-                            .parents('.form-group')
-                            .addClass('has-error');
-                    }
-                },
             });
         },
     },

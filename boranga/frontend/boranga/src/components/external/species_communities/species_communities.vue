@@ -1,10 +1,9 @@
 <template lang="html">
-    <div
-        v-if="species_community"
-        id="externalSpeciesCommunity"
-        class="container"
-    >
-        <div class="row" style="padding-bottom: 50px">
+    <div id="externalSpeciesCommunity" class="container">
+        <div v-if="errorMessage" class="alert alert-danger" role="alert">
+            {{ errorMessage }}
+        </div>
+        <div v-if="species_community" class="row" style="padding-bottom: 50px">
             <h3>
                 {{ display_group_type }} {{ display_number }} -
                 {{ display_name }}
@@ -78,6 +77,7 @@
                                         species_community
                                     "
                                     :is_internal="false"
+                                    :is_external="true"
                                     :is_readonly="true"
                                 >
                                 </ProposalSpeciesCommunities>
@@ -125,13 +125,23 @@ export default {
             to.query.group_type_name === 'fauna'
         ) {
             const speciesUrl = `${api_endpoints.external_species}/${to.params.species_community_id}/`;
-            fetch(speciesUrl).then(
+            fetch(speciesUrl, {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(
                 async (response) => {
                     next(async (vm) => {
-                        vm.species_community = await response.json(); //--temp species_obj
-                        vm.uploadedID = vm.species_community.image_doc;
-                        // reset the downloading flag when a new image id is present
-                        vm.downloadingImage = !!vm.uploadedID;
+                        if (response.ok) {
+                            vm.species_community = await response.json(); //--temp species_obj
+                            vm.uploadedID = vm.species_community.image_doc;
+                            // reset the downloading flag when a new image id is present
+                            vm.downloadingImage = !!vm.uploadedID;
+                        } else {
+                            vm.species_community = null;
+                            vm.errorMessage =
+                                'The record you have requested does not exist.';
+                        }
                     });
                 },
                 (err) => {
@@ -142,13 +152,23 @@ export default {
         //------get community object if received community id
         else {
             const communityUrl = `${api_endpoints.external_community}/${to.params.species_community_id}/`;
-            fetch(communityUrl).then(
+            fetch(communityUrl, {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(
                 async (response) => {
                     next(async (vm) => {
-                        vm.species_community = await response.json(); //--temp community_obj
-                        vm.uploadedID = vm.species_community.image_doc;
-                        // reset the downloading flag when a new image id is present
-                        vm.downloadingImage = !!vm.uploadedID;
+                        if (response.ok) {
+                            vm.species_community = await response.json(); //--temp community_obj
+                            vm.uploadedID = vm.species_community.image_doc;
+                            // reset the downloading flag when a new image id is present
+                            vm.downloadingImage = !!vm.uploadedID;
+                        } else {
+                            vm.species_community = null;
+                            vm.errorMessage =
+                                'The record you have requested does not exist.';
+                        }
                     });
                 },
                 (err) => {
@@ -162,6 +182,7 @@ export default {
             species_community: null,
             uploadedID: null,
             downloadingImage: true,
+            errorMessage: null,
         };
     },
     computed: {

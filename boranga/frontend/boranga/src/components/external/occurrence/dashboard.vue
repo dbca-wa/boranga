@@ -13,7 +13,9 @@
             />
         </FormSection>
         <FormSection
-            v-if="profile && profile.ocr_referral_count > 0"
+            v-if="
+                profile && profile.user && profile.user.ocr_referral_count > 0
+            "
             :form-collapse="false"
             label="Occurrence Reports Forms Referred to Me"
             Index="ocr_referred_to_me"

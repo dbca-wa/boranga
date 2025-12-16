@@ -22,6 +22,7 @@ from boranga.components.main.serializers import (
     ListMultipleChoiceField,
     SafeFileUrlField,
     YesNoBooleanField,
+    get_relative_url,
 )
 from boranga.components.main.utils import get_geometry_source
 from boranga.components.occurrence.models import (
@@ -1270,7 +1271,7 @@ class OccurrenceLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class ListOccurrenceSerializer(OccurrenceSerializer):
@@ -2534,7 +2535,7 @@ class OccurrenceReportLogEntrySerializer(CommunicationLogEntrySerializer):
         read_only_fields = ("customer",)
 
     def get_documents(self, obj):
-        return [[d.name, d._file.url] for d in obj.documents.all()]
+        return [[d.name, get_relative_url(d._file.url)] for d in obj.documents.all()]
 
 
 class OccurrenceReportDocumentSerializer(BaseModelSerializer):

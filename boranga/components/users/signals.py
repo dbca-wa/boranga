@@ -29,14 +29,14 @@ def ocr_process_ocr_external_referee_invite(sender, user, request, **kwargs):
     )
     logger.info("Checking if there are any external referee invites for user: %s", user)
     if not OCRExternalRefereeInvite.objects.filter(
-        archived=False, email=user.email, datetime_first_logged_in__isnull=True
+        archived=False, email__iexact=user.email, datetime_first_logged_in__isnull=True
     ).exists():
         return
 
     logger.info("External occurrence report referee invite found for user: %s", user)
 
     ocr_external_referee_invites = OCRExternalRefereeInvite.objects.filter(
-        email=user.email, archived=False
+        email__iexact=user.email, archived=False, datetime_first_logged_in__isnull=True
     )
     if ocr_external_referee_invites.count() > 1:
         logger.warning(
@@ -44,6 +44,10 @@ def ocr_process_ocr_external_referee_invite(sender, user, request, **kwargs):
             user,
         )
     ocr_external_referee_invite = ocr_external_referee_invites.first()
+    logger.info(
+        "Processing external occurrence report referee invite: %s",
+        ocr_external_referee_invite,
+    )
     ocr_external_referee_invite.datetime_first_logged_in = user.last_login
     logger.info(
         "Saving datetime_first_logged_in for occurrence report external referee invite: %s",
@@ -51,14 +55,18 @@ def ocr_process_ocr_external_referee_invite(sender, user, request, **kwargs):
     )
     ocr_external_referee_invite.save()
 
-    OccurrenceReportReferral.objects.create(
+    if not OccurrenceReportReferral.objects.filter(
         occurrence_report=ocr_external_referee_invite.occurrence_report,
         referral=user.id,
-        sent_by=ocr_external_referee_invite.sent_by,
-        text=ocr_external_referee_invite.invite_text,
-        assigned_officer=ocr_external_referee_invite.sent_by,
-        is_external=True,
-    )
+    ).exists():
+        OccurrenceReportReferral.objects.create(
+            occurrence_report=ocr_external_referee_invite.occurrence_report,
+            referral=user.id,
+            sent_by=ocr_external_referee_invite.sent_by,
+            text=ocr_external_referee_invite.invite_text,
+            assigned_officer=ocr_external_referee_invite.sent_by,
+            is_external=True,
+        )
 
 
 @transaction.atomic
@@ -71,14 +79,14 @@ def cs_process_cs_external_referee_invite(sender, user, request, **kwargs):
     )
     logger.info("Checking if there are any external referee invites for user: %s", user)
     if not CSExternalRefereeInvite.objects.filter(
-        archived=False, email=user.email, datetime_first_logged_in__isnull=True
+        archived=False, email__iexact=user.email, datetime_first_logged_in__isnull=True
     ).exists():
         return
 
     logger.info("External conservation status referee invite found for user: %s", user)
 
     cs_external_referee_invites = CSExternalRefereeInvite.objects.filter(
-        email=user.email, archived=False
+        email__iexact=user.email, archived=False, datetime_first_logged_in__isnull=True
     )
     if cs_external_referee_invites.count() > 1:
         logger.warning(
@@ -86,6 +94,10 @@ def cs_process_cs_external_referee_invite(sender, user, request, **kwargs):
             user,
         )
     cs_external_referee_invite = cs_external_referee_invites.first()
+    logger.info(
+        "Processing external conservation status referee invite: %s",
+        cs_external_referee_invite,
+    )
     cs_external_referee_invite.datetime_first_logged_in = user.last_login
     logger.info(
         "Saving datetime_first_logged_in for conservation status external referee invite: %s",
@@ -93,14 +105,18 @@ def cs_process_cs_external_referee_invite(sender, user, request, **kwargs):
     )
     cs_external_referee_invite.save()
 
-    ConservationStatusReferral.objects.create(
+    if not ConservationStatusReferral.objects.filter(
         conservation_status=cs_external_referee_invite.conservation_status,
         referral=user.id,
-        sent_by=cs_external_referee_invite.sent_by,
-        text=cs_external_referee_invite.invite_text,
-        assigned_officer=cs_external_referee_invite.sent_by,
-        is_external=True,
-    )
+    ).exists():
+        ConservationStatusReferral.objects.create(
+            conservation_status=cs_external_referee_invite.conservation_status,
+            referral=user.id,
+            sent_by=cs_external_referee_invite.sent_by,
+            text=cs_external_referee_invite.invite_text,
+            assigned_officer=cs_external_referee_invite.sent_by,
+            is_external=True,
+        )
 
 
 def process_external_referee_invites(sender, user, request, **kwargs):
