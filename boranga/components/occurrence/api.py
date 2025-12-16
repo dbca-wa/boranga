@@ -27,6 +27,7 @@ from rest_framework_datatables.filters import DatatablesFilterBackend
 from rest_framework_datatables.pagination import DatatablesPageNumberPagination
 
 from boranga import settings
+from boranga.components.conservation_status.models import ConservationStatusReferral
 from boranga.components.conservation_status.serializers import SendReferralSerializer
 from boranga.components.main.api import (
     CheckUpdatedActionMixin,
@@ -3631,6 +3632,16 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         if is_internal(self.request) or self.request.user.is_superuser:
             qs = OCCConservationThreat.objects.all().order_by("id")
         else:
+            user_id = self.request.user.id
+            referral_qs = ConservationStatusReferral.objects.filter(
+                referral=user_id
+            ).values_list(
+                "conservation_status__species", "conservation_status__community"
+            )
+
+            species_ids = [r[0] for r in referral_qs if r[0]]
+            community_ids = [r[1] for r in referral_qs if r[1]]
+
             qs = (
                 OCCConservationThreat.objects.filter(visible=True)
                 .filter(
@@ -3650,6 +3661,8 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
                             occurrence__community__community_publishing_status__threats_public=True
                         )
                     )
+                    | Q(occurrence__species__in=species_ids)
+                    | Q(occurrence__community__in=community_ids)
                 )
                 .order_by("id")
             )
