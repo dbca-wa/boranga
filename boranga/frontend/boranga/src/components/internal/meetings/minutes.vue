@@ -274,7 +274,7 @@ export default {
             this.$refs.document_detail.documentObj = new_document_another;
             this.$refs.document_detail.uploaded_document = [];
             this.$refs.document_detail.document_action = 'add';
-            this.$refs.document_detail.title = 'Add a new Minute';
+            this.$refs.document_detail.title = 'Add a new Document';
             this.$refs.document_detail.isModalOpen = true;
         },
         editDocument: function (id) {
