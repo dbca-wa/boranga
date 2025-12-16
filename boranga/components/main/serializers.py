@@ -94,10 +94,10 @@ class NH3SanitizeSerializerMixin:
         return rep
 
 
-class AbsoluteFileUrlSerializerMixin:
+class RelativeFileUrlSerializerMixin:
     """
-    Mixin to make all FileField and ImageField URLs absolute using request.build_absolute_uri.
-    This is main to ensure that file urls include the same scheme as the request
+    Mixin to make all FileField and ImageField URLs relative.
+    This is to ensure that file urls do not include the scheme, allowing the browser to use the current scheme.
     """
 
     def to_representation(self, instance):
@@ -107,14 +107,14 @@ class AbsoluteFileUrlSerializerMixin:
             for field_name, field in self.fields.items():
                 if isinstance(field, (serializers.FileField, serializers.ImageField)):
                     url = data.get(field_name)
-                    if url and not url.startswith("http"):
-                        data[field_name] = request.build_absolute_uri(url)
+                    if url and url.startswith("http"):
+                        data[field_name] = urlparse(url).path
         return data
 
 
 class BaseModelSerializer(
     NH3SanitizeSerializerMixin,
-    AbsoluteFileUrlSerializerMixin,
+    RelativeFileUrlSerializerMixin,
     serializers.ModelSerializer,
 ):
     """
@@ -127,7 +127,7 @@ class BaseModelSerializer(
 
 class BaseSerializer(
     NH3SanitizeSerializerMixin,
-    AbsoluteFileUrlSerializerMixin,
+    RelativeFileUrlSerializerMixin,
     serializers.Serializer,
 ):
     """
