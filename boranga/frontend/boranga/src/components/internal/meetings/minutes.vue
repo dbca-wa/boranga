@@ -2,7 +2,7 @@
     <div id="minutes">
         <FormSection
             :form-collapse="false"
-            label="Minutes"
+            label="Meeting Documents"
             :Index="minutesBody"
         >
             <form class="form-horizontal" action="index.html" method="post">
