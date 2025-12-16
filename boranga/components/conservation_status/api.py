@@ -1805,7 +1805,7 @@ class ConservationStatusViewSet(
         )
         serializer.is_valid(raise_exception=True)
         if CSExternalRefereeInvite.objects.filter(
-            archived=False, email=request.data["email"]
+            archived=False, email__iexact=request.data["email"]
         ).exists():
             raise serializers.ValidationError(
                 "An external referee invitation has already been sent to {email}".format(
