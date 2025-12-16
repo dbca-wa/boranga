@@ -24,8 +24,6 @@ if "default" in DATABASES:
     # Default to 600 seconds (10 minutes)
     DATABASES["default"]["CONN_MAX_AGE"] = env("CONN_MAX_AGE", 600)
 
-WORKING_FROM_HOME = env("WORKING_FROM_HOME", False)
-
 ROOT_URLCONF = "boranga.urls"
 SITE_ID = 1
 DEPT_DOMAINS = env("DEPT_DOMAINS", ["dpaw.wa.gov.au", "dbca.wa.gov.au"])

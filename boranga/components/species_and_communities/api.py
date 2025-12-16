@@ -1996,7 +1996,7 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             split_of_species_retains_original,
             occurrence_assignments_dict,
         )
-        if not (settings.WORKING_FROM_HOME and settings.DEBUG) and not ret1:
+        if not ret1:
             raise serializers.ValidationError(
                 "Email could not be sent. Please try again later"
             )
