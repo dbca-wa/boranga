@@ -3704,7 +3704,20 @@ class ConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if not (is_internal(self.request) or self.request.user.is_superuser):
+        user = self.request.user
+        if not (is_internal(self.request) or user.is_superuser):
+            referral_q = Q()
+            if user.is_authenticated:
+                referral_species_ids = ConservationStatusReferral.objects.filter(
+                    referral=user.id, conservation_status__species__isnull=False
+                ).values_list("conservation_status__species__id", flat=True)
+                referral_community_ids = ConservationStatusReferral.objects.filter(
+                    referral=user.id, conservation_status__community__isnull=False
+                ).values_list("conservation_status__community__id", flat=True)
+                referral_q = Q(species__id__in=referral_species_ids) | Q(
+                    community__id__in=referral_community_ids
+                )
+
             qs = (
                 qs.filter(visible=True)
                 .filter(
@@ -3716,6 +3729,7 @@ class ConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
                         Q(community__community_publishing_status__community_public=True)
                         & Q(community__community_publishing_status__threats_public=True)
                     )
+                    | referral_q
                 )
                 .order_by("id")
             )
