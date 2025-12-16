@@ -47,8 +47,26 @@ class NH3SanitizeSerializerMixin:
                 return [self.child.to_internal_value(item) for item in data]
             raise serializers.ValidationError("Expected an object but received a list.")
 
-        # Use dict() for shallow copy to avoid deep copy issues with file handles
-        data = dict(data.lists()) if hasattr(data, "lists") else dict(data)
+        if hasattr(data, "lists"):
+            # Handle QueryDict
+            new_data = {}
+            for key, value in data.lists():
+                field = self.fields.get(key)
+                if field:
+                    if isinstance(
+                        field, (serializers.ListField, serializers.MultipleChoiceField)
+                    ):
+                        new_data[key] = value
+                    elif isinstance(field, serializers.ManyRelatedField):
+                        new_data[key] = value
+                    else:
+                        new_data[key] = value[-1]
+                else:
+                    new_data[key] = value[-1]
+            data = new_data
+        else:
+            data = dict(data)
+
         for field_name, field in self.fields.items():
             if isinstance(field, serializers.CharField):
                 value = data.get(field_name)
