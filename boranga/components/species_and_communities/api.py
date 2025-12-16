@@ -22,6 +22,7 @@ from boranga.components.conservation_status.models import (
     CommonwealthConservationList,
     ConservationChangeCode,
     ConservationStatus,
+    ConservationStatusReferral,
     ConservationStatusUserAction,
     WALegislativeCategory,
     WALegislativeList,
@@ -130,7 +131,7 @@ from boranga.components.species_and_communities.utils import (
     species_form_submit,
 )
 from boranga.components.users.models import SubmitterCategory
-from boranga.helpers import is_internal
+from boranga.helpers import is_conservation_status_referee, is_internal
 from boranga.permissions import IsSuperuser
 
 logger = logging.getLogger(__name__)
@@ -1206,13 +1207,25 @@ class CommunitiesPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Community.objects.select_related("group_type", "community_publishing_status")
-        .filter(processing_status=Species.PROCESSING_STATUS_ACTIVE)
-        .filter(community_publishing_status__community_public=True)
-    )
     serializer_class = CommunitySerializer
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        qs = Community.objects.select_related(
+            "group_type", "community_publishing_status"
+        ).filter(processing_status=Species.PROCESSING_STATUS_ACTIVE)
+        user = self.request.user
+        if user.is_authenticated and is_conservation_status_referee(self.request):
+            referral_community_ids = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__community__isnull=False
+            ).values_list("conservation_status__community__id", flat=True)
+            qs = qs.filter(
+                Q(community_publishing_status__community_public=True)
+                | Q(id__in=referral_community_ids)
+            )
+        else:
+            qs = qs.filter(community_publishing_status__community_public=True)
+        return qs
 
     @detail_route(
         methods=[
@@ -1302,22 +1315,35 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = (
-        Species.objects.select_related(
-            "taxonomy",
-            "group_type",
-            "species_publishing_status",
-        )
-        .prefetch_related(
-            "conservation_status",
-        )
-        .filter(
-            processing_status=Species.PROCESSING_STATUS_ACTIVE,
-            species_publishing_status__species_public=True,
-        )
-    )
     serializer_class = SpeciesSerializer
     permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        qs = (
+            Species.objects.select_related(
+                "taxonomy",
+                "group_type",
+                "species_publishing_status",
+            )
+            .prefetch_related(
+                "conservation_status",
+            )
+            .filter(
+                processing_status=Species.PROCESSING_STATUS_ACTIVE,
+            )
+        )
+        user = self.request.user
+        if user.is_authenticated and is_conservation_status_referee(self.request):
+            referral_species_ids = ConservationStatusReferral.objects.filter(
+                referral=user.id, conservation_status__species__isnull=False
+            ).values_list("conservation_status__species__id", flat=True)
+            qs = qs.filter(
+                Q(species_publishing_status__species_public=True)
+                | Q(id__in=referral_species_ids)
+            )
+        else:
+            qs = qs.filter(species_publishing_status__species_public=True)
+        return qs
 
     @detail_route(
         methods=[
