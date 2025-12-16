@@ -234,7 +234,7 @@ def send_external_referee_invite_email(
         txt_template="boranga/emails/cs_proposals/send_external_referee_invite.txt",
     )
 
-    url = request.build_absolute_uri(reverse("external"))
+    url = request.build_absolute_uri(reverse("home"))
 
     url = convert_internal_url_to_external_url(url)
 
