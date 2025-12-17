@@ -8,6 +8,7 @@ from pathlib import Path
 
 from django.apps import apps
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.conservation_status.tec import (
@@ -194,6 +195,14 @@ class ConservationStatusImporter(BaseSheetImporter):
                 "SubmitterCategory 'DBCA' not found. SubmitterInformation records may be incomplete."
             )
 
+        # TEC Submitter User
+        User = get_user_model()
+        tec_user = User.objects.filter(email="boranga.tec@dbca.wa.gov.au").first()
+        if not tec_user:
+            logger.warning(
+                "User 'boranga.tec@dbca.wa.gov.au' not found. TEC SubmitterInformation will use default submitter."
+            )
+
         # 3. Create objects
         ConservationStatus = apps.get_model("boranga", "ConservationStatus")
 
@@ -324,9 +333,14 @@ class ConservationStatusImporter(BaseSheetImporter):
                     else None
                 )
 
+                # Determine submitter for SubmitterInformation
+                si_email_user = row.get("submitter")
+                if community_mig_id and tec_user:
+                    si_email_user = tec_user.id
+
                 # Create SubmitterInformation instance (do not save yet)
                 sub_info = SubmitterInformation(
-                    email_user=row.get("submitter"),
+                    email_user=si_email_user,
                     organisation="DBCA",
                     submitter_category=submitter_category_dbca,
                 )
