@@ -100,11 +100,19 @@ def _result(value, *issues: TransformIssue):
     return TransformResult(value=value, issues=list(issues))
 
 
-@registry.register("is_present")
-def t_is_present(value, ctx):
-    if value in (None, "", []):
-        return _result(False)
+@registry.register("static_value_True")
+def t_static_value_True(value, ctx):
     return _result(True)
+
+
+@registry.register("static_value_boranga.tec@dbca.wa.gov.au")
+def t_static_value_boranga_tec(value, ctx):
+    return _result("boranga.tec@dbca.wa.gov.au")
+
+
+@registry.register("static_value_community")
+def t_static_value_community(value, ctx):
+    return _result("community")
 
 
 @registry.register("Y_to_active_else_historical")

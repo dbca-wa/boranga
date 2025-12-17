@@ -8,20 +8,24 @@ from boranga.components.data_migration.adapters.schema_base import Schema
 COLUMN_MAP = {
     "migrated_from_id": "migrated_from_id",
     "species": "species_name",
+    "community": "community_migrated_from_id",
     "wa_legislative_category": "wa_legislative_category",
     "wa_legislative_list": "wa_legislative_list",
     "wa_priority_category": "wa_priority_category",
+    "wa_priority_list": "wa_priority_list",
     "processing_status": "processing_status",
     "effective_from": "effective_from_date",
     "submitter": "submitter",
     "comment": "comment",
+    "customer_status": "customer_status",
+    "internal_application": "internal_application",
+    "locked": "locked",
 }
 
 # Minimal required canonical fields for migration
 REQUIRED_COLUMNS = [
     "migrated_from_id",
     "processing_status",
-    "species_name",
 ]
 
 PIPELINES: dict[str, list[str]] = {}

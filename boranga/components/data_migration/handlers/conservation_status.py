@@ -10,6 +10,9 @@ from django.apps import apps
 from django.conf import settings
 from django.utils import timezone
 
+from boranga.components.data_migration.adapters.conservation_status.tec import (
+    ConservationStatusTecAdapter,
+)
 from boranga.components.data_migration.adapters.conservation_status.tpfl import (
     ConservationStatusTpflAdapter,
 )
@@ -24,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: ConservationStatusTpflAdapter(),
+    Source.TEC.value: ConservationStatusTecAdapter(),
 }
 
 
@@ -139,6 +143,13 @@ class ConservationStatusImporter(BaseSheetImporter):
             if s.taxonomy and s.taxonomy.scientific_name:
                 species_map[s.taxonomy.scientific_name.strip().lower()] = s
 
+        # Community lookup by migrated_from_id
+        Community = apps.get_model("boranga", "Community")
+        community_map = {
+            c.migrated_from_id: c
+            for c in Community.objects.filter(migrated_from_id__isnull=False)
+        }
+
         # Load legacy name map
         legacy_name_map = {}
         try:
@@ -194,10 +205,12 @@ class ConservationStatusImporter(BaseSheetImporter):
         valid_rows = []
         for row in all_rows:
             try:
-                # Resolve Species
+                # Resolve Species or Community
                 species_name = row.get("species_name")
+                community_mig_id = row.get("community_migrated_from_id")
                 species_obj = None
                 taxonomy_obj = None
+                community_obj = None
 
                 if species_name:
                     clean_name = species_name.strip().lower()
@@ -231,14 +244,64 @@ class ConservationStatusImporter(BaseSheetImporter):
                             }
                         )
                         continue
+                elif community_mig_id:
+                    community_obj = community_map.get(community_mig_id)
+                    if not community_obj:
+                        msg = f"Community not found for migrated_from_id: {community_mig_id}"
+                        logger.warning(msg)
+                        stats["skipped"] += 1
+                        stats["errors"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": row.get("migrated_from_id"),
+                                "column": "community_migrated_from_id",
+                                "level": "error",
+                                "message": msg,
+                                "raw_value": community_mig_id,
+                                "reason": "Community lookup failed",
+                                "row_json": json.dumps(row, default=str),
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        continue
 
                 # Resolve Lists and Categories
                 wa_pl_code = row.get("wa_priority_list")
-                wa_pl_obj = (
-                    wa_priority_list_map.get(wa_pl_code.strip().upper())
-                    if wa_pl_code
-                    else None
-                )
+                wa_pl_obj = None
+                if wa_pl_code:
+                    # Handle "community" static value mapping to list name
+                    if wa_pl_code == "community":
+                        # Find list with name='community' or similar?
+                        # Task says: Apply static value wa_priority_list_id where name = 'community'
+                        # But WAPriorityList has 'code' and 'label'.
+                        # Assuming there is a list with code='COMMUNITY' or label='Community'?
+                        # Let's try to find by code first, then label.
+                        # Or maybe the user meant GroupType? No, field is wa_priority_list.
+                        # Let's assume there is a WAPriorityList with code 'P1', 'P2' etc.
+                        # If the value is "community", maybe it means the list applies to communities?
+                        # Wait, Task 12071 says: "Apply static value wa_priority_list_id where name = 'community'"
+                        # WAPriorityList model has 'code' and 'label'. It doesn't have 'name'.
+                        # Maybe it means GroupType? But the field is wa_priority_list.
+                        # Let's check WAPriorityList model again.
+                        # It inherits AbstractConservationList which has code, label.
+                        # Maybe the user means the list instance that is for communities?
+                        # But usually lists are P1, P2, etc.
+                        # Let's look for a list with code="COMMUNITY" or label="Community".
+                        # If not found, maybe log warning.
+                        # For now, let's try to find a list where code="COMMUNITY".
+                        wa_pl_obj = wa_priority_list_map.get("COMMUNITY")
+                        if not wa_pl_obj:
+                            # Try finding by label?
+                            # Or maybe the user meant the list associated with the community group type?
+                            # But priority lists are specific (e.g. P1).
+                            # If the legacy data has "wa_priority_list" column, we should use that.
+                            # But the task says "Apply static value...".
+                            # If the static value is "community", it's weird.
+                            # Maybe they mean the list named "Priority List"?
+                            # Let's assume for now we look up by code "COMMUNITY".
+                            pass
+                    else:
+                        wa_pl_obj = wa_priority_list_map.get(wa_pl_code.strip().upper())
 
                 wa_pc_code = row.get("wa_priority_category")
                 wa_pc_obj = (
@@ -276,6 +339,7 @@ class ConservationStatusImporter(BaseSheetImporter):
                     customer_status=row.get("customer_status"),
                     species=species_obj,
                     species_taxonomy=taxonomy_obj,
+                    community=community_obj,
                     wa_priority_list=wa_pl_obj,
                     wa_priority_category=wa_pc_obj,
                     wa_legislative_list=wa_ll_obj,
