@@ -126,6 +126,14 @@ def t_y_to_true_n_to_none(value, ctx):
     return _result(None)
 
 
+@registry.register("y_to_true_else_false")
+def t_y_to_true_else_false(value, ctx):
+    if not value:
+        return _result(False)
+    val = str(value).strip().upper()
+    return _result(val == "Y")
+
+
 @registry.register("strip")
 def t_strip(value, ctx):
     if value is None:

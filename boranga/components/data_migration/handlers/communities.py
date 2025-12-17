@@ -19,6 +19,7 @@ from boranga.components.data_migration.registry import (
 from boranga.components.species_and_communities.models import (
     Community,
     CommunityDistribution,
+    CommunityPublishingStatus,
     CommunityTaxonomy,
     GroupType,
 )
@@ -414,7 +415,72 @@ class CommunityImporter(BaseSheetImporter):
                     dist_to_update, dist_update_fields, batch_size=1000
                 )
 
-            # 4d. Update Regions and Districts (Many-to-Many)
+            # 4d. Create/Update CommunityPublishingStatus
+            logger.info("Updating CommunityPublishingStatus records...")
+
+            existing_publishing_statuses = {
+                ps.community_id: ps
+                for ps in CommunityPublishingStatus.objects.filter(
+                    community__in=all_communities.values()
+                )
+            }
+
+            pub_to_create = []
+            pub_to_update = []
+            pub_update_fields = [
+                "community_public",
+                "conservation_status_public",
+                "distribution_public",
+                "threats_public",
+            ]
+
+            for canonical in valid_rows:
+                migrated_id = canonical.get("migrated_from_id")
+                community = all_communities.get(migrated_id)
+                if not community:
+                    continue
+
+                is_public = canonical.get("active_cs") is True
+
+                pub_defaults = {
+                    "community_public": is_public,
+                    "conservation_status_public": is_public,
+                    "distribution_public": is_public,
+                    "threats_public": is_public,
+                }
+
+                if community.id in existing_publishing_statuses:
+                    pub_obj = existing_publishing_statuses[community.id]
+                    changed = False
+                    for k, v in pub_defaults.items():
+                        if getattr(pub_obj, k) != v:
+                            setattr(pub_obj, k, v)
+                            changed = True
+                    if changed:
+                        pub_to_update.append(pub_obj)
+                else:
+                    pub_obj = CommunityPublishingStatus(
+                        community=community, **pub_defaults
+                    )
+                    pub_to_create.append(pub_obj)
+
+            if pub_to_create:
+                logger.info(
+                    f"Creating {len(pub_to_create)} new CommunityPublishingStatus records..."
+                )
+                CommunityPublishingStatus.objects.bulk_create(
+                    pub_to_create, batch_size=1000
+                )
+
+            if pub_to_update:
+                logger.info(
+                    f"Updating {len(pub_to_update)} existing CommunityPublishingStatus records..."
+                )
+                CommunityPublishingStatus.objects.bulk_update(
+                    pub_to_update, pub_update_fields, batch_size=1000
+                )
+
+            # 4e. Update Regions and Districts (Many-to-Many)
             logger.info("Updating Community Regions and Districts...")
 
             # Load legacy mappings

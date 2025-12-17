@@ -16,6 +16,7 @@ PIPELINES = {
     "distribution": ["strip", "blank_to_none"],
     "regions": ["strip", "blank_to_none"],
     "districts": ["strip", "blank_to_none"],
+    "active_cs": ["strip", "y_to_true_else_false"],
 }
 
 

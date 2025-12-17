@@ -17,6 +17,7 @@ COLUMN_MAP = {
     "Distribution": "distribution",
     "DBCA regions": "regions",
     "DBCA districts": "districts",
+    "Active CS": "active_cs",
 }
 
 REQUIRED_COLUMNS = [
