@@ -1,9 +1,6 @@
 import logging
 import os
-import shutil
-import subprocess
 import sys
-from pathlib import Path
 
 import confy
 from confy import env
@@ -276,48 +273,22 @@ if DEBUG:
 
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
+# Use random hash for purging cache in browser for deployment changes
+GIT_COMMIT_HASH = ""
+GIT_COMMIT_DATE = ""
+if len(GIT_COMMIT_HASH) == 0:
+    GIT_COMMIT_HASH = os.popen("cat /app/git_hash").read()
+    if len(GIT_COMMIT_HASH) == 0:
+        print("ERROR: No git hash provided")
+        if os.path.isdir(BASE_DIR + "/.git/") is True:
+            GIT_COMMIT_DATE = os.popen(
+                "cd " + BASE_DIR + " ; git log -1 --format=%cd"
+            ).read()
+            GIT_COMMIT_HASH = os.popen(
+                "cd  " + BASE_DIR + " ; git log -1 --format=%H"
+            ).read()
 
-def _get_git_commit_hash():
-    """Return git commit hash if git is available and we are in a repo.
-
-    Falls back to the GIT_COMMIT_VERSION env var (or 'unknown') when git is not
-    available or the current directory is not a git repository.
-    """
-    try:
-        git_exe = shutil.which("git")
-        if git_exe:
-            # Run in the project base directory in case settings are executed
-            # from elsewhere.
-            try:
-                commit = (
-                    subprocess.check_output(
-                        [git_exe, "rev-parse", "HEAD"],
-                        cwd=BASE_DIR,
-                        stderr=subprocess.DEVNULL,
-                    )
-                    .decode()
-                    .strip()
-                )
-                if commit:
-                    return commit
-            except Exception:
-                # Could be not a git repo or other git error; fall through
-                pass
-    except Exception:
-        # Any unexpected failure (shutil, subprocess) - fall back to env
-        pass
-
-    return env("GIT_COMMIT_VERSION", "unknown")
-
-
-GIT_COMMIT_VERSION = _get_git_commit_hash()
-
-try:
-    GIT_COMMIT_HASH = Path("/app/git_hash").read_text().strip() or GIT_COMMIT_VERSION
-except Exception:
-    GIT_COMMIT_HASH = GIT_COMMIT_VERSION
-
-APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0") + "-" + GIT_COMMIT_VERSION[:7]
+APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0")
 
 RUNNING_DEVSERVER = len(sys.argv) > 1 and sys.argv[1] == "runserver"
 
