@@ -15,7 +15,11 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
-from boranga.components.species_and_communities.models import Community, GroupType
+from boranga.components.species_and_communities.models import (
+    Community,
+    CommunityTaxonomy,
+    GroupType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +188,7 @@ class CommunityImporter(BaseSheetImporter):
 
         to_create = []
         to_update = []
+        valid_rows = []  # Store canonical rows for subsequent processing
 
         # Fields to update if record exists
         update_fields = [
@@ -233,6 +238,8 @@ class CommunityImporter(BaseSheetImporter):
                 # Should be caught by 'required' pipeline, but just in case
                 continue
 
+            valid_rows.append(canonical)
+
             # Prepare object data
             defaults = {
                 "group_type": community_group_type,
@@ -263,6 +270,71 @@ class CommunityImporter(BaseSheetImporter):
             if to_update:
                 logger.info(f"Updating {len(to_update)} existing communities...")
                 Community.objects.bulk_update(to_update, update_fields, batch_size=1000)
+
+            # 4b. Create/Update CommunityTaxonomy
+            logger.info("Updating CommunityTaxonomy records...")
+            # Reload communities to get IDs for newly created ones
+            all_communities = {
+                c.migrated_from_id: c
+                for c in Community.objects.filter(migrated_from_id__isnull=False)
+            }
+
+            # Load existing taxonomies
+            existing_taxonomies = {
+                t.community_id: t
+                for t in CommunityTaxonomy.objects.filter(
+                    community__in=all_communities.values()
+                )
+            }
+
+            taxonomy_to_create = []
+            taxonomy_to_update = []
+            taxonomy_update_fields = [
+                "community_common_id",
+                "community_name",
+                "community_description",
+            ]
+
+            for canonical in valid_rows:
+                migrated_id = canonical.get("migrated_from_id")
+                community = all_communities.get(migrated_id)
+                if not community:
+                    continue
+
+                tax_defaults = {
+                    "community_common_id": canonical.get("community_common_id"),
+                    "community_name": canonical.get("community_name"),
+                    "community_description": canonical.get("community_description"),
+                }
+
+                if community.id in existing_taxonomies:
+                    tax_obj = existing_taxonomies[community.id]
+                    changed = False
+                    for k, v in tax_defaults.items():
+                        if getattr(tax_obj, k) != v:
+                            setattr(tax_obj, k, v)
+                            changed = True
+                    if changed:
+                        taxonomy_to_update.append(tax_obj)
+                else:
+                    tax_obj = CommunityTaxonomy(community=community, **tax_defaults)
+                    taxonomy_to_create.append(tax_obj)
+
+            if taxonomy_to_create:
+                logger.info(
+                    f"Creating {len(taxonomy_to_create)} new CommunityTaxonomy records..."
+                )
+                CommunityTaxonomy.objects.bulk_create(
+                    taxonomy_to_create, batch_size=1000
+                )
+
+            if taxonomy_to_update:
+                logger.info(
+                    f"Updating {len(taxonomy_to_update)} existing CommunityTaxonomy records..."
+                )
+                CommunityTaxonomy.objects.bulk_update(
+                    taxonomy_to_update, taxonomy_update_fields, batch_size=1000
+                )
 
         # 5. Reporting
         stats["processed"] = processed

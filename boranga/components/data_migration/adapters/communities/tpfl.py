@@ -8,6 +8,9 @@ PIPELINES = {
     "former_range": ["strip", "blank_to_none"],
     "range_decline": ["strip", "blank_to_none"],
     "occ_decline": ["strip", "blank_to_none"],
+    "community_common_id": ["strip", "blank_to_none"],
+    "community_description": ["strip", "blank_to_none"],
+    "community_name": ["strip", "blank_to_none"],
 }
 
 

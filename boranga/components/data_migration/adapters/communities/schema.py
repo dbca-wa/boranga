@@ -5,10 +5,13 @@ from dataclasses import dataclass
 from boranga.components.data_migration.adapters.schema_base import Schema
 
 COLUMN_MAP = {
-    "COMMUNITY_ID": "migrated_from_id",
     "COM_FORMER_RANGE": "former_range",
     "COM_RANGE_DECLINE": "range_decline",
     "COM_OCC_DECLINE": "occ_decline",
+    "COM_ID": "community_common_id",
+    "COM_DESC": "community_description",
+    "COM_NO": "migrated_from_id",
+    "COM_NAME": "community_name",
 }
 
 REQUIRED_COLUMNS = [
@@ -43,3 +46,6 @@ class CommunityRow:
     former_range: str | None = None
     range_decline: str | None = None
     occ_decline: str | None = None
+    community_common_id: str | None = None
+    community_description: str | None = None
+    community_name: str | None = None
