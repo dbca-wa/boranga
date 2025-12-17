@@ -17,6 +17,7 @@ from boranga.components.data_migration.registry import (
 )
 from boranga.components.species_and_communities.models import (
     Community,
+    CommunityDistribution,
     CommunityTaxonomy,
     GroupType,
 )
@@ -334,6 +335,82 @@ class CommunityImporter(BaseSheetImporter):
                 )
                 CommunityTaxonomy.objects.bulk_update(
                     taxonomy_to_update, taxonomy_update_fields, batch_size=1000
+                )
+
+            # 4c. Create/Update CommunityDistribution
+            logger.info("Updating CommunityDistribution records...")
+
+            # Load existing distributions
+            existing_distributions = {
+                d.community_id: d
+                for d in CommunityDistribution.objects.filter(
+                    community__in=all_communities.values()
+                )
+            }
+
+            dist_to_create = []
+            dist_to_update = []
+            dist_update_fields = [
+                "community_original_area",
+                "community_original_area_accuracy",
+                "community_original_area_reference",
+                "distribution",
+                "aoo_actual_auto",
+                "eoo_auto",
+                "noo_auto",
+            ]
+
+            for canonical in valid_rows:
+                migrated_id = canonical.get("migrated_from_id")
+                community = all_communities.get(migrated_id)
+                if not community:
+                    continue
+
+                # Calculate conditional reference
+                area_acc = canonical.get("community_original_area_accuracy")
+                ref_val = None
+                if area_acc is not None and area_acc >= 0:
+                    ref_val = "TEC Database"
+
+                dist_defaults = {
+                    "community_original_area": canonical.get("community_original_area"),
+                    "community_original_area_accuracy": area_acc,
+                    "community_original_area_reference": ref_val,
+                    "distribution": canonical.get("distribution"),
+                    "aoo_actual_auto": True,
+                    "eoo_auto": True,
+                    "noo_auto": True,
+                }
+
+                if community.id in existing_distributions:
+                    dist_obj = existing_distributions[community.id]
+                    changed = False
+                    for k, v in dist_defaults.items():
+                        if getattr(dist_obj, k) != v:
+                            setattr(dist_obj, k, v)
+                            changed = True
+                    if changed:
+                        dist_to_update.append(dist_obj)
+                else:
+                    dist_obj = CommunityDistribution(
+                        community=community, **dist_defaults
+                    )
+                    dist_to_create.append(dist_obj)
+
+            if dist_to_create:
+                logger.info(
+                    f"Creating {len(dist_to_create)} new CommunityDistribution records..."
+                )
+                CommunityDistribution.objects.bulk_create(
+                    dist_to_create, batch_size=1000
+                )
+
+            if dist_to_update:
+                logger.info(
+                    f"Updating {len(dist_to_update)} existing CommunityDistribution records..."
+                )
+                CommunityDistribution.objects.bulk_update(
+                    dist_to_update, dist_update_fields, batch_size=1000
                 )
 
         # 5. Reporting

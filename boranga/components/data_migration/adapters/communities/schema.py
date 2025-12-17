@@ -12,6 +12,9 @@ COLUMN_MAP = {
     "COM_DESC": "community_description",
     "COM_NO": "migrated_from_id",
     "COM_NAME": "community_name",
+    "COM_ORIG_AREA": "community_original_area",
+    "COM_AREA_ACC": "community_original_area_accuracy",
+    "Distribution": "distribution",
 }
 
 REQUIRED_COLUMNS = [
@@ -49,3 +52,6 @@ class CommunityRow:
     community_common_id: str | None = None
     community_description: str | None = None
     community_name: str | None = None
+    community_original_area: float | None = None
+    community_original_area_accuracy: float | None = None
+    distribution: str | None = None

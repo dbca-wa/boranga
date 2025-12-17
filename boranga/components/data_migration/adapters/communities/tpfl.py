@@ -11,6 +11,9 @@ PIPELINES = {
     "community_common_id": ["strip", "blank_to_none"],
     "community_description": ["strip", "blank_to_none"],
     "community_name": ["strip", "blank_to_none"],
+    "community_original_area": ["strip", "blank_to_none", "to_decimal"],
+    "community_original_area_accuracy": ["strip", "blank_to_none", "to_decimal"],
+    "distribution": ["strip", "blank_to_none"],
 }
 
 
