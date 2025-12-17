@@ -18,6 +18,10 @@ COLUMN_MAP = {
     "DBCA regions": "regions",
     "DBCA districts": "districts",
     "Active CS": "active_cs",
+    "PUB_TITLE": "pub_title",
+    "PUB_AUTHOR": "pub_author",
+    "PUB_DATE": "pub_date",
+    "PUB_PLACE": "pub_place",
 }
 
 REQUIRED_COLUMNS = [

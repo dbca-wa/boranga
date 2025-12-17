@@ -17,6 +17,10 @@ PIPELINES = {
     "regions": ["strip", "blank_to_none"],
     "districts": ["strip", "blank_to_none"],
     "active_cs": ["strip", "y_to_true_else_false"],
+    "pub_title": ["strip", "blank_to_none"],
+    "pub_author": ["strip", "blank_to_none"],
+    "pub_date": ["strip", "blank_to_none"],
+    "pub_place": ["strip", "blank_to_none"],
 }
 
 

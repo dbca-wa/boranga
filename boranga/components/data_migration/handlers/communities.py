@@ -19,8 +19,10 @@ from boranga.components.data_migration.registry import (
 from boranga.components.species_and_communities.models import (
     Community,
     CommunityDistribution,
+    CommunityDocument,
     CommunityPublishingStatus,
     CommunityTaxonomy,
+    DocumentCategory,
     GroupType,
 )
 
@@ -189,8 +191,9 @@ class CommunityImporter(BaseSheetImporter):
             for c in Community.objects.filter(migrated_from_id__isnull=False)
         }
 
+        communities_cache = existing_communities.copy()
         to_create = []
-        to_update = []
+        dirty_communities = set()
         valid_rows = []  # Store canonical rows for subsequent processing
 
         # Fields to update if record exists
@@ -251,18 +254,19 @@ class CommunityImporter(BaseSheetImporter):
                 "processing_status": "active",
             }
 
-            if migrated_id in existing_communities:
-                obj = existing_communities[migrated_id]
+            if migrated_id in communities_cache:
+                obj = communities_cache[migrated_id]
                 changed = False
                 for k, v in defaults.items():
                     if getattr(obj, k) != v:
                         setattr(obj, k, v)
                         changed = True
                 if changed:
-                    to_update.append(obj)
+                    dirty_communities.add(obj)
             else:
                 obj = Community(migrated_from_id=migrated_id, **defaults)
                 to_create.append(obj)
+                communities_cache[migrated_id] = obj
 
         # 4. Bulk operations
         if not ctx.dry_run:
@@ -270,9 +274,13 @@ class CommunityImporter(BaseSheetImporter):
                 logger.info(f"Creating {len(to_create)} new communities...")
                 Community.objects.bulk_create(to_create, batch_size=1000)
 
-            if to_update:
-                logger.info(f"Updating {len(to_update)} existing communities...")
-                Community.objects.bulk_update(to_update, update_fields, batch_size=1000)
+            if dirty_communities:
+                logger.info(
+                    f"Updating {len(dirty_communities)} existing communities..."
+                )
+                Community.objects.bulk_update(
+                    list(dirty_communities), update_fields, batch_size=1000
+                )
 
             # 4b. Create/Update CommunityTaxonomy
             logger.info("Updating CommunityTaxonomy records...")
@@ -534,17 +542,102 @@ class CommunityImporter(BaseSheetImporter):
                 if district_ids:
                     community.districts.set(district_ids)
 
+            # 4e. Create CommunityDocument
+            logger.info("Creating CommunityDocument records...")
+
+            # Fetch DocumentCategory
+            try:
+                doc_category = DocumentCategory.objects.get(
+                    document_category_name="TEC Database Publication Reference"
+                )
+            except DocumentCategory.DoesNotExist:
+                logger.warning(
+                    "DocumentCategory 'TEC Database Publication Reference' not found. Skipping document creation."
+                )
+                doc_category = None
+
+            if doc_category:
+                docs_to_create = []
+                for canonical in valid_rows:
+                    migrated_id = canonical.get("migrated_from_id")
+                    community = all_communities.get(migrated_id)
+                    if not community:
+                        continue
+
+                    # Check if publication data exists
+                    pub_title = canonical.get("pub_title")
+                    pub_author = canonical.get("pub_author")
+                    pub_date = canonical.get("pub_date")
+                    pub_place = canonical.get("pub_place")
+
+                    # If all are empty, skip
+                    if not any([pub_title, pub_author, pub_date, pub_place]):
+                        continue
+
+                    # Construct description
+                    parts = [
+                        str(p)
+                        for p in [pub_title, pub_author, pub_date, pub_place]
+                        if p
+                    ]
+                    description = " ".join(parts)
+
+                    doc = CommunityDocument(
+                        community=community,
+                        document_category=doc_category,
+                        active=True,
+                        description=description,
+                        input_name="community_doc",
+                        _file="None",
+                        name=pub_title or "Legacy Publication",
+                        uploaded_date=timezone.now(),
+                    )
+                    docs_to_create.append(doc)
+
+                if docs_to_create:
+                    logger.info(
+                        f"Creating {len(docs_to_create)} new CommunityDocument records..."
+                    )
+                    CommunityDocument.objects.bulk_create(
+                        docs_to_create, batch_size=1000
+                    )
+
+                    # Update document_number for created documents
+                    # Since bulk_create doesn't return PKs on all DBs (but Postgres does),
+                    # and we need to set document_number = D{pk}.
+                    # We can iterate and save, or fetch and update.
+                    # Given the volume might be high, let's try to optimize.
+                    # For now, let's iterate and save those that were just created?
+                    # No, we can't easily identify them without PKs if we don't have them.
+                    # Postgres returns PKs if we use bulk_create(..., returning=True) (Django 4.x feature?)
+                    # Boranga uses Django 3.2 or 4?
+                    # Let's assume we need to fetch them.
+                    # But how to identify them? We don't have a unique legacy ID for documents.
+                    # We can filter by input_name="community_doc" and document_number=""
+
+                    docs_to_update = []
+                    for doc in CommunityDocument.objects.filter(
+                        input_name="community_doc", document_number=""
+                    ):
+                        doc.document_number = f"D{doc.pk}"
+                        docs_to_update.append(doc)
+
+                    if docs_to_update:
+                        CommunityDocument.objects.bulk_update(
+                            docs_to_update, ["document_number"], batch_size=1000
+                        )
+
         # 5. Reporting
         stats["processed"] = processed
         stats["created"] = len(to_create)
-        stats["updated"] = len(to_update)
+        stats["updated"] = len(dirty_communities)
         stats["errors"] = errors
 
         logger.info(
             "CommunityImporter finished: %d processed, %d created, %d updated, %d errors",
             processed,
             len(to_create),
-            len(to_update),
+            len(dirty_communities),
             errors,
         )
 
