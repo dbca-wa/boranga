@@ -22,8 +22,11 @@ from boranga.components.species_and_communities.models import (
     CommunityDocument,
     CommunityPublishingStatus,
     CommunityTaxonomy,
+    ConservationThreat,
+    CurrentImpact,
     DocumentCategory,
     GroupType,
+    ThreatCategory,
 )
 
 logger = logging.getLogger(__name__)
@@ -626,6 +629,82 @@ class CommunityImporter(BaseSheetImporter):
                         CommunityDocument.objects.bulk_update(
                             docs_to_update, ["document_number"], batch_size=1000
                         )
+
+            # 4f. Create ConservationThreat
+            logger.info("Creating ConservationThreat records...")
+
+            # Fetch ThreatCategory and CurrentImpact
+            # We'll cache ThreatCategory by name for lookup
+            threat_categories = {
+                tc.name.lower(): tc for tc in ThreatCategory.objects.all()
+            }
+
+            # Fetch "Unknown" CurrentImpact
+            try:
+                unknown_impact = CurrentImpact.objects.get(name="Unknown")
+            except CurrentImpact.DoesNotExist:
+                logger.warning("CurrentImpact 'Unknown' not found. Creating it.")
+                unknown_impact = CurrentImpact.objects.create(name="Unknown")
+
+            threats_to_create = []
+            for canonical in valid_rows:
+                migrated_id = canonical.get("migrated_from_id")
+                community = all_communities.get(migrated_id)
+                if not community:
+                    continue
+
+                threat_code = canonical.get("threat_category")
+                if not threat_code:
+                    continue
+
+                # Try to find threat category
+                # The user says "List value Match (S&C) and Program transformation of matched values (OIM)"
+                # Assuming threat_code might match name or we need a mapping.
+                # For now, try exact match (case-insensitive)
+                threat_cat = threat_categories.get(str(threat_code).lower())
+                if not threat_cat:
+                    # Log warning and skip or create?
+                    # User says "This is a closed list... values are to equal or be matched"
+                    # If not found, we can't link it.
+                    logger.warning(
+                        f"ThreatCategory '{threat_code}' not found for community {migrated_id}"
+                    )
+                    continue
+
+                threat = ConservationThreat(
+                    community=community,
+                    threat_category=threat_cat,
+                    current_impact=unknown_impact,
+                    comment=canonical.get("threat_comment"),
+                    date_observed=canonical.get("date_observed"),
+                    visible=True,
+                )
+                threats_to_create.append(threat)
+
+            if threats_to_create:
+                logger.info(
+                    f"Creating {len(threats_to_create)} new ConservationThreat records..."
+                )
+                ConservationThreat.objects.bulk_create(
+                    threats_to_create, batch_size=1000
+                )
+
+                # Update threat_number
+                threats_to_update = []
+                # Similar strategy: fetch threats with empty threat_number
+                # Note: This might pick up threats created by other means if they have empty number,
+                # but in migration context it's likely fine.
+                # To be safer, we could filter by community__in=all_communities.values()
+                for t in ConservationThreat.objects.filter(
+                    community__in=all_communities.values(), threat_number=""
+                ):
+                    t.threat_number = f"T{t.pk}"
+                    threats_to_update.append(t)
+
+                if threats_to_update:
+                    ConservationThreat.objects.bulk_update(
+                        threats_to_update, ["threat_number"], batch_size=1000
+                    )
 
         # 5. Reporting
         stats["processed"] = processed

@@ -22,6 +22,9 @@ COLUMN_MAP = {
     "PUB_AUTHOR": "pub_author",
     "PUB_DATE": "pub_date",
     "PUB_PLACE": "pub_place",
+    "CTHR_THREAT_CODE": "threat_category",
+    "CTHR_DESC": "threat_comment",
+    "CTHR_DATE": "date_observed",
 }
 
 REQUIRED_COLUMNS = [
