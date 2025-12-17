@@ -190,9 +190,9 @@ class ConservationStatusImporter(BaseSheetImporter):
         # Submitter Category 'DBCA'
         submitter_category_dbca = SubmitterCategory.objects.filter(name="DBCA").first()
         if not submitter_category_dbca:
-            # Create if not exists? Or warn?
-            # Usually exists.
-            pass
+            logger.warning(
+                "SubmitterCategory 'DBCA' not found. SubmitterInformation records may be incomplete."
+            )
 
         # 3. Create objects
         ConservationStatus = apps.get_model("boranga", "ConservationStatus")
