@@ -9,6 +9,7 @@ from boranga.components.data_migration.adapters.communities.tpfl import (
     CommunityTpflAdapter,
 )
 from boranga.components.data_migration.adapters.sources import Source
+from boranga.components.data_migration.mappings import load_legacy_to_pk_map
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -412,6 +413,60 @@ class CommunityImporter(BaseSheetImporter):
                 CommunityDistribution.objects.bulk_update(
                     dist_to_update, dist_update_fields, batch_size=1000
                 )
+
+            # 4d. Update Regions and Districts (Many-to-Many)
+            logger.info("Updating Community Regions and Districts...")
+
+            # Load legacy mappings
+            region_map = load_legacy_to_pk_map(
+                legacy_system="TPFL", model_name="Region"
+            )
+            district_map = load_legacy_to_pk_map(
+                legacy_system="TPFL", model_name="District"
+            )
+
+            def parse_keys(raw, mapping, label, mig_id):
+                if not raw:
+                    return []
+                # Handle list/tuple if pipeline already split it
+                if isinstance(raw, (list, tuple)):
+                    items = [str(x).strip() for x in raw if x]
+                elif isinstance(raw, str):
+                    # Split by comma
+                    items = [x.strip() for x in raw.split(",") if x.strip()]
+                else:
+                    items = [str(raw)]
+
+                ids = []
+                for item in items:
+                    pk = mapping.get(item)
+                    if pk:
+                        ids.append(pk)
+                    else:
+                        logger.warning(
+                            f"{label}: '{item}' not found in legacy map for community {mig_id}"
+                        )
+                return ids
+
+            for canonical in valid_rows:
+                migrated_id = canonical.get("migrated_from_id")
+                community = all_communities.get(migrated_id)
+                if not community:
+                    continue
+
+                # Regions
+                regions_raw = canonical.get("regions")
+                region_ids = parse_keys(regions_raw, region_map, "Region", migrated_id)
+                if region_ids:
+                    community.regions.set(region_ids)
+
+                # Districts
+                districts_raw = canonical.get("districts")
+                district_ids = parse_keys(
+                    districts_raw, district_map, "District", migrated_id
+                )
+                if district_ids:
+                    community.districts.set(district_ids)
 
         # 5. Reporting
         stats["processed"] = processed

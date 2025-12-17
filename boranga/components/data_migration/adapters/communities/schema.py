@@ -15,6 +15,8 @@ COLUMN_MAP = {
     "COM_ORIG_AREA": "community_original_area",
     "COM_AREA_ACC": "community_original_area_accuracy",
     "Distribution": "distribution",
+    "DBCA regions": "regions",
+    "DBCA districts": "districts",
 }
 
 REQUIRED_COLUMNS = [
@@ -55,3 +57,5 @@ class CommunityRow:
     community_original_area: float | None = None
     community_original_area_accuracy: float | None = None
     distribution: str | None = None
+    regions: str | None = None
+    districts: str | None = None
