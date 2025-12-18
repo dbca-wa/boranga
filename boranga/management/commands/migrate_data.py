@@ -64,6 +64,18 @@ class Command(BaseCommand):
             help="Optional limit of rows to process (for testing)",
         )
 
+        # Manually add --sources to allow any value (avoid conflicts between importers)
+        p_run.add_argument(
+            "--sources",
+            nargs="+",
+            help="Subset of sources (e.g. TPFL, TEC)",
+        )
+        p_multi.add_argument(
+            "--sources",
+            nargs="+",
+            help="Subset of sources (e.g. TPFL, TEC)",
+        )
+
         # Importer-specific options only relevant to run / runmany
         for imp_cls in all_importers():
             imp = imp_cls()
