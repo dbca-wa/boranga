@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from boranga.components.data_migration.adapters.base import BaseAdapter
+import os
+from collections import defaultdict
+
+from boranga.components.data_migration.adapters.base import (
+    ExtractionResult,
+    ExtractionWarning,
+    SourceAdapter,
+)
 from boranga.components.data_migration.adapters.occurrence.schema import SCHEMA
-from boranga.components.data_migration.registry import register_transform
 
 
-@register_transform
-def tec_comment_transform(row, val):
+def tec_comment_transform(val, ctx):
+    row = ctx.row
     parts = []
     if row.get("_temp_occ_other"):
         parts.append(row["_temp_occ_other"])
@@ -27,11 +33,18 @@ def tec_comment_transform(row, val):
             f"Bush Forever Site Number: {row['_temp_occ_bush_forever_site_no']}"
         )
 
+    # Additional Data
+    additional_data = row.get("_nested_additional_data", [])
+    for item in additional_data:
+        desc = item.get("ADD_DESC")
+        if desc:
+            parts.append(f"Additional Data: {desc}")
+
     return "; ".join(parts)
 
 
-@register_transform
-def tec_habitat_notes_transform(row, val):
+def tec_habitat_notes_transform(val, ctx):
+    row = ctx.row
     parts = []
     if row.get("_temp_occ_other_attr"):
         parts.append(row["_temp_occ_other_attr"])
@@ -49,59 +62,335 @@ def tec_habitat_notes_transform(row, val):
     return "; ".join(parts)
 
 
-@register_transform
-def tec_fire_history_comment_transform(row, val):
+def tec_fire_history_comment_transform(val, ctx):
+    row = ctx.row
     parts = []
-    date = row.get("_temp_fire_date")
-    comment = row.get("_temp_fire_comment")
 
-    if date:
-        parts.append(f"Fire Date: {date}")
-    if comment:
-        parts.append(comment)
+    # Handle nested fire history
+    nested = row.get("_nested_fire_history", [])
+    for item in nested:
+        date = item.get("FIRE_DATE")
+        comment = item.get("FIRE_COMMENT")
+        p = []
+        if date:
+            p.append(f"Date: {date}")
+        if comment:
+            p.append(comment)
+        if p:
+            parts.append(" - ".join(p))
 
-    return ", ".join(parts)
+    return "; ".join(parts)
 
 
-@register_transform
-def tec_observation_detail_comments_transform(row, val):
+def tec_observation_detail_comments_transform(val, ctx):
+    row = ctx.row
+    if row.get("_resolved_reliability"):
+        return f"Boundary Reliability: {row['_resolved_reliability']}"
     if val:
         return f"Boundary Reliability: {val}"
     return val
 
 
-@register_transform
-def tec_site_geometry_transform(row, val):
+def tec_location_locality_transform(val, ctx):
+    row = ctx.row
+    if row.get("_resolved_dola"):
+        return row["_resolved_dola"]
+    return val
+
+
+def tec_site_geometry_transform(val, ctx):
     """
-    Construct a Point geometry from S_LATITUDE_PREF and S_LONGITUDE_PREF.
+    Construct a Point geometry from OccurrenceSite__latitude and OccurrenceSite__longitude.
+    Supports being called as a pipeline transform (ctx.row) or manually (val=row).
     """
+    if ctx:
+        row = ctx.row
+    else:
+        row = val
+
     lat = row.get("OccurrenceSite__latitude")
     lon = row.get("OccurrenceSite__longitude")
 
-    if lat is not None and lon is not None:
-        # Assuming WGS84 (SRID 4326) for lat/lon
-        from django.contrib.gis.geos import Point
+    if lat and lon:
+        try:
+            lat = float(lat)
+            lon = float(lon)
+            # Assuming WGS84 (SRID 4326) for lat/lon
+            from django.contrib.gis.geos import Point
 
-        return Point(lon, lat, srid=4326)
+            return Point(lon, lat, srid=4326)
+        except (ValueError, TypeError):
+            pass
     return None
 
 
-class OccurrenceTecAdapter(BaseAdapter):
+def val_to_none(val, ctx):
+    return None
+
+
+class OccurrenceTecAdapter(SourceAdapter):
     schema = SCHEMA
     source = "TEC"
+
+    def extract(self, path: str, **options) -> ExtractionResult:
+        occ_path = path
+        site_path = None
+        fire_path = None
+        additional_path = None
+        species_path = None
+        reliability_path = None
+        dola_path = None
+        species_role_path = None
+
+        warnings = []
+
+        if os.path.isdir(path):
+            # Try to find occurrences file
+            for name in ["OCCURRENCES.csv", "occurrences.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    occ_path = p
+                    break
+            else:
+                return ExtractionResult(
+                    rows=[],
+                    warnings=[ExtractionWarning(f"Missing OCCURRENCES.csv in {path}")],
+                )
+
+            # Try to find sites file
+            for name in ["SITES.csv", "sites.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    site_path = p
+                    break
+
+            # Find FIRE_HISTORY.csv
+            for name in ["FIRE_HISTORY.csv", "fire_history.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    fire_path = p
+                    break
+
+            # Find ADDITIONAL_DATA.csv
+            for name in ["ADDITIONAL_DATA.csv", "additional_data.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    additional_path = p
+                    break
+
+            # Find OCCURRENCE_SPECIES.csv
+            for name in ["OCCURRENCE_SPECIES.csv", "occurrence_species.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    species_path = p
+                    break
+
+            # Find RELIABILITY.csv
+            for name in ["RELIABILITY.csv", "reliability.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    reliability_path = p
+                    break
+
+            # Find DOLA_LOCATIONS.csv
+            for name in ["DOLA_LOCATIONS.csv", "dola_locations.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    dola_path = p
+                    break
+
+            # Find SPECIES_ROLES.csv
+            for name in ["SPECIES_ROLES.csv", "species_roles.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    species_role_path = p
+                    break
+        else:
+            # Path is the occurrences file
+            dirname = os.path.dirname(path)
+            for name in ["SITES.csv", "sites.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    site_path = p
+                    break
+
+            for name in ["FIRE_HISTORY.csv", "fire_history.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    fire_path = p
+                    break
+
+            for name in ["ADDITIONAL_DATA.csv", "additional_data.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    additional_path = p
+                    break
+
+            for name in ["OCCURRENCE_SPECIES.csv", "occurrence_species.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    species_path = p
+                    break
+
+            for name in ["RELIABILITY.csv", "reliability.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    reliability_path = p
+                    break
+
+            for name in ["DOLA_LOCATIONS.csv", "dola_locations.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    dola_path = p
+                    break
+
+            for name in ["SPECIES_ROLES.csv", "species_roles.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    species_role_path = p
+                    break
+
+        # Read occurrences
+        occ_rows, occ_warns = self.read_table(occ_path, **options)
+        warnings.extend(occ_warns)
+
+        # Read sites if found
+        site_rows = []
+        if site_path:
+            site_rows, site_warns = self.read_table(site_path, **options)
+            warnings.extend(site_warns)
+        else:
+            warnings.append(
+                ExtractionWarning(
+                    f"Missing SITES.csv near {occ_path}, proceeding without sites"
+                )
+            )
+
+        # Read Fire History
+        fire_rows = []
+        if fire_path:
+            fire_rows, fire_warns = self.read_table(fire_path, **options)
+            warnings.extend(fire_warns)
+
+        # Read Additional Data
+        additional_rows = []
+        if additional_path:
+            additional_rows, add_warns = self.read_table(additional_path, **options)
+            warnings.extend(add_warns)
+
+        # Read Species
+        species_rows = []
+        if species_path:
+            species_rows, sp_warns = self.read_table(species_path, **options)
+            warnings.extend(sp_warns)
+
+        # Read Lookups
+        reliability_map = {}
+        if reliability_path:
+            rel_rows, rel_warns = self.read_table(reliability_path, **options)
+            warnings.extend(rel_warns)
+            for r in rel_rows:
+                reliability_map[r["BR_CODE"]] = r["BR_DESC"]
+
+        dola_map = {}
+        if dola_path:
+            dola_rows, dola_warns = self.read_table(dola_path, **options)
+            warnings.extend(dola_warns)
+            for r in dola_rows:
+                dola_map[r["DOLA_REF"]] = r["DOLA_REF_DESC"]
+
+        role_map = {}
+        if species_role_path:
+            role_rows, role_warns = self.read_table(species_role_path, **options)
+            warnings.extend(role_warns)
+            for r in role_rows:
+                role_map[r["SP_ROLE_CODE"]] = r["SP_ROLE_DESC"]
+
+        # Index auxiliary data by OCC_UNIQUE_ID
+        sites_by_occ = defaultdict(list)
+        for s in site_rows:
+            fk = s.get("OCC_UNIQUE_ID")
+            if fk:
+                sites_by_occ[fk].append(s)
+
+        fire_by_occ = defaultdict(list)
+        for row in fire_rows:
+            fire_by_occ[row["OCC_UNIQUE_ID"]].append(row)
+
+        additional_by_occ = defaultdict(list)
+        for row in additional_rows:
+            additional_by_occ[row["OCC_UNIQUE_ID"]].append(row)
+
+        species_by_occ = defaultdict(list)
+        for row in species_rows:
+            species_by_occ[row["OCC_UNIQUE_ID"]].append(row)
+
+        # Join
+        joined_rows = []
+        for row in occ_rows:
+            occ_id = row.get("OCC_UNIQUE_ID")
+
+            # Sites
+            sites = sites_by_occ.get(occ_id, [])
+            if sites:
+                row["_nested_sites"] = sites
+
+            # Fire History
+            row["_nested_fire_history"] = fire_by_occ.get(occ_id, [])
+
+            # Additional Data
+            row["_nested_additional_data"] = additional_by_occ.get(occ_id, [])
+
+            # Species
+            species_list = species_by_occ.get(occ_id, [])
+            for sp in species_list:
+                role_code = sp.get("SPEC_SP_ROLE_CODE")
+                if role_code and role_code in role_map:
+                    sp["_resolved_role"] = role_map[role_code]
+            row["_nested_species"] = species_list
+
+            # Lookups
+            br_code = row.get("OCC_BR_CODE")
+            if br_code and br_code in reliability_map:
+                row["_resolved_reliability"] = reliability_map[br_code]
+
+            dola_ref = row.get("OCC_DOLA_REF")
+            if dola_ref and dola_ref in dola_map:
+                row["_resolved_dola"] = dola_map[dola_ref]
+
+            joined_rows.append(row)
+
+        return ExtractionResult(rows=joined_rows, warnings=warnings)
 
     PIPELINES = {
         "comment": [tec_comment_transform],
         "OCCHabitatComposition__habitat_notes": [tec_habitat_notes_transform],
         "OCCFireHistory__comment": [tec_fire_history_comment_transform],
         "OCCObservationDetail__comments": [
-            "{SOURCE_CHOICE}",
             tec_observation_detail_comments_transform,
         ],
-        "OCCLocation__coordinate_source_id": ["{SOURCE_CHOICE}"],
-        "OCCLocation__locality": ["{SOURCE_CHOICE}"],
-        "AssociatedSpeciesTaxonomy__species_role_id": ["{SOURCE_CHOICE}"],
-        "OccurrenceDocument__document_sub_category_id": ["{SOURCE_CHOICE}"],
+        # TODO: Implement lookups for these fields
+        "OCCLocation__coordinate_source_id": [val_to_none],
+        "OCCLocation__locality": [tec_location_locality_transform],
+        "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
+        "OccurrenceDocument__document_sub_category_id": [val_to_none],
         # Geometry transform for OccurrenceSite
         "OccurrenceSite__geometry": [tec_site_geometry_transform],
+        # Pass-through fields
+        "migrated_from_id": [],
+        "processing_status": [],
+        "community_id": [],
+        "species_id": [],
+        "wild_status_id": [],
+        "datetime_created": [],
+        "datetime_updated": [],
+        "modified_by": [],
+        "submitter": [],
+        "pop_number": [],
+        "subpop_code": [],
+        "OCCLocation__location_description": [],
+        "OCCLocation__boundary_description": [],
+        "OCCAssociatedSpecies__comment": [],
+        "OCCHabitatComposition__water_quality": [],
+        "_nested_species": [],
     }
