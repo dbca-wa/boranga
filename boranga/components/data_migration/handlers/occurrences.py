@@ -10,9 +10,13 @@ from django.core.exceptions import FieldDoesNotExist
 from django.db import models as dj_models
 from django.db import transaction
 from django.utils import timezone
+from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.data_migration.adapters.occurrence import (  # shared canonical schema
     schema,
+)
+from boranga.components.data_migration.adapters.occurrence.tec import (
+    OccurrenceTecAdapter,
 )
 from boranga.components.data_migration.adapters.occurrence.tpfl import (
     OccurrenceTpflAdapter,
@@ -29,15 +33,24 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
-from boranga.components.occurrence.models import OCCContactDetail, Occurrence
+from boranga.components.occurrence.models import (
+    AssociatedSpeciesTaxonomy,
+    OCCAssociatedSpecies,
+    OCCContactDetail,
+    OCCFireHistory,
+    OCCHabitatComposition,
+    OCCLocation,
+    OCCObservationDetail,
+    Occurrence,
+    OccurrenceDocument,
+    OccurrenceSite,
+)
 
 logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OccurrenceTpflAdapter(),
-    # Add new adapters here as they are implemented:
-    # Source.TEC.value: OccurrenceTECAdapter(),
-    # Source.TFAUNA.value: OccurrenceTFAUNAAdapter(),
+    Source.TEC.value: OccurrenceTecAdapter(),
 }
 
 
@@ -68,8 +81,16 @@ class OccurrenceImporter(BaseSheetImporter):
         try:
             try:
                 OCCContactDetail.objects.all().delete()
+                OCCLocation.objects.all().delete()
+                OccurrenceSite.objects.all().delete()
+                OCCObservationDetail.objects.all().delete()
+                OCCHabitatComposition.objects.all().delete()
+                OCCFireHistory.objects.all().delete()
+                OCCAssociatedSpecies.objects.all().delete()
+                AssociatedSpeciesTaxonomy.objects.all().delete()
+                OccurrenceDocument.objects.all().delete()
             except Exception:
-                logger.exception("Failed to delete OCCContactDetail")
+                logger.exception("Failed to delete related Occurrence data")
             try:
                 Occurrence.objects.all().delete()
             except Exception:
@@ -303,6 +324,17 @@ class OccurrenceImporter(BaseSheetImporter):
             return merged, combined_issues
 
         # Persist merged rows in bulk where possible (prepare ops then create/update)
+
+        # Pre-fetch TEC submitter if needed
+        tec_submitter_id = None
+        try:
+            tec_user = EmailUserRO.objects.get(email="boranga.tec@dbca.wa.gov.au")
+            tec_submitter_id = tec_user.id
+        except Exception:
+            logger.warning(
+                "EmailUser 'boranga.tec@dbca.wa.gov.au' not found. TEC occurrences will have no submitter."
+            )
+
         ops = []
         for migrated_from_id, entries in groups.items():
             merged, combined_issues = merge_group(entries, sources)
@@ -364,6 +396,12 @@ class OccurrenceImporter(BaseSheetImporter):
                     continue
 
             defaults = occ_row.to_model_defaults()
+
+            # If submitter is missing and this is a TEC record, use the TEC submitter
+            if not defaults.get("submitter") and Source.TEC.value in involved_sources:
+                if tec_submitter_id:
+                    defaults["submitter"] = tec_submitter_id
+
             defaults["lodgement_date"] = merged.get("datetime_created")
             if merged.get("locked") is not None:
                 defaults["locked"] = merged.get("locked")
@@ -726,6 +764,139 @@ class OccurrenceImporter(BaseSheetImporter):
                             "Failed to create OccurrenceUserAction for occurrence %s",
                             getattr(obj.occurrence, "pk", None),
                         )
+
+        # Create related objects for TEC data
+        # We iterate through ops again. If the op has TEC-specific fields, we create/update the related models.
+        # Note: This is a simplified approach. Ideally we would bulk create these too.
+        # Given the complexity and number of related models, individual creation/update per
+        # occurrence might be safer/easier to implement first.
+
+        # Helper to get occurrence object
+        def get_occ(mig_id):
+            return created_map.get(mig_id) or target_map.get(mig_id)
+
+        # Load DocumentCategory "ORF Document"
+        from boranga.components.species_and_communities.models import DocumentCategory
+
+        try:
+            orf_document_category = DocumentCategory.objects.get(
+                document_category_name="ORF Document"
+            )
+        except DocumentCategory.DoesNotExist:
+            logger.warning(
+                "DocumentCategory 'ORF Document' not found. OccurrenceDocuments will be created without category."
+            )
+            orf_document_category = None
+
+        for op in ops:
+            mig = op["migrated_from_id"]
+            merged = op.get("merged") or {}
+            occ = get_occ(mig)
+            if not occ:
+                continue
+
+            # OCCLocation
+            if any(k.startswith("OCCLocation__") for k in merged):
+                OCCLocation.objects.update_or_create(
+                    occurrence=occ,
+                    defaults={
+                        "coordinate_source_id": merged.get(
+                            "OCCLocation__coordinate_source_id"
+                        ),
+                        "boundary_description": merged.get(
+                            "OCCLocation__boundary_description"
+                        ),
+                        "locality": merged.get("OCCLocation__locality"),
+                        "location_description": merged.get(
+                            "OCCLocation__location_description"
+                        ),
+                    },
+                )
+
+            # OccurrenceSite
+            if any(k.startswith("OccurrenceSite__") for k in merged):
+                # We need to handle geometry creation here if not done in adapter
+                # Adapter does it: OccurrenceSite__geometry
+                site, created = OccurrenceSite.objects.update_or_create(
+                    occurrence=occ,
+                    defaults={
+                        "site_name": merged.get("OccurrenceSite__site_name"),
+                        "comments": merged.get("OccurrenceSite__comments"),
+                        "geometry": merged.get("OccurrenceSite__geometry"),
+                    },
+                )
+                # Manually update updated_date to bypass auto_now=True from GeometryBase
+                if merged.get("OccurrenceSite__updated_date"):
+                    OccurrenceSite.objects.filter(pk=site.pk).update(
+                        updated_date=merged.get("OccurrenceSite__updated_date")
+                    )
+
+            # OCCObservationDetail
+            if any(k.startswith("OCCObservationDetail__") for k in merged):
+                OCCObservationDetail.objects.update_or_create(
+                    occurrence=occ,
+                    defaults={
+                        "comments": merged.get("OCCObservationDetail__comments"),
+                    },
+                )
+
+            # OCCHabitatComposition
+            if any(k.startswith("OCCHabitatComposition__") for k in merged):
+                OCCHabitatComposition.objects.update_or_create(
+                    occurrence=occ,
+                    defaults={
+                        "water_quality": merged.get(
+                            "OCCHabitatComposition__water_quality"
+                        ),
+                        "habitat_notes": merged.get(
+                            "OCCHabitatComposition__habitat_notes"
+                        ),
+                    },
+                )
+
+            # OCCFireHistory
+            if any(k.startswith("OCCFireHistory__") for k in merged):
+                OCCFireHistory.objects.update_or_create(
+                    occurrence=occ,
+                    defaults={
+                        "comment": merged.get("OCCFireHistory__comment"),
+                    },
+                )
+
+            # OCCAssociatedSpecies
+            if any(k.startswith("OCCAssociatedSpecies__") for k in merged):
+                OCCAssociatedSpecies.objects.update_or_create(
+                    occurrence=occ,
+                    defaults={
+                        "comment": merged.get("OCCAssociatedSpecies__comment"),
+                    },
+                )
+
+            # AssociatedSpeciesTaxonomy
+            if any(k.startswith("AssociatedSpeciesTaxonomy__") for k in merged):
+                AssociatedSpeciesTaxonomy.objects.update_or_create(
+                    occurrence=occ,
+                    defaults={
+                        "species_role_id": merged.get(
+                            "AssociatedSpeciesTaxonomy__species_role_id"
+                        ),
+                    },
+                )
+
+            # OccurrenceDocument
+            # Task 12278: Default Value = ORF Document (DocumentCategory)
+            # Task 12279: document_sub_category (DocumentSubCategory)
+            if any(k.startswith("OccurrenceDocument__") for k in merged):
+                OccurrenceDocument.objects.update_or_create(
+                    occurrence=occ,
+                    defaults={
+                        "document_sub_category_id": merged.get(
+                            "OccurrenceDocument__document_sub_category_id"
+                        ),
+                        "description": merged.get("OccurrenceDocument__description"),
+                        "document_category": orf_document_category,
+                    },
+                )
 
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)

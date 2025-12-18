@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Any
 
 from boranga.components.data_migration import utils
 from boranga.components.data_migration.adapters.schema_base import Schema
@@ -26,6 +27,50 @@ COLUMN_MAP = {
     "VESTING": "OccurrenceTenure__vesting_id",
     "POP_NUMBER": "pop_number",
     "SUBPOP_CODE": "subpop_code",
+    # TEC Mappings
+    "OCC_UNIQUE_ID": "migrated_from_id",
+    "COM_NO": "community_id",
+    "OCC_DATE_ENTERED": "datetime_created",
+    "OCC_DATE_EDITED": "datetime_updated",
+    # Comment components
+    "OCC_OTHER": "_temp_occ_other",
+    "OCC_DATA": "_temp_occ_data",
+    "OCC_ORIGINAL_AREA": "_temp_occ_original_area",
+    "OCC_AREA_ACCURACY": "_temp_occ_area_accuracy",
+    "OCC_BEARD_MAP_CODE": "_temp_occ_beard_map_code",
+    "OCC_BEARD_DESC": "_temp_occ_beard_desc",
+    "OCC_BUSH_FOREVER_SITE_NO": "_temp_occ_bush_forever_site_no",
+    # OCCLocation
+    "OCC_SOURCE_CODE": "OCCLocation__coordinate_source_id",
+    "OCC_BOUNDARY_DESC": "OCCLocation__boundary_description",
+    "OCC_DOLA_REF": "OCCLocation__locality",
+    "OCC_DESC": "OCCLocation__location_description",
+    # OccurrenceSite
+    "S_COMMENTS": "OccurrenceSite__comments",
+    "S_LATITUDE_PREF": "OccurrenceSite__latitude",
+    "S_LONGITUDE_PREF": "OccurrenceSite__longitude",
+    "S_ID": "OccurrenceSite__site_name",
+    "S_DATE_EDITED": "OccurrenceSite__updated_date",
+    # OCCObservationDetail
+    "OCC_BR_CODE": "OCCObservationDetail__comments",
+    # OCCHabitatComposition
+    "OCC_OTHER_ATTR": "_temp_occ_other_attr",
+    "OCC_LAND_ELEMENT": "_temp_occ_land_element",
+    "OCC_DRAINAGE": "_temp_occ_drainage",
+    "OCC_SOIL": "_temp_occ_soil",
+    "OCC_SURF_GEOLOGY": "_temp_occ_surf_geology",
+    "OCC_CLASSIFICATION": "_temp_occ_classification",
+    "OCC_WATER": "OCCHabitatComposition__water_quality",
+    # OCCFireHistory
+    "FIRE_DATE": "_temp_fire_date",
+    "FIRE_COMMENT": "_temp_fire_comment",
+    # OCCAssociatedSpecies
+    "OCC_SPECIES_DESC": "OCCAssociatedSpecies__comment",
+    # AssociatedSpeciesTaxonomy
+    "SPEC_SP_ROLE_CODE": "AssociatedSpeciesTaxonomy__species_role_id",
+    # OccurrenceDocument
+    "ADD_ITEM_CODE": "OccurrenceDocument__document_sub_category_id",
+    "ADD_DESC": "OccurrenceDocument__description",
 }
 
 REQUIRED_COLUMNS = [
@@ -81,6 +126,33 @@ class OccurrenceRow:
     OccurrenceTenure__purpose_id: int | None = None
     OccurrenceTenure__vesting_id: int | None = None
 
+    # TEC Fields
+    OCCLocation__coordinate_source_id: int | None = None
+    OCCLocation__boundary_description: str | None = None
+    OCCLocation__locality: str | None = None
+    OCCLocation__location_description: str | None = None
+
+    OccurrenceSite__comments: str | None = None
+    OccurrenceSite__latitude: float | None = None
+    OccurrenceSite__longitude: float | None = None
+    OccurrenceSite__site_name: str | None = None
+    OccurrenceSite__updated_date: datetime | None = None
+    OccurrenceSite__geometry: Any | None = None
+
+    OCCObservationDetail__comments: str | None = None
+
+    OCCHabitatComposition__water_quality: str | None = None
+    OCCHabitatComposition__habitat_notes: str | None = None
+
+    OCCFireHistory__comment: str | None = None
+
+    OCCAssociatedSpecies__comment: str | None = None
+
+    AssociatedSpeciesTaxonomy__species_role_id: int | None = None
+
+    OccurrenceDocument__document_sub_category_id: int | None = None
+    OccurrenceDocument__description: str | None = None
+
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceRow:
         """
@@ -110,6 +182,68 @@ class OccurrenceRow:
             review_status=utils.safe_strip(d.get("review_status")),
             processing_status=utils.safe_strip(d.get("processing_status")),
             review_due_date=d.get("review_due_date"),
+            datetime_created=d.get("datetime_created"),
+            datetime_updated=d.get("datetime_updated"),
+            locked=d.get("locked", False),
+            OCCContactDetail__contact=utils.safe_strip(
+                d.get("OCCContactDetail__contact")
+            ),
+            OCCContactDetail__contact_name=utils.safe_strip(
+                d.get("OCCContactDetail__contact_name")
+            ),
+            OCCContactDetail__notes=utils.safe_strip(d.get("OCCContactDetail__notes")),
+            OccurrenceTenure__purpose_id=utils.to_int_maybe(
+                d.get("OccurrenceTenure__purpose_id")
+            ),
+            OccurrenceTenure__vesting_id=utils.to_int_maybe(
+                d.get("OccurrenceTenure__vesting_id")
+            ),
+            OCCLocation__coordinate_source_id=utils.to_int_maybe(
+                d.get("OCCLocation__coordinate_source_id")
+            ),
+            OCCLocation__boundary_description=utils.safe_strip(
+                d.get("OCCLocation__boundary_description")
+            ),
+            OCCLocation__locality=utils.safe_strip(d.get("OCCLocation__locality")),
+            OCCLocation__location_description=utils.safe_strip(
+                d.get("OCCLocation__location_description")
+            ),
+            OccurrenceSite__comments=utils.safe_strip(
+                d.get("OccurrenceSite__comments")
+            ),
+            OccurrenceSite__latitude=utils.to_float_maybe(
+                d.get("OccurrenceSite__latitude")
+            ),
+            OccurrenceSite__longitude=utils.to_float_maybe(
+                d.get("OccurrenceSite__longitude")
+            ),
+            OccurrenceSite__site_name=utils.safe_strip(
+                d.get("OccurrenceSite__site_name")
+            ),
+            OccurrenceSite__updated_date=d.get("OccurrenceSite__updated_date"),
+            OccurrenceSite__geometry=d.get("OccurrenceSite__geometry"),
+            OCCObservationDetail__comments=utils.safe_strip(
+                d.get("OCCObservationDetail__comments")
+            ),
+            OCCHabitatComposition__water_quality=utils.safe_strip(
+                d.get("OCCHabitatComposition__water_quality")
+            ),
+            OCCHabitatComposition__habitat_notes=utils.safe_strip(
+                d.get("OCCHabitatComposition__habitat_notes")
+            ),
+            OCCFireHistory__comment=utils.safe_strip(d.get("OCCFireHistory__comment")),
+            OCCAssociatedSpecies__comment=utils.safe_strip(
+                d.get("OCCAssociatedSpecies__comment")
+            ),
+            AssociatedSpeciesTaxonomy__species_role_id=utils.to_int_maybe(
+                d.get("AssociatedSpeciesTaxonomy__species_role_id")
+            ),
+            OccurrenceDocument__document_sub_category_id=utils.to_int_maybe(
+                d.get("OccurrenceDocument__document_sub_category_id")
+            ),
+            OccurrenceDocument__description=utils.safe_strip(
+                d.get("OccurrenceDocument__description")
+            ),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:
