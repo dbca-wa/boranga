@@ -5,8 +5,8 @@ import logging
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.communities import schema
-from boranga.components.data_migration.adapters.communities.tpfl import (
-    CommunityTpflAdapter,
+from boranga.components.data_migration.adapters.communities.tec import (
+    CommunityTecAdapter,
 )
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.mappings import load_legacy_to_pk_map
@@ -32,7 +32,7 @@ from boranga.components.species_and_communities.models import (
 logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
-    Source.TPFL.value: CommunityTpflAdapter(),
+    Source.TEC.value: CommunityTecAdapter(),
 }
 
 
@@ -222,7 +222,7 @@ class CommunityImporter(BaseSheetImporter):
 
                 pipeline = pipeline_map.get(col)
                 if pipeline:
-                    res = run_pipeline(val, pipeline, ctx)
+                    res = run_pipeline(pipeline, val, ctx)
                     if res.errors:
                         for e in res.errors:
                             row_errors.append(f"{col}: {e.message}")
@@ -495,11 +495,9 @@ class CommunityImporter(BaseSheetImporter):
             logger.info("Updating Community Regions and Districts...")
 
             # Load legacy mappings
-            region_map = load_legacy_to_pk_map(
-                legacy_system="TPFL", model_name="Region"
-            )
+            region_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="Region")
             district_map = load_legacy_to_pk_map(
-                legacy_system="TPFL", model_name="District"
+                legacy_system="TEC", model_name="District"
             )
 
             def parse_keys(raw, mapping, label, mig_id):
