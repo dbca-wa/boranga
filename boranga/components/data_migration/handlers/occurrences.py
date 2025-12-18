@@ -872,17 +872,6 @@ class OccurrenceImporter(BaseSheetImporter):
                     },
                 )
 
-            # AssociatedSpeciesTaxonomy
-            if any(k.startswith("AssociatedSpeciesTaxonomy__") for k in merged):
-                AssociatedSpeciesTaxonomy.objects.update_or_create(
-                    occurrence=occ,
-                    defaults={
-                        "species_role_id": merged.get(
-                            "AssociatedSpeciesTaxonomy__species_role_id"
-                        ),
-                    },
-                )
-
             # OccurrenceDocument
             # Task 12278: Default Value = ORF Document (DocumentCategory)
             # Task 12279: document_sub_category (DocumentSubCategory)
