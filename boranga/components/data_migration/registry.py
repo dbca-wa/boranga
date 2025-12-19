@@ -142,6 +142,11 @@ def t_y_to_true_else_false(value, ctx):
     return _result(val == "Y")
 
 
+@registry.register("is_present")
+def t_is_present(value, ctx):
+    return _result(bool(value))
+
+
 @registry.register("strip")
 def t_strip(value, ctx):
     if value is None:
