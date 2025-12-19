@@ -101,11 +101,13 @@ class ConservationStatusTpflAdapter(SourceAdapter):
 
             # 4. Users
             sub = canonical.get("submitter")
+            appr = canonical.get("approved_by")
             if sub:
+                # Get user id for submitter and approver from user_map
                 user_id = user_map.get(sub.strip())
                 canonical["submitter"] = user_id
-                # Use submitter ID for approved_by and assigned_approver as requested
-                canonical["approved_by"] = user_id
+                appr_user_id = user_map.get(appr.strip())
+                canonical["approved_by"] = appr_user_id
 
             # 5. Calculated fields
             raw_leg_list = canonical.get("wa_legislative_list")

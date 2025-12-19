@@ -13,6 +13,7 @@ COLUMN_MAP = {
     "wa_legislative_list": "wa_legislative_list",
     "wa_priority_category": "wa_priority_category",
     "wa_priority_list": "wa_priority_list",
+    "approved_by": "approved_by",
     "processing_status": "processing_status",
     "effective_from": "effective_from_date",
     "submitter": "submitter",
