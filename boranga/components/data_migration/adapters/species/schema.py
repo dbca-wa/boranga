@@ -12,7 +12,7 @@ from boranga.components.species_and_communities.models import Species
 
 COLUMN_MAP = {
     "TXN_LIST_ID": "migrated_from_id",
-    "NAME": "taxonomy_id",
+    "TAXONID": "taxonomy_id",
     "FILE_COMMENTS": "comment",
     "R_PLAN": "conservation_plan_exists",
     "FILE_NO": "department_file_numbers",
