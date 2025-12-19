@@ -87,7 +87,7 @@ class Command(BaseCommand):
                     "NAME",
                 )
                 legacy_taxon_name_id = self._get_field(
-                    r, "TAXONID", "legacy_taxon_name_id"
+                    r, "TAXONID", "legacy_taxon_name_id", "taxonid", "TaxonId"
                 )
                 if legacy_taxon_name_id:
                     legacy_taxon_name_id = legacy_taxon_name_id.replace("WACENSUS:", "")
@@ -130,16 +130,16 @@ class Command(BaseCommand):
                     failed += 1
                     continue
 
-                # find existing mapping by unique key
+                # find existing mapping by unique key (legacy_taxon_name_id)
                 try:
                     mapping = LegacyTaxonomyMapping.objects.get(
-                        list_name=list_name, legacy_canonical_name=legacy_name
+                        list_name=list_name, legacy_taxon_name_id=legacy_taxon_name_id
                     )
                     # Determine if fully populated: taxonomy set and taxon_name_id matches
                     if (
                         mapping.taxonomy_id
                         and mapping.taxon_name_id == taxon_name_id
-                        and mapping.legacy_taxon_name_id == legacy_taxon_name_id
+                        and mapping.legacy_canonical_name == legacy_name
                     ):
                         skipped += 1
                         continue
@@ -147,15 +147,15 @@ class Command(BaseCommand):
                     # needs update
                     if dry_run:
                         self.stdout.write(
-                            f"[DRY] would update mapping {list_name}:{legacy_name} -> taxon_name_id={taxon_name_id} "
-                            f"taxonomy_id={taxonomy.id} legacy_taxon_name_id={legacy_taxon_name_id}"
+                            f"[DRY] would update mapping {list_name}:{legacy_taxon_name_id} ({legacy_name}) "
+                            f"-> taxon_name_id={taxon_name_id} taxonomy_id={taxonomy.id}"
                         )
                         updated += 1
                         continue
 
                     mapping.taxon_name_id = taxon_name_id
                     mapping.taxonomy = taxonomy
-                    mapping.legacy_taxon_name_id = legacy_taxon_name_id
+                    mapping.legacy_canonical_name = legacy_name
                     mapping.save()
                     updated += 1
                 except LegacyTaxonomyMapping.DoesNotExist:
@@ -176,6 +176,13 @@ class Command(BaseCommand):
                         legacy_taxon_name_id=legacy_taxon_name_id,
                     )
                     created += 1
+                except LegacyTaxonomyMapping.MultipleObjectsReturned:
+                    self.stderr.write(
+                        f"Multiple mappings found for list_name={list_name} "
+                        f"legacy_taxon_name_id={legacy_taxon_name_id}; skipping"
+                    )
+                    failed += 1
+                    continue
 
         self.stdout.write(
             f"created={created} updated={updated} skipped={skipped} failed={failed} (dry_run={dry_run})"
