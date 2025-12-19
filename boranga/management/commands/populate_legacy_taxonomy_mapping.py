@@ -89,6 +89,9 @@ class Command(BaseCommand):
                 legacy_taxon_name_id = self._get_field(
                     r, "TAXONID", "legacy_taxon_name_id"
                 )
+                if legacy_taxon_name_id:
+                    legacy_taxon_name_id = legacy_taxon_name_id.replace("WACENSUS:", "")
+
                 taxon_name_id_raw = self._get_field(
                     r, "taxon_name_id", "taxon_id", "taxonnameid", "nomos_taxon_id"
                 )
