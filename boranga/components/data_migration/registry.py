@@ -1082,6 +1082,44 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
     return mapping
 
 
+# Cache for LegacyTaxonomyMapping list -> {legacy_taxon_name_id: {taxonomy_id, taxon_name_id}}
+_legacy_taxonomy_id_mappings_cache: dict[str, dict] = {}
+
+
+def _load_legacy_taxonomy_id_mappings(list_name: str) -> dict:
+    """Load and cache LegacyTaxonomyMapping rows for `list_name` keyed by legacy_taxon_name_id.
+
+    Returns a dict keyed by legacy_taxon_name_id mapping to a dict with keys `taxonomy_id` and `taxon_name_id`.
+    """
+    if list_name in _legacy_taxonomy_id_mappings_cache:
+        return _legacy_taxonomy_id_mappings_cache[list_name]
+
+    mapping: dict = {}
+    try:
+        from boranga.components.main.models import LegacyTaxonomyMapping
+
+        qs = (
+            LegacyTaxonomyMapping.objects.filter(list_name=list_name)
+            .exclude(legacy_taxon_name_id__isnull=True)
+            .exclude(legacy_taxon_name_id="")
+        )
+
+        for rec in qs.only("legacy_taxon_name_id", "taxonomy_id", "taxon_name_id"):
+            key = str(rec.legacy_taxon_name_id).strip()
+            if not key:
+                continue
+            entry = {"taxonomy_id": rec.taxonomy_id, "taxon_name_id": rec.taxon_name_id}
+            mapping[key] = entry
+    except Exception:
+        logger.exception(
+            "Failed to load LegacyTaxonomyMapping (ID) for list %s", list_name
+        )
+        mapping = {}
+
+    _legacy_taxonomy_id_mappings_cache[list_name] = mapping
+    return mapping
+
+
 def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
     """Register and return a transform name that resolves a legacy canonical name
     (from `LegacyTaxonomyMapping`) to a taxonomy id.
@@ -1366,6 +1404,64 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
                 "taxonomy_lookup_legacy_mapping_species lookup failed: %s", e
             )
             return _result(value, TransformIssue("error", f"lookup error: {e}"))
+
+    registry._fns[name] = _inner
+    return name
+
+
+def taxonomy_lookup_legacy_id_mapping(list_name: str) -> str:
+    """Register and return a transform name that resolves a legacy taxon name id
+    (from `LegacyTaxonomyMapping`) to a taxonomy_id.
+
+    Behaviour:
+      - looks up the legacy_taxon_name_id
+      - returns the `taxonomy_id` if present
+      - on missing mapping returns an error TransformIssue
+    """
+    if not list_name:
+        raise ValueError("list_name must be provided")
+
+    key_repr = f"taxonom_lookup_legacy_id:{list_name}"
+    name = "taxonom_lookup_legacy_id_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(None)
+
+        table = _load_legacy_taxonomy_id_mappings(list_name)
+        if not table:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"No LegacyTaxonomyMapping entries loaded for list '{list_name}'",
+                ),
+            )
+
+        key = str(value).strip()
+        entry = table.get(key)
+        if entry:
+            # Return the taxonomy_id
+            tax_id = entry.get("taxonomy_id")
+            if tax_id is None:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error",
+                        f"LegacyTaxonomyMapping for ID '{value}' has no taxonomy_id",
+                    ),
+                )
+            return _result(tax_id)
+
+        return _result(
+            value,
+            TransformIssue(
+                "error",
+                f"LegacyTaxonomyMapping for ID '{value}' not found in list '{list_name}'",
+            ),
+        )
 
     registry._fns[name] = _inner
     return name
