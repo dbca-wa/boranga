@@ -70,3 +70,11 @@ If you change APIs
 - Add or update API docs/comments close to the `api.py` implementation; follow existing naming/parameter conventions.
 
 If anything is unclear or you'd like me to expand a section (examples for adding a ViewSet, running a specific test, or wiring frontend -> backend), tell me which area to expand and I'll iterate.
+
+LEGACY DATA MIGRATION
+
+This project includes legacy data migration components under `boranga/components/data_migration`.
+
+That folder contains a README.md with specific instructions on how to use the data migration framework, including how to define adapters, schemas, and run migrations.
+
+When working in that area, please refer to the README.md in that folder for detailed guidance on the migration process and best practices.
