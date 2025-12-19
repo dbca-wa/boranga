@@ -730,6 +730,7 @@ class LegacyTaxonomyMapping(models.Model):
     """
 
     list_name = models.CharField(max_length=50)
+    legacy_taxon_name_id = models.CharField(max_length=255)
     legacy_canonical_name = models.CharField(max_length=255)
     taxon_name_id = models.PositiveIntegerField()
     taxonomy = models.ForeignKey(
@@ -742,7 +743,8 @@ class LegacyTaxonomyMapping(models.Model):
 
     class Meta:
         app_label = "boranga"
-        unique_together = (("list_name", "legacy_canonical_name"),)
+        # Once data is populated and all rows have a unique value re-enable this constraint
+        # unique_together = (("list_name", "legacy_taxon_name_id"),)
         indexes = [
             models.Index(fields=["list_name"], name="idx_legacytax_listname"),
             models.Index(fields=["taxon_name_id"], name="idx_legacytax_taxonid"),
@@ -750,4 +752,4 @@ class LegacyTaxonomyMapping(models.Model):
 
     def __str__(self):
         tgt = self.taxonomy or self.taxon_name_id
-        return f"{self.list_name}:{self.legacy_canonical_name} -> {tgt}"
+        return f"{self.list_name}:{self.legacy_taxon_name_id}:{self.legacy_canonical_name} -> {tgt}"
