@@ -120,12 +120,14 @@ class LegacyUsernameEmailuserMappingAdmin(admin.ModelAdmin):
 class LegacyTaxonomyMappingAdmin(admin.ModelAdmin):
     list_display = [
         "list_name",
+        "legacy_taxon_name_id",
         "legacy_canonical_name",
         "taxon_name_id",
         "taxonomy",
     ]
     list_filter = ["list_name"]
     search_fields = [
+        "legacy_taxon_name_id",
         "legacy_canonical_name",
         "taxon_name_id",
         "taxonomy__scientific_name",
