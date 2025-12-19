@@ -105,7 +105,6 @@ class ConservationStatusTpflAdapter(SourceAdapter):
                 user_id = user_map.get(sub.strip())
                 canonical["submitter"] = user_id
                 # Use submitter ID for approved_by and assigned_approver as requested
-                canonical["assigned_approver"] = user_id
                 canonical["approved_by"] = user_id
 
             # 5. Calculated fields
