@@ -2500,7 +2500,7 @@ class SpeciesDocument(Document):
     _file = models.FileField(
         upload_to=update_species_doc_filename,
         max_length=512,
-        default="None",
+        default=None,
         storage=private_storage,
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)
@@ -2569,7 +2569,7 @@ class CommunityDocument(Document):
     _file = models.FileField(
         upload_to=update_community_doc_filename,
         max_length=512,
-        default="None",
+        default=None,
         storage=private_storage,
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)
