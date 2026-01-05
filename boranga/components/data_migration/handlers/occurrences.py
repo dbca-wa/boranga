@@ -229,14 +229,10 @@ class OccurrenceImporter(BaseSheetImporter):
                     self.slug,
                     processed,
                 )
-            # Map raw row to canonical keys
-            mapped_row = schema.SCHEMA.map_raw_row(row)
-            # Preserve internal keys (starting with _) like _source, _nested_sites
-            for k, v in row.items():
-                if k.startswith("_"):
-                    mapped_row[k] = v
+            # Adapter provides canonical row (already mapped from raw CSV)
+            canonical_row = row
 
-            tcx = TransformContext(row=mapped_row, model=None, user_id=ctx.user_id)
+            tcx = TransformContext(row=canonical_row, model=None, user_id=ctx.user_id)
             issues = []
             transformed = {}
             has_error = False
@@ -246,7 +242,7 @@ class OccurrenceImporter(BaseSheetImporter):
                 src, pipelines_by_source.get(None, {})
             )
             for col, pipeline in pipeline_map.items():
-                raw_val = mapped_row.get(col)
+                raw_val = canonical_row.get(col)
                 res = run_pipeline(pipeline, raw_val, tcx)
                 transformed[col] = res.value
                 for issue in res.issues:
