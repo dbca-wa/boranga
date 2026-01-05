@@ -186,22 +186,11 @@ class ConservationStatusImporter(BaseSheetImporter):
             logger.info(f"[DRY RUN] Would import {len(all_rows)} rows.")
             return
 
-        # 1.5 Handle source-specific transformations
-        # TEC data needs special handling for certain fields
-        for row in all_rows:
-            src_key = row.get("_source")
-
-            # TEC-specific field handling
-            if src_key == Source.TEC.value:
-                # Set required boolean fields to True for TEC
-                if row.get("internal_application") is None:
-                    row["internal_application"] = True
-                if row.get("locked") is None:
-                    row["locked"] = True
-
-                # Note: migrated_from_id generation for TEC needs business analyst input
-                # Currently, TEC data does not provide a unique identifier,
-                # so rows without migrated_from_id will be skipped and logged as errors
+        # Load TEC user if TEC source is being imported
+        tec_user = None
+        if Source.TEC.value in sources:
+            User = get_user_model()
+            tec_user = User.objects.filter(email="boranga.tec@dbca.wa.gov.au").first()
 
         # 2. Load dependencies
         Species = apps.get_model("boranga", "Species")
@@ -270,14 +259,6 @@ class ConservationStatusImporter(BaseSheetImporter):
         if not submitter_category_dbca:
             logger.warning(
                 "SubmitterCategory 'DBCA' not found. SubmitterInformation records may be incomplete."
-            )
-
-        # TEC Submitter User
-        User = get_user_model()
-        tec_user = User.objects.filter(email="boranga.tec@dbca.wa.gov.au").first()
-        if not tec_user:
-            logger.warning(
-                "User 'boranga.tec@dbca.wa.gov.au' not found. TEC SubmitterInformation will use default submitter."
             )
 
         # 3. Create objects

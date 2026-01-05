@@ -24,7 +24,7 @@ COLUMN_MAP = {
     "internal_application": "internal_application",
     "locked": "locked",
     # TEC format (community conservation status)
-    "COM_NO": "community_migrated_from_id",
+    "COM_NO": "migrated_from_id",  # TEC uses COM_NO as the unique identifier
     "CAT_CT_TYPE": "processing_status",
     "CAT_EFFECT_DATE": "effective_from_date",
     "CAT_COMMENT": "comment",
