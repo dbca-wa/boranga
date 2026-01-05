@@ -17,13 +17,8 @@ PIPELINES = {
     "regions": ["strip", "blank_to_none"],
     "districts": ["strip", "blank_to_none"],
     "active_cs": ["strip", "y_to_true_else_false"],
-    "pub_title": ["strip", "blank_to_none"],
-    "pub_author": ["strip", "blank_to_none"],
-    "pub_date": ["strip", "blank_to_none"],
-    "pub_place": ["strip", "blank_to_none"],
-    "threat_category": ["strip", "blank_to_none"],
-    "threat_comment": ["strip", "blank_to_none"],
-    "date_observed": ["strip", "blank_to_none", "date_from_datetime_iso"],
+    # Note: Publication and threat data are loaded from separate CSV files
+    # by the importer, not from the main COMMUNITIES.csv file
 }
 
 

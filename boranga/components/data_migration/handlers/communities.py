@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import json
 import logging
+from pathlib import Path
 
 from django.utils import timezone
 
@@ -34,6 +37,88 @@ logger = logging.getLogger(__name__)
 SOURCE_ADAPTERS = {
     Source.TEC.value: CommunityTecAdapter(),
 }
+
+
+def _load_publications_data(path: str) -> dict:
+    """
+    Load PUBLICATIONS.csv and return a dict: PUB_NO -> publication dict.
+    """
+    publications = {}
+    pub_path = Path(path).parent / "PUBLICATIONS.csv"
+
+    if not pub_path.exists():
+        logger.warning(f"PUBLICATIONS.csv not found at {pub_path}")
+        return publications
+
+    try:
+        with open(pub_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                pub_no = row.get("PUB_NO", "").strip()
+                if pub_no:
+                    publications[pub_no] = row
+    except Exception as e:
+        logger.error(f"Error loading PUBLICATIONS.csv: {e}")
+
+    logger.debug(f"Loaded {len(publications)} publications")
+    return publications
+
+
+def _load_community_publications_map(path: str) -> dict:
+    """
+    Load COMMUNITY_PUBLICATIONS.csv and return a dict: COM_NO -> list of PUB_NOs.
+    """
+    com_pub_map = {}
+    comm_pub_path = Path(path).parent / "COMMUNITY_PUBLICATIONS.csv"
+
+    if not comm_pub_path.exists():
+        logger.warning(f"COMMUNITY_PUBLICATIONS.csv not found at {comm_pub_path}")
+        return com_pub_map
+
+    try:
+        with open(comm_pub_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                com_no = row.get("COM_NO", "").strip()
+                cp_pub_no = row.get("CP_PUB_NO", "").strip()
+                if com_no and cp_pub_no:
+                    if com_no not in com_pub_map:
+                        com_pub_map[com_no] = []
+                    com_pub_map[com_no].append(cp_pub_no)
+    except Exception as e:
+        logger.error(f"Error loading COMMUNITY_PUBLICATIONS.csv: {e}")
+
+    logger.debug(
+        f"Loaded community-publication mappings for {len(com_pub_map)} communities"
+    )
+    return com_pub_map
+
+
+def _load_community_threats(path: str) -> dict:
+    """
+    Load COMMUNITY_THREATS.csv and return a dict: COM_NO -> list of threat dicts.
+    """
+    threats = {}
+    threats_path = Path(path).parent / "COMMUNITY_THREATS.csv"
+
+    if not threats_path.exists():
+        logger.warning(f"COMMUNITY_THREATS.csv not found at {threats_path}")
+        return threats
+
+    try:
+        with open(threats_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                com_no = row.get("COM_NO", "").strip()
+                if com_no:
+                    if com_no not in threats:
+                        threats[com_no] = []
+                    threats[com_no].append(row)
+    except Exception as e:
+        logger.error(f"Error loading COMMUNITY_THREATS.csv: {e}")
+
+    logger.debug(f"Loaded threats for {len(threats)} communities")
+    return threats
 
 
 @register
@@ -150,6 +235,18 @@ class CommunityImporter(BaseSheetImporter):
             for r in result.rows:
                 r["_source"] = src
             all_rows.extend(result.rows)
+
+        # 1b. Load related data (publications, threats) from separate CSV files
+        logger.info("Loading related publication and threat data...")
+        base_path = path_map.get("TEC", path)  # Use TEC path as base
+        publications_data = _load_publications_data(base_path)
+        community_pub_map = _load_community_publications_map(base_path)
+        community_threats_map = _load_community_threats(base_path)
+        logger.info(
+            f"Loaded: {len(publications_data)} publications, "
+            f"{len(community_pub_map)} communities with pubs, "
+            f"{len(community_threats_map)} communities with threats"
+        )
 
         # Apply limit
         limit = getattr(ctx, "limit", None)
@@ -309,6 +406,12 @@ class CommunityImporter(BaseSheetImporter):
                 "community_description",
             ]
 
+            # Track unique names we've seen to handle duplicates
+            seen_names = set()
+            for existing_tax in existing_taxonomies.values():
+                if existing_tax.community_name:
+                    seen_names.add(existing_tax.community_name.lower())
+
             for canonical in valid_rows:
                 migrated_id = canonical.get("migrated_from_id")
                 community = all_communities.get(migrated_id)
@@ -320,6 +423,29 @@ class CommunityImporter(BaseSheetImporter):
                     "community_name": canonical.get("community_name"),
                     "community_description": canonical.get("community_description"),
                 }
+
+                # Check for duplicate community names
+                original_name = tax_defaults.get("community_name")
+                if original_name:
+                    name_lower = original_name.lower()
+                    if name_lower in seen_names:
+                        # Duplicate found - log as error and skip
+                        error_msg = f"Duplicate community_name '{original_name}'; skipping taxonomy creation"
+                        logger.error(f"{error_msg} for migrated_from_id={migrated_id}")
+                        errors += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": migrated_id,
+                                "column": "community_name",
+                                "level": "ERROR",
+                                "message": error_msg,
+                                "raw_value": original_name,
+                                "reason": "Unique constraint violation",
+                                "row": canonical,
+                            }
+                        )
+                        continue
+                    seen_names.add(name_lower)
 
                 if community.id in existing_taxonomies:
                     tax_obj = existing_taxonomies[community.id]
@@ -565,35 +691,41 @@ class CommunityImporter(BaseSheetImporter):
                     if not community:
                         continue
 
-                    # Check if publication data exists
-                    pub_title = canonical.get("pub_title")
-                    pub_author = canonical.get("pub_author")
-                    pub_date = canonical.get("pub_date")
-                    pub_place = canonical.get("pub_place")
-
-                    # If all are empty, skip
-                    if not any([pub_title, pub_author, pub_date, pub_place]):
+                    # Check if community has publications in the mapping
+                    pub_nos = community_pub_map.get(migrated_id, [])
+                    if not pub_nos:
                         continue
 
-                    # Construct description
-                    parts = [
-                        str(p)
-                        for p in [pub_title, pub_author, pub_date, pub_place]
-                        if p
-                    ]
-                    description = " ".join(parts)
+                    # Load publication details for each publication number
+                    for pub_no in pub_nos:
+                        pub_data = publications_data.get(str(pub_no))
+                        if not pub_data:
+                            logger.warning(
+                                f"Publication {pub_no} not found for community {migrated_id}"
+                            )
+                            continue
 
-                    doc = CommunityDocument(
-                        community=community,
-                        document_category=doc_category,
-                        active=True,
-                        description=description,
-                        input_name="community_doc",
-                        _file="None",
-                        name=pub_title or "Legacy Publication",
-                        uploaded_date=timezone.now(),
-                    )
-                    docs_to_create.append(doc)
+                        pub_title = (pub_data.get("PUB_TITLE") or "").strip()
+                        pub_author = (pub_data.get("PUB_AUTHOR") or "").strip()
+                        pub_date = (pub_data.get("PUB_DATE") or "").strip()
+                        pub_place = (pub_data.get("PUB_PLACE") or "").strip()
+
+                        # Construct description
+                        parts = [
+                            p for p in [pub_title, pub_author, pub_date, pub_place] if p
+                        ]
+                        description = " ".join(parts) if parts else pub_no
+
+                        doc = CommunityDocument(
+                            community=community,
+                            document_category=doc_category,
+                            active=True,
+                            description=description,
+                            input_name="community_doc",
+                            name="",
+                            uploaded_date=timezone.now(),
+                        )
+                        docs_to_create.append(doc)
 
                 if docs_to_create:
                     logger.info(
@@ -631,11 +763,11 @@ class CommunityImporter(BaseSheetImporter):
             # 4f. Create ConservationThreat
             logger.info("Creating ConservationThreat records...")
 
-            # Fetch ThreatCategory and CurrentImpact
-            # We'll cache ThreatCategory by name for lookup
-            threat_categories = {
-                tc.name.lower(): tc for tc in ThreatCategory.objects.all()
-            }
+            # Load legacy threat code mappings from LegacyValueMap
+            threat_code_map = load_legacy_to_pk_map(
+                legacy_system="TEC", model_name="ThreatCategory"
+            )
+            logger.info(f"Loaded {len(threat_code_map)} threat code mappings")
 
             # Fetch "Unknown" CurrentImpact
             try:
@@ -644,6 +776,12 @@ class CommunityImporter(BaseSheetImporter):
                 logger.warning("CurrentImpact 'Unknown' not found. Creating it.")
                 unknown_impact = CurrentImpact.objects.create(name="Unknown")
 
+            # Load threat code to ThreatCategory ID mapping from LegacyValueMap
+            threat_code_map = load_legacy_to_pk_map(
+                legacy_system="TEC", model_name="ThreatCategory"
+            )
+            logger.info(f"Loaded {len(threat_code_map)} threat code mappings")
+
             threats_to_create = []
             for canonical in valid_rows:
                 migrated_id = canonical.get("migrated_from_id")
@@ -651,33 +789,81 @@ class CommunityImporter(BaseSheetImporter):
                 if not community:
                     continue
 
-                threat_code = canonical.get("threat_category")
-                if not threat_code:
+                # Check if community has threats in the mapping
+                com_threats = community_threats_map.get(migrated_id, [])
+                if not com_threats:
                     continue
 
-                # Try to find threat category
-                # The user says "List value Match (S&C) and Program transformation of matched values (OIM)"
-                # Assuming threat_code might match name or we need a mapping.
-                # For now, try exact match (case-insensitive)
-                threat_cat = threat_categories.get(str(threat_code).lower())
-                if not threat_cat:
-                    # Log warning and skip or create?
-                    # User says "This is a closed list... values are to equal or be matched"
-                    # If not found, we can't link it.
-                    logger.warning(
-                        f"ThreatCategory '{threat_code}' not found for community {migrated_id}"
+                # Create a threat for each threat record
+                for threat_row in com_threats:
+                    threat_code = (threat_row.get("CTHR_THREAT_CODE") or "").strip()
+                    if not threat_code:
+                        continue
+
+                    # Look up threat category ID from legacy mapping
+                    threat_cat_id = threat_code_map.get(threat_code)
+                    if not threat_cat_id:
+                        error_msg = f"ThreatCategory code '{threat_code}' not found in legacy mappings"
+                        logger.error(f"{error_msg} for community {migrated_id}")
+                        errors += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": migrated_id,
+                                "column": "threat_category",
+                                "level": "ERROR",
+                                "message": error_msg,
+                                "raw_value": threat_code,
+                                "reason": "ThreatCategory code not found in LegacyValueMap",
+                                "row_json": json.dumps(threat_row),
+                            }
+                        )
+                        continue
+
+                    # Get the ThreatCategory object
+                    try:
+                        threat_cat = ThreatCategory.objects.get(pk=threat_cat_id)
+                    except ThreatCategory.DoesNotExist:
+                        error_msg = f"ThreatCategory with ID {threat_cat_id} not found"
+                        logger.error(f"{error_msg} for community {migrated_id}")
+                        errors += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": migrated_id,
+                                "column": "threat_category",
+                                "level": "ERROR",
+                                "message": error_msg,
+                                "raw_value": threat_code,
+                                "reason": f"ThreatCategory ID {threat_cat_id} not found",
+                                "row_json": json.dumps(threat_row),
+                            }
+                        )
+                        continue
+
+                    # Parse date observed
+                    date_observed = None
+                    date_str = (threat_row.get("CTHR_DATE") or "").strip()
+                    if date_str:
+                        try:
+                            from datetime import datetime
+
+                            # Try ISO format first
+                            date_observed = datetime.fromisoformat(
+                                date_str.replace("Z", "+00:00")
+                            ).date()
+                        except Exception:
+                            logger.warning(
+                                f"Could not parse date '{date_str}' for threat in community {migrated_id}"
+                            )
+
+                    threat = ConservationThreat(
+                        community=community,
+                        threat_category=threat_cat,
+                        current_impact=unknown_impact,
+                        comment=threat_row.get("CTHR_DESC"),
+                        date_observed=date_observed,
+                        visible=True,
                     )
-                    continue
-
-                threat = ConservationThreat(
-                    community=community,
-                    threat_category=threat_cat,
-                    current_impact=unknown_impact,
-                    comment=canonical.get("threat_comment"),
-                    date_observed=canonical.get("date_observed"),
-                    visible=True,
-                )
-                threats_to_create.append(threat)
+                    threats_to_create.append(threat)
 
             if threats_to_create:
                 logger.info(
@@ -720,12 +906,46 @@ class CommunityImporter(BaseSheetImporter):
 
         if errors_details:
             import csv
+            import json
+            from pathlib import Path
 
-            out_file = f"community_migration_errors_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            from django.conf import settings
+
+            # Write to private-media/handler_output directory
+            base_dir = getattr(
+                settings, "BASE_DIR", Path(__file__).resolve().parents[3]
+            )
+            output_dir = Path(base_dir) / "private-media" / "handler_output"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            out_file = (
+                output_dir
+                / f"community_migration_errors_{timezone.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            )
             with open(out_file, "w", newline="") as f:
-                writer = csv.DictWriter(
-                    f, fieldnames=["source", "row_index", "migrated_from_id", "errors"]
-                )
+                fieldnames = [
+                    "migrated_from_id",
+                    "column",
+                    "level",
+                    "message",
+                    "raw_value",
+                    "reason",
+                    "row_json",
+                    "timestamp",
+                ]
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
-                writer.writerows(errors_details)
+                for rec in errors_details:
+                    writer.writerow(
+                        {
+                            "migrated_from_id": rec.get("migrated_from_id"),
+                            "column": rec.get("column", ""),
+                            "level": rec.get("level", "ERROR"),
+                            "message": rec.get("errors", rec.get("message", "")),
+                            "raw_value": rec.get("raw_value", ""),
+                            "reason": rec.get("reason", ""),
+                            "row_json": json.dumps(rec.get("row", {}), default=str),
+                            "timestamp": timezone.now().isoformat(),
+                        }
+                    )
             logger.warning(f"Errors written to {out_file}")

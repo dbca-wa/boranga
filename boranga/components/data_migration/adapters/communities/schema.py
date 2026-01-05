@@ -18,13 +18,9 @@ COLUMN_MAP = {
     "DBCA regions": "regions",
     "DBCA districts": "districts",
     "Active CS": "active_cs",
-    "PUB_TITLE": "pub_title",
-    "PUB_AUTHOR": "pub_author",
-    "PUB_DATE": "pub_date",
-    "PUB_PLACE": "pub_place",
-    "CTHR_THREAT_CODE": "threat_category",
-    "CTHR_DESC": "threat_comment",
-    "CTHR_DATE": "date_observed",
+    # Note: Publication and threat data are in separate CSV files
+    # (COMMUNITY_PUBLICATIONS.csv, PUBLICATIONS.csv, COMMUNITY_THREATS.csv)
+    # and are loaded separately by the importer, not from COMMUNITIES.csv
 }
 
 REQUIRED_COLUMNS = [
