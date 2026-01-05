@@ -32,8 +32,8 @@ stages:
               tags: |
                 latest
                 $(tagDate)
-              containerRegistry: DockerHub
-              repository: dbcawa/boranga
+              containerRegistry: DockerGitHub
+              repository: ghcr.io/dbca-wa/boranga
               # Pass the git commit hash as a build argument to avoid copying git repo into image
               arguments: --build-arg GIT_COMMIT_VERSION=$(Build.SourceVersion)
             env:
