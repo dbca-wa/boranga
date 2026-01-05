@@ -6,6 +6,7 @@ from boranga.components.data_migration.registry import _result, registry
 
 from ..base import ExtractionResult, SourceAdapter
 from ..sources import Source
+from . import schema
 
 
 @registry.register("cs_processing_status_transform")
@@ -13,6 +14,10 @@ def t_cs_processing_status(value, ctx):
     if not value:
         return _result(None)
     val = str(value).strip().upper()
+    # Handle TEC priority codes (P1, P2, P3, P4, P5)
+    if val.startswith("P"):
+        return _result("approved")  # Priority listings are approved
+    # Handle explicit status codes
     if val == "Y":
         return _result("approved")
     if val == "N":
@@ -98,10 +103,7 @@ PIPELINES = {
         "static_value_boranga.tec@dbca.wa.gov.au",
         "emailuser_by_email",
     ],
-    "wa_priority_list": [
-        "static_value_community",
-        "wa_priority_list_by_name",
-    ],  # Need to implement wa_priority_list_by_name or similar
+    # wa_priority_list will be handled in the handler (set to COMMUNITY for TEC)
     "community_migrated_from_id": ["strip", "required"],
     "effective_from_date": [
         "strip",
@@ -113,29 +115,35 @@ PIPELINES = {
 class ConservationStatusTecAdapter(SourceAdapter):
     source_key = Source.TEC.value
     domain = "conservation_status"
+    PIPELINES = PIPELINES  # Make pipelines available to handler
 
     def extract(self, path: str, **options) -> ExtractionResult:
         raw_rows, read_warnings = self.read_table(path, encoding="utf-8-sig")
+        rows = []
 
-        # Ensure required columns for pipelines exist even if empty
-        for row in raw_rows:
-            if "customer_status" not in row:
-                row["customer_status"] = None
-            if "approval_level" not in row:
-                row["approval_level"] = None
-            if "review_due_date" not in row:
-                row["review_due_date"] = None
-            if "internal_application" not in row:
-                row["internal_application"] = None
-            if "locked" not in row:
-                row["locked"] = None
-            if "submitter" not in row:
-                row["submitter"] = None
-            if "approved_by" not in row:
-                row["approved_by"] = None
-            if "assigned_approver" not in row:
-                row["assigned_approver"] = None
-            if "wa_priority_list" not in row:
-                row["wa_priority_list"] = None
+        for raw in raw_rows:
+            # Map raw CSV headers to canonical field names
+            canonical = schema.map_raw_row(raw)
 
-        return ExtractionResult(rows=raw_rows, warnings=read_warnings)
+            # Ensure all required optional fields exist with defaults
+            for field in [
+                "customer_status",
+                "approval_level",
+                "review_due_date",
+                "internal_application",
+                "locked",
+                "submitter",
+                "approved_by",
+                "assigned_approver",
+                "wa_priority_list",
+                "species_name",
+                "wa_legislative_category",
+                "wa_legislative_list",
+                "wa_priority_category",
+            ]:
+                if field not in canonical:
+                    canonical[field] = None
+
+            rows.append(canonical)
+
+        return ExtractionResult(rows=rows, warnings=read_warnings)

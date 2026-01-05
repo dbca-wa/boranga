@@ -101,6 +101,62 @@ class ConservationStatusImporter(BaseSheetImporter):
             out[k] = v
         return out
 
+    def _clean_date_field(self, value):
+        """
+        Convert various date formats to Python date objects or None.
+        Handles:
+        - None or empty strings -> None
+        - Python date/datetime objects -> date object
+        - ISO 8601 datetime strings (e.g., '2008-08-12T00:00:00+0000') -> date object
+        - YYYY-MM-DD strings -> date object
+        """
+        from datetime import date, datetime
+
+        if value is None or value == "":
+            return None
+
+        # If already a date object, return as-is
+        if isinstance(value, date):
+            return value
+
+        # If it's a datetime object, extract the date
+        if isinstance(value, datetime):
+            return value.date()
+
+        # Try parsing as string
+        value_str = str(value).strip()
+        if not value_str:
+            return None
+
+        # Try ISO 8601 format with timezone (TEC format)
+        # e.g., '2008-08-12T00:00:00+0000' or '2008-08-12T00:00:00Z'
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S%z",  # With timezone offset like +0000
+            "%Y-%m-%dT%H:%M:%SZ",  # With Z suffix
+            "%Y-%m-%d %H:%M:%S",  # Datetime without timezone
+            "%Y-%m-%d",  # Date only
+        ):
+            try:
+                dt = datetime.strptime(value_str, fmt)
+                return dt.date() if isinstance(dt, datetime) else dt
+            except ValueError:
+                pass
+
+        # TPFL format (already parsed to date by adapter)
+        for fmt in (
+            "%d/%m/%Y %H:%M",  # With time
+            "%d/%m/%Y",  # Date only
+        ):
+            try:
+                dt = datetime.strptime(value_str, fmt)
+                return dt.date()
+            except ValueError:
+                pass
+
+        # If nothing worked, log and return None
+        logger.warning(f"Could not parse date value: {value!r}")
+        return None
+
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
         sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
@@ -119,6 +175,9 @@ class ConservationStatusImporter(BaseSheetImporter):
             logger.info(f"Extracting from {source_key} ({source_path})...")
 
             res = adapter.extract(source_path)
+            # Tag each row with its source for pipeline selection later
+            for row in res.rows:
+                row["_source"] = source_key
             stats["extracted"] += len(res.rows)
             warnings.extend(res.warnings)
             all_rows.extend(res.rows)
@@ -126,6 +185,23 @@ class ConservationStatusImporter(BaseSheetImporter):
         if ctx.dry_run:
             logger.info(f"[DRY RUN] Would import {len(all_rows)} rows.")
             return
+
+        # 1.5 Handle source-specific transformations
+        # TEC data needs special handling for certain fields
+        for row in all_rows:
+            src_key = row.get("_source")
+
+            # TEC-specific field handling
+            if src_key == Source.TEC.value:
+                # Set required boolean fields to True for TEC
+                if row.get("internal_application") is None:
+                    row["internal_application"] = True
+                if row.get("locked") is None:
+                    row["locked"] = True
+
+                # Note: migrated_from_id generation for TEC needs business analyst input
+                # Currently, TEC data does not provide a unique identifier,
+                # so rows without migrated_from_id will be skipped and logged as errors
 
         # 2. Load dependencies
         Species = apps.get_model("boranga", "Species")
@@ -151,28 +227,29 @@ class ConservationStatusImporter(BaseSheetImporter):
             for c in Community.objects.filter(migrated_from_id__isnull=False)
         }
 
-        # Load legacy name map
+        # Load legacy name map (TPFL only - used for species name lookup)
         legacy_name_map = {}
-        try:
-            map_path = (
-                Path(settings.BASE_DIR)
-                / "private-media"
-                / "legacy_data"
-                / "TPFL"
-                / "tpfl-legacy-name-to-taxon-name-id.csv"
-            )
-            if map_path.exists():
-                with open(map_path, encoding="utf-8-sig") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        if row.get("NAME") and row.get("nomos_canonical_name"):
-                            legacy_name_map[row["NAME"].strip().lower()] = row[
-                                "nomos_canonical_name"
-                            ].strip()
-            else:
-                logger.warning(f"Legacy name map not found at {map_path}")
-        except Exception as e:
-            logger.warning(f"Failed to load legacy name map: {e}")
+        if Source.TPFL.value in sources:
+            try:
+                map_path = (
+                    Path(settings.BASE_DIR)
+                    / "private-media"
+                    / "legacy_data"
+                    / "TPFL"
+                    / "tpfl-legacy-name-to-taxon-name-id.csv"
+                )
+                if map_path.exists():
+                    with open(map_path, encoding="utf-8-sig") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            if row.get("NAME") and row.get("nomos_canonical_name"):
+                                legacy_name_map[row["NAME"].strip().lower()] = row[
+                                    "nomos_canonical_name"
+                                ].strip()
+                else:
+                    logger.warning(f"Legacy name map not found at {map_path}")
+            except Exception as e:
+                logger.warning(f"Failed to load legacy name map: {e}")
 
         # Lists and Categories Caches
         wa_priority_list_map = {
@@ -214,6 +291,28 @@ class ConservationStatusImporter(BaseSheetImporter):
         valid_rows = []
         for row in all_rows:
             try:
+                # Check for required migrated_from_id
+                mig_from_id = row.get("migrated_from_id")
+                if not mig_from_id:
+                    src_key = row.get("_source")
+                    msg = f"Missing migrated_from_id for {src_key} source. Business analyst input needed for TEC data."
+                    logger.warning(msg)
+                    stats["skipped"] += 1
+                    stats["errors"] += 1
+                    errors_details.append(
+                        {
+                            "migrated_from_id": "N/A",
+                            "column": "migrated_from_id",
+                            "level": "error",
+                            "message": msg,
+                            "raw_value": "None",
+                            "reason": "Missing required field",
+                            "row_json": json.dumps(row, default=str),
+                            "timestamp": timezone.now().isoformat(),
+                        }
+                    )
+                    continue
+
                 # Resolve Species or Community
                 species_name = row.get("species_name")
                 community_mig_id = row.get("community_migrated_from_id")
@@ -358,8 +457,10 @@ class ConservationStatusImporter(BaseSheetImporter):
                     wa_priority_category=wa_pc_obj,
                     wa_legislative_list=wa_ll_obj,
                     wa_legislative_category=wa_lc_obj,
-                    review_due_date=row.get("review_due_date"),
-                    effective_from=row.get("effective_from_date"),
+                    review_due_date=self._clean_date_field(row.get("review_due_date")),
+                    effective_from=self._clean_date_field(
+                        row.get("effective_from_date")
+                    ),
                     submitter=row.get("submitter"),  # ID
                     assigned_approver=row.get("assigned_approver"),  # ID
                     approved_by=row.get("approved_by"),  # ID
