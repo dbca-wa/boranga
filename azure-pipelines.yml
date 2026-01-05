@@ -43,8 +43,8 @@ stages:
             displayName: Push image
             inputs:
               command: push
-              containerRegistry: DockerHub
-              repository: dbcawa/boranga
+              containerRegistry: DockerGitHub
+              repository: ghcr.io/dbca-wa/boranga
               tags: |
                 latest
                 $(tagDate)
@@ -57,5 +57,5 @@ stages:
               tags: |
                 boranga_dev_latest
                 boranga_dev_$(tagDate)
-              containerRegistry: DockerHub
-              repository: dbcawa/docker_app_dev
+              containerRegistry: DockerGitHub
+              repository: ghcr.io/dbca-wa/docker_app_dev
