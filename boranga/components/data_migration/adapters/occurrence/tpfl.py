@@ -161,9 +161,7 @@ class OccurrenceTpflAdapter(SourceAdapter):
             canonical_row["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
             canonical_row["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
             canonical_row["locked"] = True
-            canonical_row["lodgment_date"] = raw.get(
-                "CREATED_DATE"
-            )  # Use raw column name to get value
+            canonical_row["lodgment_date"] = canonical_row.get("datetime_created")
 
             # Handle comment fields using raw row for column access
             POP_COMMENTS = raw.get("POP_COMMENTS", "")
