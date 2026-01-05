@@ -9,6 +9,8 @@ from boranga.components.data_migration.adapters.base import (
     SourceAdapter,
 )
 from boranga.components.data_migration.adapters.occurrence.schema import SCHEMA
+from boranga.components.data_migration.mappings import get_group_type_id
+from boranga.components.species_and_communities.models import GroupType
 
 
 def tec_comment_transform(val, ctx):
@@ -358,7 +360,20 @@ class OccurrenceTecAdapter(SourceAdapter):
             if dola_ref and dola_ref in dola_map:
                 row["_resolved_dola"] = dola_map[dola_ref]
 
-            joined_rows.append(row)
+            # Map raw row to canonical keys
+            canonical_row = SCHEMA.map_raw_row(row)
+            # Preserve internal keys (starting with _)
+            for k, v in row.items():
+                if k.startswith("_"):
+                    canonical_row[k] = v
+
+            # Set TEC-specific defaults on canonical row
+            canonical_row["group_type_id"] = get_group_type_id(
+                GroupType.GROUP_TYPE_COMMUNITY
+            )
+            canonical_row["locked"] = True
+
+            joined_rows.append(canonical_row)
 
         return ExtractionResult(rows=joined_rows, warnings=warnings)
 
