@@ -22,6 +22,12 @@ from ..sources import Source
 
 # TPFL-specific transform bindings
 TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
+COORD_SOURCE_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TPFL",
+    list_name="CO_ORD_SOURCE_CODE (DRF_LOV_CORDINATE_SOURCE_VWS)",
+    required=False,
+    return_type="id",
+)
 
 SPECIES_TRANSFORM = fk_lookup(model=Species, lookup_field="taxonomy_id")
 
@@ -90,6 +96,22 @@ PIPELINES = {
     "OCCContactDetail__notes": ["strip", "blank_to_none"],
     "OccurrenceTenure__purpose_id": ["strip", "blank_to_none", PURPOSE_TRANSFORM],
     "OccurrenceTenure__vesting_id": ["strip", "blank_to_none", VESTING_TRANSFORM],
+    "OCCLocation__coordinate_source_id": [
+        "strip",
+        "blank_to_none",
+        COORD_SOURCE_TRANSFORM,
+        "to_int",
+    ],
+    "OCCLocation__location_description": ["strip", "blank_to_none"],
+    "OCCLocation__boundary_description": [
+        "strip",
+        lambda v, ctx: v if v else "(Not specified)",
+    ],
+    "OCCLocation__locality": ["strip", lambda v, ctx: v if v else "(Not specified)"],
+    "OCCObservationDetail__comments": [
+        "strip",
+        lambda v, ctx: v if v else "(No observations recorded)",
+    ],
 }
 
 
@@ -145,6 +167,16 @@ class OccurrenceTpflAdapter(SourceAdapter):
                 if k.startswith("_"):
                     canonical_row[k] = v
 
+            # Set TPFL-specific location fields (map from TPFL columns to OCCLocation canonical fields)
+            canonical_row["OCCLocation__location_description"] = raw.get("LOCATION")
+            # CO_ORD_SOURCE_CODE will be mapped via COORD_SOURCE_TRANSFORM in PIPELINES
+            canonical_row["OCCLocation__coordinate_source_id"] = raw.get(
+                "CO_ORD_SOURCE_CODE"
+            )
+            # TPFL doesn't have boundary_description in standard columns - use empty string for NOT NULL constraint
+            canonical_row["OCCLocation__boundary_description"] = ""
+            canonical_row["OCCLocation__locality"] = None
+
             # Compute occurrence_name from raw row (raw column names)
             pop = str(raw.get("POP_NUMBER", "") or "").strip()
             sub = str(raw.get("SUBPOP_CODE", "") or "").strip()
@@ -175,7 +207,10 @@ class OccurrenceTpflAdapter(SourceAdapter):
             if DEACTIVATED_DATE:
                 dd = _format_date_ddmmyyyy(DEACTIVATED_DATE)
                 parts.append(f"Date Deactivated: {dd}")
-            canonical_row["POP_COMMENTS"] = "; ".join(parts) if parts else POP_COMMENTS
+            # Set using canonical field name 'comment' (POP_COMMENTS maps to 'comment' in COLUMN_MAP)
+            canonical_row["comment"] = (
+                "; ".join(parts) if parts else canonical_row.get("comment")
+            )
             LAND_MGR_ADDRESS = raw.get("LAND_MGR_ADDRESS", "")
             LAND_MGR_PHONE = raw.get("LAND_MGR_PHONE", "")
             contact = LAND_MGR_ADDRESS
@@ -183,7 +218,8 @@ class OccurrenceTpflAdapter(SourceAdapter):
                 if contact:
                     contact += "; "
                 contact += LAND_MGR_PHONE
-            canonical_row["LAND_MGR_ADDRESS"] = contact if contact else LAND_MGR_ADDRESS
+            # Set using canonical field name for contact (address + phone combined)
+            canonical_row["OCCContactDetail__contact"] = contact if contact else None
             rows.append(canonical_row)
         return ExtractionResult(rows=rows, warnings=warnings)
 
