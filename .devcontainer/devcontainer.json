@@ -1,6 +1,6 @@
 {
 	"name": "Boranga Development",
-	"image": "dbcawa/docker_app_dev:boranga_dev_latest",
+	"image": "ghcr.io/dbca-wa/docker_app_dev:boranga_dev_latest",
 	"remoteUser": "container",
 	"workspaceFolder": "/data/data/projects/boranga",
 	"mounts": ["type=bind,source=/data/,target=/data/",
