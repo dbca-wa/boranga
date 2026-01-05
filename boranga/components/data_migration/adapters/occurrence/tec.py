@@ -130,9 +130,76 @@ def val_to_none(val, ctx):
     return None
 
 
+PIPELINES = {
+    "comment": [tec_comment_transform],
+    "OCCHabitatComposition__habitat_notes": [tec_habitat_notes_transform],
+    "OCCFireHistory__comment": [tec_fire_history_comment_transform],
+    "OCCObservationDetail__comments": [
+        tec_observation_detail_comments_transform,
+    ],
+    # TODO: Implement lookups for these fields
+    "OCCLocation__coordinate_source_id": [val_to_none],
+    "OCCLocation__locality": [tec_location_locality_transform],
+    "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
+    "OccurrenceDocument__document_sub_category_id": [val_to_none],
+    # Geometry transform for OccurrenceSite
+    "OccurrenceSite__geometry": [tec_site_geometry_transform],
+    # Pass-through fields
+    "migrated_from_id": [],
+    "processing_status": [],
+    "community_id": [],
+    "species_id": [],
+    "wild_status_id": [],
+    "datetime_created": [],
+    "datetime_updated": [],
+    "modified_by": [],
+    "submitter": [],
+    "pop_number": [],
+    "subpop_code": [],
+    "OCCLocation__location_description": [],
+    "OCCLocation__boundary_description": [],
+    "OCCAssociatedSpecies__comment": [],
+    "OCCHabitatComposition__water_quality": [],
+    "_nested_species": [],
+}
+
+
 class OccurrenceTecAdapter(SourceAdapter):
     schema = SCHEMA
     source = "TEC"
+
+    PIPELINES = {
+        "comment": [tec_comment_transform],
+        "OCCHabitatComposition__habitat_notes": [tec_habitat_notes_transform],
+        "OCCFireHistory__comment": [tec_fire_history_comment_transform],
+        "OCCObservationDetail__comments": [
+            tec_observation_detail_comments_transform,
+        ],
+        # TODO: Implement lookups for these fields
+        "OCCLocation__coordinate_source_id": [val_to_none],
+        "OCCLocation__locality": [tec_location_locality_transform],
+        "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
+        "OccurrenceDocument__document_sub_category_id": [val_to_none],
+        # Geometry transform for OccurrenceSite
+        "OccurrenceSite__geometry": [tec_site_geometry_transform],
+        # Pass-through fields
+        "migrated_from_id": [],
+        "processing_status": [],
+        "community_id": [],
+        "species_id": [],
+        "wild_status_id": [],
+        "datetime_created": [],
+        "datetime_updated": [],
+        "modified_by": [],
+        "submitter": [],
+        "pop_number": [],
+        "subpop_code": [],
+        "OCCLocation__location_description": [],
+        "OCCLocation__boundary_description": [],
+        "OCCAssociatedSpecies__comment": [],
+        "OCCHabitatComposition__water_quality": [],
+        "_nested_species": [],
+    }
 
     def extract(self, path: str, **options) -> ExtractionResult:
         occ_path = path
@@ -372,40 +439,12 @@ class OccurrenceTecAdapter(SourceAdapter):
                 GroupType.GROUP_TYPE_COMMUNITY
             )
             canonical_row["locked"] = True
+            canonical_row["lodgment_date"] = canonical_row.get("datetime_created")
 
             joined_rows.append(canonical_row)
 
         return ExtractionResult(rows=joined_rows, warnings=warnings)
 
-    PIPELINES = {
-        "comment": [tec_comment_transform],
-        "OCCHabitatComposition__habitat_notes": [tec_habitat_notes_transform],
-        "OCCFireHistory__comment": [tec_fire_history_comment_transform],
-        "OCCObservationDetail__comments": [
-            tec_observation_detail_comments_transform,
-        ],
-        # TODO: Implement lookups for these fields
-        "OCCLocation__coordinate_source_id": [val_to_none],
-        "OCCLocation__locality": [tec_location_locality_transform],
-        "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
-        "OccurrenceDocument__document_sub_category_id": [val_to_none],
-        # Geometry transform for OccurrenceSite
-        "OccurrenceSite__geometry": [tec_site_geometry_transform],
-        # Pass-through fields
-        "migrated_from_id": [],
-        "processing_status": [],
-        "community_id": [],
-        "species_id": [],
-        "wild_status_id": [],
-        "datetime_created": [],
-        "datetime_updated": [],
-        "modified_by": [],
-        "submitter": [],
-        "pop_number": [],
-        "subpop_code": [],
-        "OCCLocation__location_description": [],
-        "OCCLocation__boundary_description": [],
-        "OCCAssociatedSpecies__comment": [],
-        "OCCHabitatComposition__water_quality": [],
-        "_nested_species": [],
-    }
+
+# Attach pipelines to adapter class
+OccurrenceTecAdapter.PIPELINES = PIPELINES
