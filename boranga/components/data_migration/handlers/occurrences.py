@@ -59,6 +59,17 @@ SOURCE_ADAPTERS = {
 
 @register
 class OccurrenceImporter(BaseSheetImporter):
+    """
+    Example import commands for different data sources:
+        ./manage.py migrate_data run occurrence_legacy \
+            private-media/legacy_data/TPFL/DRF_POPULATION.csv --sources TPFL \
+            --limit 10 --dry-run
+
+        ./manage.py migrate_data run occurrence_legacy \
+            private-media/legacy_data/TEC/ --sources TEC \
+            --wipe-targets
+    """
+
     slug = "occurrence_legacy"
     description = "Import occurrence data from legacy TEC / TFAUNA / TPFL sources"
 
@@ -1005,26 +1016,27 @@ class OccurrenceImporter(BaseSheetImporter):
             )
 
             sites_to_process = []
-            if merged.get("_nested_sites"):
-                for raw_site in merged.get("_nested_sites"):
-                    # Map raw column names to canonical names
-                    mapped_site = schema.SCHEMA.map_raw_row(raw_site)
-                    # Apply pipelines to transform the canonical values
-                    tcx = TransformContext(
-                        row=mapped_site, model=None, user_id=ctx.user_id
-                    )
-                    transformed_site = dict(
-                        mapped_site
-                    )  # Start with all mapped columns
-                    # Apply pipelines to OccurrenceSite fields that have them
-                    for col, pipeline in pipeline_map.items():
-                        if col.startswith("OccurrenceSite__"):
-                            raw_val = mapped_site.get(col)
-                            res = run_pipeline(pipeline, raw_val, tcx)
-                            transformed_site[col] = res.value
-                    sites_to_process.append(transformed_site)
-            elif any(k.startswith("OccurrenceSite__") for k in merged):
-                sites_to_process.append(merged)
+            if src != Source.TPFL.value:
+                if merged.get("_nested_sites"):
+                    for raw_site in merged.get("_nested_sites"):
+                        # Map raw column names to canonical names
+                        mapped_site = schema.SCHEMA.map_raw_row(raw_site)
+                        # Apply pipelines to transform the canonical values
+                        tcx = TransformContext(
+                            row=mapped_site, model=None, user_id=ctx.user_id
+                        )
+                        transformed_site = dict(
+                            mapped_site
+                        )  # Start with all mapped columns
+                        # Apply pipelines to OccurrenceSite fields that have them
+                        for col, pipeline in pipeline_map.items():
+                            if col.startswith("OccurrenceSite__"):
+                                raw_val = mapped_site.get(col)
+                                res = run_pipeline(pipeline, raw_val, tcx)
+                                transformed_site[col] = res.value
+                        sites_to_process.append(transformed_site)
+                elif any(k.startswith("OccurrenceSite__") for k in merged):
+                    sites_to_process.append(merged)
 
             for mapped_site in sites_to_process:
                 site_name = mapped_site.get("OccurrenceSite__site_name")
