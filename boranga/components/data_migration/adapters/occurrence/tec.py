@@ -131,6 +131,7 @@ def val_to_none(val, ctx):
 
 
 PIPELINES = {
+    "community_id": ["community_id_from_legacy"],
     "comment": [tec_comment_transform],
     "OCCHabitatComposition__habitat_notes": [tec_habitat_notes_transform],
     "OCCFireHistory__comment": [tec_fire_history_comment_transform],
@@ -155,15 +156,14 @@ PIPELINES = {
     "OccurrenceSite__latitude": [],
     "OccurrenceSite__longitude": [],
     "OccurrenceSite__site_name": [],
-    "OccurrenceSite__updated_date": [],
+    "OccurrenceSite__updated_date": ["blank_to_none"],
     # Pass-through fields
     "migrated_from_id": [],
     "processing_status": [],
-    "community_id": [],
     "species_id": [],
     "wild_status_id": [],
-    "datetime_created": [],
-    "datetime_updated": [],
+    "datetime_created": ["blank_to_none"],
+    "datetime_updated": ["blank_to_none"],
     "modified_by": [],
     "submitter": [],
     "pop_number": [],
@@ -180,6 +180,15 @@ class OccurrenceTecAdapter(SourceAdapter):
     PIPELINES = PIPELINES
 
     def extract(self, path: str, **options) -> ExtractionResult:
+        tec_submitter_id = None
+        try:
+            from ledger_api_client.ledger_models import EmailUserRO
+
+            tec_user = EmailUserRO.objects.get(email="boranga.tec@dbca.wa.gov.au")
+            tec_submitter_id = tec_user.id
+        except Exception:
+            pass
+
         occ_path = path
         site_path = None
         fire_path = None
@@ -426,7 +435,8 @@ class OccurrenceTecAdapter(SourceAdapter):
                 GroupType.GROUP_TYPE_COMMUNITY
             )
             canonical_row["locked"] = True
-            canonical_row["lodgment_date"] = canonical_row.get("datetime_created")
+            if not canonical_row.get("submitter") and tec_submitter_id:
+                canonical_row["submitter"] = tec_submitter_id
 
             joined_rows.append(canonical_row)
 

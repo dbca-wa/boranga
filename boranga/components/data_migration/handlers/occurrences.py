@@ -9,7 +9,6 @@ from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
-from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.data_migration.adapters.occurrence import (  # shared canonical schema
     schema,
@@ -351,16 +350,6 @@ class OccurrenceImporter(BaseSheetImporter):
 
         # Persist merged rows in bulk where possible (prepare ops then create/update)
 
-        # Pre-fetch TEC submitter if needed
-        tec_submitter_id = None
-        try:
-            tec_user = EmailUserRO.objects.get(email="boranga.tec@dbca.wa.gov.au")
-            tec_submitter_id = tec_user.id
-        except Exception:
-            logger.warning(
-                "EmailUser 'boranga.tec@dbca.wa.gov.au' not found. TEC occurrences will have no submitter."
-            )
-
         ops = []
         for migrated_from_id, entries in groups.items():
             merged, combined_issues = merge_group(entries, sources)
@@ -422,15 +411,6 @@ class OccurrenceImporter(BaseSheetImporter):
                     continue
 
             defaults = occ_row.to_model_defaults()
-
-            # If submitter is missing and this is a TEC record, use the TEC submitter
-            if not defaults.get("submitter") and Source.TEC.value in involved_sources:
-                if tec_submitter_id:
-                    defaults["submitter"] = tec_submitter_id
-
-            defaults["lodgement_date"] = merged.get("datetime_created")
-            if merged.get("locked") is not None:
-                defaults["locked"] = merged.get("locked")
 
             # Apply model defaults (handles None -> "" for non-nullable text fields, etc.)
             apply_model_defaults(Occurrence, defaults)
