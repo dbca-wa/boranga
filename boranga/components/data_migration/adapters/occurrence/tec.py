@@ -136,14 +136,26 @@ PIPELINES = {
     "OCCFireHistory__comment": [tec_fire_history_comment_transform],
     "OCCObservationDetail__comments": [
         tec_observation_detail_comments_transform,
+        lambda v, ctx: v if v else "",
     ],
     # TODO: Implement lookups for these fields
     "OCCLocation__coordinate_source_id": [val_to_none],
-    "OCCLocation__locality": [tec_location_locality_transform],
+    "OCCLocation__locality": [
+        tec_location_locality_transform,
+        # lambda v, ctx: v if v else "(Not specified)",
+    ],
+    "OCCLocation__location_description": ["strip"],
+    "OCCLocation__boundary_description": ["strip"],
     "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
     "OccurrenceDocument__document_sub_category_id": [val_to_none],
     # Geometry transform for OccurrenceSite
     "OccurrenceSite__geometry": [tec_site_geometry_transform],
+    # Pass-through fields for OccurrenceSite
+    "OccurrenceSite__comments": [],
+    "OccurrenceSite__latitude": [],
+    "OccurrenceSite__longitude": [],
+    "OccurrenceSite__site_name": [],
+    "OccurrenceSite__updated_date": [],
     # Pass-through fields
     "migrated_from_id": [],
     "processing_status": [],
@@ -156,8 +168,6 @@ PIPELINES = {
     "submitter": [],
     "pop_number": [],
     "subpop_code": [],
-    "OCCLocation__location_description": [],
-    "OCCLocation__boundary_description": [],
     "OCCAssociatedSpecies__comment": [],
     "OCCHabitatComposition__water_quality": [],
     "_nested_species": [],
@@ -167,39 +177,7 @@ PIPELINES = {
 class OccurrenceTecAdapter(SourceAdapter):
     schema = SCHEMA
     source = "TEC"
-
-    PIPELINES = {
-        "comment": [tec_comment_transform],
-        "OCCHabitatComposition__habitat_notes": [tec_habitat_notes_transform],
-        "OCCFireHistory__comment": [tec_fire_history_comment_transform],
-        "OCCObservationDetail__comments": [
-            tec_observation_detail_comments_transform,
-        ],
-        # TODO: Implement lookups for these fields
-        "OCCLocation__coordinate_source_id": [val_to_none],
-        "OCCLocation__locality": [tec_location_locality_transform],
-        "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
-        "OccurrenceDocument__document_sub_category_id": [val_to_none],
-        # Geometry transform for OccurrenceSite
-        "OccurrenceSite__geometry": [tec_site_geometry_transform],
-        # Pass-through fields
-        "migrated_from_id": [],
-        "processing_status": [],
-        "community_id": [],
-        "species_id": [],
-        "wild_status_id": [],
-        "datetime_created": [],
-        "datetime_updated": [],
-        "modified_by": [],
-        "submitter": [],
-        "pop_number": [],
-        "subpop_code": [],
-        "OCCLocation__location_description": [],
-        "OCCLocation__boundary_description": [],
-        "OCCAssociatedSpecies__comment": [],
-        "OCCHabitatComposition__water_quality": [],
-        "_nested_species": [],
-    }
+    PIPELINES = PIPELINES
 
     def extract(self, path: str, **options) -> ExtractionResult:
         occ_path = path
@@ -323,10 +301,13 @@ class OccurrenceTecAdapter(SourceAdapter):
         occ_rows, occ_warns = self.read_table(occ_path, **options)
         warnings.extend(occ_warns)
 
-        # Read sites if found
+        # Read sites if found - don't apply limit to auxiliary tables
         site_rows = []
         if site_path:
-            site_rows, site_warns = self.read_table(site_path, **options)
+            # Set limit=0 to override environment variable and read all rows
+            site_options = {k: v for k, v in options.items() if k != "limit"}
+            site_options["limit"] = 0  # 0 means no limit - read all rows
+            site_rows, site_warns = self.read_table(site_path, **site_options)
             warnings.extend(site_warns)
         else:
             warnings.append(
@@ -338,19 +319,25 @@ class OccurrenceTecAdapter(SourceAdapter):
         # Read Fire History
         fire_rows = []
         if fire_path:
-            fire_rows, fire_warns = self.read_table(fire_path, **options)
+            fire_options = {k: v for k, v in options.items() if k != "limit"}
+            fire_options["limit"] = 0  # 0 means no limit - read all rows
+            fire_rows, fire_warns = self.read_table(fire_path, **fire_options)
             warnings.extend(fire_warns)
 
         # Read Additional Data
         additional_rows = []
         if additional_path:
-            additional_rows, add_warns = self.read_table(additional_path, **options)
+            add_options = {k: v for k, v in options.items() if k != "limit"}
+            add_options["limit"] = 0  # 0 means no limit - read all rows
+            additional_rows, add_warns = self.read_table(additional_path, **add_options)
             warnings.extend(add_warns)
 
         # Read Species
         species_rows = []
         if species_path:
-            species_rows, sp_warns = self.read_table(species_path, **options)
+            sp_options = {k: v for k, v in options.items() if k != "limit"}
+            sp_options["limit"] = 0  # 0 means no limit - read all rows
+            species_rows, sp_warns = self.read_table(species_path, **sp_options)
             warnings.extend(sp_warns)
 
         # Read Lookups
@@ -444,7 +431,3 @@ class OccurrenceTecAdapter(SourceAdapter):
             joined_rows.append(canonical_row)
 
         return ExtractionResult(rows=joined_rows, warnings=warnings)
-
-
-# Attach pipelines to adapter class
-OccurrenceTecAdapter.PIPELINES = PIPELINES

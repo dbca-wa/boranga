@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import os
 from collections import defaultdict
 from typing import Any
 
-from django.core.exceptions import FieldDoesNotExist
-from django.db import models as dj_models
 from django.db import transaction
 from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
@@ -24,6 +23,7 @@ from boranga.components.data_migration.adapters.occurrence.tpfl import (
 )
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.handlers.helpers import (
+    apply_model_defaults,
     apply_value_to_instance,
     normalize_create_kwargs,
 )
@@ -117,17 +117,21 @@ class OccurrenceImporter(BaseSheetImporter):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--sources",
-            nargs="+",
-            choices=list(SOURCE_ADAPTERS.keys()),
-            help="Subset of sources (default: all implemented)",
-        )
-        parser.add_argument(
             "--path-map",
             nargs="+",
             metavar="SRC=PATH",
             help="Per-source path overrides (e.g. TPFL=/tmp/tpfl.xlsx). If omitted, --path is reused.",
         )
+        try:
+            parser.add_argument(
+                "--sources",
+                nargs="+",
+                choices=list(SOURCE_ADAPTERS.keys()),
+                help="Subset of sources (default: all implemented)",
+            )
+        except argparse.ArgumentError:
+            # Already added by management command
+            pass
 
     def _parse_path_map(self, pairs):
         out = {}
@@ -267,10 +271,13 @@ class OccurrenceImporter(BaseSheetImporter):
                 continue
 
             # copy adapter-added keys (e.g. group_type_id) from the source row into
-            # the transformed dict so they survive the merge. Skip internals.
+            # the transformed dict so they survive the merge. Also preserve _nested_*
+            # keys which hold related model data, and _source for pipeline selection.
             for k, v in row.items():
                 if k.startswith("_"):
-                    continue
+                    # Preserve _nested_* keys and _source, skip other internals
+                    if not (k.startswith("_nested_") or k == "_source"):
+                        continue
                 if k in transformed:
                     continue
                 transformed[k] = v
@@ -307,7 +314,8 @@ class OccurrenceImporter(BaseSheetImporter):
                 val = None
                 for trans, src, _ in entries_sorted:
                     v = trans.get(col)
-                    if v not in (None, ""):
+                    # Accept empty string as a valid value (e.g., for text fields with defaults)
+                    if v not in (None,):
                         val = v
                         break
                 merged[col] = val
@@ -321,7 +329,8 @@ class OccurrenceImporter(BaseSheetImporter):
                 val = None
                 for trans, src, _ in entries_sorted:
                     v = trans.get(extra)
-                    if v not in (None, ""):
+                    # Accept empty string as a valid value
+                    if v not in (None,):
                         val = v
                         break
                 merged[extra] = val
@@ -412,30 +421,8 @@ class OccurrenceImporter(BaseSheetImporter):
             if merged.get("locked") is not None:
                 defaults["locked"] = merged.get("locked")
 
-            # If transforms produced None for fields that have model defaults
-            # (for example CharFields with default=''), prefer the model's
-            # default value. This keeps transforms simple (they can return
-            # None) while avoiding validation failures for non-nullable
-            # fields that expect a non-None default like an empty string or
-            # choice fields like review_status.
-            for k, v in list(defaults.items()):
-                if v is not None:
-                    continue
-                try:
-                    field = Occurrence._meta.get_field(k)
-                except FieldDoesNotExist:
-                    continue
-                # Prefer explicit field default (handles callables)
-                field_default = field.get_default()
-                if field_default is not None:
-                    defaults[k] = field_default
-                    continue
-                # Fallback: for non-nullable text fields, prefer empty string
-                if not getattr(field, "null", False) and isinstance(
-                    field, (dj_models.CharField, dj_models.TextField)
-                ):
-                    defaults[k] = ""
-                    continue
+            # Apply model defaults (handles None -> "" for non-nullable text fields, etc.)
+            apply_model_defaults(Occurrence, defaults)
 
             # If dry-run, log planned defaults and skip adding to ops so no DB work
             if ctx.dry_run:
@@ -850,6 +837,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         "OCCLocation__location_description"
                     ),
                 }
+                apply_model_defaults(OCCLocation, defaults)
                 if occ.pk in existing_locs:
                     obj = existing_locs[occ.pk]
                     for k, v in defaults.items():
@@ -861,6 +849,7 @@ class OccurrenceImporter(BaseSheetImporter):
             # OCCObservationDetail
             if any(k.startswith("OCCObservationDetail__") for k in merged):
                 defaults = {"comments": merged.get("OCCObservationDetail__comments")}
+                apply_model_defaults(OCCObservationDetail, defaults)
                 if occ.pk in existing_obs:
                     obj = existing_obs[occ.pk]
                     for k, v in defaults.items():
@@ -872,11 +861,10 @@ class OccurrenceImporter(BaseSheetImporter):
             # OCCHabitatComposition
             if any(k.startswith("OCCHabitatComposition__") for k in merged):
                 defaults = {
-                    "water_quality": merged.get("OCCHabitatComposition__water_quality")
-                    or "",
-                    "habitat_notes": merged.get("OCCHabitatComposition__habitat_notes")
-                    or "",
+                    "water_quality": merged.get("OCCHabitatComposition__water_quality"),
+                    "habitat_notes": merged.get("OCCHabitatComposition__habitat_notes"),
                 }
+                apply_model_defaults(OCCHabitatComposition, defaults)
                 if occ.pk in existing_hab:
                     obj = existing_hab[occ.pk]
                     for k, v in defaults.items():
@@ -887,7 +875,8 @@ class OccurrenceImporter(BaseSheetImporter):
 
             # OCCFireHistory
             if any(k.startswith("OCCFireHistory__") for k in merged):
-                defaults = {"comment": merged.get("OCCFireHistory__comment") or ""}
+                defaults = {"comment": merged.get("OCCFireHistory__comment")}
+                apply_model_defaults(OCCFireHistory, defaults)
                 if occ.pk in existing_fire:
                     obj = existing_fire[occ.pk]
                     for k, v in defaults.items():
@@ -1009,10 +998,31 @@ class OccurrenceImporter(BaseSheetImporter):
             if not occ:
                 continue
 
+            # Determine the source for pipeline selection
+            src = merged.get("_source")
+            pipeline_map = pipelines_by_source.get(
+                src, pipelines_by_source.get(None, {})
+            )
+
             sites_to_process = []
             if merged.get("_nested_sites"):
                 for raw_site in merged.get("_nested_sites"):
-                    sites_to_process.append(schema.SCHEMA.map_raw_row(raw_site))
+                    # Map raw column names to canonical names
+                    mapped_site = schema.SCHEMA.map_raw_row(raw_site)
+                    # Apply pipelines to transform the canonical values
+                    tcx = TransformContext(
+                        row=mapped_site, model=None, user_id=ctx.user_id
+                    )
+                    transformed_site = dict(
+                        mapped_site
+                    )  # Start with all mapped columns
+                    # Apply pipelines to OccurrenceSite fields that have them
+                    for col, pipeline in pipeline_map.items():
+                        if col.startswith("OccurrenceSite__"):
+                            raw_val = mapped_site.get(col)
+                            res = run_pipeline(pipeline, raw_val, tcx)
+                            transformed_site[col] = res.value
+                    sites_to_process.append(transformed_site)
             elif any(k.startswith("OccurrenceSite__") for k in merged):
                 sites_to_process.append(merged)
 
