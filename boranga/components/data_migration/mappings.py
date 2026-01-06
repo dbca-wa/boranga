@@ -453,3 +453,28 @@ def load_sheet_associated_species_names(
     except Exception as exc:
         logger.exception("Error reading associated-species CSV %s: %s", resolved, exc)
         return {}
+
+
+_COMMUNITY_ID_MAP = None
+
+
+def get_community_id_map() -> dict[str, int]:
+    """
+    Return a map of {migrated_from_id (str): community_pk (int)} for all
+    communities currently in the database. Cached in memory after first call.
+    """
+    global _COMMUNITY_ID_MAP
+    if _COMMUNITY_ID_MAP is None:
+        from boranga.components.species_and_communities.models import Community
+
+        # Fetch all communities that have a migrated_from_id
+        # Use iterator if the table is huge, but dict comprehension consumes it anyway.
+        # This is expected to be reasonably sized for memory.
+        _COMMUNITY_ID_MAP = {
+            str(c.migrated_from_id): c.pk
+            for c in Community.objects.exclude(migrated_from_id__isnull=True)
+            if c.migrated_from_id
+        }
+        logger.debug("Loaded %d community ID mappings", len(_COMMUNITY_ID_MAP))
+
+    return _COMMUNITY_ID_MAP
