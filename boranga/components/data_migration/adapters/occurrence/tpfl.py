@@ -105,12 +105,12 @@ PIPELINES = {
     "OCCLocation__location_description": ["strip", "blank_to_none"],
     "OCCLocation__boundary_description": [
         "strip",
-        lambda v, ctx: v if v else "(Not specified)",
+        "blank_to_none",
     ],
-    "OCCLocation__locality": ["strip", lambda v, ctx: v if v else "(Not specified)"],
+    "OCCLocation__locality": ["strip", "blank_to_none"],
     "OCCObservationDetail__comments": [
         "strip",
-        lambda v, ctx: v if v else "(No observations recorded)",
+        "blank_to_none",
     ],
 }
 
