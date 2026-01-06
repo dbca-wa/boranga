@@ -44,6 +44,7 @@ from boranga.components.occurrence.models import (
     Occurrence,
     OccurrenceDocument,
     OccurrenceSite,
+    OccurrenceUserAction,
     SpeciesRole,
 )
 from boranga.components.species_and_communities.models import Taxonomy
@@ -605,161 +606,11 @@ class OccurrenceImporter(BaseSheetImporter):
                             getattr(inst, "pk", None),
                         )
 
-        # Now create contact details for created/updated occurrences when provided
-        target_mig_ids = [o["migrated_from_id"] for o in ops]
-        target_occs = list(
-            Occurrence.objects.filter(migrated_from_id__in=target_mig_ids)
-        )
-        target_map = {o.migrated_from_id: o for o in target_occs}
+        # Process related objects in chunks to avoid massive SQL queries
+        RELATED_BATCH_SIZE = 1000
+        total_ops = len(ops)
 
-        existing_contacts = set(
-            OCCContactDetail.objects.filter(occurrence__in=target_occs).values_list(
-                "occurrence_id", flat=True
-            )
-        )
-        want_contact_create = []
-        # created_meta contains tuples for created ones; for updates use merged from ops
-        # create_meta may include extra fields (modified_by, datetime_updated) so ignore extras here
-        for mig, contact, contact_name, notes, *rest in create_meta:
-            occ = created_map.get(mig)
-            if not occ:
-                continue
-            if occ.pk in existing_contacts:
-                continue
-            if contact or contact_name or notes:
-                want_contact_create.append(
-                    OCCContactDetail(
-                        occurrence=occ,
-                        contact=contact or "",
-                        contact_name=contact_name or "",
-                        notes=notes or "",
-                        visible=True,
-                    )
-                )
-
-        # also handle updates (ops where occurrence existed)
-        for op in ops:
-            mig = op["migrated_from_id"]
-            merged = op.get("merged") or {}
-            occ = target_map.get(mig)
-            if not occ:
-                continue
-            if occ.pk in existing_contacts:
-                continue
-            if (
-                merged.get("OCCContactDetail__contact")
-                or merged.get("OCCContactDetail__contact_name")
-                or merged.get("OCCContactDetail__notes")
-            ):
-                want_contact_create.append(
-                    OCCContactDetail(
-                        occurrence=occ,
-                        contact=merged.get("OCCContactDetail__contact") or "",
-                        contact_name=merged.get("OCCContactDetail__contact_name") or "",
-                        notes=merged.get("OCCContactDetail__notes") or "",
-                        visible=True,
-                    )
-                )
-
-        if want_contact_create:
-            try:
-                OCCContactDetail.objects.bulk_create(
-                    want_contact_create, batch_size=BATCH
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCCContactDetail; falling back to individual creates"
-                )
-                for obj in want_contact_create:
-                    try:
-                        obj.save()
-                    except Exception:
-                        logger.exception(
-                            "Failed to create OCCContactDetail for occurrence %s",
-                            getattr(obj.occurrence, "pk", None),
-                        )
-
-        # Create an OccurrenceUserAction for created/updated occurrences (one per occurrence)
-        from boranga.components.occurrence.models import OccurrenceUserAction
-
-        existing_actions = set(
-            OccurrenceUserAction.objects.filter(occurrence__in=target_occs).values_list(
-                "occurrence_id", flat=True
-            )
-        )
-
-        want_action_create = []
-        # created_meta contains tuples for created ones; tuples extended with modified_by and datetime_updated
-        for tpl in create_meta:
-            # tpl = (migrated_from_id, contact, contact_name, notes, modified_by, datetime_updated)
-            mig = tpl[0]
-            modified_by = tpl[4]
-            datetime_updated = tpl[5]
-            occ = created_map.get(mig)
-            if not occ:
-                continue
-            if occ.pk in existing_actions:
-                continue
-            if modified_by and datetime_updated:
-                want_action_create.append(
-                    OccurrenceUserAction(
-                        occurrence=occ,
-                        what="Edited in TPFL",
-                        when=datetime_updated,
-                        who=modified_by,
-                    )
-                )
-
-        # also create for updates (ops where occurrence existed)
-        for op in ops:
-            mig = op["migrated_from_id"]
-            merged = op.get("merged") or {}
-            occ = target_map.get(mig)
-            if not occ:
-                continue
-            if occ.pk in existing_actions:
-                continue
-            modified_by = merged.get("modified_by")
-            datetime_updated = merged.get("datetime_updated")
-            if modified_by and datetime_updated:
-                want_action_create.append(
-                    OccurrenceUserAction(
-                        occurrence=occ,
-                        what="Edited in TPFL",
-                        when=datetime_updated,
-                        who=modified_by,
-                    )
-                )
-
-        if want_action_create:
-            try:
-                OccurrenceUserAction.objects.bulk_create(
-                    want_action_create, batch_size=BATCH
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to bulk_create OccurrenceUserAction; falling back to individual creates"
-                )
-                for obj in want_action_create:
-                    try:
-                        obj.save()
-                    except Exception:
-                        logger.exception(
-                            "Failed to create OccurrenceUserAction for occurrence %s",
-                            getattr(obj.occurrence, "pk", None),
-                        )
-
-        # Create related objects for TEC data
-        # We iterate through ops again. If the op has TEC-specific fields, we create/update the related models.
-        # Note: This is a simplified approach. Ideally we would bulk create these too.
-        # Given the complexity and number of related models, individual creation/update per
-        # occurrence might be safer/easier to implement first.
-
-        # Helper to get occurrence object
-        def get_occ(mig_id):
-            return created_map.get(mig_id) or target_map.get(mig_id)
-
-        # Load DocumentCategory "ORF Document"
+        # Load DocumentCategory "ORF Document" once
         from boranga.components.species_and_communities.models import DocumentCategory
 
         try:
@@ -768,402 +619,576 @@ class OccurrenceImporter(BaseSheetImporter):
             )
         except DocumentCategory.DoesNotExist:
             logger.warning(
-                "DocumentCategory 'ORF Document' not found. OccurrenceDocuments will be created without category."
+                "DocumentCategory 'ORF Document' not found. "
+                "OccurrenceDocuments will be created without category."
             )
             orf_document_category = None
 
-        # 1. Bulk handle OneToOne related models
-        # Prepare lists
-        loc_create, loc_update = [], []
-        obs_create, obs_update = [], []
-        hab_create, hab_update = [], []
-        fire_create, fire_update = [], []
-        assoc_create, assoc_update = [], []
-        doc_create, doc_update = [], []
+        logger.info(
+            "OccurrenceImporter: processing related objects in chunks (total %d ops)...",
+            total_ops,
+        )
 
-        # Fetch existing
-        existing_locs = {
-            loc.occurrence_id: loc
-            for loc in OCCLocation.objects.filter(occurrence__in=target_occs)
-        }
-        existing_obs = {
-            o.occurrence_id: o
-            for o in OCCObservationDetail.objects.filter(occurrence__in=target_occs)
-        }
-        existing_hab = {
-            h.occurrence_id: h
-            for h in OCCHabitatComposition.objects.filter(occurrence__in=target_occs)
-        }
-        existing_fire = {
-            f.occurrence_id: f
-            for f in OCCFireHistory.objects.filter(occurrence__in=target_occs)
-        }
-        existing_assoc = {
-            a.occurrence_id: a
-            for a in OCCAssociatedSpecies.objects.filter(occurrence__in=target_occs)
-        }
-        existing_docs = {
-            d.occurrence_id: d
-            for d in OccurrenceDocument.objects.filter(occurrence__in=target_occs)
-        }
+        for i in range(0, total_ops, RELATED_BATCH_SIZE):
+            chunk_ops = ops[i : i + RELATED_BATCH_SIZE]
 
-        for op in ops:
-            mig = op["migrated_from_id"]
-            merged = op.get("merged") or {}
-            occ = get_occ(mig)
-            if not occ:
-                continue
-
-            # OCCLocation
-            if any(k.startswith("OCCLocation__") for k in merged):
-                defaults = {
-                    "coordinate_source_id": merged.get(
-                        "OCCLocation__coordinate_source_id"
-                    ),
-                    "boundary_description": merged.get(
-                        "OCCLocation__boundary_description"
-                    ),
-                    "locality": merged.get("OCCLocation__locality"),
-                    "location_description": merged.get(
-                        "OCCLocation__location_description"
-                    ),
-                }
-                apply_model_defaults(OCCLocation, defaults)
-                if occ.pk in existing_locs:
-                    obj = existing_locs[occ.pk]
-                    for k, v in defaults.items():
-                        setattr(obj, k, v)
-                    loc_update.append(obj)
-                else:
-                    loc_create.append(OCCLocation(occurrence=occ, **defaults))
-
-            # OCCObservationDetail
-            if any(k.startswith("OCCObservationDetail__") for k in merged):
-                defaults = {"comments": merged.get("OCCObservationDetail__comments")}
-                apply_model_defaults(OCCObservationDetail, defaults)
-                if occ.pk in existing_obs:
-                    obj = existing_obs[occ.pk]
-                    for k, v in defaults.items():
-                        setattr(obj, k, v)
-                    obs_update.append(obj)
-                else:
-                    obs_create.append(OCCObservationDetail(occurrence=occ, **defaults))
-
-            # OCCHabitatComposition
-            if any(k.startswith("OCCHabitatComposition__") for k in merged):
-                defaults = {
-                    "water_quality": merged.get("OCCHabitatComposition__water_quality"),
-                    "habitat_notes": merged.get("OCCHabitatComposition__habitat_notes"),
-                }
-                apply_model_defaults(OCCHabitatComposition, defaults)
-                if occ.pk in existing_hab:
-                    obj = existing_hab[occ.pk]
-                    for k, v in defaults.items():
-                        setattr(obj, k, v)
-                    hab_update.append(obj)
-                else:
-                    hab_create.append(OCCHabitatComposition(occurrence=occ, **defaults))
-
-            # OCCFireHistory
-            if any(k.startswith("OCCFireHistory__") for k in merged):
-                defaults = {"comment": merged.get("OCCFireHistory__comment")}
-                apply_model_defaults(OCCFireHistory, defaults)
-                if occ.pk in existing_fire:
-                    obj = existing_fire[occ.pk]
-                    for k, v in defaults.items():
-                        setattr(obj, k, v)
-                    fire_update.append(obj)
-                else:
-                    fire_create.append(OCCFireHistory(occurrence=occ, **defaults))
-
-            # OCCAssociatedSpecies (Parent)
-            if any(
-                k.startswith("OCCAssociatedSpecies__") for k in merged
-            ) or merged.get("_nested_species"):
-                defaults = {
-                    "comment": merged.get("OCCAssociatedSpecies__comment") or ""
-                }
-                if occ.pk in existing_assoc:
-                    obj = existing_assoc[occ.pk]
-                    for k, v in defaults.items():
-                        setattr(obj, k, v)
-                    assoc_update.append(obj)
-                else:
-                    # Create new instance
-                    new_obj = OCCAssociatedSpecies(occurrence=occ, **defaults)
-                    assoc_create.append(new_obj)
-                    # Store in existing_assoc so we can use it for nested species later
-                    existing_assoc[occ.pk] = new_obj
-
-            # OccurrenceDocument
-            if any(k.startswith("OccurrenceDocument__") for k in merged):
-                defaults = {
-                    "document_sub_category_id": merged.get(
-                        "OccurrenceDocument__document_sub_category_id"
-                    ),
-                    "description": merged.get("OccurrenceDocument__description") or "",
-                    "document_category": orf_document_category,
-                }
-                if occ.pk in existing_docs:
-                    obj = existing_docs[occ.pk]
-                    for k, v in defaults.items():
-                        setattr(obj, k, v)
-                    doc_update.append(obj)
-                else:
-                    doc_create.append(OccurrenceDocument(occurrence=occ, **defaults))
-
-        # Execute Bulk Ops for OneToOne
-        if loc_create:
-            OCCLocation.objects.bulk_create(loc_create, batch_size=BATCH)
-        if loc_update:
-            OCCLocation.objects.bulk_update(
-                loc_update,
-                [
-                    "coordinate_source_id",
-                    "boundary_description",
-                    "locality",
-                    "location_description",
-                ],
-                batch_size=BATCH,
+            logger.info(
+                "Processing related objects: %d / %d ...", i + len(chunk_ops), total_ops
             )
 
-        if obs_create:
-            OCCObservationDetail.objects.bulk_create(obs_create, batch_size=BATCH)
-        if obs_update:
-            OCCObservationDetail.objects.bulk_update(
-                obs_update, ["comments"], batch_size=BATCH
+            chunk_mig_ids = [o["migrated_from_id"] for o in chunk_ops]
+
+            # Fetch occurrences for this chunk
+            chunk_occs = list(
+                Occurrence.objects.filter(migrated_from_id__in=chunk_mig_ids)
             )
+            chunk_occ_map = {o.migrated_from_id: o for o in chunk_occs}
+            chunk_occ_ids = [o.pk for o in chunk_occs]
 
-        if hab_create:
-            OCCHabitatComposition.objects.bulk_create(hab_create, batch_size=BATCH)
-        if hab_update:
-            OCCHabitatComposition.objects.bulk_update(
-                hab_update, ["water_quality", "habitat_notes"], batch_size=BATCH
-            )
+            # Helper
+            def get_chunk_occ(mig_id):
+                return chunk_occ_map.get(mig_id)
 
-        if fire_create:
-            OCCFireHistory.objects.bulk_create(fire_create, batch_size=BATCH)
-        if fire_update:
-            OCCFireHistory.objects.bulk_update(
-                fire_update, ["comment"], batch_size=BATCH
-            )
-
-        if assoc_create:
-            OCCAssociatedSpecies.objects.bulk_create(assoc_create, batch_size=BATCH)
-        if assoc_update:
-            OCCAssociatedSpecies.objects.bulk_update(
-                assoc_update, ["comment"], batch_size=BATCH
-            )
-
-        if doc_create:
-            OccurrenceDocument.objects.bulk_create(doc_create, batch_size=BATCH)
-        if doc_update:
-            OccurrenceDocument.objects.bulk_update(
-                doc_update,
-                [
-                    "document_sub_category_id",
-                    "description",
-                    "document_category",
-                ],
-                batch_size=BATCH,
-            )
-
-        # Refresh existing_assoc to get PKs for newly created ones
-        if assoc_create:
-            existing_assoc = {
-                a.occurrence_id: a
-                for a in OCCAssociatedSpecies.objects.filter(occurrence__in=target_occs)
-            }
-
-        # 2. OccurrenceSite (ForeignKey, multiple per occurrence)
-        site_create = []
-        site_update = []
-        existing_sites = defaultdict(dict)
-        for s in OccurrenceSite.objects.filter(occurrence__in=target_occs):
-            existing_sites[s.occurrence_id][s.site_name] = s
-
-        for op in ops:
-            mig = op["migrated_from_id"]
-            merged = op.get("merged") or {}
-            occ = get_occ(mig)
-            if not occ:
-                continue
-
-            # Determine the source for pipeline selection
-            src = merged.get("_source")
-            pipeline_map = pipelines_by_source.get(
-                src, pipelines_by_source.get(None, {})
-            )
-
-            sites_to_process = []
-            if src != Source.TPFL.value:
-                if merged.get("_nested_sites"):
-                    for raw_site in merged.get("_nested_sites"):
-                        # Map raw column names to canonical names
-                        mapped_site = schema.SCHEMA.map_raw_row(raw_site)
-                        # Apply pipelines to transform the canonical values
-                        tcx = TransformContext(
-                            row=mapped_site, model=None, user_id=ctx.user_id
-                        )
-                        transformed_site = dict(
-                            mapped_site
-                        )  # Start with all mapped columns
-                        # Apply pipelines to OccurrenceSite fields that have them
-                        for col, pipeline in pipeline_map.items():
-                            if col.startswith("OccurrenceSite__"):
-                                raw_val = mapped_site.get(col)
-                                res = run_pipeline(pipeline, raw_val, tcx)
-                                transformed_site[col] = res.value
-                        sites_to_process.append(transformed_site)
-                elif any(k.startswith("OccurrenceSite__") for k in merged):
-                    sites_to_process.append(merged)
-
-            for mapped_site in sites_to_process:
-                site_name = mapped_site.get("OccurrenceSite__site_name")
-                defaults = {
-                    "comments": mapped_site.get("OccurrenceSite__comments"),
-                    "geometry": mapped_site.get("OccurrenceSite__geometry")
-                    or tec_site_geometry_transform(mapped_site, None),
-                    "updated_date": mapped_site.get("OccurrenceSite__updated_date"),
-                }
-
-                if site_name in existing_sites[occ.pk]:
-                    s = existing_sites[occ.pk][site_name]
-                    for k, v in defaults.items():
-                        if k != "updated_date":
-                            setattr(s, k, v)
-                    # Handle updated_date manually if present
-                    if defaults["updated_date"]:
-                        s.updated_date = defaults["updated_date"]
-                    site_update.append(s)
-                else:
-                    s = OccurrenceSite(
-                        occurrence=occ,
-                        site_name=site_name,
-                        comments=defaults["comments"],
-                        geometry=defaults["geometry"],
-                    )
-                    if defaults["updated_date"]:
-                        s.updated_date = defaults["updated_date"]
-                    site_create.append(s)
-
-        if site_create:
-            OccurrenceSite.objects.bulk_create(site_create, batch_size=BATCH)
-        if site_update:
-            OccurrenceSite.objects.bulk_update(
-                site_update, ["comments", "geometry", "updated_date"], batch_size=BATCH
-            )
-
-        # 3. Nested Species (AssociatedSpeciesTaxonomy & M2M)
-        # Collect all needed taxonomies
-        needed_taxa = set()
-        needed_roles = set()
-        species_ops = []  # list of (occ_pk, taxon_id, role_name, voucher)
-
-        for op in ops:
-            mig = op["migrated_from_id"]
-            merged = op.get("merged") or {}
-            occ = get_occ(mig)
-            if not occ:
-                continue
-
-            nested_species = merged.get("_nested_species")
-            if nested_species:
-                for sp in nested_species:
-                    taxon_id = sp.get("SPEC_TAXON_ID")
-                    role_name = sp.get("_resolved_role")
-                    voucher = sp.get("SPEC_VOUCHER_NO")
-                    if taxon_id:
-                        needed_taxa.add(taxon_id)
-                        if role_name:
-                            needed_roles.add(role_name)
-                        species_ops.append((occ.pk, taxon_id, role_name, voucher))
-
-        if species_ops:
-            # Resolve Taxonomy
-            tax_map = {
-                t.taxon_name_id: t
-                for t in Taxonomy.objects.filter(taxon_name_id__in=needed_taxa)
-            }
-            # Resolve Roles
-            role_map = {
-                r.name: r for r in SpeciesRole.objects.filter(name__in=needed_roles)
-            }
-
-            # Identify missing ASTs
-            relevant_tax_ids = [t.id for t in tax_map.values()]
-            existing_asts = defaultdict(list)  # (tax_id, role_id) -> list of ASTs
-            for ast in AssociatedSpeciesTaxonomy.objects.filter(
-                taxonomy_id__in=relevant_tax_ids
-            ):
-                existing_asts[(ast.taxonomy_id, ast.species_role_id)].append(ast)
-
-            missing_keys = set()
-            for occ_pk, taxon_id, role_name, voucher in species_ops:
-                tax = tax_map.get(taxon_id)
-                if not tax:
-                    continue
-                role = role_map.get(role_name)
-                role_id = role.id if role else None
-                key = (tax.id, role_id)
-                if not existing_asts.get(key):
-                    missing_keys.add(key)
-
-            if missing_keys:
-                new_asts = [
-                    AssociatedSpeciesTaxonomy(
-                        taxonomy_id=tid, species_role_id=rid, comments=""
-                    )
-                    for tid, rid in missing_keys
-                ]
-                AssociatedSpeciesTaxonomy.objects.bulk_create(
-                    new_asts, batch_size=BATCH
+            # --- OCCContactDetail ---
+            existing_contacts = set()
+            if not getattr(ctx, "wipe_targets", False):
+                existing_contacts = set(
+                    OCCContactDetail.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    ).values_list("occurrence_id", flat=True)
                 )
 
-                # Re-fetch
+            want_contact_create = []
+
+            for op in chunk_ops:
+                mig = op["migrated_from_id"]
+                merged = op.get("merged") or {}
+                occ = get_chunk_occ(mig)
+                if not occ:
+                    continue
+
+                if (
+                    merged.get("OCCContactDetail__contact")
+                    or merged.get("OCCContactDetail__contact_name")
+                    or merged.get("OCCContactDetail__notes")
+                ):
+                    if occ.pk not in existing_contacts:
+                        want_contact_create.append(
+                            OCCContactDetail(
+                                occurrence=occ,
+                                contact=merged.get("OCCContactDetail__contact") or "",
+                                contact_name=merged.get(
+                                    "OCCContactDetail__contact_name"
+                                )
+                                or "",
+                                notes=merged.get("OCCContactDetail__notes") or "",
+                                visible=True,
+                            )
+                        )
+                        existing_contacts.add(occ.pk)
+
+            if want_contact_create:
+                try:
+                    OCCContactDetail.objects.bulk_create(
+                        want_contact_create, batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_create OCCContactDetail; falling back to individual creates"
+                    )
+                    for obj in want_contact_create:
+                        try:
+                            obj.save()
+                        except Exception:
+                            logger.exception("Failed to create OCCContactDetail")
+
+            # --- OccurrenceUserAction ---
+            existing_actions = set()
+            if not getattr(ctx, "wipe_targets", False):
+                existing_actions = set(
+                    OccurrenceUserAction.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    ).values_list("occurrence_id", flat=True)
+                )
+
+            want_action_create = []
+
+            for op in chunk_ops:
+                mig = op["migrated_from_id"]
+                merged = op.get("merged") or {}
+                occ = get_chunk_occ(mig)
+                if not occ:
+                    continue
+
+                if occ.pk in existing_actions:
+                    continue
+
+                modified_by = merged.get("modified_by")
+                datetime_updated = merged.get("datetime_updated")
+                if modified_by and datetime_updated:
+                    want_action_create.append(
+                        OccurrenceUserAction(
+                            occurrence=occ,
+                            what="Edited in TPFL",
+                            when=datetime_updated,
+                            who=modified_by,
+                        )
+                    )
+
+            if want_action_create:
+                try:
+                    OccurrenceUserAction.objects.bulk_create(
+                        want_action_create, batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_create OccurrenceUserAction; falling back to individual creates"
+                    )
+                    for obj in want_action_create:
+                        try:
+                            obj.save()
+                        except Exception:
+                            logger.exception("Failed to create OccurrenceUserAction")
+
+            # --- Related Models (OneToOne) ---
+            loc_create, loc_update = [], []
+            obs_create, obs_update = [], []
+            hab_create, hab_update = [], []
+            fire_create, fire_update = [], []
+            assoc_create, assoc_update = [], []
+            doc_create, doc_update = [], []
+
+            existing_locs = {}
+            existing_obs = {}
+            existing_hab = {}
+            existing_fire = {}
+            existing_assoc = {}
+            existing_docs = {}
+
+            if not getattr(ctx, "wipe_targets", False):
+                existing_locs = {
+                    loc.occurrence_id: loc
+                    for loc in OCCLocation.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    )
+                }
+                existing_obs = {
+                    o.occurrence_id: o
+                    for o in OCCObservationDetail.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    )
+                }
+                existing_hab = {
+                    h.occurrence_id: h
+                    for h in OCCHabitatComposition.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    )
+                }
+                existing_fire = {
+                    f.occurrence_id: f
+                    for f in OCCFireHistory.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    )
+                }
+                existing_assoc = {
+                    a.occurrence_id: a
+                    for a in OCCAssociatedSpecies.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    )
+                }
+                existing_docs = {
+                    d.occurrence_id: d
+                    for d in OccurrenceDocument.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    )
+                }
+
+            for op in chunk_ops:
+                mig = op["migrated_from_id"]
+                merged = op.get("merged") or {}
+                occ = get_chunk_occ(mig)
+                if not occ:
+                    continue
+
+                # OCCLocation
+                if any(k.startswith("OCCLocation__") for k in merged):
+                    defaults = {
+                        "coordinate_source_id": merged.get(
+                            "OCCLocation__coordinate_source_id"
+                        ),
+                        "boundary_description": merged.get(
+                            "OCCLocation__boundary_description"
+                        ),
+                        "locality": merged.get("OCCLocation__locality"),
+                        "location_description": merged.get(
+                            "OCCLocation__location_description"
+                        ),
+                    }
+                    apply_model_defaults(OCCLocation, defaults)
+                    if occ.pk in existing_locs:
+                        obj = existing_locs[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        loc_update.append(obj)
+                    else:
+                        loc_create.append(OCCLocation(occurrence=occ, **defaults))
+
+                # OCCObservationDetail
+                if any(k.startswith("OCCObservationDetail__") for k in merged):
+                    defaults = {
+                        "comments": merged.get("OCCObservationDetail__comments")
+                    }
+                    apply_model_defaults(OCCObservationDetail, defaults)
+                    if occ.pk in existing_obs:
+                        obj = existing_obs[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        obs_update.append(obj)
+                    else:
+                        obs_create.append(
+                            OCCObservationDetail(occurrence=occ, **defaults)
+                        )
+
+                # OCCHabitatComposition
+                if any(k.startswith("OCCHabitatComposition__") for k in merged):
+                    defaults = {
+                        "water_quality": merged.get(
+                            "OCCHabitatComposition__water_quality"
+                        ),
+                        "habitat_notes": merged.get(
+                            "OCCHabitatComposition__habitat_notes"
+                        ),
+                    }
+                    apply_model_defaults(OCCHabitatComposition, defaults)
+                    if occ.pk in existing_hab:
+                        obj = existing_hab[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        hab_update.append(obj)
+                    else:
+                        hab_create.append(
+                            OCCHabitatComposition(occurrence=occ, **defaults)
+                        )
+
+                # OCCFireHistory
+                if any(k.startswith("OCCFireHistory__") for k in merged):
+                    defaults = {"comment": merged.get("OCCFireHistory__comment")}
+                    apply_model_defaults(OCCFireHistory, defaults)
+                    if occ.pk in existing_fire:
+                        obj = existing_fire[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        fire_update.append(obj)
+                    else:
+                        fire_create.append(OCCFireHistory(occurrence=occ, **defaults))
+
+                # OCCAssociatedSpecies
+                if any(
+                    k.startswith("OCCAssociatedSpecies__") for k in merged
+                ) or merged.get("_nested_species"):
+                    defaults = {
+                        "comment": merged.get("OCCAssociatedSpecies__comment") or ""
+                    }
+                    if occ.pk in existing_assoc:
+                        obj = existing_assoc[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        assoc_update.append(obj)
+                    else:
+                        new_obj = OCCAssociatedSpecies(occurrence=occ, **defaults)
+                        assoc_create.append(new_obj)
+
+                # OccurrenceDocument
+                if any(k.startswith("OccurrenceDocument__") for k in merged):
+                    defaults = {
+                        "document_sub_category_id": merged.get(
+                            "OccurrenceDocument__document_sub_category_id"
+                        ),
+                        "description": merged.get("OccurrenceDocument__description")
+                        or "",
+                        "document_category": orf_document_category,
+                    }
+                    if occ.pk in existing_docs:
+                        obj = existing_docs[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        doc_update.append(obj)
+                    else:
+                        doc_create.append(
+                            OccurrenceDocument(occurrence=occ, **defaults)
+                        )
+
+            # Execution
+            if loc_create:
+                OCCLocation.objects.bulk_create(loc_create, batch_size=BATCH)
+            if loc_update:
+                OCCLocation.objects.bulk_update(
+                    loc_update,
+                    [
+                        "coordinate_source_id",
+                        "boundary_description",
+                        "locality",
+                        "location_description",
+                    ],
+                    batch_size=BATCH,
+                )
+
+            if obs_create:
+                OCCObservationDetail.objects.bulk_create(obs_create, batch_size=BATCH)
+            if obs_update:
+                OCCObservationDetail.objects.bulk_update(
+                    obs_update, ["comments"], batch_size=BATCH
+                )
+
+            if hab_create:
+                OCCHabitatComposition.objects.bulk_create(hab_create, batch_size=BATCH)
+            if hab_update:
+                OCCHabitatComposition.objects.bulk_update(
+                    hab_update, ["water_quality", "habitat_notes"], batch_size=BATCH
+                )
+
+            if fire_create:
+                OCCFireHistory.objects.bulk_create(fire_create, batch_size=BATCH)
+            if fire_update:
+                OCCFireHistory.objects.bulk_update(
+                    fire_update, ["comment"], batch_size=BATCH
+                )
+
+            if assoc_create:
+                OCCAssociatedSpecies.objects.bulk_create(assoc_create, batch_size=BATCH)
+            if assoc_update:
+                OCCAssociatedSpecies.objects.bulk_update(
+                    assoc_update, ["comment"], batch_size=BATCH
+                )
+
+            if doc_create:
+                OccurrenceDocument.objects.bulk_create(doc_create, batch_size=BATCH)
+            if doc_update:
+                OccurrenceDocument.objects.bulk_update(
+                    doc_update,
+                    [
+                        "document_sub_category_id",
+                        "description",
+                        "document_category",
+                    ],
+                    batch_size=BATCH,
+                )
+
+            # Re-fetch OCCAssociatedSpecies for current chunk to get PKs
+            if assoc_create:
+                existing_assoc = {
+                    a.occurrence_id: a
+                    for a in OCCAssociatedSpecies.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    )
+                }
+
+            # --- OccurrenceSite ---
+            site_create = []
+            site_update = []
+            existing_sites = defaultdict(dict)
+            if not getattr(ctx, "wipe_targets", False):
+                for s in OccurrenceSite.objects.filter(occurrence_id__in=chunk_occ_ids):
+                    existing_sites[s.occurrence_id][s.site_name] = s
+
+            for op in chunk_ops:
+                mig = op["migrated_from_id"]
+                merged = op.get("merged") or {}
+                occ = get_chunk_occ(mig)
+                if not occ:
+                    continue
+
+                src = merged.get("_source")
+                pipeline_map = pipelines_by_source.get(
+                    src, pipelines_by_source.get(None, {})
+                )
+
+                sites_to_process = []
+                if src != Source.TPFL.value:
+                    if merged.get("_nested_sites"):
+                        for raw_site in merged.get("_nested_sites"):
+                            mapped_site = schema.SCHEMA.map_raw_row(raw_site)
+                            tcx = TransformContext(
+                                row=mapped_site, model=None, user_id=ctx.user_id
+                            )
+                            transformed_site = dict(mapped_site)
+                            for col, pipeline in pipeline_map.items():
+                                if col.startswith("OccurrenceSite__"):
+                                    raw_val = mapped_site.get(col)
+                                    res = run_pipeline(pipeline, raw_val, tcx)
+                                    transformed_site[col] = res.value
+                            sites_to_process.append(transformed_site)
+                    elif any(k.startswith("OccurrenceSite__") for k in merged):
+                        sites_to_process.append(merged)
+
+                for mapped_site in sites_to_process:
+                    site_name = mapped_site.get("OccurrenceSite__site_name")
+                    defaults = {
+                        "comments": mapped_site.get("OccurrenceSite__comments"),
+                        "geometry": mapped_site.get("OccurrenceSite__geometry")
+                        or tec_site_geometry_transform(mapped_site, None),
+                        "updated_date": mapped_site.get("OccurrenceSite__updated_date"),
+                    }
+
+                    if site_name in existing_sites[occ.pk]:
+                        s = existing_sites[occ.pk][site_name]
+                        for k, v in defaults.items():
+                            if k != "updated_date":
+                                setattr(s, k, v)
+                        if defaults["updated_date"]:
+                            s.updated_date = defaults["updated_date"]
+                        site_update.append(s)
+                    else:
+                        s = OccurrenceSite(
+                            occurrence=occ,
+                            site_name=site_name,
+                            comments=defaults["comments"],
+                            geometry=defaults["geometry"],
+                        )
+                        if defaults["updated_date"]:
+                            s.updated_date = defaults["updated_date"]
+                        site_create.append(s)
+
+            if site_create:
+                OccurrenceSite.objects.bulk_create(site_create, batch_size=BATCH)
+            if site_update:
+                OccurrenceSite.objects.bulk_update(
+                    site_update,
+                    ["comments", "geometry", "updated_date"],
+                    batch_size=BATCH,
+                )
+
+            # --- Nested Species ---
+            needed_taxa = set()
+            needed_roles = set()
+            species_ops = []
+
+            for op in chunk_ops:
+                mig = op["migrated_from_id"]
+                merged = op.get("merged") or {}
+                occ = get_chunk_occ(mig)
+                if not occ:
+                    continue
+
+                nested_species = merged.get("_nested_species")
+                if nested_species:
+                    for sp in nested_species:
+                        raw_taxon_id = sp.get("SPEC_TAXON_ID")
+                        role_name = sp.get("_resolved_role")
+                        voucher = sp.get("SPEC_VOUCHER_NO")
+                        if raw_taxon_id:
+                            try:
+                                taxon_id = int(raw_taxon_id)
+                                needed_taxa.add(taxon_id)
+                                if role_name:
+                                    needed_roles.add(role_name)
+                                species_ops.append(
+                                    (occ.pk, taxon_id, role_name, voucher, mig)
+                                )
+                            except (ValueError, TypeError):
+                                logger.warning(
+                                    f"Skipping invalid SPEC_TAXON_ID: {raw_taxon_id}"
+                                )
+
+            if species_ops:
+                tax_map = {
+                    t.taxon_name_id: t
+                    for t in Taxonomy.objects.filter(taxon_name_id__in=needed_taxa)
+                }
+                role_map = {
+                    r.name: r for r in SpeciesRole.objects.filter(name__in=needed_roles)
+                }
+
+                relevant_tax_ids = [t.id for t in tax_map.values()]
+
                 existing_asts = defaultdict(list)
                 for ast in AssociatedSpeciesTaxonomy.objects.filter(
                     taxonomy_id__in=relevant_tax_ids
                 ):
                     existing_asts[(ast.taxonomy_id, ast.species_role_id)].append(ast)
 
-            # Link to Occurrences
-            through_model = OCCAssociatedSpecies.related_species.through
+                missing_keys = set()
+                for occ_pk, taxon_id, role_name, voucher, mig in species_ops:
+                    tax = tax_map.get(taxon_id)
+                    if not tax:
+                        errors_details.append(
+                            {
+                                "migrated_from_id": mig,
+                                "column": "AssociatedSpecies",
+                                "level": "error",
+                                "message": f"Taxonomy not found for taxon_name_id {taxon_id}",
+                                "raw_value": str(taxon_id),
+                                "reason": "missing_taxonomy",
+                            }
+                        )
+                        continue
+                    role = role_map.get(role_name)
+                    role_id = role.id if role else None
+                    key = (tax.id, role_id)
+                    if not existing_asts.get(key):
+                        missing_keys.add(key)
 
-            # Fetch existing links to avoid duplicates
-            occ_assoc_ids = [a.id for a in existing_assoc.values()]
-            existing_links = set(
-                through_model.objects.filter(
-                    occassociatedspecies_id__in=occ_assoc_ids
-                ).values_list("occassociatedspecies_id", "associatedspeciestaxonomy_id")
-            )
+                if missing_keys:
+                    new_asts = [
+                        AssociatedSpeciesTaxonomy(
+                            taxonomy_id=tid, species_role_id=rid, comments=""
+                        )
+                        for tid, rid in missing_keys
+                    ]
+                    AssociatedSpeciesTaxonomy.objects.bulk_create(
+                        new_asts, batch_size=BATCH
+                    )
 
-            through_objs = []
-            for occ_pk, taxon_id, role_name, voucher in species_ops:
-                tax = tax_map.get(taxon_id)
-                if not tax:
-                    continue
-                role = role_map.get(role_name)
-                role_id = role.id if role else None
+                    existing_asts = defaultdict(list)
+                    for ast in AssociatedSpeciesTaxonomy.objects.filter(
+                        taxonomy_id__in=relevant_tax_ids
+                    ):
+                        existing_asts[(ast.taxonomy_id, ast.species_role_id)].append(
+                            ast
+                        )
 
-                asts = existing_asts.get((tax.id, role_id))
-                if not asts:
-                    continue
-                ast = asts[0]
-
-                occ_assoc = existing_assoc.get(occ_pk)
-                if occ_assoc:
-                    if (occ_assoc.id, ast.id) not in existing_links:
-                        through_objs.append(
-                            through_model(
-                                occassociatedspecies_id=occ_assoc.id,
-                                associatedspeciestaxonomy_id=ast.id,
+                occ_assoc_ids = [a.id for a in existing_assoc.values()]
+                if occ_assoc_ids:
+                    through_model = OCCAssociatedSpecies.related_species.through
+                    existing_links = set()
+                    if not getattr(ctx, "wipe_targets", False):
+                        existing_links = set(
+                            through_model.objects.filter(
+                                occassociatedspecies_id__in=occ_assoc_ids
+                            ).values_list(
+                                "occassociatedspecies_id",
+                                "associatedspeciestaxonomy_id",
                             )
                         )
-                        existing_links.add((occ_assoc.id, ast.id))
 
-            if through_objs:
-                through_model.objects.bulk_create(through_objs, batch_size=BATCH)
+                    through_objs = []
+                    for occ_pk, taxon_id, role_name, voucher, mig in species_ops:
+                        tax = tax_map.get(taxon_id)
+                        if not tax:
+                            continue
+                        role = role_map.get(role_name)
+                        role_id = role.id if role else None
+
+                        asts = existing_asts.get((tax.id, role_id))
+                        if not asts:
+                            continue
+                        ast = asts[0]
+
+                        occ_assoc = existing_assoc.get(occ_pk)
+                        if occ_assoc:
+                            if (occ_assoc.id, ast.id) not in existing_links:
+                                through_objs.append(
+                                    through_model(
+                                        occassociatedspecies_id=occ_assoc.id,
+                                        associatedspeciestaxonomy_id=ast.id,
+                                    )
+                                )
+                                existing_links.add((occ_assoc.id, ast.id))
+
+                    if through_objs:
+                        through_model.objects.bulk_create(
+                            through_objs, batch_size=BATCH
+                        )
 
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)

@@ -194,6 +194,7 @@ class OccurrenceTecAdapter(SourceAdapter):
         fire_path = None
         additional_path = None
         species_path = None
+        fauna_path = None
         reliability_path = None
         dola_path = None
         species_role_path = None
@@ -241,6 +242,13 @@ class OccurrenceTecAdapter(SourceAdapter):
                     species_path = p
                     break
 
+            # Find OCCURRENCE_FAUNA.csv
+            for name in ["OCCURRENCE_FAUNA.csv", "occurrence_fauna.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    fauna_path = p
+                    break
+
             # Find RELIABILITY.csv
             for name in ["RELIABILITY.csv", "reliability.csv"]:
                 p = os.path.join(path, name)
@@ -286,6 +294,12 @@ class OccurrenceTecAdapter(SourceAdapter):
                 p = os.path.join(dirname, name)
                 if os.path.exists(p):
                     species_path = p
+                    break
+
+            for name in ["OCCURRENCE_FAUNA.csv", "occurrence_fauna.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    fauna_path = p
                     break
 
             for name in ["RELIABILITY.csv", "reliability.csv"]:
@@ -349,6 +363,14 @@ class OccurrenceTecAdapter(SourceAdapter):
             species_rows, sp_warns = self.read_table(species_path, **sp_options)
             warnings.extend(sp_warns)
 
+        # Read Fauna
+        fauna_rows = []
+        if fauna_path:
+            fauna_options = {k: v for k, v in options.items() if k != "limit"}
+            fauna_options["limit"] = 0  # 0 means no limit - read all rows
+            fauna_rows, fauna_warns = self.read_table(fauna_path, **fauna_options)
+            warnings.extend(fauna_warns)
+
         # Read Lookups
         reliability_map = {}
         if reliability_path:
@@ -390,6 +412,14 @@ class OccurrenceTecAdapter(SourceAdapter):
         for row in species_rows:
             species_by_occ[row["OCC_UNIQUE_ID"]].append(row)
 
+        for row in fauna_rows:
+            # Normalize fauna fields to match SPEC_ naming expected by handler
+            if "OF_TAXON_ID" in row:
+                row["SPEC_TAXON_ID"] = row["OF_TAXON_ID"]
+            if "OF_VOUCHER_NO" in row:
+                row["SPEC_VOUCHER_NO"] = row["OF_VOUCHER_NO"]
+            species_by_occ[row["OCC_UNIQUE_ID"]].append(row)
+
         # Join
         joined_rows = []
         for row in occ_rows:
@@ -409,7 +439,7 @@ class OccurrenceTecAdapter(SourceAdapter):
             # Species
             species_list = species_by_occ.get(occ_id, [])
             for sp in species_list:
-                role_code = sp.get("SPEC_SP_ROLE_CODE")
+                role_code = sp.get("SPEC_SP_ROLE_CODE") or sp.get("OF_SP_ROLE_CODE")
                 if role_code and role_code in role_map:
                     sp["_resolved_role"] = role_map[role_code]
             row["_nested_species"] = species_list
