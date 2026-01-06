@@ -899,13 +899,14 @@ class OccurrenceImporter(BaseSheetImporter):
                         assoc_create.append(new_obj)
 
                 # OccurrenceDocument
-                if any(k.startswith("OccurrenceDocument__") for k in merged):
+                # Check if we have actual data before creating/updating a document on the main row
+                doc_sub = merged.get("OccurrenceDocument__document_sub_category_id")
+                doc_desc = merged.get("OccurrenceDocument__description")
+
+                if doc_sub is not None or doc_desc:
                     defaults = {
-                        "document_sub_category_id": merged.get(
-                            "OccurrenceDocument__document_sub_category_id"
-                        ),
-                        "description": merged.get("OccurrenceDocument__description")
-                        or "",
+                        "document_sub_category_id": doc_sub,
+                        "description": doc_desc or "",
                         "document_category": orf_document_category,
                     }
                     if occ.pk in existing_docs:
@@ -1057,6 +1058,90 @@ class OccurrenceImporter(BaseSheetImporter):
                     ["comments", "geometry", "updated_date"],
                     batch_size=BATCH,
                 )
+
+            # --- Nested Documents (OccurrenceDocument) ---
+            nested_doc_create = []
+
+            # Pre-load existing documents to check for duplicates (avoid creating identical copies on re-runs)
+            existing_docs_check = defaultdict(list)
+            if not getattr(ctx, "wipe_targets", False):
+                for d in OccurrenceDocument.objects.filter(
+                    occurrence_id__in=chunk_occ_ids
+                ):
+                    existing_docs_check[d.occurrence_id].append(d)
+
+            for op in chunk_ops:
+                mig = op["migrated_from_id"]
+                merged = op.get("merged") or {}
+                occ = get_chunk_occ(mig)
+                if not occ:
+                    continue
+
+                nested = merged.get("_nested_additional_data")
+                # Only process if we have nested data and it's from TEC (explicit check)
+                if nested and merged.get("_source") == Source.TEC.value:
+                    src = merged.get("_source")
+                    pipeline_map = pipelines_by_source.get(
+                        src, pipelines_by_source.get(None, {})
+                    )
+
+                    for raw_doc in nested:
+                        mapped_doc = schema.SCHEMA.map_raw_row(raw_doc)
+                        tcx = TransformContext(
+                            row=mapped_doc, model=None, user_id=ctx.user_id
+                        )
+                        transformed_doc = dict(mapped_doc)
+
+                        # Apply pipelines for relevant columns
+                        for col, pipeline in pipeline_map.items():
+                            if col.startswith("OccurrenceDocument__"):
+                                raw_val = mapped_doc.get(col)
+                                res = run_pipeline(pipeline, raw_val, tcx)
+                                transformed_doc[col] = res.value
+
+                        sub_cat_id = transformed_doc.get(
+                            "OccurrenceDocument__document_sub_category_id"
+                        )
+                        desc = (
+                            transformed_doc.get("OccurrenceDocument__description") or ""
+                        )
+
+                        # Create if we have data and it's not a duplicate
+                        if sub_cat_id is not None or desc:
+                            # Check for duplicates
+                            is_duplicate = False
+                            if existing_docs_check.get(occ.pk):
+                                for ex in existing_docs_check[occ.pk]:
+                                    # Compare fields to determine if this exact document exists
+                                    if (
+                                        ex.document_sub_category_id == sub_cat_id
+                                        and ex.description == desc
+                                        and (
+                                            orf_document_category
+                                            and ex.document_category_id
+                                            == orf_document_category.id
+                                        )
+                                    ):
+                                        is_duplicate = True
+                                        break
+
+                            if not is_duplicate:
+                                nested_doc_create.append(
+                                    OccurrenceDocument(
+                                        occurrence=occ,
+                                        document_category=orf_document_category,
+                                        document_sub_category_id=sub_cat_id,
+                                        description=desc,
+                                    )
+                                )
+
+            if nested_doc_create:
+                try:
+                    OccurrenceDocument.objects.bulk_create(
+                        nested_doc_create, batch_size=BATCH
+                    )
+                except Exception:
+                    logger.exception("Failed to bulk_create nested OccurrenceDocument")
 
             # --- Nested Species ---
             needed_taxa = set()

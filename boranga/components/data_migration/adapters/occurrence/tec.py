@@ -126,6 +126,27 @@ def tec_site_geometry_transform(val, ctx):
     return None
 
 
+_sub_category_cache = {}
+
+
+def tec_document_sub_category_transform(val, ctx):
+    if not val:
+        return None
+    val = str(val).strip()
+    if not val:
+        return None
+
+    if not _sub_category_cache:
+        from boranga.components.species_and_communities.models import (
+            DocumentSubCategory,
+        )
+
+        for obj in DocumentSubCategory.objects.all():
+            _sub_category_cache[obj.document_sub_category_name.lower()] = obj.id
+
+    return _sub_category_cache.get(val.lower())
+
+
 def val_to_none(val, ctx):
     return None
 
@@ -148,7 +169,9 @@ PIPELINES = {
     "OCCLocation__location_description": ["strip"],
     "OCCLocation__boundary_description": ["strip"],
     "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
-    "OccurrenceDocument__document_sub_category_id": [val_to_none],
+    "OccurrenceDocument__document_sub_category_id": [
+        tec_document_sub_category_transform
+    ],
     # Geometry transform for OccurrenceSite
     "OccurrenceSite__geometry": [tec_site_geometry_transform],
     # Pass-through fields for OccurrenceSite
