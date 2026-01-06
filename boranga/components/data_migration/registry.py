@@ -2900,3 +2900,30 @@ def geometry_from_coords_factory(
 
     registry._fns[name] = inner
     return name
+
+
+@registry.register("community_id_from_legacy")
+def t_community_id_from_legacy(value, ctx):
+    """
+    Transform a legacy community ID (migrated_from_id) into the internal PK
+    of the corresponding Community object.
+    """
+    if not value:
+        return _result(None)
+
+    val_str = str(value).strip()
+    if not val_str:
+        return _result(None)
+
+    mapping = dm_mappings.get_community_id_map()
+    pk = mapping.get(val_str)
+
+    if pk is None:
+        return _result(
+            None,
+            TransformIssue(
+                "warning", f"Community with migrated_from_id '{val_str}' not found"
+            ),
+        )
+
+    return _result(pk)
