@@ -107,6 +107,7 @@ class OccurrenceRow:
     migrated_from_id: str
     occurrence_name: str | None
     group_type_id: int | None
+    submitter: int | None = None
     species_id: int | None = None
     community_id: int | None = None
     wild_status_id: int | None = None
@@ -167,6 +168,7 @@ class OccurrenceRow:
         return cls(
             migrated_from_id=str(d["migrated_from_id"]),
             occurrence_name=utils.safe_strip(d.get("occurrence_name")),
+            submitter=utils.to_int_maybe(d.get("submitter")),
             group_type_id=utils.to_int_maybe(
                 d.get("group_type_id") or d.get("group_type")
             ),
@@ -299,4 +301,7 @@ class OccurrenceRow:
             "review_status": self.review_status,
             "processing_status": self.processing_status,
             "review_due_date": self.review_due_date,
+            "submitter": self.submitter,
+            "lodgement_date": self.datetime_created,
+            "locked": self.locked,
         }
