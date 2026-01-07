@@ -1,5 +1,8 @@
 ## Boranga — AI assistant quickstart
 
+> **CRITICAL FOR DATA MIGRATION TASKS:**
+> If the user asks about importing legacy data, CSVs, or "migration" (data, not schema), **STOP reading this file** and immediately read `boranga/components/data_migration/README.md`. That file contains the definitive guide for adapters, schemas, and handlers.
+
 This file contains concise, project-specific guidance to help an AI coding agent be productive immediately in the Boranga repo.
 
 - Project type: Django (Python 3.x) monolith with a Vite + Vue 3 frontend.
