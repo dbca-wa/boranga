@@ -152,6 +152,7 @@ def val_to_none(val, ctx):
 
 
 PIPELINES = {
+    "occurrence_name": ["strip", "blank_to_none", "required"],
     "community_id": ["community_id_from_legacy"],
     "comment": [tec_comment_transform],
     "OCCHabitatComposition__habitat_notes": [tec_habitat_notes_transform],

@@ -29,6 +29,7 @@ COLUMN_MAP = {
     "SUBPOP_CODE": "subpop_code",
     # TEC Mappings
     "OCC_UNIQUE_ID": "migrated_from_id",
+    "OCC_NO": "occurrence_name",
     "COM_NO": "community_id",
     "OCC_DATE_ENTERED": "datetime_created",
     "OCC_DATE_EDITED": "datetime_updated",
