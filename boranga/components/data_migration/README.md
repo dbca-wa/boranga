@@ -1,6 +1,6 @@
 # Data Migration - Overview
 
-This folder contains the architecture used to import legacy spreadsheets into the Django models in this project.
+This folder contains the architecture used to import legacy csvs into the Django models in this project.
 
 It is designed to be modular so you can add:
 
@@ -20,7 +20,7 @@ This README explains the pieces and the typical workflow in simple language.
 
 - Schema (adapters/\*/schema.py and schema_base.Schema)
 
-  - Defines how raw spreadsheet headers map to canonical column names: `column_map`.
+  - Defines how raw csv headers map to canonical column names: `column_map`.
   - Declares which canonical fields are required.
   - Describes transformation pipelines per field (names that refer to registered transforms).
   - Supports child expansion specs (for repeating groups / multi-row expansions).
@@ -32,7 +32,7 @@ This README explains the pieces and the typical workflow in simple language.
 
 - Row expansion (row_expansion.py)
 
-  - Converts wide spreadsheet rows with indexed column names into a parent row plus list(s) of child rows. For example, document columns in a sheet can be expanded into multiple OccurrenceDocument instances: columns like `doc_1_file`, `doc_1_category`, `doc_1_visible`, `doc_2_file`, `doc_2_category`, ... are turned into a list of document dicts:
+  - Converts wide csv rows with indexed column names into a parent row plus list(s) of child rows. For example, document columns in a sheet can be expanded into multiple OccurrenceDocument instances: columns like `doc_1_file`, `doc_1_category`, `doc_1_visible`, `doc_2_file`, `doc_2_category`, ... are turned into a list of document dicts:
     - [{"file": ..., "category": ..., "visible": ...}, {"file": ..., "category": ..., "visible": ...}, ...]
   - The importer then iterates that list and creates one OccurrenceDocument model instance per child dict.
   - Also supports splitting multi-valued columns (e.g. semicolon-separated tags).
@@ -41,7 +41,7 @@ This README explains the pieces and the typical workflow in simple language.
 
   - Source-specific logic to parse a file (or detect file type) and produce canonical raw rows.
   - Implement `SourceAdapter` (extract -> returns rows + warnings).
-  - Example: `adapters/occurrence/tpfl.py` maps TPFL spreadsheets into canonical fields expected by the importer.
+  - Example: `adapters/occurrence/tpfl.py` maps TPFL csvs into canonical fields expected by the importer.
 
 - Importers / Handlers (components/data_migration/handlers/)
 
@@ -60,7 +60,7 @@ This README explains the pieces and the typical workflow in simple language.
 
 ## Typical workflow
 
-1. Adapter reads spreadsheet and emits canonical raw rows.
+1. Adapter reads csv and emits canonical raw rows.
 2. Schema maps raw headers to canonical keys and reports missing required fields.
 3. `expand_children` splits repeating or multi-value columns into child lists.
 4. For each row (and child row), the importer runs the pipeline for each field using `run_pipeline`.
@@ -126,8 +126,8 @@ This script detects when tuple structures change (new fields added) but not all 
 - List importers:
   - `python manage.py migrate_data list`
 - Run a single importer:
-  - `python manage.py migrate_data run <slug> <spreadsheet-path> [--dry-run]`
-- Run many (shared spreadsheet):
+  - `python manage.py migrate_data run <slug> <csv-path> [--dry-run]`
+- Run many (shared csv):
   - `python manage.py migrate_data runmany <path> [--only slug1 slug2] [--dry-run]`
 
 ## Debugging tips
