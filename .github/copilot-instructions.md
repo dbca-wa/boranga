@@ -77,4 +77,4 @@ This project includes legacy data migration components under `boranga/components
 
 That folder contains a README.md with specific instructions on how to use the data migration framework, including how to define adapters, schemas, and run migrations.
 
-When working in that area, please refer to the README.md in that folder for detailed guidance on the migration process and best practices.
+When working in that area, YOU MUST read `boranga/components/data_migration/README.md` first. It serves as the definitive guide for data migration architecture, including how to define adapters/schemas, which source files to use for each handler, and how to verify changes.
