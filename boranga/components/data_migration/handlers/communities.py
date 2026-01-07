@@ -374,6 +374,30 @@ class CommunityImporter(BaseSheetImporter):
                 logger.info(f"Creating {len(to_create)} new communities...")
                 Community.objects.bulk_create(to_create, batch_size=1000)
 
+                # Fetch newly created communities to set community_number
+                # bulk_create bypasses model .save() so logic generating `community_number`
+                # from PK won't have run.
+                new_migrated_ids = [c.migrated_from_id for c in to_create]
+                new_communities = Community.objects.filter(
+                    migrated_from_id__in=new_migrated_ids
+                )
+
+                communities_to_update_number = []
+                for c in new_communities:
+                    if not c.community_number:
+                        c.community_number = f"C{str(c.pk)}"
+                        communities_to_update_number.append(c)
+
+                if communities_to_update_number:
+                    logger.info(
+                        f"Updating community_number for {len(communities_to_update_number)} new communities..."
+                    )
+                    Community.objects.bulk_update(
+                        communities_to_update_number,
+                        ["community_number"],
+                        batch_size=1000,
+                    )
+
             if dirty_communities:
                 logger.info(
                     f"Updating {len(dirty_communities)} existing communities..."
