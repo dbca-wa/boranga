@@ -64,6 +64,9 @@ COLUMN_MAP = {
     # OCCFireHistory
     "FIRE_DATE": "_temp_fire_date",
     "FIRE_COMMENT": "_temp_fire_comment",
+    # OccurrenceGeometry
+    "LOCKED": "OccurrenceGeometry__locked",
+    "GEOMETRY": "OccurrenceGeometry__geometry",
     # OCCAssociatedSpecies
     "OCC_SPECIES_DESC": "OCCAssociatedSpecies__comment",
     # AssociatedSpeciesTaxonomy
@@ -147,12 +150,23 @@ class OccurrenceRow:
 
     OCCFireHistory__comment: str | None = None
 
+    OCCHabitatCondition__pristine: float | None = None
+    OCCHabitatCondition__excellent: float | None = None
+    OCCHabitatCondition__very_good: float | None = None
+    OCCHabitatCondition__good: float | None = None
+    OCCHabitatCondition__degraded: float | None = None
+    OCCHabitatCondition__completely_degraded: float | None = None
+    OCCHabitatCondition__obs_date: date | None = None
+
     OCCAssociatedSpecies__comment: str | None = None
 
     AssociatedSpeciesTaxonomy__species_role_id: int | None = None
 
     OccurrenceDocument__document_sub_category_id: int | None = None
     OccurrenceDocument__description: str | None = None
+
+    OccurrenceGeometry__locked: bool = False
+    OccurrenceGeometry__geometry: Any | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceRow:
@@ -246,6 +260,8 @@ class OccurrenceRow:
             OccurrenceDocument__description=utils.safe_strip(
                 d.get("OccurrenceDocument__description")
             ),
+            OccurrenceGeometry__locked=d.get("OccurrenceGeometry__locked", False),
+            OccurrenceGeometry__geometry=d.get("OccurrenceGeometry__geometry"),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:
