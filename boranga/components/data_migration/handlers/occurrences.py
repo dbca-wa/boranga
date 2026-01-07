@@ -26,6 +26,7 @@ from boranga.components.data_migration.handlers.helpers import (
     apply_value_to_instance,
     normalize_create_kwargs,
 )
+from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -39,15 +40,18 @@ from boranga.components.occurrence.models import (
     OCCContactDetail,
     OCCFireHistory,
     OCCHabitatComposition,
+    OCCHabitatCondition,
+    OCCIdentification,
     OCCLocation,
     OCCObservationDetail,
     Occurrence,
     OccurrenceDocument,
+    OccurrenceGeometry,
     OccurrenceSite,
     OccurrenceUserAction,
     SpeciesRole,
 )
-from boranga.components.species_and_communities.models import Taxonomy
+from boranga.components.species_and_communities.models import GroupType, Taxonomy
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +107,9 @@ class OccurrenceImporter(BaseSheetImporter):
                 OCCAssociatedSpecies.objects.all().delete()
                 AssociatedSpeciesTaxonomy.objects.all().delete()
                 OccurrenceDocument.objects.all().delete()
+                OCCIdentification.objects.all().delete()
+                OCCHabitatCondition.objects.all().delete()
+                OccurrenceGeometry.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete related Occurrence data")
             try:
@@ -624,6 +631,8 @@ class OccurrenceImporter(BaseSheetImporter):
             )
             orf_document_category = None
 
+        community_group_type_id = get_group_type_id(GroupType.GROUP_TYPE_COMMUNITY)
+
         logger.info(
             "OccurrenceImporter: processing related objects in chunks (total %d ops)...",
             total_ops,
@@ -757,6 +766,7 @@ class OccurrenceImporter(BaseSheetImporter):
             fire_create, fire_update = [], []
             assoc_create, assoc_update = [], []
             doc_create, doc_update = [], []
+            geo_create, geo_update = [], []
 
             existing_locs = {}
             existing_obs = {}
@@ -764,6 +774,7 @@ class OccurrenceImporter(BaseSheetImporter):
             existing_fire = {}
             existing_assoc = {}
             existing_docs = {}
+            existing_geo = {}
 
             if not getattr(ctx, "wipe_targets", False):
                 existing_locs = {
@@ -799,6 +810,12 @@ class OccurrenceImporter(BaseSheetImporter):
                 existing_docs = {
                     d.occurrence_id: d
                     for d in OccurrenceDocument.objects.filter(
+                        occurrence_id__in=chunk_occ_ids
+                    )
+                }
+                existing_geo = {
+                    g.occurrence_id: g
+                    for g in OccurrenceGeometry.objects.filter(
                         occurrence_id__in=chunk_occ_ids
                     )
                 }
@@ -898,6 +915,27 @@ class OccurrenceImporter(BaseSheetImporter):
                         new_obj = OCCAssociatedSpecies(occurrence=occ, **defaults)
                         assoc_create.append(new_obj)
 
+                # OccurrenceGeometry
+                # Skip for Community (TEC) as requested
+                if (
+                    any(k.startswith("OccurrenceGeometry__") for k in merged)
+                    and merged.get("group_type_id") != community_group_type_id
+                ):
+                    defaults = {
+                        "geometry": merged.get("OccurrenceGeometry__geometry"),
+                        "locked": merged.get("OccurrenceGeometry__locked"),
+                    }
+                    apply_model_defaults(OccurrenceGeometry, defaults)
+                    if occ.pk in existing_geo:
+                        obj = existing_geo[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        geo_update.append(obj)
+                    else:
+                        geo_create.append(
+                            OccurrenceGeometry(occurrence=occ, **defaults)
+                        )
+
                 # OccurrenceDocument
                 # Check if we have actual data before creating/updating a document on the main row
                 doc_sub = merged.get("OccurrenceDocument__document_sub_category_id")
@@ -973,6 +1011,13 @@ class OccurrenceImporter(BaseSheetImporter):
                         "document_category",
                     ],
                     batch_size=BATCH,
+                )
+
+            if geo_create:
+                OccurrenceGeometry.objects.bulk_create(geo_create, batch_size=BATCH)
+            if geo_update:
+                OccurrenceGeometry.objects.bulk_update(
+                    geo_update, ["geometry", "locked"], batch_size=BATCH
                 )
 
             # Re-fetch OCCAssociatedSpecies for current chunk to get PKs
