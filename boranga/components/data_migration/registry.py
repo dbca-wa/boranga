@@ -12,6 +12,7 @@ from datetime import timezone as stdlib_timezone
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any, Literal
 
+import shapely.wkt
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.cache import cache
 from django.db import models
@@ -2927,3 +2928,80 @@ def t_community_id_from_legacy(value, ctx):
         )
 
     return _result(pk)
+
+
+# Module-level cache for pyproj transformers
+_TRANSFORMER_CACHE = {}
+
+
+def wkt_to_geometry_factory(source_srid: int = 4326, target_srid: int = 4326) -> str:
+    """
+    Factory that returns a registered transform name for parsing a WKT string into a GEOSGeometry.
+
+    The returned transform takes a WKT string (from value) then:
+    1. Parses it as a Shapely geometry
+    2. Uses a cached pyproj.Transformer to reproject if source_srid != target_srid
+    3. Converts to Django GEOSGeometry with the target SRID
+
+    Args:
+        source_srid: The Spatial Reference ID of the input WKT (default: 4326 for WGS84)
+        target_srid: The Spatial Reference ID of the output Geometry (default: 4326 for WGS84)
+
+    Returns:
+        A registered transform name (str).
+    """
+    key = f"wkt_to_geometry_{source_srid}_{target_srid}"
+    name = "wkt_to_geom_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Load transformer into cache if projection is needed
+    if source_srid != target_srid:
+        if (source_srid, target_srid) not in _TRANSFORMER_CACHE:
+            _TRANSFORMER_CACHE[(source_srid, target_srid)] = Transformer.from_crs(
+                f"EPSG:{source_srid}", f"EPSG:{target_srid}", always_xy=True
+            )
+
+    def inner(value, ctx: TransformContext):
+        """
+        Parses WKT string 'value' into GEOSGeometry and performs CRS transformation using pyproj.
+        """
+        if not value:
+            return _result(None)
+
+        try:
+            wkt_str = str(value).strip()
+            if not wkt_str or wkt_str.lower() == "none" or wkt_str.lower() == "null":
+                return _result(None)
+
+            if source_srid == target_srid:
+                # No transform needed, direct load
+                geom = GEOSGeometry(wkt_str, srid=target_srid)
+                return _result(geom)
+
+            # Perform transform using cached pyproj transformer
+            transformer = _TRANSFORMER_CACHE[(source_srid, target_srid)]
+
+            # 1. Load WKT into Shapely
+            shapely_geom = shapely.wkt.loads(wkt_str)
+
+            # 2. Transform using pyproj
+            transformed_shapely = shapely_transform(transformer.transform, shapely_geom)
+
+            # 3. Convert back to GEOSGeometry
+            # Use WKB for robust conversion or WKT
+            geom = GEOSGeometry(transformed_shapely.wkt, srid=target_srid)
+
+            return _result(geom)
+
+        except Exception as e:
+            return _result(
+                None,
+                TransformIssue(
+                    "error", f"WKT parse/transform error for value '{value}': {e}"
+                ),
+            )
+
+    registry._fns[name] = inner
+    return name
