@@ -137,9 +137,10 @@ export default {
                 searching: true,
                 ordering: true,
                 order: [[0, 'desc']],
+                serverSide: true,
                 ajax: {
                     url: vm.ajax_url,
-                    dataSrc: '',
+                    dataSrc: 'data',
                     data: function (d) {
                         d.related_filter_type = vm.filterRelatedType;
                     },

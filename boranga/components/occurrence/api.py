@@ -3388,6 +3388,31 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     def get_related_items(self, request, *args, **kwargs):
         instance = self.get_object()
         related_filter_type = request.GET.get("related_filter_type")
+
+        draw = request.GET.get("draw")
+        start = request.GET.get("start")
+        length = request.GET.get("length")
+        search_value = request.GET.get("search[value]")
+
+        if draw and start and length:
+            related_items, total_count = instance.get_related_items(
+                related_filter_type,
+                offset=start,
+                limit=length,
+                search_value=search_value,
+            )
+            serializer = RelatedItemsSerializer(
+                related_items, many=True, context={"request": request}
+            )
+            return Response(
+                {
+                    "draw": int(draw),
+                    "recordsTotal": total_count,
+                    "recordsFiltered": total_count,
+                    "data": serializer.data,
+                }
+            )
+
         related_items = instance.get_related_items(related_filter_type)
         serializer = RelatedItemsSerializer(
             related_items, many=True, context={"request": request}
@@ -4325,6 +4350,31 @@ class OccurrenceViewSet(
     def get_related_items(self, request, *args, **kwargs):
         instance = self.get_object()
         related_filter_type = request.GET.get("related_filter_type")
+
+        draw = request.GET.get("draw")
+        start = request.GET.get("start")
+        length = request.GET.get("length")
+        search_value = request.GET.get("search[value]")
+
+        if draw and start and length:
+            related_items, total_count = instance.get_related_items(
+                related_filter_type,
+                offset=start,
+                limit=length,
+                search_value=search_value,
+            )
+            serializer = RelatedItemsSerializer(
+                related_items, many=True, context={"request": request}
+            )
+            return Response(
+                {
+                    "draw": int(draw),
+                    "recordsTotal": total_count,
+                    "recordsFiltered": total_count,
+                    "data": serializer.data,
+                }
+            )
+
         related_items = instance.get_related_items(related_filter_type)
         serializer = RelatedItemsSerializer(
             related_items, many=True, context={"request": request}
