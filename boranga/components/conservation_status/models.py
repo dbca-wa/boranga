@@ -1022,22 +1022,14 @@ class ConservationStatus(
             # the assigned to dropdown for the approver or assessor and not both.
             return is_conservation_status_assessor(request)
 
-        if (
-            self.assigned_officer == request.user.id
-            and is_conservation_status_assessor(request)
-        ):
-            return True
+        if self.assigned_officer:
+            if self.assigned_officer == request.user.id:
+                return is_conservation_status_assessor(
+                    request
+                ) or is_conservation_status_approver(request)
+            return False
 
-        elif not self.locked:
-            return is_conservation_status_approver(request)
-        else:
-            if not self.assigned_officer:
-                return False
-
-            if not self.assigned_officer == request.user.id:
-                return False
-
-            return is_conservation_status_assessor(request)
+        return False
 
     @transaction.atomic
     def assign_officer(self, request, officer):
