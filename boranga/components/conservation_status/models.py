@@ -1120,7 +1120,7 @@ class ConservationStatus(
 
     @transaction.atomic
     def unassign(self, request):
-        if not self.locked or self.processing_status in [
+        if self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA,
             ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA,
             ConservationStatus.PROCESSING_STATUS_ON_AGENDA,
