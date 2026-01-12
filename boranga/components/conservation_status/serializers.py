@@ -1051,6 +1051,7 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
             "assessor_can_assess": obj.can_assess(request),
             "assessor_level": "assessor",
             "assessor_box_view": obj.assessor_comments_view(request),
+            "status_without_assessor": obj.status_without_assessor,
         }
 
     def get_internal_user_edit(self, obj):
@@ -1167,6 +1168,7 @@ class InternalSpeciesConservationStatusSerializer(BaseConservationStatusSerializ
             "assessor_can_assess": obj.can_assess(request),
             "assessor_level": "assessor",
             "assessor_box_view": obj.assessor_comments_view(request),
+            "status_without_assessor": obj.status_without_assessor,
         }
 
 
@@ -1392,6 +1394,7 @@ class InternalCommunityConservationStatusSerializer(BaseConservationStatusSerial
             "assessor_can_assess": obj.can_assess(request),
             "assessor_level": "assessor",
             "assessor_box_view": obj.assessor_comments_view(request),
+            "status_without_assessor": obj.status_without_assessor,
         }
 
 
@@ -1660,6 +1663,7 @@ class ConservationStatusReferralProposalSerializer(
             ),
             "assessor_level": "referral",
             "assessor_box_view": obj.assessor_comments_view(request),
+            "status_without_assessor": obj.status_without_assessor,
         }
 
 
