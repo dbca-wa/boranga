@@ -1551,22 +1551,19 @@ class ConservationStatus(
         if effective_to:
             self.effective_to = effective_to
 
-        approve_log_message = (
-            ConservationStatusUserAction.ACTION_APPROVE_CONSERVATION_STATUS.format(
-                self.conservation_status_number
-            )
-        )
-        approve_log_message = f"{approve_log_message} - {self.approver_comment}"
-
         # Log proposal action
         self.log_user_action(
-            approve_log_message,
+            ConservationStatusUserAction.ACTION_APPROVE_CONSERVATION_STATUS.format(
+                self.conservation_status_number, details.get("details")
+            ),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            approve_log_message,
+            ConservationStatusUserAction.ACTION_APPROVE_CONSERVATION_STATUS.format(
+                self.conservation_status_number, details.get("details")
+            ),
             request,
         )
 
@@ -2184,7 +2181,9 @@ class ConservationStatusUserAction(UserAction):
     )
     ACTION_UNASSIGN_APPROVER = "Unassign approver from conservation status proposal {}"
     ACTION_DECLINE = "Decline conservation status application {}"
-    ACTION_APPROVE_CONSERVATION_STATUS = "Approve conservation status proposal {}"
+    ACTION_APPROVE_CONSERVATION_STATUS = (
+        "Approve conservation status proposal {}. Approver Comment: {}"
+    )
     ACTION_CLOSE_CONSERVATION_STATUS = "Conservation status {} has been closed"
     ACTION_CLOSE_CONSERVATION_STATUS_DUE_TO_RENAME = (
         "Conservation status {} has been closed due to a rename"
