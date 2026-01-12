@@ -1687,9 +1687,15 @@ export default {
         listing_and_review_due_date_disabled: function () {
             return (
                 this.isReadOnly ||
-                !['With Assessor', 'Deferred', 'With Referral'].includes(
-                    this.conservation_status_obj.processing_status
-                ) ||
+                ![
+                    'With Assessor',
+                    'Deferred',
+                    'With Referral',
+                    'Approved',
+                    'Declined',
+                    'DeListed',
+                    'Closed',
+                ].includes(this.conservation_status_obj.processing_status) ||
                 this.conservation_status_obj.locked
             );
         },
