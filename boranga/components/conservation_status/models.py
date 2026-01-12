@@ -1052,7 +1052,7 @@ class ConservationStatus(
         ]
 
         if (
-            not self.locked or self.processing_status in approver_statuses
+            self.processing_status in approver_statuses
         ) and is_conservation_status_approver(request):
             if officer == self.assigned_approver:
                 logger.warning(
@@ -1080,6 +1080,7 @@ class ConservationStatus(
                 ),
                 request,
             )
+            return
 
         assessor_statuses = [
             ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR,
@@ -1550,19 +1551,22 @@ class ConservationStatus(
         if effective_to:
             self.effective_to = effective_to
 
-        # Log proposal action
-        self.log_user_action(
+        approve_log_message = (
             ConservationStatusUserAction.ACTION_APPROVE_CONSERVATION_STATUS.format(
                 self.conservation_status_number
-            ),
+            )
+        )
+        approve_log_message = f"{approve_log_message} - {self.approver_comment}"
+
+        # Log proposal action
+        self.log_user_action(
+            approve_log_message,
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            ConservationStatusUserAction.ACTION_APPROVE_CONSERVATION_STATUS.format(
-                self.conservation_status_number,
-            ),
+            approve_log_message,
             request,
         )
 
@@ -1608,18 +1612,37 @@ class ConservationStatus(
             previous_approved_version.save()
 
             # Create a log entry for the conservation status
-            self.log_user_action(
+            cs_closed_message = (
                 ConservationStatusUserAction.ACTION_CLOSE_CONSERVATION_STATUS.format(
                     previous_approved_version.conservation_status_number
-                ),
+                )
+            )
+            cs_closed_message = (
+                f"{cs_closed_message} (Replaced by {self.conservation_status_number})"
+            )
+            previous_approved_version.log_user_action(
+                cs_closed_message,
                 request,
             )
 
-            # Create a log entry for the user
-            request.user.log_user_action(
+            previous_cs_closed_message = (
                 ConservationStatusUserAction.ACTION_CLOSE_CONSERVATION_STATUS.format(
-                    previous_approved_version.conservation_status_number,
-                ),
+                    previous_approved_version.conservation_status_number
+                )
+            )
+            previous_cs_closed_message = f"Previous {previous_cs_closed_message}"
+            self.log_user_action(
+                previous_cs_closed_message,
+                request,
+            )
+
+            # Create log entries for the user
+            request.user.log_user_action(
+                cs_closed_message,
+                request,
+            )
+            request.user.log_user_action(
+                previous_cs_closed_message,
                 request,
             )
 
