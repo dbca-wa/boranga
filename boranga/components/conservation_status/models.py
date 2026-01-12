@@ -828,7 +828,6 @@ class ConservationStatus(
     @property
     def allowed_assessors(self):
         group_ids = None
-        logger.debug(f"processing status --> {self.processing_status}")
         if self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR,
             ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL,
