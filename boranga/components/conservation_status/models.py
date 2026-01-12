@@ -1296,6 +1296,9 @@ class ConservationStatus(
                 self.save()
                 send_proposal_approver_sendback_email_notification(request, self)
 
+        if status == ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR:
+            self.locked = False
+
         previous_status = self.processing_status
         self.processing_status = status
         self.save()
