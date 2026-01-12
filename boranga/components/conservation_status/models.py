@@ -1022,6 +1022,12 @@ class ConservationStatus(
             # the assigned to dropdown for the approver or assessor and not both.
             return is_conservation_status_assessor(request)
 
+        if (
+            self.assigned_officer == request.user.id
+            and is_conservation_status_assessor(request)
+        ):
+            return True
+
         elif not self.locked:
             return is_conservation_status_approver(request)
         else:
