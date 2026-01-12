@@ -437,7 +437,7 @@
                                                             resendReferral(r)
                                                         "
                                                         ><i
-                                                            class="fa fa-envelope text-primary"
+                                                            class="bi bi-repeat text-primary"
                                                             aria-hidden="true"
                                                         ></i>
                                                     </a>
