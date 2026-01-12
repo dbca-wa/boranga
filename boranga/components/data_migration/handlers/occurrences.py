@@ -17,6 +17,9 @@ from boranga.components.data_migration.adapters.occurrence.tec import (
     OccurrenceTecAdapter,
     tec_site_geometry_transform,
 )
+from boranga.components.data_migration.adapters.occurrence.tec_boundaries import (
+    OccurrenceTecBoundariesAdapter,
+)
 from boranga.components.data_migration.adapters.occurrence.tpfl import (
     OccurrenceTpflAdapter,
 )
@@ -26,7 +29,6 @@ from boranga.components.data_migration.handlers.helpers import (
     apply_value_to_instance,
     normalize_create_kwargs,
 )
-from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -51,13 +53,14 @@ from boranga.components.occurrence.models import (
     OccurrenceUserAction,
     SpeciesRole,
 )
-from boranga.components.species_and_communities.models import GroupType, Taxonomy
+from boranga.components.species_and_communities.models import Taxonomy
 
 logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OccurrenceTpflAdapter(),
     Source.TEC.value: OccurrenceTecAdapter(),
+    Source.TEC_BOUNDARIES.value: OccurrenceTecBoundariesAdapter(),
 }
 
 
@@ -439,6 +442,7 @@ class OccurrenceImporter(BaseSheetImporter):
                     "migrated_from_id": migrated_from_id,
                     "defaults": defaults,
                     "merged": merged,
+                    "sources": list(involved_sources),
                 }
             )
 
@@ -466,6 +470,27 @@ class OccurrenceImporter(BaseSheetImporter):
                 for k, v in defaults.items():
                     apply_value_to_instance(obj, k, v)
                 to_update.append(obj)
+                continue
+
+            # Check if we should skip creation for boundary-only sources
+            involved_sources = op.get("sources", [])
+            if (
+                len(involved_sources) == 1
+                and Source.TEC_BOUNDARIES.value in involved_sources
+            ):
+                logger.warning(
+                    "Skipping creation of Occurrence %s (found in TEC_BOUNDARIES but not in primary TEC source)",
+                    migrated_from_id,
+                )
+                errors_details.append(
+                    {
+                        "migrated_from_id": migrated_from_id,
+                        "reason": "missing_primary_record",
+                        "level": "error",
+                        "message": "Occurrence found in TEC_BOUNDARIES but not in primary TEC source",
+                        "row": merged,
+                    }
+                )
                 continue
 
             create_kwargs = dict(defaults)
@@ -631,7 +656,7 @@ class OccurrenceImporter(BaseSheetImporter):
             )
             orf_document_category = None
 
-        community_group_type_id = get_group_type_id(GroupType.GROUP_TYPE_COMMUNITY)
+        # community_group_type_id = get_group_type_id(GroupType.GROUP_TYPE_COMMUNITY)
 
         logger.info(
             "OccurrenceImporter: processing related objects in chunks (total %d ops)...",
@@ -916,11 +941,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         assoc_create.append(new_obj)
 
                 # OccurrenceGeometry
-                # Skip for Community (TEC) as requested
-                if (
-                    any(k.startswith("OccurrenceGeometry__") for k in merged)
-                    and merged.get("group_type_id") != community_group_type_id
-                ):
+                if any(k.startswith("OccurrenceGeometry__") for k in merged):
+
                     defaults = {
                         "geometry": merged.get("OccurrenceGeometry__geometry"),
                         "locked": merged.get("OccurrenceGeometry__locked"),

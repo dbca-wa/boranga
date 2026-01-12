@@ -57,6 +57,10 @@ class OccurrenceReportTecSitesAdapter(SourceAdapter):
             # Map site (S_ID) to Occurrence link so handler can copy details/relate records
             if canonical.get("site"):
                 canonical["Occurrence__migrated_from_id"] = canonical["site"]
+                # SITES.csv generally uses S_ID (mapped to 'site' in schema) as the primary key.
+                # Ensure migrated_from_id is set so it can be merged with other sources (like Boundaries).
+                if not canonical.get("migrated_from_id"):
+                    canonical["migrated_from_id"] = canonical["site"]
 
             # Sites rely on SITE_VISIT_ID mapping in schema to populate migrated_from_id
             if not canonical.get("migrated_from_id"):
