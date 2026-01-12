@@ -8579,7 +8579,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 ).filter(occurrence_count__gt=0)
 
             if not related_model_qs.exists():
-                error_message = f"No records found for foreign key field {field.related_model._meta.model_name}"
+                error_message = f"No records found for foreign key field {field.related_model._meta.verbose_name}"
                 errors.append(
                     {
                         "error_type": "no_records",
@@ -8601,7 +8601,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             related_model_qs = self.filtered_related_model_qs
 
             if not related_model_qs.exists():
-                error_message = f"No records found for many to many field {field.related_model._meta.model_name}"
+                error_message = f"No records found for many to many field {field.related_model._meta.verbose_name}"
                 errors.append(
                     {
                         "error_type": "no_records",
@@ -8697,9 +8697,14 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         "community__taxonomy__community_common_id": species_or_community_identifier
                     }
                 if not random_occurrence.filter(**filter_field).exists():
+                    species_or_community_display = (
+                        species_or_community_identifier
+                        if species_or_community_identifier
+                        else "Unknown"
+                    )
                     error_message = (
                         f"No occurrences found where species or community identifier = "
-                        f"{species_or_community_identifier}"
+                        f"{species_or_community_display}"
                     )
                     errors.append(
                         {
@@ -9314,9 +9319,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors_added += 1
                 return cell_value, errors_added
             except related_model.DoesNotExist:
+                display_value = cell_value if cell_value else "matching the criteria"
                 error_message = (
                     f"Can't find {self.django_import_field_name} record by looking up "
-                    f"{lookup_field} with value {cell_value} "
+                    f"{lookup_field} with value {display_value} "
                     f"for column {self.xlsx_column_header_name}"
                 )
                 errors.append(
