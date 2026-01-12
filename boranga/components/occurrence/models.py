@@ -7919,6 +7919,23 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 django_import_field_name="occurrence_number",
             ).exists()
         )
+
+        # Special case where only an existing occurrence or a new_occurrence_name
+        # Should be provided when both columns are present otherwise validation will fail
+        row_contains_ocr_approval_occurrence_and_new_name = (
+            columns.filter(
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(
+                    OccurrenceReportApprovalDetails
+                ),
+                django_import_field_name="occurrence",
+            ).exists()
+            and columns.filter(
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(
+                    OccurrenceReportApprovalDetails
+                ),
+                django_import_field_name="new_occurrence_name",
+            ).exists()
+        )
         species_or_community_identifier = None
         for column in columns:
             sample_value = column.get_sample_value(
@@ -7946,6 +7963,15 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 and row_contains_occ_migrated_from_id
             ):
                 sample_value = ""
+
+            if (
+                column.django_import_content_type.model
+                == OccurrenceReportApprovalDetails._meta.model_name
+                and column.django_import_field_name == "new_occurrence_name"
+                and row_contains_ocr_approval_occurrence_and_new_name
+            ):
+                sample_value = ""
+
             sample_row.append(sample_value)
 
         logger.info(f"Sample row: {sample_row}")
