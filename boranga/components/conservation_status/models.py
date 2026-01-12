@@ -828,7 +828,15 @@ class ConservationStatus(
     @property
     def allowed_assessors(self):
         group_ids = None
-        if not self.locked or self.processing_status in [
+        logger.debug(f"processing status --> {self.processing_status}")
+        if self.processing_status in [
+            ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR,
+            ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL,
+            ConservationStatus.PROCESSING_STATUS_DEFERRED,
+        ]:
+            group_ids = member_ids(GROUP_NAME_CONSERVATION_STATUS_ASSESSOR)
+
+        elif not self.locked or self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA,
             ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA,
             ConservationStatus.PROCESSING_STATUS_ON_AGENDA,
@@ -839,13 +847,7 @@ class ConservationStatus(
             ConservationStatus.PROCESSING_STATUS_DELISTED,
         ]:
             group_ids = member_ids(GROUP_NAME_CONSERVATION_STATUS_APPROVER)
-        elif self.processing_status in [
-            ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR,
-            ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL,
-            ConservationStatus.PROCESSING_STATUS_DEFERRED,
-        ]:
-            group_ids = member_ids(GROUP_NAME_CONSERVATION_STATUS_ASSESSOR)
-
+        logger.debug(f"allowed assessor group ids --> {group_ids}")
         users = (
             list(
                 map(
