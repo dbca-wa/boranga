@@ -4,7 +4,6 @@ from zipfile import ZipFile
 
 import geopandas as gpd
 from django.apps import apps
-from django.conf import settings
 from django.contrib.gis.gdal import SpatialReference
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.exceptions import ValidationError
@@ -67,7 +66,7 @@ def ocr_proposal_submit(ocr_proposal, request):
     ret1 = send_submit_email_notification(request, ocr_proposal)
     ret2 = send_submitter_submit_email_notification(request, ocr_proposal)
 
-    if (settings.WORKING_FROM_HOME and settings.DEBUG) or ret1 and ret2:
+    if ret1 and ret2:
         ocr_proposal.processing_status = (
             OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
         )

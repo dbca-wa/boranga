@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 
+from boranga.components.data_migration.adapters.occurrence.schema import SCHEMA
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
@@ -18,10 +19,22 @@ from boranga.components.species_and_communities.models import (
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
-from . import schema
+
+
+def tpfl_migrated_id_transform(val, ctx):
+    if val:
+        return f"tpfl-{val}"
+    return val
+
 
 # TPFL-specific transform bindings
 TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
+COORD_SOURCE_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TPFL",
+    list_name="CO_ORD_SOURCE_CODE (DRF_LOV_CORDINATE_SOURCE_VWS)",
+    required=False,
+    return_type="id",
+)
 
 SPECIES_TRANSFORM = fk_lookup(model=Species, lookup_field="taxonomy_id")
 
@@ -58,7 +71,7 @@ VESTING_TRANSFORM = build_legacy_map_transform(
 )
 
 PIPELINES = {
-    "migrated_from_id": ["strip", "required"],
+    "migrated_from_id": ["strip", "required", tpfl_migrated_id_transform],
     "species_id": [
         "strip",
         "blank_to_none",
@@ -90,6 +103,22 @@ PIPELINES = {
     "OCCContactDetail__notes": ["strip", "blank_to_none"],
     "OccurrenceTenure__purpose_id": ["strip", "blank_to_none", PURPOSE_TRANSFORM],
     "OccurrenceTenure__vesting_id": ["strip", "blank_to_none", VESTING_TRANSFORM],
+    "OCCLocation__coordinate_source_id": [
+        "strip",
+        "blank_to_none",
+        COORD_SOURCE_TRANSFORM,
+        "to_int",
+    ],
+    "OCCLocation__location_description": ["strip", "blank_to_none"],
+    "OCCLocation__boundary_description": [
+        "strip",
+        "blank_to_none",
+    ],
+    "OCCLocation__locality": ["strip", "blank_to_none"],
+    "OCCObservationDetail__comments": [
+        "strip",
+        "blank_to_none",
+    ],
 }
 
 
@@ -138,23 +167,45 @@ class OccurrenceTpflAdapter(SourceAdapter):
             return v
 
         for raw in raw_rows:
-            canonical = schema.map_raw_row(raw)
-            # Build occurrence_name: concat POP_NUMBER + SUBPOP_CODE (no space)
-            pop = str(canonical.get("pop_number", "") or "").strip()
-            sub = str(canonical.get("subpop_code", "") or "").strip()
+            # Map raw row to canonical keys
+            canonical_row = SCHEMA.map_raw_row(raw)
+            # Preserve internal keys (starting with _)
+            for k, v in raw.items():
+                if k.startswith("_"):
+                    canonical_row[k] = v
+
+            # Set TPFL-specific location fields (map from TPFL columns to OCCLocation canonical fields)
+            canonical_row["OCCLocation__location_description"] = raw.get("LOCATION")
+            # CO_ORD_SOURCE_CODE will be mapped via COORD_SOURCE_TRANSFORM in PIPELINES
+            canonical_row["OCCLocation__coordinate_source_id"] = raw.get(
+                "CO_ORD_SOURCE_CODE"
+            )
+            # TPFL doesn't have boundary_description in standard columns - use empty string for NOT NULL constraint
+            canonical_row["OCCLocation__boundary_description"] = ""
+            canonical_row["OCCLocation__locality"] = None
+
+            # Compute occurrence_name from raw row (raw column names)
+            pop = str(raw.get("POP_NUMBER", "") or "").strip()
+            sub = str(raw.get("SUBPOP_CODE", "") or "").strip()
             occ_name = (pop + sub).strip()
             # If only a single digit (e.g. "1"), pad with leading zero -> "01"
             if occ_name and len(occ_name) == 1 and occ_name.isdigit():
                 occ_name = occ_name.zfill(2)
-            canonical["occurrence_name"] = occ_name if occ_name else None
-            canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
-            canonical["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
-            canonical["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
-            canonical["locked"] = True
-            canonical["lodgment_date"] = canonical.get("datetime_created")
-            POP_COMMENTS = canonical.get("POP_COMMENTS", "")
-            REASON_DEACTIVATED = canonical.get("REASON_DEACTIVATED", "")
-            DEACTIVATED_DATE = canonical.get("DEACTIVATED_DATE", "")
+            canonical_row["occurrence_name"] = occ_name if occ_name else None
+
+            # Set TPFL-specific defaults on canonical row
+            canonical_row["group_type_id"] = get_group_type_id(
+                GroupType.GROUP_TYPE_FLORA
+            )
+            canonical_row["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
+            canonical_row["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
+            canonical_row["locked"] = True
+            canonical_row["lodgment_date"] = canonical_row.get("datetime_created")
+
+            # Handle comment fields using raw row for column access
+            POP_COMMENTS = raw.get("POP_COMMENTS", "")
+            REASON_DEACTIVATED = raw.get("REASON_DEACTIVATED", "")
+            DEACTIVATED_DATE = raw.get("DEACTIVATED_DATE", "")
             parts = []
             if POP_COMMENTS:
                 parts.append(str(POP_COMMENTS).strip())
@@ -163,16 +214,20 @@ class OccurrenceTpflAdapter(SourceAdapter):
             if DEACTIVATED_DATE:
                 dd = _format_date_ddmmyyyy(DEACTIVATED_DATE)
                 parts.append(f"Date Deactivated: {dd}")
-            canonical["comment"] = "; ".join(parts) if parts else None
-            LAND_MGR_ADDRESS = canonical.get("LAND_MGR_ADDRESS", "")
-            LAND_MGR_PHONE = canonical.get("LAND_MGR_PHONE", "")
+            # Set using canonical field name 'comment' (POP_COMMENTS maps to 'comment' in COLUMN_MAP)
+            canonical_row["comment"] = (
+                "; ".join(parts) if parts else canonical_row.get("comment")
+            )
+            LAND_MGR_ADDRESS = raw.get("LAND_MGR_ADDRESS", "")
+            LAND_MGR_PHONE = raw.get("LAND_MGR_PHONE", "")
             contact = LAND_MGR_ADDRESS
             if LAND_MGR_PHONE:
                 if contact:
                     contact += "; "
                 contact += LAND_MGR_PHONE
-            canonical["OCCContactDetail__contact"] = contact if contact else None
-            rows.append(canonical)
+            # Set using canonical field name for contact (address + phone combined)
+            canonical_row["OCCContactDetail__contact"] = contact if contact else None
+            rows.append(canonical_row)
         return ExtractionResult(rows=rows, warnings=warnings)
 
 

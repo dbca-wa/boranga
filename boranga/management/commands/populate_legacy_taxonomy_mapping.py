@@ -20,11 +20,13 @@ class Command(BaseCommand):
     - list_name (required unless overridden with `--list-name`)
       - legacy_canonical_name (required)
       - taxon_name_id (required)
+      - TAXONID (required) -> maps to legacy_taxon_name_id
 
     The command will:
-      - fail a row if any of the three required fields are missing
+      - fail a row if any of the four required fields are missing
       - lookup a `Taxonomy` by `taxon_name_id` and fail the row if none found
-      - skip rows where an existing mapping is already fully populated (taxonomy set and taxon_name_id matches)
+      - skip rows where an existing mapping is already fully populated
+      (taxonomy set, taxon_name_id matches, and legacy_taxon_name_id matches)
       - create new mappings or update existing (when not fully populated)
       - report counts of created/updated/skipped/failed
       - support `--dry-run` to show actions without touching the DB
@@ -84,14 +86,26 @@ class Command(BaseCommand):
                     "legacy",
                     "NAME",
                 )
+                legacy_taxon_name_id = self._get_field(
+                    r, "TAXONID", "legacy_taxon_name_id", "taxonid", "TaxonId"
+                )
+                if legacy_taxon_name_id:
+                    legacy_taxon_name_id = legacy_taxon_name_id.replace("WACENSUS:", "")
+
                 taxon_name_id_raw = self._get_field(
                     r, "taxon_name_id", "taxon_id", "taxonnameid", "nomos_taxon_id"
                 )
 
-                if not (list_name and legacy_name and taxon_name_id_raw):
+                if not (
+                    list_name
+                    and legacy_name
+                    and taxon_name_id_raw
+                    and legacy_taxon_name_id
+                ):
                     self.stderr.write(
                         f"Missing required fields in row: list_name={list_name} "
-                        f"legacy_canonical_name={legacy_name} taxon_name_id={taxon_name_id_raw}"
+                        f"legacy_canonical_name={legacy_name} taxon_name_id={taxon_name_id_raw} "
+                        f"legacy_taxon_name_id={legacy_taxon_name_id}"
                     )
                     failed += 1
                     continue
@@ -116,27 +130,32 @@ class Command(BaseCommand):
                     failed += 1
                     continue
 
-                # find existing mapping by unique key
+                # find existing mapping by unique key (legacy_taxon_name_id)
                 try:
                     mapping = LegacyTaxonomyMapping.objects.get(
-                        list_name=list_name, legacy_canonical_name=legacy_name
+                        list_name=list_name, legacy_taxon_name_id=legacy_taxon_name_id
                     )
                     # Determine if fully populated: taxonomy set and taxon_name_id matches
-                    if mapping.taxonomy_id and mapping.taxon_name_id == taxon_name_id:
+                    if (
+                        mapping.taxonomy_id
+                        and mapping.taxon_name_id == taxon_name_id
+                        and mapping.legacy_canonical_name == legacy_name
+                    ):
                         skipped += 1
                         continue
 
                     # needs update
                     if dry_run:
                         self.stdout.write(
-                            f"[DRY] would update mapping {list_name}:{legacy_name} -> taxon_name_id={taxon_name_id} "
-                            "taxonomy_id={taxonomy.id}"
+                            f"[DRY] would update mapping {list_name}:{legacy_taxon_name_id} ({legacy_name}) "
+                            f"-> taxon_name_id={taxon_name_id} taxonomy_id={taxonomy.id}"
                         )
                         updated += 1
                         continue
 
                     mapping.taxon_name_id = taxon_name_id
                     mapping.taxonomy = taxonomy
+                    mapping.legacy_canonical_name = legacy_name
                     mapping.save()
                     updated += 1
                 except LegacyTaxonomyMapping.DoesNotExist:
@@ -144,7 +163,7 @@ class Command(BaseCommand):
                     if dry_run:
                         self.stdout.write(
                             f"[DRY] would create mapping {list_name}:{legacy_name} -> taxon_name_id={taxon_name_id} "
-                            f"taxonomy_id={taxonomy.id}"
+                            f"taxonomy_id={taxonomy.id} legacy_taxon_name_id={legacy_taxon_name_id}"
                         )
                         created += 1
                         continue
@@ -154,8 +173,16 @@ class Command(BaseCommand):
                         legacy_canonical_name=legacy_name,
                         taxon_name_id=taxon_name_id,
                         taxonomy=taxonomy,
+                        legacy_taxon_name_id=legacy_taxon_name_id,
                     )
                     created += 1
+                except LegacyTaxonomyMapping.MultipleObjectsReturned:
+                    self.stderr.write(
+                        f"Multiple mappings found for list_name={list_name} "
+                        f"legacy_taxon_name_id={legacy_taxon_name_id}; skipping"
+                    )
+                    failed += 1
+                    continue
 
         self.stdout.write(
             f"created={created} updated={updated} skipped={skipped} failed={failed} (dry_run={dry_run})"

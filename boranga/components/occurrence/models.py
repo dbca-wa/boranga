@@ -3942,6 +3942,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         ("species", "Species"),
         ("community", "Community"),
         ("occurrence_report", "Occurrence Report"),
+        ("occurrences", "Occurrence"),
     ]
 
     OCCURRENCE_CHOICE_OCR = "ocr"
@@ -4233,6 +4234,15 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
     @property
     def related_item_descriptor(self):
+        if self.group_type.name in ["flora", "fauna"]:
+            if self.species:
+                if self.species.taxonomy and self.species.taxonomy.scientific_name:
+                    return self.species.taxonomy.scientific_name
+        elif self.group_type.name == "community":
+            if self.community:
+                if self.community.taxonomy and self.community.taxonomy.community_name:
+                    return self.community.taxonomy.community_name
+
         if self.species:
             if self.species.taxonomy and self.species.taxonomy.scientific_name:
                 return self.species.taxonomy.scientific_name
@@ -4707,7 +4717,9 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     def log_user_action(self, action, request):
         return OccurrenceUserAction.log_action(self, action, request.user.id)
 
-    def get_related_items(self, filter_type, **kwargs):
+    def get_related_items(
+        self, filter_type, offset=None, limit=None, search_value=None, **kwargs
+    ):
         return_list = []
         if filter_type == "all":
             related_field_names = [
@@ -4722,57 +4734,186 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 "occurrences",
                 "occurrence_report",
             ]
+        elif filter_type == "occurrences":
+            related_field_names = ["species", "community"]
         else:
             related_field_names = [
                 filter_type,
             ]
+
+        total_count = 0
+
+        def get_slice_range(count):
+            if offset is None:
+                return 0, count
+            global_start = total_count
+            global_end = total_count + count
+            req_start = int(offset)
+            req_end = int(offset) + int(limit)
+            if global_end <= req_start or global_start >= req_end:
+                return 0, 0
+            start = max(0, req_start - global_start)
+            end = min(count, req_end - global_start)
+            return start, end
+
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
             if a_field.name in related_field_names:
                 field_objects = []
+                is_queryset = False
                 if a_field.is_relation:
                     if a_field.many_to_many:
                         field_objects = a_field.related_model.objects.filter(
                             **{a_field.remote_field.name: self}
                         )
+                        is_queryset = True
                     elif a_field.many_to_one:  # foreign key
-                        field_objects = [
-                            getattr(self, a_field.name),
-                        ]
+                        val = getattr(self, a_field.name)
+                        if val:
+                            field_objects = [val]
+                        else:
+                            field_objects = []
                     elif a_field.one_to_many:  # reverse foreign key
                         field_objects = a_field.related_model.objects.filter(
                             **{a_field.remote_field.name: self}
                         )
+                        is_queryset = True
                     elif a_field.one_to_one:
                         if hasattr(self, a_field.name):
                             field_objects = [
                                 getattr(self, a_field.name),
                             ]
-                for field_object in field_objects:
-                    if field_object:
-                        related_item = field_object.as_related_item
-                        if related_item not in return_list:
+
+                count = 0
+                if is_queryset:
+                    count = field_objects.count()
+                else:
+                    count = len(field_objects)
+
+                # If we are filtering for occurrences, we don't want the parent (Species/Community) itself in the list
+                if filter_type == "occurrences" and (
+                    a_field.name == "species" or a_field.name == "community"
+                ):
+                    count = 0
+
+                start, end = get_slice_range(count)
+                if start < end:
+                    subset = field_objects[start:end]
+                    for field_object in subset:
+                        if field_object:
+                            related_item = field_object.as_related_item
+                            if search_value:
+                                if (
+                                    search_value.lower()
+                                    not in related_item.identifier.lower()
+                                    and search_value.lower()
+                                    not in related_item.descriptor.lower()
+                                ):
+                                    continue
                             return_list.append(related_item)
 
+                total_count += count
+
                 # Add parent species related items to the list (limited to one degree of separation)
-                if a_field.name == "species" and self.species:
-                    return_list.extend(self.species.get_related_items("for_occurrence"))
+                if (
+                    a_field.name == "species"
+                    and self.species
+                    and filter_type != "species"
+                ):
+                    # Determine target filter for parent
+                    target_filter = "for_occurrence"
+                    if filter_type == "occurrences":
+                        target_filter = "occurrences"
+
+                    # Calculate local offset/limit for the recursive call
+                    local_offset = None
+                    if offset is not None:
+                        # We need to map the global requested window to the local window of this sub-list.
+                        # Records before this sub-list: total_count
+                        # Desired start global: int(offset)
+                        # Desired end global: int(offset) + int(limit)
+
+                        req_start = int(offset)
+                        local_offset = max(0, req_start - total_count)
+                        # We pass the full limit; the child function will handle the upper bound clipping
+                        # provided we handle the returned count correctly.
+
+                    # Pass ourselves as excluded
+                    exclude_ids = [self.id]
+
+                    if local_offset is not None:
+                        items, count = self.species.get_related_items(
+                            target_filter,
+                            offset=local_offset,
+                            limit=limit,
+                            exclude_ids=exclude_ids,
+                            search_value=search_value,
+                        )
+                        return_list.extend(items)
+                        total_count += count
+                    else:
+                        items = self.species.get_related_items(
+                            target_filter,
+                            exclude_ids=exclude_ids,
+                            search_value=search_value,
+                        )
+                        count = len(items)
+                        # Fallback to local slicing if no offset provided (shouldn't happen in paginated context)
+                        start, end = get_slice_range(count)
+                        if start < end:
+                            return_list.extend(items[start:end])
+                        total_count += count
 
                 # Add renamed from / renamed to community related items to the list
-                if a_field.name == "community" and self.community:
-                    return_list.extend(
-                        self.community.get_related_items("for_occurrence")
-                    )
+                if (
+                    a_field.name == "community"
+                    and self.community
+                    and filter_type != "community"
+                ):
+                    target_filter = "for_occurrence"
+                    if filter_type == "occurrences":
+                        target_filter = "occurrences"
+
+                    local_offset = None
+                    if offset is not None:
+                        req_start = int(offset)
+                        local_offset = max(0, req_start - total_count)
+
+                    exclude_ids = [self.id]
+
+                    if local_offset is not None:
+                        items, count = self.community.get_related_items(
+                            target_filter,
+                            offset=local_offset,
+                            limit=limit,
+                            exclude_ids=exclude_ids,
+                            search_value=search_value,
+                        )
+                        return_list.extend(items)
+                        total_count += count
+                    else:
+                        items = self.community.get_related_items(
+                            target_filter,
+                            exclude_ids=exclude_ids,
+                            search_value=search_value,
+                        )
+                        count = len(items)
+                        start, end = get_slice_range(count)
+                        if start < end:
+                            return_list.extend(items[start:end])
+                        total_count += count
 
         # Remove the occurrence itself from the list if it ended up there
-        for item in return_list:
-            if (
-                item.model_name == "Occurrence"
-                and item.identifier == self.occurrence_number
-            ):
-                return_list.remove(item)
+        if offset is None:
+            for item in return_list:
+                if (
+                    item.model_name == "Occurrence"
+                    and item.identifier == self.occurrence_number
+                ):
+                    return_list.remove(item)
+            return return_list
 
-        return return_list
+        return return_list, total_count
 
     @classmethod
     @transaction.atomic
@@ -7778,6 +7919,23 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 django_import_field_name="occurrence_number",
             ).exists()
         )
+
+        # Special case where only an existing occurrence or a new_occurrence_name
+        # Should be provided when both columns are present otherwise validation will fail
+        row_contains_ocr_approval_occurrence_and_new_name = (
+            columns.filter(
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(
+                    OccurrenceReportApprovalDetails
+                ),
+                django_import_field_name="occurrence",
+            ).exists()
+            and columns.filter(
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(
+                    OccurrenceReportApprovalDetails
+                ),
+                django_import_field_name="new_occurrence_name",
+            ).exists()
+        )
         species_or_community_identifier = None
         for column in columns:
             sample_value = column.get_sample_value(
@@ -7805,6 +7963,15 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 and row_contains_occ_migrated_from_id
             ):
                 sample_value = ""
+
+            if (
+                column.django_import_content_type.model
+                == OccurrenceReportApprovalDetails._meta.model_name
+                and column.django_import_field_name == "new_occurrence_name"
+                and row_contains_ocr_approval_occurrence_and_new_name
+            ):
+                sample_value = ""
+
             sample_row.append(sample_value)
 
         logger.info(f"Sample row: {sample_row}")
@@ -8412,7 +8579,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 ).filter(occurrence_count__gt=0)
 
             if not related_model_qs.exists():
-                error_message = f"No records found for foreign key field {field.related_model._meta.model_name}"
+                error_message = f"No records found for foreign key field {field.related_model._meta.verbose_name}"
                 errors.append(
                     {
                         "error_type": "no_records",
@@ -8434,7 +8601,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             related_model_qs = self.filtered_related_model_qs
 
             if not related_model_qs.exists():
-                error_message = f"No records found for many to many field {field.related_model._meta.model_name}"
+                error_message = f"No records found for many to many field {field.related_model._meta.verbose_name}"
                 errors.append(
                     {
                         "error_type": "no_records",
@@ -8530,9 +8697,14 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         "community__taxonomy__community_common_id": species_or_community_identifier
                     }
                 if not random_occurrence.filter(**filter_field).exists():
+                    species_or_community_display = (
+                        species_or_community_identifier
+                        if species_or_community_identifier
+                        else "Unknown"
+                    )
                     error_message = (
                         f"No occurrences found where species or community identifier = "
-                        f"{species_or_community_identifier}"
+                        f"{species_or_community_display}"
                     )
                     errors.append(
                         {
@@ -9147,9 +9319,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors_added += 1
                 return cell_value, errors_added
             except related_model.DoesNotExist:
+                display_value = cell_value if cell_value else "matching the criteria"
                 error_message = (
                     f"Can't find {self.django_import_field_name} record by looking up "
-                    f"{lookup_field} with value {cell_value} "
+                    f"{lookup_field} with value {display_value} "
                     f"for column {self.xlsx_column_header_name}"
                 )
                 errors.append(

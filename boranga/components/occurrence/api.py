@@ -1599,34 +1599,17 @@ class OccurrenceReportViewSet(
             for id in request.query_params.get("proposal_ids", "").split(",")
             if id.lstrip("-").isnumeric()
         ]
-        # application_type = request.query_params.get("application_type", None)
-        # processing_status = request.query_params.get("processing_status", None)
 
-        cache_key = settings.CACHE_KEY_MAP_OCCURRENCE_REPORTS
-        qs = cache.get(cache_key)
+        if len(occurrence_report_ids) == 0:
+            raise serializers.ValidationError("No proposal_ids found in request")
 
-        if qs is None:
-            qs = (
-                self.get_queryset()
-                .exclude(ocr_geometry__isnull=True)
-                .prefetch_related("ocr_geometry")
-            )
-            cache.set(cache_key, qs, settings.CACHE_TIMEOUT_2_HOURS)
+        qs = (
+            self.get_queryset()
+            .filter(id__in=occurrence_report_ids)
+            .exclude(ocr_geometry__isnull=True)
+            .prefetch_related("ocr_geometry")
+        )
 
-        if len(occurrence_report_ids) > 0:
-            qs = qs.filter(id__in=occurrence_report_ids)
-
-        # if (
-        #     application_type
-        #     and application_type.isnumeric()
-        #     and int(application_type) > 0
-        # ):
-        #     qs = qs.filter(application_type_id=application_type)
-
-        # if processing_status:
-        #     qs = qs.filter(processing_status=processing_status)
-
-        # qs = self.filter_queryset(qs)
         serializer = ListOCRReportMinimalSerializer(
             qs, context={"request": request}, many=True
         )
@@ -3405,6 +3388,31 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     def get_related_items(self, request, *args, **kwargs):
         instance = self.get_object()
         related_filter_type = request.GET.get("related_filter_type")
+
+        draw = request.GET.get("draw")
+        start = request.GET.get("start")
+        length = request.GET.get("length")
+        search_value = request.GET.get("search[value]")
+
+        if draw and start and length:
+            related_items, total_count = instance.get_related_items(
+                related_filter_type,
+                offset=start,
+                limit=length,
+                search_value=search_value,
+            )
+            serializer = RelatedItemsSerializer(
+                related_items, many=True, context={"request": request}
+            )
+            return Response(
+                {
+                    "draw": int(draw),
+                    "recordsTotal": total_count,
+                    "recordsFiltered": total_count,
+                    "data": serializer.data,
+                }
+            )
+
         related_items = instance.get_related_items(related_filter_type)
         serializer = RelatedItemsSerializer(
             related_items, many=True, context={"request": request}
@@ -4342,6 +4350,31 @@ class OccurrenceViewSet(
     def get_related_items(self, request, *args, **kwargs):
         instance = self.get_object()
         related_filter_type = request.GET.get("related_filter_type")
+
+        draw = request.GET.get("draw")
+        start = request.GET.get("start")
+        length = request.GET.get("length")
+        search_value = request.GET.get("search[value]")
+
+        if draw and start and length:
+            related_items, total_count = instance.get_related_items(
+                related_filter_type,
+                offset=start,
+                limit=length,
+                search_value=search_value,
+            )
+            serializer = RelatedItemsSerializer(
+                related_items, many=True, context={"request": request}
+            )
+            return Response(
+                {
+                    "draw": int(draw),
+                    "recordsTotal": total_count,
+                    "recordsFiltered": total_count,
+                    "data": serializer.data,
+                }
+            )
+
         related_items = instance.get_related_items(related_filter_type)
         serializer = RelatedItemsSerializer(
             related_items, many=True, context={"request": request}
@@ -5304,18 +5337,15 @@ class OccurrenceViewSet(
             if id.lstrip("-").isnumeric()
         ]
 
-        cache_key = settings.CACHE_KEY_MAP_OCCURRENCES
-        qs = cache.get(cache_key)
-        if qs is None:
-            qs = (
-                self.get_queryset()
-                .exclude(occ_geometry__isnull=True)
-                .prefetch_related("occ_geometry")
-            )
-            cache.set(cache_key, qs, settings.CACHE_TIMEOUT_2_HOURS)
+        if len(occurrence_ids) == 0:
+            raise serializers.ValidationError("No proposal_ids found in request")
 
-        if len(occurrence_ids) > 0:
-            qs = qs.filter(id__in=occurrence_ids)
+        qs = (
+            self.get_queryset()
+            .filter(id__in=occurrence_ids)
+            .exclude(occ_geometry__isnull=True)
+            .prefetch_related("occ_geometry")
+        )
 
         serializer = ListOCCMinimalSerializer(
             qs, context={"request": request}, many=True
@@ -6091,6 +6121,10 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     @list_route(methods=["GET"], detail=False)
     def list_for_map(self, request, *args, **kwargs):
         occurrence_id = request.GET.get("occurrence_id")
+
+        if not occurrence_id:
+            raise serializers.ValidationError("No occurrence_id found in request")
+
         qs = (
             self.get_queryset()
             .filter(occurrence_id=occurrence_id)

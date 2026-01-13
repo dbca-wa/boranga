@@ -401,7 +401,7 @@ class Minutes(Document):
     _file = models.FileField(
         upload_to=update_meeting_doc_filename,
         max_length=512,
-        default="None",
+        default=None,
         storage=private_storage,
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)

@@ -893,7 +893,9 @@ class Species(RevisionedMixin):
 
         return is_species_communities_approver(request) or request.user.is_superuser
 
-    def get_related_items(self, filter_type, **kwargs):
+    def get_related_items(
+        self, filter_type, offset=None, limit=None, search_value=None, **kwargs
+    ):
         return_list = []
         if filter_type == "all":
             related_field_names = [
@@ -923,54 +925,107 @@ class Species(RevisionedMixin):
             related_field_names = [
                 filter_type,
             ]
+
+        total_count = 0
+
+        def get_slice_range(count):
+            if offset is None:
+                return 0, count
+
+            global_start = total_count
+            global_end = total_count + count
+            req_start = int(offset)
+            req_end = int(offset) + int(limit)
+
+            if global_end <= req_start or global_start >= req_end:
+                return 0, 0
+
+            start = max(0, req_start - global_start)
+            end = min(count, req_end - global_start)
+            return start, end
+
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
             if a_field.name in related_field_names:
                 field_objects = []
+                is_queryset = False
                 if a_field.is_relation:
                     if a_field.many_to_many:
                         field_objects = a_field.related_model.objects.filter(
                             **{a_field.remote_field.name: self}
                         )
+                        is_queryset = True
                     elif a_field.many_to_one:  # foreign key
-                        field_objects = [
-                            getattr(self, a_field.name),
-                        ]
+                        val = getattr(self, a_field.name)
+                        if val:
+                            field_objects = [val]
+                        else:
+                            field_objects = []
                     elif a_field.one_to_many:  # reverse foreign key
-                        field_objects = a_field.related_model.objects.filter(
+                        qs = a_field.related_model.objects.filter(
                             **{a_field.remote_field.name: self}
                         )
+                        field_objects = qs
+                        is_queryset = True
                     elif a_field.one_to_one:
                         if hasattr(self, a_field.name):
                             field_objects = [
                                 getattr(self, a_field.name),
                             ]
-                for field_object in field_objects:
-                    if field_object:
-                        related_item = field_object.as_related_item
-                        if related_item not in return_list:
+
+                count = 0
+                if is_queryset:
+                    if "exclude_ids" in kwargs:
+                        field_objects = field_objects.exclude(
+                            id__in=kwargs["exclude_ids"]
+                        )
+                    count = field_objects.count()
+                else:
+                    count = len(field_objects)
+
+                start, end = get_slice_range(count)
+
+                if start < end:
+                    subset = field_objects[start:end]
+                    for field_object in subset:
+                        if field_object:
+                            related_item = field_object.as_related_item
+                            if search_value:
+                                if (
+                                    search_value.lower()
+                                    not in related_item.identifier.lower()
+                                    and search_value.lower()
+                                    not in related_item.descriptor.lower()
+                                ):
+                                    continue
                             return_list.append(related_item)
+
+                total_count += count
 
                 # Add parent species related items to the list (limited to one degree of separation)
                 if a_field.name == "parent_species":
                     for parent_species in self.parent_species.all():
                         if filter_type == "for_occurrence":
-                            return_list.extend(
-                                parent_species.get_related_items(
-                                    "conservation_status_and_occurrences"
-                                )
+                            items = parent_species.get_related_items(
+                                "conservation_status_and_occurrences"
                             )
                         else:
-                            return_list.extend(
-                                parent_species.get_related_items(
-                                    "all_except_parent_species"
-                                )
+                            items = parent_species.get_related_items(
+                                "all_except_parent_species"
                             )
 
-        # Remove duplicates
-        return_list = list(set(return_list))
+                        count = len(items)
+                        start, end = get_slice_range(count)
+                        if start < end:
+                            return_list.extend(items[start:end])
+                        total_count += count
 
-        return return_list
+        # Remove duplicates
+        if offset is None:
+            return_list = list(set(return_list))
+            return return_list
+
+        return return_list, total_count
 
     @property
     def as_related_item(self):
@@ -1811,7 +1866,9 @@ class Community(RevisionedMixin):
     def reference(self):
         return f"{self.community_number}-{self.community_number}"
 
-    def get_related_items(self, filter_type, **kwargs):
+    def get_related_items(
+        self, filter_type, offset=None, limit=None, search_value=None, **kwargs
+    ):
         return_list = []
         if filter_type == "all":
             related_field_names = [
@@ -1843,74 +1900,131 @@ class Community(RevisionedMixin):
             related_field_names = [
                 filter_type,
             ]
+
+        total_count = 0
+
+        def get_slice_range(count):
+            if offset is None:
+                return 0, count
+
+            global_start = total_count
+            global_end = total_count + count
+            req_start = int(offset)
+            req_end = int(offset) + int(limit)
+
+            if global_end <= req_start or global_start >= req_end:
+                return 0, 0
+
+            start = max(0, req_start - global_start)
+            end = min(count, req_end - global_start)
+            return start, end
+
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
             if a_field.name in related_field_names:
                 field_objects = []
+                is_queryset = False
                 if a_field.is_relation:
                     if a_field.many_to_many:
                         field_objects = a_field.related_model.objects.filter(
                             **{a_field.remote_field.name: self}
                         )
+                        is_queryset = True
                     elif a_field.many_to_one:  # foreign key
-                        field_objects = [
-                            getattr(self, a_field.name),
-                        ]
+                        val = getattr(self, a_field.name)
+                        if val:
+                            field_objects = [val]
+                        else:
+                            field_objects = []
                     elif a_field.one_to_many:  # reverse foreign key
-                        field_objects = a_field.related_model.objects.filter(
+                        qs = a_field.related_model.objects.filter(
                             **{a_field.remote_field.name: self}
                         )
+                        field_objects = qs
+                        is_queryset = True
                     elif a_field.one_to_one:
                         if hasattr(self, a_field.name):
                             field_objects = [
                                 getattr(self, a_field.name),
                             ]
-                for field_object in field_objects:
-                    if field_object:
-                        related_item = field_object.as_related_item
-                        if related_item not in return_list:
+
+                count = 0
+                if is_queryset:
+                    if "exclude_ids" in kwargs:
+                        field_objects = field_objects.exclude(
+                            id__in=kwargs["exclude_ids"]
+                        )
+                    count = field_objects.count()
+                else:
+                    count = len(field_objects)
+
+                start, end = get_slice_range(count)
+
+                if start < end:
+                    subset = field_objects[start:end]
+                    for field_object in subset:
+                        if field_object:
+                            related_item = field_object.as_related_item
+                            if search_value:
+                                if (
+                                    search_value.lower()
+                                    not in related_item.identifier.lower()
+                                    and search_value.lower()
+                                    not in related_item.descriptor.lower()
+                                ):
+                                    continue
                             return_list.append(related_item)
+
+                total_count += count
 
                 # Add renamed from related items to the list (limited to one degree of separation)
                 if a_field.name == "renamed_from" and self.renamed_from:
                     if filter_type == "for_occurrence":
-                        return_list.extend(
-                            self.renamed_from.get_related_items(
-                                "conservation_status_and_occurrences"
-                            )
+                        items = self.renamed_from.get_related_items(
+                            "conservation_status_and_occurrences"
                         )
                     else:
-                        return_list.extend(
-                            self.renamed_from.get_related_items(
-                                "all_except_renamed_community"
-                            )
+                        items = self.renamed_from.get_related_items(
+                            "all_except_renamed_community"
                         )
+
+                    count = len(items)
+                    start, end = get_slice_range(count)
+                    if start < end:
+                        return_list.extend(items[start:end])
+                    total_count += count
+
                 # Add renamed to related items to the list (limited to one degree of separation)
                 if a_field.name == "renamed_to" and self.renamed_to.exists():
                     for community in self.renamed_to.select_related("taxonomy").all():
                         if filter_type == "for_occurrence":
-                            return_list.extend(
-                                community.get_related_items(
-                                    "conservation_status_and_occurrences"
-                                )
+                            items = community.get_related_items(
+                                "conservation_status_and_occurrences"
                             )
                         else:
-                            return_list.extend(
-                                community.get_related_items(
-                                    "all_except_renamed_community"
-                                )
+                            items = community.get_related_items(
+                                "all_except_renamed_community"
                             )
 
-        # Remove duplicates by (model_name, identifier)
-        seen = set()
-        deduped = []
-        for it in return_list:
-            key = (getattr(it, "model_name", None), getattr(it, "identifier", None))
-            if key not in seen:
-                seen.add(key)
-                deduped.append(it)
+                        count = len(items)
+                        start, end = get_slice_range(count)
+                        if start < end:
+                            return_list.extend(items[start:end])
+                        total_count += count
 
-        return deduped
+        # Remove duplicates by (model_name, identifier)
+        if offset is None:
+            seen = set()
+            deduped = []
+            for it in return_list:
+                key = (getattr(it, "model_name", None), getattr(it, "identifier", None))
+                if key not in seen:
+                    seen.add(key)
+                    deduped.append(it)
+
+            return deduped
+
+        return return_list, total_count
 
     @property
     def as_related_item(self):
@@ -2500,7 +2614,7 @@ class SpeciesDocument(Document):
     _file = models.FileField(
         upload_to=update_species_doc_filename,
         max_length=512,
-        default="None",
+        default=None,
         storage=private_storage,
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)
@@ -2569,7 +2683,7 @@ class CommunityDocument(Document):
     _file = models.FileField(
         upload_to=update_community_doc_filename,
         max_length=512,
-        default="None",
+        default=None,
         storage=private_storage,
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)

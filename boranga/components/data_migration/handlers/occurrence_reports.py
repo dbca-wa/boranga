@@ -70,6 +70,14 @@ SOURCE_ADAPTERS = {
     # time. We'll import the class lazily inside `run()` after emitting
     # initial logs to avoid long silent startup delays.
     Source.TPFL.value: "boranga.components.data_migration.adapters.occurrence_report.tpfl.OccurrenceReportTpflAdapter",
+    Source.TEC_SITES.value: (
+        "boranga.components.data_migration.adapters."
+        "occurrence_report.tec_sites.OccurrenceReportTecSitesAdapter"
+    ),
+    Source.TEC_SURVEYS.value: (
+        "boranga.components.data_migration.adapters."
+        "occurrence_report.tec_surveys.OccurrenceReportTecSurveysAdapter"
+    ),
     # add other adapters when available
 }
 
@@ -613,6 +621,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             ops.append(
                 {
                     "migrated_from_id": migrated_from_id,
+                    "canonical": report_row,
                     "defaults": defaults,
                     "merged": merged,
                     "habitat_data": habitat_data,
@@ -636,6 +645,41 @@ class OccurrenceReportImporter(BaseSheetImporter):
             len(ops),
             str(transform_duration),
         )
+
+        # Pre-fetch Occurrences for linking
+        occ_mig_ids = {
+            op["canonical"].Occurrence__migrated_from_id
+            for op in ops
+            if op["canonical"].Occurrence__migrated_from_id
+        }
+        occ_map = {}
+        if occ_mig_ids:
+            occ_map = {
+                o.migrated_from_id: o
+                for o in Occurrence.objects.filter(migrated_from_id__in=occ_mig_ids)
+            }
+
+        for op in ops:
+            row = op["canonical"]
+            defaults = op["defaults"]
+
+            # Resolve occurrence link and copy details
+            if row.Occurrence__migrated_from_id:
+                occ = occ_map.get(row.Occurrence__migrated_from_id)
+                if occ:
+                    # Replace string mapping with ID
+                    defaults["occurrence_id"] = occ.id
+                    defaults.pop("occurrence", None)
+
+                    # Copy name and number if not present (TEC requirement)
+                    if not defaults.get("ocr_for_occ_name"):
+                        defaults["ocr_for_occ_name"] = occ.occurrence_name
+                    if not defaults.get("ocr_for_occ_number"):
+                        defaults["ocr_for_occ_number"] = occ.occurrence_number
+
+                    # Copy community from parent occurrence (Tasks 12299, 12531)
+                    if occ.community_id and not defaults.get("community_id"):
+                        defaults["community_id"] = occ.community_id
 
         # Build op_map for O(1) access to per-migrated-id data (avoid O(n) scans)
         op_map = {o["migrated_from_id"]: o for o in ops}

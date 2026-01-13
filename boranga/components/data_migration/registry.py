@@ -12,6 +12,7 @@ from datetime import timezone as stdlib_timezone
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any, Literal
 
+import shapely.wkt
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.cache import cache
 from django.db import models
@@ -100,11 +101,19 @@ def _result(value, *issues: TransformIssue):
     return TransformResult(value=value, issues=list(issues))
 
 
-@registry.register("is_present")
-def t_is_present(value, ctx):
-    if value in (None, "", []):
-        return _result(False)
+@registry.register("static_value_True")
+def t_static_value_True(value, ctx):
     return _result(True)
+
+
+@registry.register("static_value_boranga.tec@dbca.wa.gov.au")
+def t_static_value_boranga_tec(value, ctx):
+    return _result("boranga.tec@dbca.wa.gov.au")
+
+
+@registry.register("static_value_community")
+def t_static_value_community(value, ctx):
+    return _result("community")
 
 
 @registry.register("Y_to_active_else_historical")
@@ -124,6 +133,19 @@ def t_y_to_true_n_to_none(value, ctx):
     if val == "N":
         return _result(None)
     return _result(None)
+
+
+@registry.register("y_to_true_else_false")
+def t_y_to_true_else_false(value, ctx):
+    if not value:
+        return _result(False)
+    val = str(value).strip().upper()
+    return _result(val == "Y")
+
+
+@registry.register("is_present")
+def t_is_present(value, ctx):
+    return _result(bool(value))
 
 
 @registry.register("strip")
@@ -1061,6 +1083,44 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
     return mapping
 
 
+# Cache for LegacyTaxonomyMapping list -> {legacy_taxon_name_id: {taxonomy_id, taxon_name_id}}
+_legacy_taxonomy_id_mappings_cache: dict[str, dict] = {}
+
+
+def _load_legacy_taxonomy_id_mappings(list_name: str) -> dict:
+    """Load and cache LegacyTaxonomyMapping rows for `list_name` keyed by legacy_taxon_name_id.
+
+    Returns a dict keyed by legacy_taxon_name_id mapping to a dict with keys `taxonomy_id` and `taxon_name_id`.
+    """
+    if list_name in _legacy_taxonomy_id_mappings_cache:
+        return _legacy_taxonomy_id_mappings_cache[list_name]
+
+    mapping: dict = {}
+    try:
+        from boranga.components.main.models import LegacyTaxonomyMapping
+
+        qs = (
+            LegacyTaxonomyMapping.objects.filter(list_name=list_name)
+            .exclude(legacy_taxon_name_id__isnull=True)
+            .exclude(legacy_taxon_name_id="")
+        )
+
+        for rec in qs.only("legacy_taxon_name_id", "taxonomy_id", "taxon_name_id"):
+            key = str(rec.legacy_taxon_name_id).strip()
+            if not key:
+                continue
+            entry = {"taxonomy_id": rec.taxonomy_id, "taxon_name_id": rec.taxon_name_id}
+            mapping[key] = entry
+    except Exception:
+        logger.exception(
+            "Failed to load LegacyTaxonomyMapping (ID) for list %s", list_name
+        )
+        mapping = {}
+
+    _legacy_taxonomy_id_mappings_cache[list_name] = mapping
+    return mapping
+
+
 def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
     """Register and return a transform name that resolves a legacy canonical name
     (from `LegacyTaxonomyMapping`) to a taxonomy id.
@@ -1345,6 +1405,64 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
                 "taxonomy_lookup_legacy_mapping_species lookup failed: %s", e
             )
             return _result(value, TransformIssue("error", f"lookup error: {e}"))
+
+    registry._fns[name] = _inner
+    return name
+
+
+def taxonomy_lookup_legacy_id_mapping(list_name: str) -> str:
+    """Register and return a transform name that resolves a legacy taxon name id
+    (from `LegacyTaxonomyMapping`) to a taxonomy_id.
+
+    Behaviour:
+      - looks up the legacy_taxon_name_id
+      - returns the `taxonomy_id` if present
+      - on missing mapping returns an error TransformIssue
+    """
+    if not list_name:
+        raise ValueError("list_name must be provided")
+
+    key_repr = f"taxonom_lookup_legacy_id:{list_name}"
+    name = "taxonom_lookup_legacy_id_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(None)
+
+        table = _load_legacy_taxonomy_id_mappings(list_name)
+        if not table:
+            return _result(
+                value,
+                TransformIssue(
+                    "error",
+                    f"No LegacyTaxonomyMapping entries loaded for list '{list_name}'",
+                ),
+            )
+
+        key = str(value).strip()
+        entry = table.get(key)
+        if entry:
+            # Return the taxonomy_id
+            tax_id = entry.get("taxonomy_id")
+            if tax_id is None:
+                return _result(
+                    value,
+                    TransformIssue(
+                        "error",
+                        f"LegacyTaxonomyMapping for ID '{value}' has no taxonomy_id",
+                    ),
+                )
+            return _result(tax_id)
+
+        return _result(
+            value,
+            TransformIssue(
+                "error",
+                f"LegacyTaxonomyMapping for ID '{value}' not found in list '{list_name}'",
+            ),
+        )
 
     registry._fns[name] = _inner
     return name
@@ -2780,6 +2898,110 @@ def geometry_from_coords_factory(
         except Exception as e:
             logger.exception("Error in geometry_from_coords_factory: %s", e)
             return _result(None)
+
+    registry._fns[name] = inner
+    return name
+
+
+@registry.register("community_id_from_legacy")
+def t_community_id_from_legacy(value, ctx):
+    """
+    Transform a legacy community ID (migrated_from_id) into the internal PK
+    of the corresponding Community object.
+    """
+    if not value:
+        return _result(None)
+
+    val_str = str(value).strip()
+    if not val_str:
+        return _result(None)
+
+    mapping = dm_mappings.get_community_id_map()
+    pk = mapping.get(val_str)
+
+    if pk is None:
+        return _result(
+            None,
+            TransformIssue(
+                "warning", f"Community with migrated_from_id '{val_str}' not found"
+            ),
+        )
+
+    return _result(pk)
+
+
+# Module-level cache for pyproj transformers
+_TRANSFORMER_CACHE = {}
+
+
+def wkt_to_geometry_factory(source_srid: int = 4326, target_srid: int = 4326) -> str:
+    """
+    Factory that returns a registered transform name for parsing a WKT string into a GEOSGeometry.
+
+    The returned transform takes a WKT string (from value) then:
+    1. Parses it as a Shapely geometry
+    2. Uses a cached pyproj.Transformer to reproject if source_srid != target_srid
+    3. Converts to Django GEOSGeometry with the target SRID
+
+    Args:
+        source_srid: The Spatial Reference ID of the input WKT (default: 4326 for WGS84)
+        target_srid: The Spatial Reference ID of the output Geometry (default: 4326 for WGS84)
+
+    Returns:
+        A registered transform name (str).
+    """
+    key = f"wkt_to_geometry_{source_srid}_{target_srid}"
+    name = "wkt_to_geom_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Load transformer into cache if projection is needed
+    if source_srid != target_srid:
+        if (source_srid, target_srid) not in _TRANSFORMER_CACHE:
+            _TRANSFORMER_CACHE[(source_srid, target_srid)] = Transformer.from_crs(
+                f"EPSG:{source_srid}", f"EPSG:{target_srid}", always_xy=True
+            )
+
+    def inner(value, ctx: TransformContext):
+        """
+        Parses WKT string 'value' into GEOSGeometry and performs CRS transformation using pyproj.
+        """
+        if not value:
+            return _result(None)
+
+        try:
+            wkt_str = str(value).strip()
+            if not wkt_str or wkt_str.lower() == "none" or wkt_str.lower() == "null":
+                return _result(None)
+
+            if source_srid == target_srid:
+                # No transform needed, direct load
+                geom = GEOSGeometry(wkt_str, srid=target_srid)
+                return _result(geom)
+
+            # Perform transform using cached pyproj transformer
+            transformer = _TRANSFORMER_CACHE[(source_srid, target_srid)]
+
+            # 1. Load WKT into Shapely
+            shapely_geom = shapely.wkt.loads(wkt_str)
+
+            # 2. Transform using pyproj
+            transformed_shapely = shapely_transform(transformer.transform, shapely_geom)
+
+            # 3. Convert back to GEOSGeometry
+            # Use WKB for robust conversion or WKT
+            geom = GEOSGeometry(transformed_shapely.wkt, srid=target_srid)
+
+            return _result(geom)
+
+        except Exception as e:
+            return _result(
+                None,
+                TransformIssue(
+                    "error", f"WKT parse/transform error for value '{value}': {e}"
+                ),
+            )
 
     registry._fns[name] = inner
     return name

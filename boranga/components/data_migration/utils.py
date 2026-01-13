@@ -69,3 +69,15 @@ def safe_strip(v: Any) -> str | None:
         return None
     s = str(v).strip()
     return s if s != "" else None
+
+
+def to_float_maybe(v: Any) -> float | None:
+    """Return float(v) or None for None/''/invalid."""
+    if v is None or v == "":
+        return None
+    if isinstance(v, (float, int)):
+        return float(v)
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return None

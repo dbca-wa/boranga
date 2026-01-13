@@ -1,6 +1,5 @@
 import logging
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpRequest
@@ -57,7 +56,7 @@ def species_form_submit(species_instance, request, split=False, rename=False):
     ret1 = send_species_create_email_notification(request, species_instance)
     ret2 = send_user_species_create_email_notification(request, species_instance)
 
-    if (settings.WORKING_FROM_HOME and settings.DEBUG) or ret1 and ret2:
+    if ret1 and ret2:
         species_instance.processing_status = Species.PROCESSING_STATUS_ACTIVE
         # all functions that call this save after - otherwise we can parametise this if need be
         species_instance.save(no_revision=True)
@@ -95,7 +94,7 @@ def community_form_submit(community_instance, request):
     ret1 = send_community_create_email_notification(request, community_instance)
     ret2 = send_user_community_create_email_notification(request, community_instance)
 
-    if (settings.WORKING_FROM_HOME and settings.DEBUG) or ret1 and ret2:
+    if ret1 and ret2:
         community_instance.processing_status = Community.PROCESSING_STATUS_ACTIVE
         community_instance.save(no_revision=True)
     else:

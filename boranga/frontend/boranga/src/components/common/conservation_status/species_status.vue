@@ -61,7 +61,7 @@
                             <select
                                 :id="common_name_lookup"
                                 :ref="common_name_lookup"
-                                :disabled="isReadOnly"
+                                :disabled="isScientificNameReadOnly"
                                 :name="common_name_lookup"
                                 class="form-control"
                             />
@@ -1687,9 +1687,15 @@ export default {
         listing_and_review_due_date_disabled: function () {
             return (
                 this.isReadOnly ||
-                !['With Assessor', 'Deferred', 'With Referral'].includes(
-                    this.conservation_status_obj.processing_status
-                ) ||
+                ![
+                    'With Assessor',
+                    'Deferred',
+                    'With Referral',
+                    'Approved',
+                    'Declined',
+                    'DeListed',
+                    'Closed',
+                ].includes(this.conservation_status_obj.processing_status) ||
                 this.conservation_status_obj.locked
             );
         },
@@ -1793,10 +1799,20 @@ export default {
             return true;
         },
         isScientificNameReadOnly: function () {
+            const readOnlyStatuses = [
+                constants.PROPOSAL_STATUS.WITH_APPROVER.TEXT,
+                'With Approver',
+                constants.PROPOSAL_STATUS.READY_FOR_AGENDA.TEXT,
+                constants.PROPOSAL_STATUS.ON_AGENDA.TEXT,
+                constants.PROPOSAL_STATUS.APPROVED.TEXT,
+                constants.PROPOSAL_STATUS.DECLINED.TEXT,
+                constants.PROPOSAL_STATUS.CLOSED.TEXT,
+                constants.PROPOSAL_STATUS.DELISTED.TEXT,
+            ];
             return (
                 this.isReadOnly ||
                 (!this.is_external &&
-                    constants.EFFECTIVE_TO_STATUSES.includes(
+                    readOnlyStatuses.includes(
                         this.conservation_status_obj.processing_status
                     ) &&
                     !this.conservation_status_obj.locked)
@@ -1820,13 +1836,21 @@ export default {
             );
         },
         assessor_comment_readonly: function () {
+            let status_without_assessor =
+                this.conservation_status_obj.assessor_mode
+                    .status_without_assessor;
+            if (
+                this.conservation_status_obj.processing_status === 'Approved' &&
+                !this.conservation_status_obj.locked
+            ) {
+                status_without_assessor = false;
+            }
             return !this.is_external &&
                 !this.conservation_status_obj.can_user_edit &&
                 this.conservation_status_obj.assessor_mode.assessor_level ==
                     'assessor' &&
                 this.conservation_status_obj.assessor_mode.has_assessor_mode &&
-                !this.conservation_status_obj.assessor_mode
-                    .status_without_assessor
+                !status_without_assessor
                 ? false
                 : true;
         },

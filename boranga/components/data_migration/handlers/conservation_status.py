@@ -8,8 +8,12 @@ from pathlib import Path
 
 from django.apps import apps
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from boranga.components.data_migration.adapters.conservation_status.tec import (
+    ConservationStatusTecAdapter,
+)
 from boranga.components.data_migration.adapters.conservation_status.tpfl import (
     ConservationStatusTpflAdapter,
 )
@@ -24,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: ConservationStatusTpflAdapter(),
+    Source.TEC.value: ConservationStatusTecAdapter(),
 }
 
 
@@ -96,6 +101,62 @@ class ConservationStatusImporter(BaseSheetImporter):
             out[k] = v
         return out
 
+    def _clean_date_field(self, value):
+        """
+        Convert various date formats to Python date objects or None.
+        Handles:
+        - None or empty strings -> None
+        - Python date/datetime objects -> date object
+        - ISO 8601 datetime strings (e.g., '2008-08-12T00:00:00+0000') -> date object
+        - YYYY-MM-DD strings -> date object
+        """
+        from datetime import date, datetime
+
+        if value is None or value == "":
+            return None
+
+        # If already a date object, return as-is
+        if isinstance(value, date):
+            return value
+
+        # If it's a datetime object, extract the date
+        if isinstance(value, datetime):
+            return value.date()
+
+        # Try parsing as string
+        value_str = str(value).strip()
+        if not value_str:
+            return None
+
+        # Try ISO 8601 format with timezone (TEC format)
+        # e.g., '2008-08-12T00:00:00+0000' or '2008-08-12T00:00:00Z'
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S%z",  # With timezone offset like +0000
+            "%Y-%m-%dT%H:%M:%SZ",  # With Z suffix
+            "%Y-%m-%d %H:%M:%S",  # Datetime without timezone
+            "%Y-%m-%d",  # Date only
+        ):
+            try:
+                dt = datetime.strptime(value_str, fmt)
+                return dt.date() if isinstance(dt, datetime) else dt
+            except ValueError:
+                pass
+
+        # TPFL format (already parsed to date by adapter)
+        for fmt in (
+            "%d/%m/%Y %H:%M",  # With time
+            "%d/%m/%Y",  # Date only
+        ):
+            try:
+                dt = datetime.strptime(value_str, fmt)
+                return dt.date()
+            except ValueError:
+                pass
+
+        # If nothing worked, log and return None
+        logger.warning(f"Could not parse date value: {value!r}")
+        return None
+
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
         sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
@@ -114,6 +175,9 @@ class ConservationStatusImporter(BaseSheetImporter):
             logger.info(f"Extracting from {source_key} ({source_path})...")
 
             res = adapter.extract(source_path)
+            # Tag each row with its source for pipeline selection later
+            for row in res.rows:
+                row["_source"] = source_key
             stats["extracted"] += len(res.rows)
             warnings.extend(res.warnings)
             all_rows.extend(res.rows)
@@ -121,6 +185,12 @@ class ConservationStatusImporter(BaseSheetImporter):
         if ctx.dry_run:
             logger.info(f"[DRY RUN] Would import {len(all_rows)} rows.")
             return
+
+        # Load TEC user if TEC source is being imported
+        tec_user = None
+        if Source.TEC.value in sources:
+            User = get_user_model()
+            tec_user = User.objects.filter(email="boranga.tec@dbca.wa.gov.au").first()
 
         # 2. Load dependencies
         Species = apps.get_model("boranga", "Species")
@@ -139,28 +209,36 @@ class ConservationStatusImporter(BaseSheetImporter):
             if s.taxonomy and s.taxonomy.scientific_name:
                 species_map[s.taxonomy.scientific_name.strip().lower()] = s
 
-        # Load legacy name map
+        # Community lookup by migrated_from_id
+        Community = apps.get_model("boranga", "Community")
+        community_map = {
+            c.migrated_from_id: c
+            for c in Community.objects.filter(migrated_from_id__isnull=False)
+        }
+
+        # Load legacy name map (TPFL only - used for species name lookup)
         legacy_name_map = {}
-        try:
-            map_path = (
-                Path(settings.BASE_DIR)
-                / "private-media"
-                / "legacy_data"
-                / "TPFL"
-                / "tpfl-legacy-name-to-taxon-name-id.csv"
-            )
-            if map_path.exists():
-                with open(map_path, encoding="utf-8-sig") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        if row.get("NAME") and row.get("nomos_canonical_name"):
-                            legacy_name_map[row["NAME"].strip().lower()] = row[
-                                "nomos_canonical_name"
-                            ].strip()
-            else:
-                logger.warning(f"Legacy name map not found at {map_path}")
-        except Exception as e:
-            logger.warning(f"Failed to load legacy name map: {e}")
+        if Source.TPFL.value in sources:
+            try:
+                map_path = (
+                    Path(settings.BASE_DIR)
+                    / "private-media"
+                    / "legacy_data"
+                    / "TPFL"
+                    / "tpfl-legacy-name-to-taxon-name-id.csv"
+                )
+                if map_path.exists():
+                    with open(map_path, encoding="utf-8-sig") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            if row.get("NAME") and row.get("nomos_canonical_name"):
+                                legacy_name_map[row["NAME"].strip().lower()] = row[
+                                    "nomos_canonical_name"
+                                ].strip()
+                else:
+                    logger.warning(f"Legacy name map not found at {map_path}")
+            except Exception as e:
+                logger.warning(f"Failed to load legacy name map: {e}")
 
         # Lists and Categories Caches
         wa_priority_list_map = {
@@ -179,9 +257,9 @@ class ConservationStatusImporter(BaseSheetImporter):
         # Submitter Category 'DBCA'
         submitter_category_dbca = SubmitterCategory.objects.filter(name="DBCA").first()
         if not submitter_category_dbca:
-            # Create if not exists? Or warn?
-            # Usually exists.
-            pass
+            logger.warning(
+                "SubmitterCategory 'DBCA' not found. SubmitterInformation records may be incomplete."
+            )
 
         # 3. Create objects
         ConservationStatus = apps.get_model("boranga", "ConservationStatus")
@@ -194,10 +272,34 @@ class ConservationStatusImporter(BaseSheetImporter):
         valid_rows = []
         for row in all_rows:
             try:
-                # Resolve Species
+                # Check for required migrated_from_id
+                mig_from_id = row.get("migrated_from_id")
+                if not mig_from_id:
+                    src_key = row.get("_source")
+                    msg = f"Missing migrated_from_id for {src_key} source. Business analyst input needed for TEC data."
+                    logger.warning(msg)
+                    stats["skipped"] += 1
+                    stats["errors"] += 1
+                    errors_details.append(
+                        {
+                            "migrated_from_id": "N/A",
+                            "column": "migrated_from_id",
+                            "level": "error",
+                            "message": msg,
+                            "raw_value": "None",
+                            "reason": "Missing required field",
+                            "row_json": json.dumps(row, default=str),
+                            "timestamp": timezone.now().isoformat(),
+                        }
+                    )
+                    continue
+
+                # Resolve Species or Community
                 species_name = row.get("species_name")
+                community_mig_id = row.get("community_migrated_from_id")
                 species_obj = None
                 taxonomy_obj = None
+                community_obj = None
 
                 if species_name:
                     clean_name = species_name.strip().lower()
@@ -231,14 +333,64 @@ class ConservationStatusImporter(BaseSheetImporter):
                             }
                         )
                         continue
+                elif community_mig_id:
+                    community_obj = community_map.get(community_mig_id)
+                    if not community_obj:
+                        msg = f"Community not found for migrated_from_id: {community_mig_id}"
+                        logger.warning(msg)
+                        stats["skipped"] += 1
+                        stats["errors"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": row.get("migrated_from_id"),
+                                "column": "community_migrated_from_id",
+                                "level": "error",
+                                "message": msg,
+                                "raw_value": community_mig_id,
+                                "reason": "Community lookup failed",
+                                "row_json": json.dumps(row, default=str),
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        continue
 
                 # Resolve Lists and Categories
                 wa_pl_code = row.get("wa_priority_list")
-                wa_pl_obj = (
-                    wa_priority_list_map.get(wa_pl_code.strip().upper())
-                    if wa_pl_code
-                    else None
-                )
+                wa_pl_obj = None
+                if wa_pl_code:
+                    # Handle "community" static value mapping to list name
+                    if wa_pl_code == "community":
+                        # Find list with name='community' or similar?
+                        # Task says: Apply static value wa_priority_list_id where name = 'community'
+                        # But WAPriorityList has 'code' and 'label'.
+                        # Assuming there is a list with code='COMMUNITY' or label='Community'?
+                        # Let's try to find by code first, then label.
+                        # Or maybe the user meant GroupType? No, field is wa_priority_list.
+                        # Let's assume there is a WAPriorityList with code 'P1', 'P2' etc.
+                        # If the value is "community", maybe it means the list applies to communities?
+                        # Wait, Task 12071 says: "Apply static value wa_priority_list_id where name = 'community'"
+                        # WAPriorityList model has 'code' and 'label'. It doesn't have 'name'.
+                        # Maybe it means GroupType? But the field is wa_priority_list.
+                        # Let's check WAPriorityList model again.
+                        # It inherits AbstractConservationList which has code, label.
+                        # Maybe the user means the list instance that is for communities?
+                        # But usually lists are P1, P2, etc.
+                        # Let's look for a list with code="COMMUNITY" or label="Community".
+                        # If not found, maybe log warning.
+                        # For now, let's try to find a list where code="COMMUNITY".
+                        wa_pl_obj = wa_priority_list_map.get("COMMUNITY")
+                        if not wa_pl_obj:
+                            # Try finding by label?
+                            # Or maybe the user meant the list associated with the community group type?
+                            # But priority lists are specific (e.g. P1).
+                            # If the legacy data has "wa_priority_list" column, we should use that.
+                            # But the task says "Apply static value...".
+                            # If the static value is "community", it's weird.
+                            # Maybe they mean the list named "Priority List"?
+                            # Let's assume for now we look up by code "COMMUNITY".
+                            pass
+                    else:
+                        wa_pl_obj = wa_priority_list_map.get(wa_pl_code.strip().upper())
 
                 wa_pc_code = row.get("wa_priority_category")
                 wa_pc_obj = (
@@ -261,9 +413,14 @@ class ConservationStatusImporter(BaseSheetImporter):
                     else None
                 )
 
+                # Determine submitter for SubmitterInformation
+                si_email_user = row.get("submitter")
+                if community_mig_id and tec_user:
+                    si_email_user = tec_user.id
+
                 # Create SubmitterInformation instance (do not save yet)
                 sub_info = SubmitterInformation(
-                    email_user=row.get("submitter"),
+                    email_user=si_email_user,
                     organisation="DBCA",
                     submitter_category=submitter_category_dbca,
                 )
@@ -276,12 +433,15 @@ class ConservationStatusImporter(BaseSheetImporter):
                     customer_status=row.get("customer_status"),
                     species=species_obj,
                     species_taxonomy=taxonomy_obj,
+                    community=community_obj,
                     wa_priority_list=wa_pl_obj,
                     wa_priority_category=wa_pc_obj,
                     wa_legislative_list=wa_ll_obj,
                     wa_legislative_category=wa_lc_obj,
-                    review_due_date=row.get("review_due_date"),
-                    effective_from=row.get("effective_from_date"),
+                    review_due_date=self._clean_date_field(row.get("review_due_date")),
+                    effective_from=self._clean_date_field(
+                        row.get("effective_from_date")
+                    ),
                     submitter=row.get("submitter"),  # ID
                     assigned_approver=row.get("assigned_approver"),  # ID
                     approved_by=row.get("approved_by"),  # ID

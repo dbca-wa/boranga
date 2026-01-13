@@ -699,6 +699,11 @@ export default {
                     className: 'optionChild',
                 },
                 {
+                    value: 'deferred',
+                    name: 'Deferred',
+                    className: 'optionChild',
+                },
+                {
                     value: 'inactive',
                     name: 'Inactive',
                     className: 'optionGroup',

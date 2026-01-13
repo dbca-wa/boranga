@@ -78,3 +78,31 @@ def apply_value_to_instance(inst, field_name: str, val: Any):
             setattr(inst, field_name, [str(val)])
             return
         setattr(inst, field_name, val)
+
+
+def apply_model_defaults(model_cls, data: dict) -> dict:
+    """
+    Update data dict (in-place and returned) to replace None values with
+    model defaults where applicable.
+    """
+    for k, v in list(data.items()):
+        if v is not None:
+            continue
+        try:
+            field = model_cls._meta.get_field(k)
+        except FieldDoesNotExist:
+            continue
+
+        # Prefer explicit field default (handles callables)
+        field_default = field.get_default()
+        if field_default is not None:
+            data[k] = field_default
+            continue
+
+        # Fallback: for non-nullable text fields, prefer empty string
+        if not getattr(field, "null", False) and isinstance(
+            field, (dj_models.CharField, dj_models.TextField)
+        ):
+            data[k] = ""
+            continue
+    return data

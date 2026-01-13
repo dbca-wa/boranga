@@ -11,6 +11,16 @@ from boranga.components.species_and_communities.models import GroupType
 # Header → canonical key
 COLUMN_MAP = {
     "SHEETNO": "migrated_from_id",
+    # SITE_VISITS fields
+    "SITE_VISIT_ID": "migrated_from_id",
+    "SV_VISIT_DATE": "observation_date",
+    "SV_OBSERVATION_NOTES": "comments",
+    "S_ID": "site",
+    # SURVEYS fields
+    "SUR_NO": "SUR_NO",
+    "SUR_COMMENTS": "comments",
+    "SUR_DATE": "observation_date",
+    "OCC_UNIQUE_ID": "Occurrence__migrated_from_id",
     "SPNAME": "species_id",
     "COMM_NAME": "community_id",  # TODO replace with real column name later
     # approved_by - has no column as is derived from two other columns: See synthetic fields in handler
@@ -24,6 +34,7 @@ COLUMN_MAP = {
     "RECORD_SRC_CODE": "record_source",
     # reported_date: just a copy of lodgement_date, so will be applied in handler
     "CREATED_BY": "submitter",
+    "USERNAME": "submitter",  # Map Survey USERNAME to submitter as well
     "MODIFIED_BY": "modified_by",  # used in tpfl adapter to derive submitter
     # OCRObserverDetail fields
     "OBS_ROLE_CODE": "OCRObserverDetail__role",
@@ -165,6 +176,14 @@ class OccurrenceReportRow:
     lodgement_date: date | None = None
     approved_by: int | None = None  # FK id (EmailUser) after transform
     submitter: int | None = None  # FK id (EmailUser) after transform
+    assigned_approver_id: int | None = None
+    assigned_officer_id: int | None = None
+    internal_application: bool | None = None
+    # Temp fields for user resolution
+    assigned_approver_name: str | None = None
+    assigned_officer_name: str | None = None
+    approved_by_name: str | None = None
+    submitter_name: str | None = None
 
     # OCRObserverDetail fields
     OCRObserverDetail__role: str | None = None
@@ -283,6 +302,13 @@ class OccurrenceReportRow:
             lodgement_date=lodgement_dt,
             approved_by=utils.to_int_maybe(d.get("approved_by")),
             submitter=utils.to_int_maybe(d.get("submitter")),
+            assigned_approver_id=utils.to_int_maybe(d.get("assigned_approver_id")),
+            assigned_officer_id=utils.to_int_maybe(d.get("assigned_officer_id")),
+            internal_application=d.get("internal_application"),
+            assigned_approver_name=utils.safe_strip(d.get("assigned_approver_name")),
+            assigned_officer_name=utils.safe_strip(d.get("assigned_officer_name")),
+            approved_by_name=utils.safe_strip(d.get("approved_by_name")),
+            submitter_name=utils.safe_strip(d.get("submitter_name")),
             OCRObserverDetail__role=utils.safe_strip(d.get("OCRObserverDetail__role")),
             SubmitterInformation__submitter_category=utils.to_int_maybe(
                 d.get("SubmitterInformation__submitter_category")
@@ -496,6 +522,9 @@ class OccurrenceReportRow:
             "observation_date": self.observation_date,
             "record_source": self.record_source,
             "comments": self.comments or "",
+            "assigned_approver": self.assigned_approver_id,
+            "assigned_officer": self.assigned_officer_id,
+            "internal_application": self.internal_application,
             "ocr_for_occ_number": self.ocr_for_occ_number or "",
             "ocr_for_occ_name": self.ocr_for_occ_name or "",
             "assessor_data": self.assessor_data or "",

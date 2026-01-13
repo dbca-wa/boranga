@@ -148,7 +148,19 @@ class Command(BaseCommand):
                         # assemble filter kwargs; include the second lookup if provided
                         # Use case-insensitive lookups for matching by appending '__iexact'
                         # unless an explicit lookup (iexact, icontains, etc.) is already provided.
+                        from django.db.models import ForeignKey
+
                         def _ci_lookup_key(field_name: str) -> str:
+                            # Check if the field is a ForeignKey - they don't support iexact
+                            try:
+                                field = model_cls._meta.get_field(field_name)
+                                if isinstance(field, ForeignKey):
+                                    # ForeignKey doesn't support case-insensitive lookups
+                                    return field_name + "__exact"
+                            except Exception:
+                                pass
+
+                            # For other fields, use case-insensitive exact match
                             # Always perform a case-insensitive exact match for CSV-provided
                             # field names by appending '__iexact'. This keeps behavior
                             # simple because CSVs in this project never include lookup
@@ -157,13 +169,98 @@ class Command(BaseCommand):
                                 return field_name
                             return field_name + "__iexact"
 
-                        query_kwargs = {_ci_lookup_key(lookup_field): lookup_value}
-                        create_kwargs = {lookup_field: lookup_value}
-                        if lookup_field_2 and lookup_value_2:
-                            query_kwargs[_ci_lookup_key(lookup_field_2)] = (
-                                lookup_value_2
+                        # Handle the primary lookup field
+                        try:
+                            primary_field = model_cls._meta.get_field(lookup_field)
+                            if isinstance(primary_field, ForeignKey):
+                                # For ForeignKey fields, need to look up the related object first
+                                related_model = primary_field.related_model
+                                try:
+                                    related_obj = related_model._default_manager.get(
+                                        name__iexact=lookup_value
+                                    )
+                                    query_kwargs = {
+                                        lookup_field + "_id": related_obj.pk
+                                    }
+                                    create_kwargs = {
+                                        lookup_field + "_id": related_obj.pk
+                                    }
+                                except related_model.DoesNotExist:
+                                    self.stderr.write(
+                                        f"Related {related_model.__name__} with name='{lookup_value}' "
+                                        f"not found; skipping row '{legacy_value}'"
+                                    )
+                                    skipped += 1
+                                    continue
+                                except related_model.MultipleObjectsReturned:
+                                    self.stderr.write(
+                                        f"Multiple {related_model.__name__} with name='{lookup_value}'; "
+                                        f"skipping row '{legacy_value}'"
+                                    )
+                                    skipped += 1
+                                    continue
+                            else:
+                                # Non-ForeignKey field, use regular lookup
+                                query_kwargs = {
+                                    _ci_lookup_key(lookup_field): lookup_value
+                                }
+                                create_kwargs = {lookup_field: lookup_value}
+                        except Exception as e:
+                            self.stderr.write(
+                                f"Error determining field type for '{lookup_field}': {e}; "
+                                f"skipping row '{legacy_value}'"
                             )
-                            create_kwargs[lookup_field_2] = lookup_value_2
+                            skipped += 1
+                            continue
+
+                        # Handle the second lookup field if provided
+                        if lookup_field_2 and lookup_value_2:
+                            try:
+                                field_2 = model_cls._meta.get_field(lookup_field_2)
+                                if isinstance(field_2, ForeignKey):
+                                    # Need to look up the related object and use its ID
+                                    related_model = field_2.related_model
+                                    # Try to find by name with case-insensitive match
+                                    try:
+                                        related_obj = (
+                                            related_model._default_manager.get(
+                                                name__iexact=lookup_value_2
+                                            )
+                                        )
+                                        # Use the ID in the query
+                                        query_kwargs[lookup_field_2 + "_id"] = (
+                                            related_obj.pk
+                                        )
+                                        create_kwargs[lookup_field_2 + "_id"] = (
+                                            related_obj.pk
+                                        )
+                                    except related_model.DoesNotExist:
+                                        self.stderr.write(
+                                            f"Related {related_model.__name__} with name='{lookup_value_2}' "
+                                            f"not found; skipping row '{legacy_value}'"
+                                        )
+                                        skipped += 1
+                                        continue
+                                    except related_model.MultipleObjectsReturned:
+                                        self.stderr.write(
+                                            f"Multiple {related_model.__name__} with name='{lookup_value_2}'; "
+                                            f"skipping row '{legacy_value}'"
+                                        )
+                                        skipped += 1
+                                        continue
+                                else:
+                                    # Regular field, use lookup as-is
+                                    query_kwargs[_ci_lookup_key(lookup_field_2)] = (
+                                        lookup_value_2
+                                    )
+                                    create_kwargs[lookup_field_2] = lookup_value_2
+                            except Exception as e:
+                                self.stderr.write(
+                                    f"Error determining field type for '{lookup_field_2}': {e}; "
+                                    f"skipping row '{legacy_value}'"
+                                )
+                                skipped += 1
+                                continue
 
                         obj = model_cls._default_manager.get(**query_kwargs)
                         target_id = str(obj.pk)

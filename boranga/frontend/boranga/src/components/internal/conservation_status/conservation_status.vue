@@ -120,7 +120,11 @@
                                                 'Declined',
                                             ].includes(
                                                 conservation_status_obj.processing_status
-                                            ) || conservation_status_obj.locked
+                                            ) ||
+                                            (conservation_status_obj.processing_status ==
+                                                'Deferred' &&
+                                                conservation_status_obj.approver_process) ||
+                                            conservation_status_obj.locked
                                         "
                                     >
                                         <select
@@ -437,7 +441,7 @@
                                                             resendReferral(r)
                                                         "
                                                         ><i
-                                                            class="fa fa-envelope text-primary"
+                                                            class="bi bi-repeat text-primary"
                                                             aria-hidden="true"
                                                         ></i>
                                                     </a>
@@ -514,6 +518,19 @@
                                                 "
                                             >
                                                 Lock</button
+                                            ><br />
+                                        </div>
+                                    </div>
+                                </template>
+                                <template v-if="canSendBackToAssessor">
+                                    <div class="row mb-2">
+                                        <div class="col-sm-12">
+                                            <button
+                                                style="width: 90%"
+                                                class="btn btn-primary"
+                                                @click.prevent="backToAssessor"
+                                            >
+                                                Back To Assessor</button
                                             ><br />
                                         </div>
                                     </div>
@@ -1215,12 +1232,22 @@ export default {
             } else if (
                 this.conservation_status_obj.processing_status == 'Deferred'
             ) {
-                return (
-                    this.conservation_status_obj.assessor_mode
-                        .assessor_can_assess &&
-                    this.conservation_status_obj.current_assessor.id ==
-                        this.conservation_status_obj.assigned_officer
-                );
+                if (
+                    this.conservation_status_obj.approver_process &&
+                    this.conservation_status_obj.assigned_approver
+                ) {
+                    return (
+                        this.conservation_status_obj.current_assessor.id ==
+                        this.conservation_status_obj.assigned_approver
+                    );
+                } else {
+                    return (
+                        this.conservation_status_obj.assessor_mode
+                            .assessor_can_assess &&
+                        this.conservation_status_obj.current_assessor.id ==
+                            this.conservation_status_obj.assigned_officer
+                    );
+                }
             } else if (
                 this.conservation_status_obj.processing_status == 'On Agenda'
             ) {
@@ -1268,10 +1295,13 @@ export default {
                     constants.PROPOSAL_STATUS.READY_FOR_AGENDA.TEXT,
                     constants.PROPOSAL_STATUS.DEFERRED.TEXT,
                 ].includes(this.conservation_status_obj.processing_status) &&
-                this.conservation_status_obj.assessor_mode
-                    .assessor_can_assess &&
-                this.conservation_status_obj.current_assessor.id ==
-                    this.conservation_status_obj.assigned_officer
+                (this.conservation_status_obj.assessor_mode
+                    .assessor_can_assess ||
+                    this.conservation_status_obj.approver_process) &&
+                (this.conservation_status_obj.current_assessor.id ==
+                    this.conservation_status_obj.assigned_officer ||
+                    this.conservation_status_obj.current_assessor.id ==
+                        this.conservation_status_obj.assigned_approver)
             );
         },
         canApproveOrDeclineOnAgendaCS: function () {
@@ -2094,7 +2124,9 @@ export default {
                     'Approved',
                     'Closed',
                     'DeListed',
-                ].includes(vm.conservation_status_obj.processing_status)
+                ].includes(vm.conservation_status_obj.processing_status) ||
+                (vm.conservation_status_obj.processing_status == 'Deferred' &&
+                    vm.conservation_status_obj.approver_process)
             ) {
                 unassign =
                     vm.conservation_status_obj.assigned_approver != null &&
@@ -2191,7 +2223,9 @@ export default {
                     'Approved',
                     'Closed',
                     'DeListed',
-                ].includes(vm.conservation_status_obj.processing_status)
+                ].includes(vm.conservation_status_obj.processing_status) ||
+                (vm.conservation_status_obj.processing_status == 'Deferred' &&
+                    vm.conservation_status_obj.approver_process)
             ) {
                 $(vm.$refs.assigned_officer).val(
                     vm.conservation_status_obj.assigned_approver
@@ -2257,12 +2291,17 @@ export default {
                     var selected = $(e.currentTarget);
                     if (
                         [
-                            'Ready For Agenda',
                             'Proposed DeListed',
+                            'Ready For Agenda',
                             'Approved',
                             'Closed',
                             'DeListed',
-                        ].includes(vm.conservation_status_obj.processing_status)
+                        ].includes(
+                            vm.conservation_status_obj.processing_status
+                        ) ||
+                        (vm.conservation_status_obj.processing_status ==
+                            'Deferred' &&
+                            vm.conservation_status_obj.approver_process)
                     ) {
                         vm.conservation_status_obj.assigned_approver =
                             selected.val();
@@ -2281,12 +2320,17 @@ export default {
                 .on('select2:unselect', function () {
                     if (
                         [
-                            'Ready For Agenda',
                             'Proposed DeListed',
+                            'Ready For Agenda',
                             'Approved',
                             'Closed',
                             'DeListed',
-                        ].includes(vm.conservation_status_obj.processing_status)
+                        ].includes(
+                            vm.conservation_status_obj.processing_status
+                        ) ||
+                        (vm.conservation_status_obj.processing_status ==
+                            'Deferred' &&
+                            vm.conservation_status_obj.approver_process)
                     ) {
                         vm.conservation_status_obj.assigned_approver = null;
                     } else {

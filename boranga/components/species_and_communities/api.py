@@ -1996,7 +1996,7 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             split_of_species_retains_original,
             occurrence_assignments_dict,
         )
-        if not (settings.WORKING_FROM_HOME and settings.DEBUG) and not ret1:
+        if not ret1:
             raise serializers.ValidationError(
                 "Email could not be sent. Please try again later"
             )
@@ -2521,6 +2521,27 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     def get_related_items(self, request, *args, **kwargs):
         instance = self.get_object()
         related_filter_type = request.GET.get("related_filter_type")
+
+        draw = request.GET.get("draw")
+        start = request.GET.get("start")
+        length = request.GET.get("length")
+
+        if draw and start and length:
+            related_items, total_count = instance.get_related_items(
+                related_filter_type, offset=start, limit=length
+            )
+            serializer = RelatedItemsSerializer(
+                related_items, many=True, context={"request": request}
+            )
+            return Response(
+                {
+                    "draw": int(draw),
+                    "recordsTotal": total_count,
+                    "recordsFiltered": total_count,
+                    "data": serializer.data,
+                }
+            )
+
         related_items = instance.get_related_items(related_filter_type)
         serializer = RelatedItemsSerializer(
             related_items, many=True, context={"request": request}
@@ -2985,6 +3006,27 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     def get_related_items(self, request, *args, **kwargs):
         instance = self.get_object()
         related_filter_type = request.GET.get("related_filter_type")
+
+        draw = request.GET.get("draw")
+        start = request.GET.get("start")
+        length = request.GET.get("length")
+
+        if draw and start and length:
+            related_items, total_count = instance.get_related_items(
+                related_filter_type, offset=start, limit=length
+            )
+            serializer = RelatedItemsSerializer(
+                related_items, many=True, context={"request": request}
+            )
+            return Response(
+                {
+                    "draw": int(draw),
+                    "recordsTotal": total_count,
+                    "recordsFiltered": total_count,
+                    "data": serializer.data,
+                }
+            )
+
         related_items = instance.get_related_items(related_filter_type)
         serializer = RelatedItemsSerializer(
             related_items, many=True, context={"request": request}
