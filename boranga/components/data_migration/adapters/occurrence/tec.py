@@ -151,12 +151,6 @@ def val_to_none(val, ctx):
     return None
 
 
-def tec_migrated_id_transform(val, ctx):
-    if val:
-        return f"tec-{val}"
-    return val
-
-
 PIPELINES = {
     "occurrence_name": ["strip", "blank_to_none", "required"],
     "community_id": ["community_id_from_legacy"],
@@ -188,7 +182,7 @@ PIPELINES = {
     "OccurrenceSite__site_name": [],
     "OccurrenceSite__updated_date": ["blank_to_none"],
     # Pass-through fields
-    "migrated_from_id": [tec_migrated_id_transform],
+    "migrated_from_id": [],
     "processing_status": [],
     "species_id": [val_to_none],
     "wild_status_id": [],

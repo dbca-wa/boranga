@@ -20,13 +20,6 @@ from boranga.components.species_and_communities.models import (
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 
-
-def tpfl_migrated_id_transform(val, ctx):
-    if val:
-        return f"tpfl-{val}"
-    return val
-
-
 # TPFL-specific transform bindings
 TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
 COORD_SOURCE_TRANSFORM = build_legacy_map_transform(
@@ -71,7 +64,7 @@ VESTING_TRANSFORM = build_legacy_map_transform(
 )
 
 PIPELINES = {
-    "migrated_from_id": ["strip", "required", tpfl_migrated_id_transform],
+    "migrated_from_id": ["strip", "required"],
     "species_id": [
         "strip",
         "blank_to_none",

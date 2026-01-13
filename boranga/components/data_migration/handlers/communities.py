@@ -327,6 +327,13 @@ class CommunityImporter(BaseSheetImporter):
                 else:
                     canonical[col] = val
 
+            # Prepend source prefix to migrated_from_id if present
+            if src and canonical.get("migrated_from_id"):
+                prefix = src.lower().replace("_", "-")
+                canonical["migrated_from_id"] = (
+                    f"{prefix}-{canonical['migrated_from_id']}"
+                )
+
             if row_errors:
                 errors += 1
                 errors_details.append(

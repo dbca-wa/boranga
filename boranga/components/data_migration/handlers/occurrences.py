@@ -303,6 +303,13 @@ class OccurrenceImporter(BaseSheetImporter):
                     continue
                 transformed[k] = v
 
+            # Prepend source prefix to migrated_from_id if present
+            _src = row.get("_source")
+            _mid = transformed.get("migrated_from_id")
+            if _src and _mid:
+                prefix = _src.lower().replace("_", "-")
+                transformed["migrated_from_id"] = f"{prefix}-{_mid}"
+
             key = transformed.get("migrated_from_id")
             if not key:
                 # missing key — cannot merge/persist

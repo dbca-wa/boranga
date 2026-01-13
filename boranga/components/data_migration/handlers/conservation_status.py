@@ -271,6 +271,12 @@ class ConservationStatusImporter(BaseSheetImporter):
         # First pass: Prepare SubmitterInformation and ConservationStatus objects
         valid_rows = []
         for row in all_rows:
+            # Prepend source prefix to migrated_from_id if present
+            _src = row.get("_source")
+            if _src and row.get("migrated_from_id"):
+                prefix = _src.lower().replace("_", "-")
+                row["migrated_from_id"] = f"{prefix}-{row['migrated_from_id']}"
+
             try:
                 # Check for required migrated_from_id
                 mig_from_id = row.get("migrated_from_id")
