@@ -130,10 +130,13 @@ class Command(BaseCommand):
                     failed += 1
                     continue
 
-                # find existing mapping by unique key (legacy_taxon_name_id)
+                # find existing mapping by (list_name, legacy_taxon_name_id, legacy_canonical_name)
+                # This allows duplicate legacy_taxon_name_id entries if they have different names
                 try:
                     mapping = LegacyTaxonomyMapping.objects.get(
-                        list_name=list_name, legacy_taxon_name_id=legacy_taxon_name_id
+                        list_name=list_name,
+                        legacy_taxon_name_id=legacy_taxon_name_id,
+                        legacy_canonical_name=legacy_name,
                     )
                     # Determine if fully populated: taxonomy set and taxon_name_id matches
                     if (
@@ -179,7 +182,8 @@ class Command(BaseCommand):
                 except LegacyTaxonomyMapping.MultipleObjectsReturned:
                     self.stderr.write(
                         f"Multiple mappings found for list_name={list_name} "
-                        f"legacy_taxon_name_id={legacy_taxon_name_id}; skipping"
+                        f"legacy_taxon_name_id={legacy_taxon_name_id} "
+                        f"legacy_canonical_name={legacy_name}; skipping"
                     )
                     failed += 1
                     continue
