@@ -778,6 +778,7 @@ class ConservationStatus(
         approver_process_state = [
             ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA,
             ConservationStatus.PROCESSING_STATUS_WITH_APPROVER,
+            ConservationStatus.PROCESSING_STATUS_DEFERRED,
         ]
         unlocked_editing_statuses = [
             ConservationStatus.PROCESSING_STATUS_APPROVED,
@@ -929,16 +930,19 @@ class ConservationStatus(
         if self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR,
             ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL,
-            ConservationStatus.PROCESSING_STATUS_APPROVED,
-            ConservationStatus.PROCESSING_STATUS_DEFERRED,
         ]:
             return is_conservation_status_assessor(request)
+
+        if self.processing_status == ConservationStatus.PROCESSING_STATUS_DEFERRED:
+            return is_conservation_status_assessor(
+                request
+            ) or is_conservation_status_approver(request)
+
         elif not self.locked or self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA,
             ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA,
             ConservationStatus.PROCESSING_STATUS_ON_AGENDA,
             ConservationStatus.PROCESSING_STATUS_WITH_APPROVER,
-            ConservationStatus.PROCESSING_STATUS_DEFERRED,
         ]:
             return is_conservation_status_approver(request)
 
@@ -982,12 +986,24 @@ class ConservationStatus(
         if self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR,
             ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL,
-            ConservationStatus.PROCESSING_STATUS_DEFERRED,
         ]:
             return (
                 self.assigned_officer != request.user.id
                 and is_conservation_status_assessor(request)
             )
+
+        if self.processing_status == ConservationStatus.PROCESSING_STATUS_DEFERRED:
+            if (
+                self.assigned_officer != request.user.id
+                and is_conservation_status_assessor(request)
+            ):
+                return True
+            if (
+                self.assigned_approver != request.user.id
+                and is_conservation_status_approver(request)
+            ):
+                return True
+            return False
 
         if self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA,
@@ -1048,6 +1064,7 @@ class ConservationStatus(
             ConservationStatus.PROCESSING_STATUS_CLOSED,
             ConservationStatus.PROCESSING_STATUS_DELISTED,
             ConservationStatus.PROCESSING_STATUS_DECLINED,
+            ConservationStatus.PROCESSING_STATUS_DEFERRED,
         ]
 
         if (
@@ -1120,6 +1137,45 @@ class ConservationStatus(
 
     @transaction.atomic
     def unassign(self, request):
+        if self.processing_status == ConservationStatus.PROCESSING_STATUS_DEFERRED:
+            if is_conservation_status_approver(request):
+                if self.assigned_approver:
+                    self.assigned_approver = None
+                    self.save()
+                    # Create a log entry for the proposal
+                    self.log_user_action(
+                        ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(
+                            self.conservation_status_number
+                        ),
+                        request,
+                    )
+                    # Create a log entry for the user
+                    request.user.log_user_action(
+                        ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(
+                            self.conservation_status_number
+                        ),
+                        request,
+                    )
+            elif is_conservation_status_assessor(request):
+                if self.assigned_officer:
+                    self.assigned_officer = None
+                    self.save()
+                    # Create a log entry for the proposal
+                    self.log_user_action(
+                        ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(
+                            self.conservation_status_number
+                        ),
+                        request,
+                    )
+                    # Create a log entry for the user
+                    request.user.log_user_action(
+                        ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(
+                            self.conservation_status_number
+                        ),
+                        request,
+                    )
+            return
+
         if self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA,
             ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA,
@@ -1286,18 +1342,15 @@ class ConservationStatus(
         if self.processing_status == status:
             return
 
-        if (
-            self.processing_status
-            == ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA
-        ):
+        if self.processing_status in [
+            ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA,
+            ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA,
+        ]:
             self.approver_comment = ""
             if approver_comment:
                 self.approver_comment = approver_comment
                 self.save()
                 send_proposal_approver_sendback_email_notification(request, self)
-
-        if status == ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR:
-            self.locked = False
 
         previous_status = self.processing_status
         self.processing_status = status

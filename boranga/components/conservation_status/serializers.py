@@ -36,8 +36,13 @@ from boranga.helpers import (
     is_occurrence_approver,
     is_occurrence_assessor,
     is_species_communities_approver,
+    member_ids,
 )
 from boranga.ledger_api_utils import retrieve_email_user
+from boranga.settings import (
+    GROUP_NAME_CONSERVATION_STATUS_APPROVER,
+    GROUP_NAME_CONSERVATION_STATUS_ASSESSOR,
+)
 
 logger = logging.getLogger("boranga")
 
@@ -891,7 +896,7 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
     customer_status = serializers.SerializerMethodField(read_only=True)
     current_assessor = serializers.SerializerMethodField()
     latest_referrals = ConservationStatusProposalReferralSerializer(many=True)
-    allowed_assessors = EmailUserSerializer(many=True)
+    allowed_assessors = serializers.SerializerMethodField()
     assessor_mode = serializers.SerializerMethodField()
     conservationstatusdeclineddetails = ConservationStatusDeclinedDetailsSerializer()
     conservationstatusissuanceapprovaldetails = (
@@ -921,6 +926,24 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
         source="community.taxonomy.community_name", allow_null=True
     )
     most_recent_meeting = MeetingSerializer(read_only=True, allow_null=True)
+
+    def get_allowed_assessors(self, obj):
+        if obj.processing_status == ConservationStatus.PROCESSING_STATUS_DEFERRED:
+            request = self.context["request"]
+            if is_conservation_status_approver(request):
+                members = []
+                ids = member_ids(GROUP_NAME_CONSERVATION_STATUS_APPROVER)
+                for id in ids:
+                    members.append(retrieve_email_user(id))
+                return EmailUserSerializer(members, many=True).data
+            elif is_conservation_status_assessor(request):
+                members = []
+                ids = member_ids(GROUP_NAME_CONSERVATION_STATUS_ASSESSOR)
+                for id in ids:
+                    members.append(retrieve_email_user(id))
+                return EmailUserSerializer(members, many=True).data
+
+        return EmailUserSerializer(obj.allowed_assessors, many=True).data
 
     class Meta:
         model = ConservationStatus
