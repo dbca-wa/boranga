@@ -1,5 +1,5 @@
 # Prepare the base environment.
-FROM dbcawa/boranga:latest AS builder_base_borangadev
+FROM ghcr.io/dbca-wa/boranga:latest as builder_base_borangadev
 
 USER root
 

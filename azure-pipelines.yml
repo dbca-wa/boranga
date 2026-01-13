@@ -32,8 +32,10 @@ stages:
               tags: |
                 latest
                 $(tagDate)
-              containerRegistry: DockerHub
-              repository: dbcawa/boranga
+              containerRegistry: DockerGitHub
+              repository: ghcr.io/dbca-wa/boranga
+              # Pass the git commit hash as a build argument to avoid copying git repo into image
+              arguments: --build-arg GIT_COMMIT_VERSION=$(Build.SourceVersion)
             env:
               DOCKER_BUILDKIT: 1
 
@@ -41,8 +43,8 @@ stages:
             displayName: Push image
             inputs:
               command: push
-              containerRegistry: DockerHub
-              repository: dbcawa/boranga
+              containerRegistry: DockerGitHub
+              repository: ghcr.io/dbca-wa/boranga
               tags: |
                 latest
                 $(tagDate)
@@ -55,5 +57,5 @@ stages:
               tags: |
                 boranga_dev_latest
                 boranga_dev_$(tagDate)
-              containerRegistry: DockerHub
-              repository: dbcawa/docker_app_dev
+              containerRegistry: DockerGitHub
+              repository: ghcr.io/dbca-wa/docker_app_dev
