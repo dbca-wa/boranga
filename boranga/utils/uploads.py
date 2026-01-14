@@ -19,6 +19,8 @@ class RandomizeUploadTo:
         self.upload_to = upload_to
         self.name_generator = name_generator
         self.keep_ext = keep_ext
+        if hasattr(upload_to, "__name__"):
+            self.__name__ = upload_to.__name__
 
     def __call__(self, instance, filename: str) -> str:
         generator = self.name_generator or _default_name_generator
@@ -97,11 +99,14 @@ def override_upload_to_in_module(
     editing each field.
     """
     orig = getattr(module, func_name)
-    wrapped = randomize_upload_to(
-        orig, name_generator=name_generator, keep_ext=keep_ext
-    )
-    # replace the function on the module
-    setattr(module, func_name, wrapped)
+    if isinstance(orig, RandomizeUploadTo):
+        wrapped = orig
+    else:
+        wrapped = randomize_upload_to(
+            orig, name_generator=name_generator, keep_ext=keep_ext
+        )
+        # replace the function on the module
+        setattr(module, func_name, wrapped)
 
     # Update any already-declared model fields that reference the original function
     # so they pick up the wrapped callable (fields are created at import time).
