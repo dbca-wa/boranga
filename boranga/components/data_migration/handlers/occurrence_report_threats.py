@@ -189,17 +189,17 @@ class OCRConservationThreatImporter(BaseSheetImporter):
 
         for transformed, src, issues in transformed_rows:
             # occurrence_report is FK
-            occurrence_report_id = transformed.get("occurrence_report")
+            occurrence_report_id = transformed.get("occurrence_report_id")
             if occurrence_report_id is None:
-                warnings.append(f"{src}: missing occurrence_report after transform")
+                warnings.append(f"{src}: missing occurrence_report_id after transform")
                 skipped += 1
                 errors += 1
                 errors_details.append(
                     {
-                        "migrated_from_id": transformed.get("occurrence_report"),
-                        "column": "occurrence_report",
+                        "migrated_from_id": transformed.get("occurrence_report_id"),
+                        "column": "occurrence_report_id",
                         "level": "error",
-                        "message": "missing occurrence_report after transform",
+                        "message": "missing occurrence_report_id after transform",
                         "raw_value": None,
                         "reason": "missing_fk",
                         "row": transformed,
