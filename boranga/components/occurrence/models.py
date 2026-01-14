@@ -8900,20 +8900,25 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         email=assigned_officer_email
                     ).id
                 except EmailUser.DoesNotExist:
-                    error_message = (
-                        "No ledger user found for assigned_officer with "
-                        f"email address: {assigned_officer_email}"
-                    )
-                    errors.append(
-                        {
-                            "row_index": index,
-                            "error_type": "column",
-                            "data": assigned_officer_email,
-                            "error_message": error_message,
-                        }
-                    )
-                    errors_added += 1
-                    return cell_value, errors_added
+                    try:
+                        assigned_officer_id = EmailUser.objects.get(
+                            id=int(assigned_officer_email)
+                        ).id
+                    except (ValueError, EmailUser.DoesNotExist):
+                        error_message = (
+                            "No ledger user found for assigned_officer with "
+                            f"email address or ID: {assigned_officer_email}"
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "column",
+                                "data": assigned_officer_email,
+                                "error_message": error_message,
+                            }
+                        )
+                        errors_added += 1
+                        return cell_value, errors_added
 
                 if not belongs_to_by_user_id(
                     assigned_officer_id, settings.GROUP_NAME_OCCURRENCE_ASSESSOR
@@ -8948,20 +8953,25 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         email=assigned_approver_email
                     ).id
                 except EmailUser.DoesNotExist:
-                    error_message = (
-                        "No ledger user found for assigned_approver with "
-                        f"email address: {assigned_approver_email}"
-                    )
-                    errors.append(
-                        {
-                            "row_index": index,
-                            "error_type": "column",
-                            "data": assigned_approver_email,
-                            "error_message": error_message,
-                        }
-                    )
-                    errors_added += 1
-                    return cell_value, errors_added
+                    try:
+                        assigned_approver_id = EmailUser.objects.get(
+                            id=int(assigned_approver_email)
+                        ).id
+                    except (ValueError, EmailUser.DoesNotExist):
+                        error_message = (
+                            "No ledger user found for assigned_approver with "
+                            f"email address or ID: {assigned_approver_email}"
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "column",
+                                "data": assigned_approver_email,
+                                "error_message": error_message,
+                            }
+                        )
+                        errors_added += 1
+                        return cell_value, errors_added
 
                 if not belongs_to_by_user_id(
                     assigned_approver_id, settings.GROUP_NAME_OCCURRENCE_APPROVER
@@ -9029,16 +9039,22 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             try:
                 cell_value = EmailUser.objects.get(email=cell_value).id
             except EmailUser.DoesNotExist:
-                error_message = f"No ledger user found with email address: {cell_value}"
-                errors.append(
-                    {
-                        "row_index": index,
-                        "error_type": "column",
-                        "data": cell_value,
-                        "error_message": error_message,
-                    }
-                )
-                errors_added += 1
+                # Try finding by ID if email lookup fails
+                try:
+                    cell_value = EmailUser.objects.get(id=int(cell_value)).id
+                except (ValueError, EmailUser.DoesNotExist):
+                    error_message = (
+                        f"No ledger user found with email address or ID: {cell_value}"
+                    )
+                    errors.append(
+                        {
+                            "row_index": index,
+                            "error_type": "column",
+                            "data": cell_value,
+                            "error_message": error_message,
+                        }
+                    )
+                    errors_added += 1
             return cell_value, errors_added
 
         if isinstance(field, MultiSelectField):
