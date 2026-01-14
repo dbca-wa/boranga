@@ -22,6 +22,8 @@ from boranga.components.species_and_communities.models import (
     DocumentSubCategory,
 )
 
+from ..sources import Source
+
 # -----------------------------------------------------------------------------
 # Schema Definition
 # -----------------------------------------------------------------------------
@@ -210,6 +212,11 @@ class OccurrenceReportDocumentAdapter(SourceAdapter):
             # We need to manually run pipelines or use a helper.
             # The Schema class has effective_pipelines() but map_raw_row only does column mapping.
             # We need to run the pipelines on the mapped data.
+
+            # Prepend source prefix
+            mid = canonical.get("occurrence_report_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical["occurrence_report_id"] = f"{Source.TPFL.value.lower()}-{mid}"
 
             rows.append(canonical)
 
