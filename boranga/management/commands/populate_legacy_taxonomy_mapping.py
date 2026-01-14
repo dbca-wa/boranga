@@ -44,6 +44,9 @@ class Command(BaseCommand):
             default=None,
         )
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument(
+            "--verbose", action="store_true", help="Show details of skipped rows"
+        )
 
     def _get_field(self, row: dict, *keys):
         """Return the first present, non-empty value from row for given candidate keys."""
@@ -58,6 +61,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         csvfile = options["csvfile"]
         dry_run = options["dry_run"]
+        verbose = options["verbose"]
         # If provided, this will be used for every row instead of the CSV `list_name` value
         list_name_override = options.get("list_name")
 
@@ -144,6 +148,11 @@ class Command(BaseCommand):
                         and mapping.taxon_name_id == taxon_name_id
                         and mapping.legacy_canonical_name == legacy_name
                     ):
+                        if verbose:
+                            self.stdout.write(
+                                f"Skipping {legacy_name} ({legacy_taxon_name_id}): "
+                                f"DB ID {mapping.taxon_name_id} matches CSV ID {taxon_name_id}"
+                            )
                         skipped += 1
                         continue
 
