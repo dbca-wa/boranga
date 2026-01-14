@@ -5336,7 +5336,7 @@ class OCCContactDetail(RevisionedMixin):
     role = models.CharField(max_length=250, blank=True, default="")
     contact = models.CharField(max_length=250, blank=True, default="")
     organisation = models.CharField(max_length=250, blank=True, default="")
-    notes = models.CharField(max_length=512, blank=True, default="")
+    notes = models.CharField(max_length=1000, blank=True, default="")
     visible = models.BooleanField(default=True)
 
     class Meta:
