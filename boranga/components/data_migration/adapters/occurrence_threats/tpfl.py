@@ -90,6 +90,12 @@ class OccurrenceThreatTpflAdapter(SourceAdapter):
                 continue
 
             canonical = schema.map_raw_row(raw)
+
+            # Prepend source prefix to occurrence_id (migrated_from_id)
+            mid = canonical.get("occurrence_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical["occurrence_id"] = f"{Source.TPFL.value.lower()}-{mid}"
+
             rows.append(canonical)
 
         return ExtractionResult(rows=rows, warnings=warnings)
