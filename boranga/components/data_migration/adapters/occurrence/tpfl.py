@@ -162,6 +162,12 @@ class OccurrenceTpflAdapter(SourceAdapter):
         for raw in raw_rows:
             # Map raw row to canonical keys
             canonical_row = SCHEMA.map_raw_row(raw)
+
+            # Prepend source prefix to migrated_from_id
+            mid = canonical_row.get("migrated_from_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical_row["migrated_from_id"] = f"{Source.TPFL.value.lower()}-{mid}"
+
             # Preserve internal keys (starting with _)
             for k, v in raw.items():
                 if k.startswith("_"):
