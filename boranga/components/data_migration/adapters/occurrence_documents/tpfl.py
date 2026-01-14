@@ -122,6 +122,12 @@ class OccurrenceDocumentTpflAdapter(SourceAdapter):
 
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
+
+            # Prepend source prefix to occurrence_id
+            mid = canonical.get("occurrence_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical["occurrence_id"] = f"{Source.TPFL.value.lower()}-{mid}"
+
             canonical["document_category_id"] = doc_cat_id
             canonical["document_sub_category_id"] = doc_sub_cat_id
             description = self._build_description(raw)
