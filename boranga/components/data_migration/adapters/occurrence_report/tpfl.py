@@ -1028,6 +1028,11 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                     True  # Default locked=True
                 )
 
+            # Prepend source prefix to migrated_from_id
+            mid = canonical.get("migrated_from_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical["migrated_from_id"] = f"{Source.TPFL.value.lower()}-{mid}"
+
             # If an explicit occurrence id is present in the source we do not assign
             # it here; the importer will link habitat to the parent OccurrenceReport
             rows.append(canonical)
