@@ -2663,6 +2663,11 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
 
             # Check cache for the occurrence PK
             occ_pk = pop_id_to_occurrence_pk_cache.get(pop_id_str)
+            if not occ_pk and legacy_system:
+                occ_pk = pop_id_to_occurrence_pk_cache.get(
+                    f"{legacy_system.lower()}-{pop_id_str}"
+                )
+
             if occ_pk:
                 # Return the Occurrence instance for normalize_create_kwargs to handle
                 occurrence = Occurrence.objects.get(pk=occ_pk)
@@ -2743,6 +2748,11 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
 
             # Check cache for the occurrence_number
             occurrence_number = pop_id_to_occurrence_number_cache.get(pop_id_str)
+            if not occurrence_number and legacy_system:
+                occurrence_number = pop_id_to_occurrence_number_cache.get(
+                    f"{legacy_system.lower()}-{pop_id_str}"
+                )
+
             if occurrence_number:
                 return _result(occurrence_number)
             else:
