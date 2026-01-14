@@ -41,7 +41,7 @@ class OCRConservationThreatAdapter(SourceAdapter):
     model = OCRConservationThreat
 
     PIPELINES = {
-        "occurrence_report": [fk_lookup(OccurrenceReport, "migrated_from_id")],
+        "occurrence_report_id": [fk_lookup(OccurrenceReport, "migrated_from_id")],
         "threat_category": [
             build_legacy_map_transform(
                 "TPFL",
@@ -105,7 +105,11 @@ class OCRConservationThreatAdapter(SourceAdapter):
             canonical = {}
 
             # Map fields
-            canonical["occurrence_report"] = raw.get("SHEETNO")
+            sheetno = raw.get("SHEETNO")
+            if sheetno and not str(sheetno).startswith(f"{Source.TPFL.value.lower()}-"):
+                sheetno = f"{Source.TPFL.value.lower()}-{sheetno}"
+
+            canonical["occurrence_report_id"] = sheetno
             canonical["threat_category"] = raw.get("THREAT_CODE")
             canonical["threat_agent"] = raw.get("AGENT_CODE")
             canonical["current_impact"] = raw.get("CUR_IMPACT")
