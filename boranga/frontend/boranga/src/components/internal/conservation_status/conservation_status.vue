@@ -2255,6 +2255,7 @@ export default {
                     vm.$nextTick(() => {
                         vm.initialisedSelects = false;
                         vm.initialiseSelects();
+                        vm.enablePopovers();
                     });
                 },
                 (error) => {
