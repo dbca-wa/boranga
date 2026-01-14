@@ -62,6 +62,12 @@ class OccurrenceTenureAdapter(SourceAdapter):
             # Use the shared schema mapping to get migrated_from_id (POP_ID)
             # and map PURPOSE1/VESTING to OccurrenceTenure__* fields
             canonical = schema.map_raw_row(raw)
+
+            # Prepend source prefix so we can match Occurrence.migrated_from_id
+            mid = canonical.get("migrated_from_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical["migrated_from_id"] = f"{Source.TPFL.value.lower()}-{mid}"
+
             rows.append(canonical)
 
         return ExtractionResult(rows=rows, warnings=warnings)
@@ -214,6 +220,13 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 geometry_instance = OccurrenceGeometry.objects.filter(
                     occurrence=occurrence
                 ).first()
+
+            if not geometry_instance.geometry:
+                logger.warning(
+                    f"Geometry object found but geometry field is None for Occurrence {occurrence}"
+                )
+                skipped += 1
+                continue
 
             if ctx.dry_run:
                 logger.info(
