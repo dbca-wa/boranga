@@ -1013,9 +1013,55 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "OccurrenceReportImporter: %d associated-species names unresolved",
                     len(unresolved),
                 )
-                # record up to 20 unresolved examples in warnings for later inspection
-                for ex in unresolved[:20]:
-                    warnings.append(f"associated_species: no taxonomy match for '{ex}'")
+
+                # Build mapping: raw_sheet_no -> [list of unresolved species on this sheet]
+                sheet_to_bad_species = defaultdict(list)
+                unresolved_set = set(unresolved)
+                for sheet_no, sp_list in sheet_to_species.items():
+                    bad_on_sheet = [s for s in sp_list if s in unresolved_set]
+                    if bad_on_sheet:
+                        sheet_to_bad_species[str(sheet_no)] = bad_on_sheet
+
+                # Check active import groups for matches
+                assoc_warnings_count = 0
+                for migrated_from_id in groups:
+                    # Heuristic: migrated_from_id is {prefix}-{sheet_no}
+                    # or just {sheet_no} depending on source.
+                    # We try to extract suffix if a dash is present.
+                    if "-" in migrated_from_id:
+                        suffix = migrated_from_id.split("-", 1)[1]
+                    else:
+                        suffix = migrated_from_id
+
+                    if suffix in sheet_to_bad_species:
+                        for bad_sp in sheet_to_bad_species[suffix]:
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": migrated_from_id,
+                                    "column": "associated_species",
+                                    "level": "warning",
+                                    "message": f"no taxonomy match for '{bad_sp}'",
+                                    "raw_value": bad_sp,
+                                    "reason": "associated_species_resolution",
+                                    "row": {},
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+                            warn_count += 1
+                            assoc_warnings_count += 1
+
+                # If we have unresolved species but no matching rows in the current import
+                # (e.g. data filtered out), we still record a generic warning to avoid silence.
+                if assoc_warnings_count == 0:
+                    for ex in unresolved[:20]:
+                        warnings.append(
+                            f"associated_species: no taxonomy match for '{ex}' (no matching sheet imported)"
+                        )
+                else:
+                    logger.info(
+                        "Generated %d row-specific warnings for associated species",
+                        assoc_warnings_count,
+                    )
 
             # Load existing AssociatedSpeciesTaxonomy rows for all resolved taxonomy ids
             tax_ids = {t.pk for t in name_to_tax.values()}
@@ -3318,6 +3364,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
         stats["warning_messages"] = warnings
         stats["error_details_csv"] = None
 
+        # Append global warnings to errors_details if any, so they appear in CSV
+        for w_msg in warnings:
+            # simple parse specific to how we append these warnings
+            level = "warning"
+            source_ref = ""
+            msg_body = w_msg
+            if ": " in w_msg:
+                # "source: message"
+                parts = w_msg.split(": ", 1)
+                source_ref = parts[0]
+                msg_body = parts[1]
+
+            errors_details.append(
+                {
+                    "migrated_from_id": "",
+                    "column": "",
+                    "level": level,
+                    "message": msg_body,
+                    "raw_value": "",
+                    "reason": source_ref,
+                    "row": {},
+                }
+            )
+
         elapsed = timezone.now() - start_time
         stats["time_taken"] = str(elapsed)
 
@@ -3411,3 +3481,5 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 warn_count,
                 str(elapsed),
             )
+
+        return stats
