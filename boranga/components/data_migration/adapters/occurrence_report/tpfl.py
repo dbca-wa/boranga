@@ -555,7 +555,6 @@ PIPELINES = {
         "strip",
         "blank_to_none",
         observer_name_fallback_transform,
-        "required",
     ],
     "OCRHabitatComposition__loose_rock_percent": [
         "strip",
