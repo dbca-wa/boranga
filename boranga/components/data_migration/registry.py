@@ -2652,9 +2652,15 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
             if sheetno in (None, ""):
                 return _result(None)
 
+            # Strip prefix if present (e.g. "tpfl-12345" -> "12345") because mapping uses raw SHEETNO
+            sheetno_str = str(sheetno)
+            prefix = f"{legacy_system.lower()}-"
+            if sheetno_str.startswith(prefix):
+                sheetno_str = sheetno_str[len(prefix) :]
+
             # Get POP_ID from SHEETNO using the mapping
             pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno, legacy_system=legacy_system
+                sheetno_str, legacy_system=legacy_system
             )
             if not pop_id:
                 return _result(None)
@@ -2737,9 +2743,15 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
             if sheetno in (None, ""):
                 return _result(None)
 
+            # Strip prefix if present (e.g. "tpfl-12345" -> "12345") because mapping uses raw SHEETNO
+            sheetno_str = str(sheetno)
+            prefix = f"{legacy_system.lower()}-"
+            if sheetno_str.startswith(prefix):
+                sheetno_str = sheetno_str[len(prefix) :]
+
             # Get POP_ID from SHEETNO using the mapping
             pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno, legacy_system=legacy_system
+                sheetno_str, legacy_system=legacy_system
             )
             if not pop_id:
                 return _result(None)
@@ -2797,9 +2809,15 @@ def pop_id_from_sheetno_factory(legacy_system: str = "TPFL"):
             if sheetno in (None, ""):
                 return _result(None)
 
+            # Strip prefix if present (e.g. "tpfl-12345" -> "12345") because mapping uses raw SHEETNO
+            sheetno_str = str(sheetno)
+            prefix = f"{legacy_system.lower()}-"
+            if sheetno_str.startswith(prefix):
+                sheetno_str = sheetno_str[len(prefix) :]
+
             # Get POP_ID from SHEETNO using the mapping
             pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno, legacy_system=legacy_system
+                sheetno_str, legacy_system=legacy_system
             )
             if not pop_id:
                 return _result(None)
