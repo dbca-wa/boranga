@@ -1165,19 +1165,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     for a in assoc_to_create:
                         try:
                             a.save()
-                        except Exception:
+                        except Exception as exc:
                             logger.exception(
                                 "Failed to create OCRAssociatedSpecies for occurrence_report %s",
                                 getattr(a.occurrence_report, "pk", None),
                             )
-
-            # Refresh existing_assoc mapping
-            existing_assoc = {
-                a.occurrence_report_id: a
-                for a in OCRAssociatedSpecies.objects.filter(
-                    occurrence_report__in=target_occs
-                ).prefetch_related("related_species")
-            }
+                            ocr_ref = getattr(a, "occurrence_report", None)
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": getattr(
+                                        ocr_ref, "migrated_from_id", ""
+                                    ),
+                                    "column": "OCRAssociatedSpecies",
+                                    "level": "error",
+                                    "message": f"Failed to create associated species: {exc}",
+                                    "raw_value": "",
+                                    "reason": "create_error",
+                                    "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+                            errors += 1
 
             # Update existing OCRAssociatedSpecies with comments
             assoc_to_update = []
@@ -1201,10 +1209,32 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     )
                 except Exception:
                     logger.exception(
-                        "Failed to bulk_update OCRAssociatedSpecies comments"
+                        "Failed to bulk_update OCRAssociatedSpecies comments; falling back to individual saves"
                     )
-
-            # Prepare through model info for bulk operations
+                for a in assoc_to_update:
+                    try:
+                        a.save(update_fields=["comment"])
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to update OCRAssociatedSpecies %s",
+                            getattr(a, "pk", None),
+                        )
+                        ocr_ref = getattr(a, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRAssociatedSpecies",
+                                "level": "error",
+                                "message": f"Failed to update associated species comment: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(a, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
             through = OCRAssociatedSpecies.related_species.through
             assoc_fk_field = None
             tax_fk_field = None
@@ -1766,10 +1796,35 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for obj in submitter_info_to_update:
                     try:
                         obj.save(update_fields=update_fields)
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to update SubmitterInformation %s", obj.pk
                         )
+                        # Try to find related OCR for error reporting
+                        try:
+                            # Reverse lookup
+                            rel_ocr = OccurrenceReport.objects.filter(
+                                submitter_information=obj
+                            ).first()
+                            mig_id = rel_ocr.migrated_from_id if rel_ocr else "unknown"
+                            ocr_pk = rel_ocr.pk if rel_ocr else "unknown"
+                        except Exception:
+                            mig_id = "unknown"
+                            ocr_pk = "unknown"
+
+                        errors_details.append(
+                            {
+                                "migrated_from_id": mig_id,
+                                "column": "SubmitterInformation",
+                                "level": "error",
+                                "message": f"Failed to update submitter info: {exc}",
+                                "raw_value": str(obj.pk),
+                                "reason": "update_error",
+                                "row": {"ocr_pk": ocr_pk, "si_pk": obj.pk},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if submitter_info_to_create:
             logger.info(
@@ -1784,14 +1839,29 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 logger.exception(
                     "Failed to bulk_create SubmitterInformation; falling back to individual creates"
                 )
-                for obj in submitter_info_to_create:
+                for (ocr_id, mig), obj in submitter_info_create_map.items():
+                    if obj.pk:
+                        continue
                     try:
                         obj.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create SubmitterInformation for occurrence_report %s",
-                            getattr(obj.pk, "pk", None),
+                            ocr_id,
                         )
+                        errors_details.append(
+                            {
+                                "migrated_from_id": mig or "",
+                                "column": "SubmitterInformation",
+                                "level": "error",
+                                "message": f"Failed to create submitter info: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"ocr_pk": ocr_id},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # After bulk_create, refresh created SubmitterInformation instances to get their IDs
         # and link them to OccurrenceReports
@@ -1884,14 +1954,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 logger.exception(
                     "Failed to bulk_create OCRObserverDetail; falling back to individual creates"
                 )
-                for obj in want_obs_create:
+                for obs in want_obs_create:
                     try:
-                        obj.save()
-                    except Exception:
+                        obs.save()
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRObserverDetail for occurrence_report %s",
-                            getattr(obj.occurrence_report, "pk", None),
+                            getattr(obs.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(obs, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRObserverDetail",
+                                "level": "error",
+                                "message": f"Failed to create observer detail: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # OCRHabitatComposition: OneToOne - create or update loose_rock_percent
         # Fetch existing habitat comps
@@ -2299,11 +2385,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             )
                         )
                         existing_ocr_geoms[inst.pk] = new_geom
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OccurrenceReportGeometry for occurrence_report %s",
                             inst.pk,
                         )
+                        errors_details.append(
+                            {
+                                "migrated_from_id": inst.migrated_from_id,
+                                "column": "geometry",
+                                "level": "error",
+                                "message": f"Failed to create geometry: {exc}",
+                                "raw_value": str(gd.get("geometry", "")),
+                                "reason": "geometry_creation_error",
+                                "row": {"pk": inst.pk},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
                 # If there is a related Occurrence, copy the geometry to it
                 if inst.occurrence_id:
@@ -2335,10 +2434,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                         )
                                 try:
                                     existing_occ_geom.save()
-                                except Exception:
+                                except Exception as exc:
                                     logger.exception(
                                         "Failed to update OccurrenceGeometry for occurrence %s",
                                         occ.pk,
+                                    )
+                                    errors_details.append(
+                                        {
+                                            "migrated_from_id": mig,
+                                            "column": "OccurrenceGeometry",
+                                            "level": "error",
+                                            "message": (
+                                                f"Failed to update linked OccurrenceGeometry for occurrence "
+                                                f"{occ.pk}: {exc}"
+                                            ),
+                                            "raw_value": (
+                                                str(gd) if "gd" in locals() else ""
+                                            ),
+                                        }
                                     )
                             else:
                                 geom_create_kwargs = {
@@ -2380,14 +2493,36 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                         )
                                     )
                                     existing_occ_geoms[occ.pk] = new_occ_geom
-                                except Exception:
+                                except Exception as exc:
                                     logger.exception(
                                         "Failed to create OccurrenceGeometry for occurrence %s",
                                         occ.pk,
                                     )
-                    except Exception:
+                                    errors_details.append(
+                                        {
+                                            "migrated_from_id": mig,
+                                            "column": "OccurrenceGeometry",
+                                            "level": "error",
+                                            "message": (
+                                                f"Failed to create OccurrenceGeometry for occurrence "
+                                                f"{occ.pk}: {exc}"
+                                            ),
+                                            "raw_value": (
+                                                str(gd) if "gd" in locals() else ""
+                                            ),
+                                        }
+                                    )
+                    except Exception as exc:
                         logger.exception(
                             "Failed to process OccurrenceGeometry for linked Occurrence"
+                        )
+                        errors_details.append(
+                            {
+                                "migrated_from_id": mig,
+                                "column": "OccurrenceGeometry",
+                                "level": "error",
+                                "message": f"Failed to process OccurrenceGeometry for linked Occurrence: {exc}",
+                            }
                         )
 
         # Handle created ones
@@ -2708,11 +2843,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             )
                         )
                         existing_ocr_geoms[ocr.pk] = new_geom
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OccurrenceReportGeometry for occurrence_report %s",
                             ocr.pk,
                         )
+                        errors_details.append(
+                            {
+                                "migrated_from_id": mig,
+                                "column": "geometry",
+                                "level": "error",
+                                "message": f"Failed to create geometry: {exc}",
+                                "raw_value": str(gd.get("geometry", "")),
+                                "reason": "geometry_creation_error",
+                                "row": {"pk": ocr.pk},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
             # If there is a related Occurrence, copy the geometry to it
             if ocr.occurrence_id and gd.get("geometry"):
@@ -2736,10 +2884,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     )
                             try:
                                 existing_occ_geom.save()
-                            except Exception:
+                            except Exception as exc:
                                 logger.exception(
                                     "Failed to update OccurrenceGeometry for occurrence %s",
                                     occ.pk,
+                                )
+                                errors_details.append(
+                                    {
+                                        "migrated_from_id": mig,
+                                        "column": "OccurrenceGeometry",
+                                        "level": "error",
+                                        "message": (
+                                            f"Failed to update linked OccurrenceGeometry for occurrence {occ.pk}: "
+                                            f"{exc}"
+                                        ),
+                                        "raw_value": (
+                                            str(gd) if "gd" in locals() else ""
+                                        ),
+                                    }
                                 )
                         else:
                             # Create new geometry
@@ -2779,14 +2941,36 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     )
                                 )
                                 existing_occ_geoms[occ.pk] = new_occ_geom
-                            except Exception:
+                            except Exception as exc:
                                 logger.exception(
                                     "Failed to create OccurrenceGeometry for occurrence %s",
                                     occ.pk,
                                 )
-                except Exception:
+                                errors_details.append(
+                                    {
+                                        "migrated_from_id": mig,
+                                        "column": "OccurrenceGeometry",
+                                        "level": "error",
+                                        "message": (
+                                            f"Failed to create OccurrenceGeometry for occurrence "
+                                            f"{occ.pk}: {exc}"
+                                        ),
+                                        "raw_value": (
+                                            str(gd) if "gd" in locals() else ""
+                                        ),
+                                    }
+                                )
+                except Exception as exc:
                     logger.exception(
                         "Failed to process OccurrenceGeometry for linked Occurrence"
+                    )
+                    errors_details.append(
+                        {
+                            "migrated_from_id": mig,
+                            "column": "OccurrenceGeometry",
+                            "level": "error",
+                            "message": f"Failed to process OccurrenceGeometry for linked Occurrence: {exc}",
+                        }
                     )
 
         if habs_to_create:
@@ -2801,11 +2985,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for h in habs_to_create:
                     try:
                         h.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRHabitatComposition for occurrence_report %s",
                             getattr(h.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(h, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRHabitatComposition",
+                                "level": "error",
+                                "message": f"Failed to create habitat composition: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if habs_to_update:
             try:
@@ -2819,11 +3019,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for h in habs_to_update:
                     try:
                         h.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to save OCRHabitatComposition %s",
                             getattr(h, "pk", None),
                         )
+                        ocr_ref = getattr(h, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRHabitatComposition",
+                                "level": "error",
+                                "message": f"Failed to update habitat composition: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(h, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # OCRHabitatCondition: OneToOne - create or update percentage flags
         if conds_to_create:
@@ -2838,11 +3054,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for c in conds_to_create:
                     try:
                         c.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRHabitatCondition for occurrence_report %s",
                             getattr(c.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(c, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRHabitatCondition",
+                                "level": "error",
+                                "message": f"Failed to create habitat condition: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if conds_to_update:
             try:
@@ -2873,11 +3105,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for c in conds_to_update:
                     try:
                         c.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to save OCRHabitatCondition %s",
                             getattr(c, "pk", None),
                         )
+                        ocr_ref = getattr(c, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRHabitatCondition",
+                                "level": "error",
+                                "message": f"Failed to update habitat condition: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(c, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # OCRIdentification: OneToOne - create or update identification records
         if idents_to_create:
@@ -2892,11 +3140,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for i in idents_to_create:
                     try:
                         i.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRIdentification for occurrence_report %s",
                             getattr(i.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(i, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRIdentification",
+                                "level": "error",
+                                "message": f"Failed to create identification: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if idents_to_update:
             try:
@@ -2926,11 +3190,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for i in idents_to_update:
                     try:
                         i.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to save OCRIdentification %s",
                             getattr(i, "pk", None),
                         )
+                        ocr_ref = getattr(i, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRIdentification",
+                                "level": "error",
+                                "message": f"Failed to update identification: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(i, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # OCRLocation: OneToOne - create or update location records
         if locs_to_create:
@@ -2943,11 +3223,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for loc in locs_to_create:
                     try:
                         loc.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRLocation for occurrence_report %s",
                             getattr(loc.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(loc, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRLocation",
+                                "level": "error",
+                                "message": f"Failed to create location: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if locs_to_update:
             try:
@@ -2977,11 +3273,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for loc in locs_to_update:
                     try:
                         loc.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to save OCRLocation %s",
                             getattr(loc, "pk", None),
                         )
+                        ocr_ref = getattr(loc, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRLocation",
+                                "level": "error",
+                                "message": f"Failed to update location: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(loc, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # OCRObservationDetail: OneToOne - create or update observation detail records
         if obs_to_create:
@@ -2996,11 +3308,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for obs in obs_to_create:
                     try:
                         obs.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRObservationDetail for occurrence_report %s",
                             getattr(obs.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(obs, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRObservationDetail",
+                                "level": "error",
+                                "message": f"Failed to create observation detail: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if obs_to_update:
             try:
@@ -3030,11 +3358,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for obs in obs_to_update:
                     try:
                         obs.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to save OCRObservationDetail %s",
                             getattr(obs, "pk", None),
                         )
+                        ocr_ref = getattr(obs, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRObservationDetail",
+                                "level": "error",
+                                "message": f"Failed to update observation detail: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(obs, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # OCRPlantCount: OneToOne - create or update plant count records
         if plant_counts_to_create:
@@ -3049,11 +3393,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for pc in plant_counts_to_create:
                     try:
                         pc.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRPlantCount for occurrence_report %s",
                             getattr(pc.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(pc, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRPlantCount",
+                                "level": "error",
+                                "message": f"Failed to create plant count: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if plant_counts_to_update:
             try:
@@ -3083,11 +3443,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for pc in plant_counts_to_update:
                     try:
                         pc.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to save OCRPlantCount %s",
                             getattr(pc, "pk", None),
                         )
+                        ocr_ref = getattr(pc, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRPlantCount",
+                                "level": "error",
+                                "message": f"Failed to update plant count: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(pc, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # OCRVegetationStructure: OneToOne - create or update vegetation structure records
         if vegetation_structures_to_create:
@@ -3102,11 +3478,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for vs in vegetation_structures_to_create:
                     try:
                         vs.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRVegetationStructure for occurrence_report %s",
                             getattr(vs.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(vs, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRVegetationStructure",
+                                "level": "error",
+                                "message": f"Failed to create vegetation structure: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if vegetation_structures_to_update:
             try:
@@ -3138,11 +3530,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for vs in vegetation_structures_to_update:
                     try:
                         vs.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to save OCRVegetationStructure %s",
                             getattr(vs, "pk", None),
                         )
+                        ocr_ref = getattr(vs, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRVegetationStructure",
+                                "level": "error",
+                                "message": f"Failed to update vegetation structure: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(vs, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # OCRFireHistory: OneToOne - create or update fire history records
         if fire_history_to_create:
@@ -3157,11 +3565,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for fh in fire_history_to_create:
                     try:
                         fh.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to create OCRFireHistory for occurrence_report %s",
                             getattr(fh.occurrence_report, "pk", None),
                         )
+                        ocr_ref = getattr(fh, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRFireHistory",
+                                "level": "error",
+                                "message": f"Failed to create fire history: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if fire_history_to_update:
             try:
@@ -3193,11 +3617,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 for fh in fire_history_to_update:
                     try:
                         fh.save()
-                    except Exception:
+                    except Exception as exc:
                         logger.exception(
                             "Failed to save OCRFireHistory %s",
                             getattr(fh, "pk", None),
                         )
+                        ocr_ref = getattr(fh, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(
+                                    ocr_ref, "migrated_from_id", ""
+                                ),
+                                "column": "OCRFireHistory",
+                                "level": "error",
+                                "message": f"Failed to update fire history: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(fh, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)
@@ -3333,10 +3773,21 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             target_obj.save()
                             cloned_count += 1
 
-                        except Exception:
+                        except Exception as exc:
                             logger.exception(
                                 f"Failed to clone {sect_code} ({ocr_model.__name__}) from OCR "
                                 f"{ocr.pk} to OCC {occurrence.pk}"
+                            )
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": getattr(
+                                        ocr, "migrated_from_id", ""
+                                    ),
+                                    "column": f"CLONE-{sect_code}",
+                                    "level": "error",
+                                    "message": f"Failed to clone {sect_code} to Occurrence {occurrence.pk}: {exc}",
+                                    "raw_value": str(getattr(ocr, "pk", "")),
+                                }
                             )
 
             logger.info(
