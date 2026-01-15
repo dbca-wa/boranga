@@ -556,6 +556,7 @@ PIPELINES = {
         "blank_to_none",
         observer_name_fallback_transform,
     ],
+    "OCRObserverDetail__organisation": ["strip", "blank_to_none"],
     "OCRHabitatComposition__loose_rock_percent": [
         "strip",
         "blank_to_none",
