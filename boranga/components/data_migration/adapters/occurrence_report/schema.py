@@ -41,6 +41,7 @@ COLUMN_MAP = {
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
     "OBS_NAME": "OCRObserverDetail__observer_name",
     "OBSERVER_CODE": "OBSERVER_CODE",
+    "OBS_ORG_NAME": "OCRObserverDetail__organisation",
     # SHEET_* fields for ocr_for_occ_name composition in tpfl adapter
     "SHEET_POP_NUMBER": "SHEET_POP_NUMBER",
     "SHEET_SUBPOP_CODE": "SHEET_SUBPOP_CODE",
