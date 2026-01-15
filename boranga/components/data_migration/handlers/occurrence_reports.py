@@ -647,11 +647,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
         )
 
         # Pre-fetch Occurrences for linking
-        occ_mig_ids = {
-            op["canonical"].Occurrence__migrated_from_id
-            for op in ops
-            if op["canonical"].Occurrence__migrated_from_id
-        }
+        def get_occ_lookup_id(report_mig_id, raw_occ_id):
+            if not raw_occ_id:
+                return None
+
+            # If raw_occ_id is an Occurrence object (returned by occurrence_from_pop_id),
+            # use its migrated_from_id string.
+            if hasattr(raw_occ_id, "migrated_from_id"):
+                return raw_occ_id.migrated_from_id
+
+            for src in SOURCE_ADAPTERS.keys():
+                prefix = f"{src.lower()}-"
+                if report_mig_id.startswith(prefix):
+                    if not raw_occ_id.startswith(prefix):
+                        return f"{prefix}{raw_occ_id}"
+            return raw_occ_id
+
+        occ_mig_ids = set()
+        for op in ops:
+            lid = get_occ_lookup_id(
+                op["migrated_from_id"], op["canonical"].Occurrence__migrated_from_id
+            )
+            if lid:
+                occ_mig_ids.add(lid)
+
         occ_map = {}
         if occ_mig_ids:
             occ_map = {
@@ -665,7 +684,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # Resolve occurrence link and copy details
             if row.Occurrence__migrated_from_id:
-                occ = occ_map.get(row.Occurrence__migrated_from_id)
+                lid = get_occ_lookup_id(
+                    op["migrated_from_id"], row.Occurrence__migrated_from_id
+                )
+                occ = occ_map.get(lid)
                 if occ:
                     # Replace string mapping with ID
                     defaults["occurrence_id"] = occ.id
@@ -822,7 +844,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     # include field only if every instance has a non-None value
                     try:
-                        if all(
+                        if f.null or all(
                             getattr(inst, f.name, None) is not None
                             for inst in update_instances
                         ):
@@ -1108,7 +1130,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 a.occurrence_report_id: a
                 for a in OCRAssociatedSpecies.objects.filter(
                     occurrence_report__in=target_occs
-                )
+                ).prefetch_related("related_species")
             }
 
             # Update existing OCRAssociatedSpecies with comments
@@ -1169,9 +1191,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         name_to_assoc[n].pk for n in names if n in name_to_assoc
                     }
                     # existing related ids (prefetched so no DB hit per-obj)
-                    existing_ids = set(
-                        assoc_obj.related_species.values_list("id", flat=True)
-                    )
+                    existing_ids = {s.pk for s in assoc_obj.related_species.all()}
                     add_ids = desired_ids - existing_ids
                     remove_ids = existing_ids - desired_ids
                     for aid in add_ids:
@@ -1913,6 +1933,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
         all_ocr_ids = update_ocr_ids + create_ocr_ids
         all_occ_ids = update_occ_ids + create_occ_ids
 
+        # Pre-fetch Occurrences for efficiently checking processing_status in the loop
+        occurrences_lookup = {
+            o.pk: o
+            for o in Occurrence.objects.annotate()
+            .select_related(None)
+            .filter(pk__in=all_occ_ids)
+            .only("id", "processing_status")
+        }
+
         existing_ocr_geoms = {
             g.occurrence_report_id: g
             for g in OccurrenceReportGeometry.objects.filter(
@@ -2233,8 +2262,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # If there is a related Occurrence, copy the geometry to it
                 if inst.occurrence_id:
                     try:
-                        occ = inst.occurrence
-                        if occ.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE:
+                        # Use lookup map to avoid N+1 queries; inst.occurrence may be stale
+                        # if occurrence_id was just updated.
+                        occ = occurrences_lookup.get(inst.occurrence_id)
+
+                        if (
+                            occ
+                            and occ.processing_status
+                            == Occurrence.PROCESSING_STATUS_ACTIVE
+                        ):
                             existing_occ_geom = existing_occ_geoms.get(occ.pk)
 
                             if existing_occ_geom:
