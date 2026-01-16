@@ -85,8 +85,8 @@ COPY --chown=oim:oim boranga ./boranga
 
 RUN python3 -m venv $VIRTUAL_ENV_PATH
 RUN $VIRTUAL_ENV_PATH/bin/pip3 install --upgrade pip && \
-    $VIRTUAL_ENV_PATH/bin/pip3 install --no-cache-dir -r requirements.txt && \
-    rm -rf /var/lib/{apt,dpkg,cache,log}/ /tmp/* /var/tmp/*
+    $VIRTUAL_ENV_PATH/bin/pip3 install --no-cache-dir -r requirements.txt
+RUN rm -rf /tmp/* /var/tmp/*
 
 FROM python_dependencies_boranga AS build_vue_boranga
 
