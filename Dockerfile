@@ -20,7 +20,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 FROM builder_base_boranga AS apt_packages_boranga
 
-RUN --mount=type=cache,target=/var/cache/apt apt-get update && \
+RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install --no-install-recommends -y \
     bzip2 \
