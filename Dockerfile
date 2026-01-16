@@ -33,6 +33,7 @@ RUN apt-get update && \
     python3-venv \
     software-properties-common \
     ssh \
+    git \
     sudo
     
 RUN update-ca-certificates
