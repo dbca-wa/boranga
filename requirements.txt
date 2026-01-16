@@ -73,7 +73,7 @@ sentry-sdk~=2.19
 setuptools~=80.9.0
 six>=1.16.0
 unicodecsv==0.14.1 # A Python 2.7 drop-in replacement from 2015
-wheel~=0.43
+wheel~=0.45
 whitenoise~=6.6
 xlsxwriter~=3.2
 xlwt==1.3.0
