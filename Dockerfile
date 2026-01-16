@@ -20,10 +20,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 FROM builder_base_boranga AS apt_packages_boranga
 
-# Use Australian Mirrors
-RUN sed 's/archive.ubuntu.com/au.archive.ubuntu.com/g' /etc/apt/sources.list > /etc/apt/sourcesau.list && \
-    mv /etc/apt/sourcesau.list /etc/apt/sources.list
-
 RUN --mount=type=cache,target=/var/cache/apt apt-get update && \
     apt-get upgrade -y && \
     apt-get install --no-install-recommends -y \
@@ -74,9 +70,6 @@ RUN chmod 755 /startup.sh && \
     mkdir /app && \
     chown -R oim.oim /app && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
-    wget https://raw.githubusercontent.com/dbca-wa/wagov_utils/main/wagov_utils/bin/default_script_installer.sh -O /tmp/default_script_installer.sh && \
-    chmod 755 /tmp/default_script_installer.sh && \
-    /tmp/default_script_installer.sh && \
     rm -rf /tmp/*
 
 FROM configure_boranga AS python_dependencies_boranga
