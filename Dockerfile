@@ -34,8 +34,8 @@ RUN --mount=type=cache,target=/var/cache/apt apt-get update && \
     software-properties-common \
     ssh \
     sudo \    
-    rm -rf /var/lib/apt/lists/* && \
     update-ca-certificates
+
 
 FROM apt_packages_boranga AS gdal_boranga
 
@@ -56,7 +56,7 @@ RUN mkdir -p /etc/apt/keyrings && \
     | tee /etc/apt/sources.list.d/nodesource.list && \
     apt-get update && \
     apt-get install -y nodejs
-
+RUN apt clean
 FROM node_boranga AS configure_boranga
 
 COPY startup.sh /
