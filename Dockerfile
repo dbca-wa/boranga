@@ -34,6 +34,9 @@ RUN apt-get update && \
     software-properties-common \
     ssh \
     git \
+    zlib1g-dev \
+    libbz2-dev \
+    build-essential \
     sudo
     
 RUN update-ca-certificates
