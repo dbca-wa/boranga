@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
@@ -405,6 +406,7 @@ def load_sheet_associated_species_names(
     path: str | None = None,
     filename: str = "DRF_SHEET_VEG_CLASSES_Ass_species.csv",
     max_lines: int | None = None,
+    split_values: bool = False,
 ) -> dict[str, list[str]]:
     """
     Load the legacy associated-species mapping CSV and return an in-memory map of
@@ -444,7 +446,15 @@ def load_sheet_associated_species_names(
                 sheet = str(sheet).strip()
                 name = str(name).strip()
                 if sheet and name:
-                    mapping[sheet].append(name)
+                    if split_values:
+                        # Split by comma or semicolon
+                        parts = re.split(r"[,;]+", name)
+                        for part in parts:
+                            part = part.strip()
+                            if part:
+                                mapping[sheet].append(part)
+                    else:
+                        mapping[sheet].append(name)
                 count += 1
         return mapping
     except FileNotFoundError:
