@@ -474,13 +474,14 @@ def ocr_plant_count_status_transform(value, ctx):
         return _result(COUNT_STATUS_NOT_COUNTED)
 
     # Check detailed count fields
+    # Note: Use canonical field names as `row` has been mapped by schema
     detailed_fields = [
-        "JUVENILE_PLANTS",
-        "MATURE_PLANTS",
-        "SEEDLING_PLANTS",
-        "JUVENILE_DEAD",
-        "MATURE_DEAD",
-        "SEEDLING_DEAD",
+        "OCRPlantCount__detailed_alive_juvenile",
+        "OCRPlantCount__detailed_alive_mature",
+        "OCRPlantCount__detailed_alive_seedling",
+        "OCRPlantCount__detailed_dead_juvenile",
+        "OCRPlantCount__detailed_dead_mature",
+        "OCRPlantCount__detailed_dead_seedling",
     ]
     has_detailed = any(
         row.get(f) is not None and str(row.get(f)).strip() != ""
@@ -491,7 +492,7 @@ def ocr_plant_count_status_transform(value, ctx):
         return _result(COUNT_STATUS_COUNTED)
 
     # Check simple count fields
-    simple_fields = ["SIMPLE_LIVE_TOT", "SIMPLE_DEAD_TOT"]
+    simple_fields = ["OCRPlantCount__simple_alive", "OCRPlantCount__simple_dead"]
     has_simple = any(
         row.get(f) is not None and str(row.get(f)).strip() != "" for f in simple_fields
     )
