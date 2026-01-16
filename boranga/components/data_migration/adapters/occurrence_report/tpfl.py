@@ -820,14 +820,30 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                         "OCRVegetationStructure__vegetation_structure_layer_one"
                     ] = veg_codes[3]
 
-            canonical["occurrence_report_name"] = (
-                f"{canonical.get('POP_NUMBER', '').strip()} {canonical.get('SUBPOP_CODE', '').strip()}".strip()
+            # Use SHEET_POP_NUMBER/SHEET_SUBPOP_CODE as POP_NUMBER/SUBPOP_CODE are not in RFR forms
+            # and not in schema column map
+            pop_num = (
+                canonical.get("SHEET_POP_NUMBER")
+                or raw.get("SHEET_POP_NUMBER")
+                or raw.get("POP_NUMBER")
+                or ""
             )
+            sub_pop = (
+                canonical.get("SHEET_SUBPOP_CODE")
+                or raw.get("SHEET_SUBPOP_CODE")
+                or raw.get("SUBPOP_CODE")
+                or ""
+            )
+            canonical["occurrence_report_name"] = (
+                f"{str(pop_num).strip()} {str(sub_pop).strip()}".strip()
+            )
+
             canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
             assessor_data = None
-            REASON_DEACTIVATED = canonical.get("REASON_DEACTIVATED", "").strip()
+            # REASON_DEACTIVATED and DEACTIVATED_DATE are not in schema column map, so read from raw
+            REASON_DEACTIVATED = raw.get("REASON_DEACTIVATED", "").strip()
             if REASON_DEACTIVATED:
-                DEACTIVATED_DATE = canonical.get("DEACTIVATED_DATE", "").strip()
+                DEACTIVATED_DATE = raw.get("DEACTIVATED_DATE", "").strip()
                 assessor_data = (
                     f"Reason Deactivated: {REASON_DEACTIVATED}, {DEACTIVATED_DATE}"
                 )
