@@ -33,8 +33,9 @@ RUN --mount=type=cache,target=/var/cache/apt apt-get update && \
     python3-venv \
     software-properties-common \
     ssh \
-    sudo \    
-    update-ca-certificates
+    sudo
+    
+RUN update-ca-certificates
 
 
 FROM apt_packages_boranga AS gdal_boranga
