@@ -1,7 +1,7 @@
 # syntax = docker/dockerfile:1.2
 
 # Prepare the base environment.
-FROM ghcr.io/dbca-wa/docker-apps-dev:ubuntu2510_base_latest  AS builder_base_appmonitor
+FROM ghcr.io/dbca-wa/docker-apps-dev:ubuntu2510_base_latest  AS builder_base_boranga
 
 LABEL maintainer="asi@dbca.wa.gov.au"
 LABEL org.opencontainers.image.source="https://github.com/dbca-wa/boranga"
