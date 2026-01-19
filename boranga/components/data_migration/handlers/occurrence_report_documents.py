@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @register
 class OccurrenceReportDocumentImporter(BaseSheetImporter):
-    slug = "occurrence_report_documents"
+    slug = "occurrence_report_documents_legacy"
     description = "Import occurrence report documents from DRF_RFR_FORMS"
 
     def run(self, path: str, ctx: ImportContext, **options):

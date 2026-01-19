@@ -18,12 +18,12 @@
 ## Occurrence Reports
 
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL
-./manage.py migrate_data run occurrence_report_documents private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL
+./manage.py migrate_data run occurrence_report_documents_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL
 ./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TPFL/DRF_SHEET_THREATS.csv --sources TPFL
 
 # The occurrence geometries are copied from the occurrence reports so this run must be done after the occurrence reports
-./manage.py migrate_data run occurrence_tenure private-media/legacy_data/TPFL/DRF_POPULATION.csv --sources TPFL
 
+./manage.py migrate_data run occurrence_tenure private-media/legacy_data/TPFL/DRF_POPULATION.csv --sources TPFL
 
 # --- TEC
 
