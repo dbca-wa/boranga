@@ -46,6 +46,11 @@ class NH3SanitizeSerializerMixin:
             # receives a clear message instead of an AttributeError.
             if hasattr(self, "child"):
                 return [self.child.to_internal_value(item) for item in data]
+
+            logger.warning(
+                f"Received list data for {self.__class__.__name__} which expects a dictionary: {data}"
+            )
+
             raise serializers.ValidationError(
                 {
                     api_settings.NON_FIELD_ERRORS_KEY: [
