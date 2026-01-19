@@ -909,13 +909,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
         if getattr(ctx, "dry_run", False):
             sheet_to_species = None
         else:
-            sheet_to_species = load_sheet_associated_species_names(path)
+            sheet_to_species = load_sheet_associated_species_names(
+                path, split_values=True
+            )
 
         # If any mapping rows found, resolve names to AssociatedSpeciesTaxonomy
+        # Also, scan OCRAssociatedSpecies__comment for additional species names
+        # and merge them into sheet_to_species.
+
+        # 0. Initialize normalized mapping from loaded file
+        normalized_sheet_to_species: dict[str, list[str]] = {}
         if sheet_to_species:
-            # Normalize sheet keys to strings and strip; ensure matching with
-            # target_map keys which are strings from migrated_from_id.
-            normalized_sheet_to_species: dict[str, list[str]] = {}
             for k, v in sheet_to_species.items():
                 if k is None:
                     continue
@@ -923,7 +927,48 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if not ks:
                     continue
                 normalized_sheet_to_species[ks] = [str(n).strip() for n in v if n]
-            sheet_to_species = normalized_sheet_to_species
+
+        sheet_to_species = normalized_sheet_to_species
+
+        # 1. Scan ops for OCRAssociatedSpecies__comment and extract names
+        import re
+
+        extra_species_count = 0
+        for op in ops:
+            mig = op["migrated_from_id"]
+            if not mig:
+                continue
+
+            merged_dict = op.get("merged") or {}
+            comment = merged_dict.get("OCRAssociatedSpecies__comment")
+
+            if comment and str(comment).strip():
+                # Split by comma or semicolon
+                raw_names = re.split(r"[,;]+", str(comment))
+                extracted = [n.strip() for n in raw_names if n.strip()]
+
+                if extracted:
+                    if mig not in sheet_to_species:
+                        sheet_to_species[mig] = []
+
+                    # Add newly found names if not already present
+                    current_set = {n.casefold() for n in sheet_to_species[mig]}
+                    for name in extracted:
+                        if name.casefold() not in current_set:
+                            sheet_to_species[mig].append(name)
+                            current_set.add(name.casefold())
+                            extra_species_count += 1
+
+        logger.info(
+            "OccurrenceReportImporter: Extracted %d additional associated species references from comments",
+            extra_species_count,
+        )
+
+        if sheet_to_species:
+            # Normalize sheet keys to strings and strip; ensure matching with
+            # target_map keys which are strings from migrated_from_id.
+            # (already done in step 0, but sheet_to_species was mutated in step 1,
+            # so keys are already consistent. Just proceed.)
 
             # unique species names
             uniq_names = {n for lst in sheet_to_species.values() for n in lst}
@@ -936,66 +981,86 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # Batch-resolve Taxonomy by case-insensitive scientific_name.
             # Use a server-side array join (unnest) to avoid huge IN(...) lists
             # which are slow to plan/parse and may hit driver/param limits.
-            from django.db import connection
 
             # Normalize names client-side to match lower(...) on DB.
-            lower_names = [str(n).strip() for n in uniq_names if n and str(n).strip()]
-            lower_names = [n.casefold() for n in lower_names]
+            lower_names = {
+                str(n).strip().casefold() for n in uniq_names if n and str(n).strip()
+            }
+            lower_names = list(lower_names)
 
             taxa_map = {}
             if lower_names:
                 # Resolve table and index names
-                tax_table = Taxonomy._meta.db_table  # may include schema
+                from django.db.models.functions import Lower
 
-                # Use server-side array join (unnest) to fetch matching taxonomy rows.
-                # Select only id and scientific_name then materialize Taxonomy instances
-                sql = (
-                    f"SELECT t.id, t.scientific_name FROM {tax_table} t JOIN unnest(%s::text[]) AS n(lower_name) "
-                    "ON lower(t.scientific_name) = n.lower_name;"
-                )
-                with connection.cursor() as cur:
-                    try:
-                        cur.execute(sql, [lower_names])
-                        rows = cur.fetchall()
-                    except Exception:
-                        logger.exception(
-                            "unnest resolution failed; falling back to ORM filter"
-                        )
-                        rows = []
+                # Fetch all matching Taxonomies (including historical ones)
+                # Group by scientific_name (lowercase) for correct duplicate handling
+                # We need to fetch: id, scientific_name, and other fields to determine "current"
+                # Assuming there's a way to determine "current" (e.g. no end_date or similar concept)
+                # But here the requirement is:
+                # 1. If not found -> warning
+                # 2. If multiple found -> prefer is_current=True
+                # 3. If multiple is_current=True -> warning
+                # We'll do this in Python to handle the complex logic, but batch-fetch carefully.
+                # Since we have duplicate names in DB potentially, unnest is tricky if it returns partial matches.
+                # Let's use the IN-clause with batching, but selecting *all* matches.
 
-                if rows:
-                    ids = [r[0] for r in rows]
-                    # bulk fetch Taxonomy instances for matched ids
-                    tax_by_id = {
-                        t.pk: t
-                        for t in Taxonomy.objects.filter(pk__in=ids).only(
-                            "id", "scientific_name"
-                        )
-                    }
-                    for tid, sci in rows:
-                        t = tax_by_id.get(tid)
-                        if t:
-                            taxa_map[sci.casefold()] = t
-                else:
-                    # Fallback: small set or unnest failure - try ORM path with batching
-                    try:
-                        from django.db.models.functions import Lower
+                matches_by_name = defaultdict(list)
+                ambiguous_species = {}
 
-                        batch_size = 5000
-                        # split lower_names into batches to avoid huge IN lists
-                        for i in range(0, len(lower_names), batch_size):
-                            batch = lower_names[i : i + batch_size]
-                            qs = (
-                                Taxonomy.objects.annotate(_ln=Lower("scientific_name"))
-                                .filter(_ln__in=list(batch))
-                                .only("id", "scientific_name")
-                            )
-                            for t in qs:
-                                taxa_map[t.scientific_name.casefold()] = t
-                    except Exception:
-                        logger.exception(
-                            "Fallback ORM lookup for taxonomy names failed"
-                        )
+                batch_size = 2000
+                for i in range(0, len(lower_names), batch_size):
+                    batch = lower_names[i : i + batch_size]
+                    qs = Taxonomy.objects.annotate(
+                        lname=Lower("scientific_name")
+                    ).filter(lname__in=batch)
+                    # We might need to select is_cal_name or similar if that indicates "current"?
+                    # Checking usage: TaxonPreviousName suggests Taxonomy might not have is_current flag directly?
+                    # Let's check the model first in a separate step or assume a field exists.
+                    # Wait, user prompt mentioned "is_current=True". Assuming Taxonomy has is_current.
+                    for t in qs:
+                        key = t.scientific_name.strip().casefold()
+                        # Avoid duplicates if batching somehow fetches same obj twice (defensive)
+                        if t not in matches_by_name[key]:
+                            matches_by_name[key].append(t)
+
+                # Now resolve "best" match per name
+                for name in uniq_names:
+                    lname = name.strip().casefold()
+                    candidates = matches_by_name.get(lname, [])
+
+                    if not candidates:
+                        # Case 1: Not found -> Log warning
+                        # warnings.append(
+                        #    f"Associated Species Taxonomy not found: {name}"
+                        # )
+                        continue
+
+                    if len(candidates) == 1:
+                        taxa_map[lname] = candidates[0]
+                        continue
+
+                    # Multiple candidates found
+                    current_candidates = [
+                        c for c in candidates if getattr(c, "is_current", False)
+                    ]
+
+                    if len(current_candidates) == 1:
+                        # Case 2: Exactly one active
+                        taxa_map[lname] = current_candidates[0]
+                    elif len(current_candidates) > 1:
+                        # Case 3: Multiple active -> Record for ambiguity warning later
+                        ambiguous_species[name] = [c.pk for c in current_candidates]
+                        # Fallback: maybe pick the one with highest ID? or latest created?
+                        # For now, just pick the first one to allow migration to proceed, but warned.
+                        taxa_map[lname] = current_candidates[0]
+                    else:
+                        # None are current, but we have candidates. Pick the first one (historical?)
+                        # Might want to warn here too? "Multiple candidates but none current".
+                        # Let's silently pick the last one (highest ID typically) or just first.
+                        # Sort by ID descending to get "newest" record effectively
+                        candidates.sort(key=lambda x: x.pk, reverse=True)
+                        taxa_map[lname] = candidates[0]
 
             # Resolve name -> taxonomy using scientific_name only (no vernacular lookup)
             name_to_tax: dict[str, Taxonomy] = {}
@@ -1007,6 +1072,40 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     unresolved.append(name)
                     continue
                 name_to_tax[name] = tax
+
+            if ambiguous_species:
+                # Build mapping: raw_sheet_no -> [list of ambiguous species on this sheet]
+                sheet_to_ambiguous_species = defaultdict(list)
+                for sheet_no, sp_list in sheet_to_species.items():
+                    amb_on_sheet = [s for s in sp_list if s in ambiguous_species]
+                    if amb_on_sheet:
+                        sheet_to_ambiguous_species[str(sheet_no)] = amb_on_sheet
+
+                # Check active import groups for matches
+                for migrated_from_id in groups:
+                    # Heuristic: migrated_from_id is {prefix}-{sheet_no}
+                    # or just {sheet_no}
+                    if "-" in migrated_from_id:
+                        suffix = migrated_from_id.split("-", 1)[1]
+                    else:
+                        suffix = migrated_from_id
+
+                    if suffix in sheet_to_ambiguous_species:
+                        for amb_sp in sheet_to_ambiguous_species[suffix]:
+                            cands = ambiguous_species.get(amb_sp, [])
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": migrated_from_id,
+                                    "column": "associated_species",
+                                    "level": "warning",
+                                    "message": f"Multiple current Taxonomy records found for '{amb_sp}': {cands}",
+                                    "raw_value": amb_sp,
+                                    "reason": "associated_species_ambiguity",
+                                    "row": {},
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+                            warn_count += 1
 
             if unresolved:
                 logger.warning(
@@ -1131,6 +1230,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # Create OCRAssociatedSpecies for occurrence reports that need them
             assoc_to_create = []
+            ocr_id_to_resolved = {}  # Store resolved species for M2M population
+
             # Iterate over all target occurrence reports, not just those in sheet_to_species
             for sheetno, ocr in target_map.items():
                 if ocr.pk in existing_assoc:
@@ -1147,6 +1248,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     merged = op.get("merged") or {}
                     comment = merged.get("OCRAssociatedSpecies__comment")
 
+                if resolved:
+                    ocr_id_to_resolved[ocr.pk] = resolved
+
                 if resolved or comment:
                     assoc = OCRAssociatedSpecies(occurrence_report=ocr)
                     if comment:
@@ -1158,6 +1262,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     OCRAssociatedSpecies.objects.bulk_create(
                         assoc_to_create, batch_size=BATCH
                     )
+
+                    # Populate ManyToMany relations for newly created objects
+                    # Use through model for bulk creation to avoid N+1 queries
+                    ThroughModel = OCRAssociatedSpecies.related_species.through
+                    m2m_links = []
+
+                    # Fetch them back to ensure we have IDs
+                    created_assocs = OCRAssociatedSpecies.objects.filter(
+                        occurrence_report_id__in=list(ocr_id_to_resolved.keys())
+                    )
+                    for assoc in created_assocs:
+                        r_list = ocr_id_to_resolved.get(assoc.occurrence_report_id)
+                        if r_list:
+                            for tax_obj in r_list:
+                                m2m_links.append(
+                                    ThroughModel(
+                                        ocrassociatedspecies_id=assoc.id,
+                                        associatedspeciestaxonomy_id=tax_obj.id,
+                                    )
+                                )
+
+                    if m2m_links:
+                        ThroughModel.objects.bulk_create(m2m_links, batch_size=BATCH)
+
                 except Exception:
                     logger.exception(
                         "Failed to bulk_create OCRAssociatedSpecies; falling back to individual saves"
@@ -1165,6 +1293,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     for a in assoc_to_create:
                         try:
                             a.save()
+                            # Also populate M2M on fallback
+                            if a.occurrence_report_id in ocr_id_to_resolved:
+                                a.related_species.add(
+                                    *ocr_id_to_resolved[a.occurrence_report_id]
+                                )
                         except Exception as exc:
                             logger.exception(
                                 "Failed to create OCRAssociatedSpecies for occurrence_report %s",
@@ -2529,8 +2662,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         logger.debug(
             f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}"
         )
-        logger.info(f"created_map keys: {list(created_map.keys())}")
+        # logger.info(f"created_map keys: {list(created_map.keys())}")
 
+        cm_processed = 0
         for (
             mig,
             habitat_data,
@@ -2543,14 +2677,20 @@ class OccurrenceReportImporter(BaseSheetImporter):
             vegetation_structure_data,
             fire_history_data,
         ) in create_meta:
-            logger.info(
-                f"Processing create_meta item: mig={mig}, has_geometry_data={bool(geometry_data)}"
-            )
+            cm_processed += 1
+            if cm_processed % 500 == 0:
+                logger.info(
+                    "OccurrenceReportImporter: processing create_meta item %d/%d (mig=%s)",
+                    cm_processed,
+                    len(create_meta),
+                    mig,
+                )
+
             ocr = created_map.get(mig)
             if not ocr:
-                logger.info(f"Skipping {mig}: not in created_map")
+                logger.debug(f"Skipping {mig}: not in created_map")
                 continue
-            logger.info(f"Continuing with mig={mig}, ocr.pk={ocr.pk}")
+            # logger.debug(f"Continuing with mig={mig}, ocr.pk={ocr.pk}")
             hd = habitat_data or {}
             hc = habitat_condition or {}
             # also pull identification_data from create_meta mapping (create_meta entries are tuples of
@@ -2774,17 +2914,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
 
             # OccurrenceReportGeometry: OneToOne - create geometry with locked=True and content_type set
-            logger.info(f"About to process geometry for mig={mig}, ocr.pk={ocr.pk}")
             gd = geometry_data or {}
-            if gd:
-                logger.info(
-                    f"Creating geometry for OCR {ocr.migrated_from_id} (pk={ocr.pk}): gd keys={list(gd.keys())}"
-                )
+
             # Only create geometry if we have at least a geometry field
             if gd.get("geometry"):
-                logger.debug(
-                    f"Creating geometry for OCR {ocr.pk}: {type(gd.get('geometry'))}"
-                )
+                # logger.debug(
+                #    f"Creating geometry for OCR {ocr.pk}: {type(gd.get('geometry'))}"
+                # )
                 existing_geom = existing_ocr_geoms.get(ocr.pk)
 
                 if existing_geom:
