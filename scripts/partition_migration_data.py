@@ -43,11 +43,12 @@ def load_adapter_class(adapter_path: str):
 
 def get_interesting_columns(
     adapter_class: Any, headers: list[str], ignore_list: list[str]
-) -> list[str]:
+) -> dict[str, str]:
     """
     Identify columns that have non-trivial pipelines and are not ignored.
+    Returns: Dict[header_name, canonical_key]
     """
-    interesting_columns = []
+    interesting_columns = {}
 
     # Try to access pipelines and column map
     # Some adapters define PIPELINES on the class, some might use a schema module
@@ -95,12 +96,19 @@ def get_interesting_columns(
                 is_trivial = True
 
             if not is_trivial:
-                interesting_columns.append(header)
+                interesting_columns[header] = canonical_key
         else:
             # If pipeline is not a list (advanced usage?), assume interesting
-            interesting_columns.append(header)
+            interesting_columns[header] = canonical_key
 
     return interesting_columns
+
+
+def parse_target(canonical_key: str) -> str:
+    if "__" in canonical_key:
+        model, field = canonical_key.split("__", 1)
+        return f"{model}.{field}"
+    return f"Main.{canonical_key}"
 
 
 def partition_data(
@@ -110,6 +118,7 @@ def partition_data(
     ignore_fields: list[str],
     max_cardinality: int = 50,
     heaviest_first: bool = False,
+    report_path: str = None,
 ):
     logger.info(f"Loading adapter: {adapter_path}")
     adapter_class = load_adapter_class(adapter_path)
@@ -128,7 +137,12 @@ def partition_data(
     headers = list(df.columns)
     logger.info(f"Found {len(headers)} columns.")
 
-    interesting_columns = get_interesting_columns(adapter_class, headers, ignore_fields)
+    # Returns Dict[header, canonical_key]
+    interesting_columns_map = get_interesting_columns(
+        adapter_class, headers, ignore_fields
+    )
+    interesting_columns = list(interesting_columns_map.keys())
+
     logger.info(
         f" identified {len(interesting_columns)} interesting columns: {interesting_columns}"
     )
@@ -191,6 +205,7 @@ def partition_data(
 
     covered_features = set()
     selected_indices = []
+    selected_rows_info = []  # Store (row_idx, new_features_set) for reporting
 
     while len(covered_features) < len(required_features):
         # Find the feature that is least covered? Or the row that covers most?
@@ -233,6 +248,7 @@ def partition_data(
 
         if best_row != -1:
             selected_indices.append(best_row)
+            selected_rows_info.append((best_row, best_row_diff))
             covered_features.update(best_row_diff)
             # Remove covered features from feature_to_rows to speed up next iteration
             # actually not strictly needed if we use 'covered_features' check,
@@ -251,12 +267,41 @@ def partition_data(
 
     if not heaviest_first:
         # Sort by index to preserve relative order roughly
-        selected_indices.sort()
+        selected_rows_info.sort(key=lambda x: x[0])
+        selected_indices = [x[0] for x in selected_rows_info]
 
     result_df = df.iloc[selected_indices]
 
     logger.info(f"Writing to {output_path}")
     result_df.to_csv(output_path, index=False)
+
+    if report_path:
+        logger.info(f"Writing report to {report_path}")
+        report_data = []
+        for idx, features in selected_rows_info:
+            # features is a set of (col_name, value)
+            # sort features by col name
+            sorted_feats = sorted(list(features), key=lambda x: x[0])
+            feat_str = "; ".join([f"{c}={v}" for c, v in sorted_feats])
+            columns_str = ", ".join(sorted([c for c, v in features]))
+
+            # Build target string
+            targets = []
+            for col in sorted([c for c, v in features]):
+                canonical = interesting_columns_map.get(col, col)
+                targets.append(parse_target(canonical))
+            targets_str = ", ".join(targets)
+
+            row_data = {
+                "original_row_index": idx,
+                "new_features_count": len(features),
+                "contributing_columns": columns_str,
+                "targets": targets_str,
+                "new_features": feat_str,
+            }
+            report_data.append(row_data)
+
+        pd.DataFrame(report_data).to_csv(report_path, index=False)
 
 
 if __name__ == "__main__":
@@ -281,6 +326,11 @@ if __name__ == "__main__":
         help="Sort output by number of new features covered (descending)",
     )
 
+    parser.add_argument(
+        "--report",
+        help="Path to report CSV detailing features covered per row",
+    )
+
     args = parser.parse_args()
 
     ignore_list = [x.strip() for x in args.ignore.split(",") if x.strip()]
@@ -292,4 +342,5 @@ if __name__ == "__main__":
         ignore_list,
         args.max_cardinality,
         args.heaviest_first,
+        args.report,
     )
