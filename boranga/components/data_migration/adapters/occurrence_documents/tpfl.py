@@ -1,6 +1,7 @@
 from boranga.components.data_migration.registry import (
+    TransformIssue,
+    _result,
     emailuser_by_legacy_username_factory,
-    fk_lookup,
 )
 from boranga.components.main.models import LegacyValueMap
 from boranga.components.occurrence.models import Occurrence
@@ -13,11 +14,37 @@ from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 from . import schema
 
+
 # TPFL-specific transforms and pipelines
-OCCURRENCE_ID_TRANSFORM = fk_lookup(
-    Occurrence,
-    lookup_field="migrated_from_id",
-)
+def occurrence_lookup_transform(value, ctx):
+    # Cache on function attribute
+    if not hasattr(occurrence_lookup_transform, "_cache"):
+        # Preload all occurrences mapped by migrated_from_id
+        mapping = dict(
+            Occurrence.objects.filter(migrated_from_id__isnull=False).values_list(
+                "migrated_from_id", "pk"
+            )
+        )
+        occurrence_lookup_transform._cache = mapping
+
+    if value in (None, ""):
+        return _result(None)
+
+    val_str = str(value)
+    unique_id = occurrence_lookup_transform._cache.get(val_str)
+
+    if unique_id:
+        return _result(unique_id)
+
+    return _result(
+        value,
+        TransformIssue(
+            "error", f"Occurrence with migrated_from_id='{value}' not found"
+        ),
+    )
+
+
+OCCURRENCE_ID_TRANSFORM = occurrence_lookup_transform
 
 UPLOADED_BY_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
