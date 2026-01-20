@@ -178,11 +178,12 @@ class OCRConservationThreatImporter(BaseSheetImporter):
 
         # helper to filter payload to model fields
         def filter_fields(model, payload: dict):
-            allowed = {
-                f.name
-                for f in model._meta.get_fields()
-                if f.concrete and not f.many_to_many and not f.one_to_many
-            }
+            allowed = set()
+            for f in model._meta.get_fields():
+                if f.concrete and not f.many_to_many and not f.one_to_many:
+                    allowed.add(f.name)
+                    if hasattr(f, "attname"):
+                        allowed.add(f.attname)
             return {k: v for k, v in payload.items() if k in allowed}
 
         to_create = []
