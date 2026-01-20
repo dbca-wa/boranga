@@ -7,8 +7,9 @@ from boranga.components.data_migration.adapters.base import (
     SourceAdapter,
 )
 from boranga.components.data_migration.registry import (
+    TransformIssue,
+    _result,
     build_legacy_map_transform,
-    fk_lookup,
     static_value_factory,
 )
 from boranga.components.occurrence.models import OccurrenceReport, OCRConservationThreat
@@ -35,13 +36,40 @@ def preload_observation_dates(path: str) -> dict[str, str]:
     return mapping
 
 
+def occurrence_report_lookup_transform(value, ctx):
+    # Cache on function attribute
+    if not hasattr(occurrence_report_lookup_transform, "_cache"):
+        mapping = dict(
+            OccurrenceReport.objects.filter(migrated_from_id__isnull=False).values_list(
+                "migrated_from_id", "pk"
+            )
+        )
+        occurrence_report_lookup_transform._cache = mapping
+
+    if value in (None, ""):
+        return _result(None)
+
+    val_str = str(value)
+    unique_id = occurrence_report_lookup_transform._cache.get(val_str)
+
+    if unique_id:
+        return _result(unique_id)
+
+    return _result(
+        value,
+        TransformIssue(
+            "error", f"OccurrenceReport with migrated_from_id='{value}' not found"
+        ),
+    )
+
+
 class OCRConservationThreatAdapter(SourceAdapter):
     source_key = Source.TPFL.value
     domain = "ocr_conservation_threat"
     model = OCRConservationThreat
 
     PIPELINES = {
-        "occurrence_report_id": [fk_lookup(OccurrenceReport, "migrated_from_id")],
+        "occurrence_report_id": [occurrence_report_lookup_transform],
         "threat_category": [
             build_legacy_map_transform(
                 "TPFL",
