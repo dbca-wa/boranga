@@ -86,6 +86,21 @@ class OccurrenceTenureImporter(BaseSheetImporter):
     slug = "occurrence_tenure"
     description = "Create OccurrenceTenure from spatial intersection and legacy CSV"
 
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """Delete OccurrenceTenure target data. Respect `ctx.dry_run`."""
+        if ctx.dry_run:
+            logger.info("Dry run: Would delete all OccurrenceTenure objects")
+            return
+
+        # We don't delete parent Occurrences, only the Tenure links
+        # OccurrenceTenure is just a linking model between OccurrenceGeometry and Tenure features
+        count = OccurrenceTenure.objects.count()
+        logger.info(f"Deleting {count} OccurrenceTenure objects...")
+        OccurrenceTenure.objects.all().delete()
+        logger.info("Deletion complete.")
+
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
         logger.info(
@@ -94,6 +109,10 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             start_time.isoformat(),
             ctx.dry_run,
         )
+
+        # Handle wipe-targets option
+        if options.get("wipe_targets"):
+            self.clear_targets(ctx, **options)
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
 
@@ -154,6 +173,34 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             logger.error("Multiple tenure intersects query layers found")
             return stats
 
+        # Preload Occurrence map for performance (migrated_from_id -> pk)
+        # Optimization: Only include active occurrences since geometries are only created for them.
+        occurrence_map = {}
+        # Track duplicates to mimic original behavior
+        duplicate_mids = set()
+
+        qs_occs = (
+            Occurrence.objects.filter(
+                migrated_from_id__isnull=False,
+                processing_status=Occurrence.PROCESSING_STATUS_ACTIVE,
+            )
+            .exclude(migrated_from_id="")
+            .values_list("migrated_from_id", "pk")
+        )
+
+        for mid, pk in qs_occs:
+            if mid in occurrence_map:
+                duplicate_mids.add(mid)
+            else:
+                occurrence_map[mid] = pk
+
+        # Remove duplicates from map
+        for mid in duplicate_mids:
+            if mid in occurrence_map:
+                del occurrence_map[mid]
+
+        from boranga.components.occurrence.models import OccurrenceGeometry
+
         for row in all_rows:
             processed += 1
             if processed % 100 == 0:
@@ -182,48 +229,48 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 skipped += 1
                 continue
 
-            # Find Occurrence
-            try:
-                occurrence = Occurrence.objects.get(migrated_from_id=migrated_from_id)
-            except Occurrence.DoesNotExist:
-                logger.warning(
-                    f"Occurrence with migrated_from_id {migrated_from_id} not found"
-                )
-                skipped += 1
-                continue
-            except Occurrence.MultipleObjectsReturned:
+            # Find Occurrence (Optimized)
+            if migrated_from_id in duplicate_mids:
                 logger.warning(
                     f"Multiple Occurrences with migrated_from_id {migrated_from_id} found"
                 )
                 skipped += 1
                 continue
 
+            occurrence_pk = occurrence_map.get(migrated_from_id)
+            if not occurrence_pk:
+                logger.warning(
+                    f"Occurrence with migrated_from_id {migrated_from_id} not found"
+                )
+                skipped += 1
+                continue
+
+            # Use hollow object for FK lookup
+            occurrence = Occurrence(pk=occurrence_pk)
+            occurrence_str = f"Occurrence {occurrence_pk} ({migrated_from_id})"
+
             # Get Geometry
             try:
                 # Assuming one geometry per occurrence for now, or taking the first one
                 # OccurrenceGeometry has a OneToOne or ForeignKey?
-                # In utils.py: InstanceGeometry.objects.filter(**{instance_fk_field_name: instance})
-                # OccurrenceGeometry is the model.
-                from boranga.components.occurrence.models import OccurrenceGeometry
-
                 geometry_instance = OccurrenceGeometry.objects.get(
                     occurrence=occurrence
                 )
             except OccurrenceGeometry.DoesNotExist:
-                logger.warning(f"No geometry for Occurrence {occurrence}")
+                logger.warning(f"No geometry for {occurrence_str}")
                 skipped += 1
                 continue
             except OccurrenceGeometry.MultipleObjectsReturned:
                 # If multiple, maybe process all?
                 # For now let's take the first one or log warning
-                logger.warning(f"Multiple geometries for Occurrence {occurrence}")
+                logger.warning(f"Multiple geometries for {occurrence_str}")
                 geometry_instance = OccurrenceGeometry.objects.filter(
                     occurrence=occurrence
                 ).first()
 
             if not geometry_instance.geometry:
                 logger.warning(
-                    f"Geometry object found but geometry field is None for Occurrence {occurrence}"
+                    f"Geometry object found but geometry field is None for {occurrence_str}"
                 )
                 skipped += 1
                 continue
