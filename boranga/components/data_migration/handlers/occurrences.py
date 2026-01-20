@@ -308,7 +308,8 @@ class OccurrenceImporter(BaseSheetImporter):
             _mid = transformed.get("migrated_from_id")
             if _src and _mid:
                 prefix = _src.lower().replace("_", "-")
-                transformed["migrated_from_id"] = f"{prefix}-{_mid}"
+                if not str(_mid).startswith(f"{prefix}-"):
+                    transformed["migrated_from_id"] = f"{prefix}-{_mid}"
 
             key = transformed.get("migrated_from_id")
             if not key:

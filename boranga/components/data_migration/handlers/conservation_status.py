@@ -275,7 +275,8 @@ class ConservationStatusImporter(BaseSheetImporter):
             _src = row.get("_source")
             if _src and row.get("migrated_from_id"):
                 prefix = _src.lower().replace("_", "-")
-                row["migrated_from_id"] = f"{prefix}-{row['migrated_from_id']}"
+                if not str(row["migrated_from_id"]).startswith(f"{prefix}-"):
+                    row["migrated_from_id"] = f"{prefix}-{row['migrated_from_id']}"
 
             try:
                 # Check for required migrated_from_id
