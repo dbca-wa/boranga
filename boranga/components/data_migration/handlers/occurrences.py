@@ -948,7 +948,9 @@ class OccurrenceImporter(BaseSheetImporter):
                         assoc_create.append(new_obj)
 
                 # OccurrenceGeometry
-                if any(k.startswith("OccurrenceGeometry__") for k in merged):
+                if src != Source.TPFL.value and any(
+                    k.startswith("OccurrenceGeometry__") for k in merged
+                ):
 
                     defaults = {
                         "geometry": merged.get("OccurrenceGeometry__geometry"),
