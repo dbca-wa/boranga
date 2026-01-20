@@ -97,9 +97,36 @@ class OccurrenceReportImporter(BaseSheetImporter):
             )
             return
 
-        logger.warning(
-            "OccurrenceReportImporter: deleting OccurrenceReport and related data..."
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
         )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        if is_filtered:
+            if not target_group_types:
+                logger.warning(
+                    "clear_targets: sources %s provided but no associated group_types found in map. Skipping delete.",
+                    sources,
+                )
+                return
+            logger.warning(
+                "OccurrenceReportImporter: deleting OccurrenceReport and related data for group_types: %s ...",
+                target_group_types,
+            )
+            report_filter = {"group_type__name__in": target_group_types}
+        else:
+            logger.warning(
+                "OccurrenceReportImporter: deleting OccurrenceReport and related data..."
+            )
+            report_filter = {}
 
         # Perform deletes in an autocommit block so they are committed
         # immediately. This mirrors the approach used in `SpeciesImporter` and
@@ -112,24 +139,28 @@ class OccurrenceReportImporter(BaseSheetImporter):
             conn.set_autocommit(True)
         try:
             try:
-                OccurrenceReport.objects.all().delete()
+                if is_filtered:
+                    OccurrenceReport.objects.filter(**report_filter).delete()
+                else:
+                    OccurrenceReport.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OccurrenceReport")
 
             # Reset the primary key sequence for OccurrenceReport when using PostgreSQL.
-            try:
-                if getattr(conn, "vendor", None) == "postgresql":
-                    table = OccurrenceReport._meta.db_table
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                            [table, "id", 1, False],
-                        )
-                    logger.info("Reset primary key sequence for table %s", table)
-            except Exception:
-                logger.exception(
-                    "Failed to reset OccurrenceReport primary key sequence"
-                )
+            if not is_filtered:
+                try:
+                    if getattr(conn, "vendor", None) == "postgresql":
+                        table = OccurrenceReport._meta.db_table
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", 1, False],
+                            )
+                        logger.info("Reset primary key sequence for table %s", table)
+                except Exception:
+                    logger.exception(
+                        "Failed to reset OccurrenceReport primary key sequence"
+                    )
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)

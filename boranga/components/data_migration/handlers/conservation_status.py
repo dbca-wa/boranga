@@ -44,9 +44,37 @@ class ConservationStatusImporter(BaseSheetImporter):
         if ctx.dry_run:
             return
 
-        logger.warning(
-            "ConservationStatusImporter: deleting ConservationStatus data..."
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
         )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        if is_filtered:
+            if not target_group_types:
+                return
+            logger.warning(
+                "ConservationStatusImporter: deleting ConservationStatus data for group_types: %s ...",
+                target_group_types,
+            )
+            # ConservationStatus uses application_type for group_type
+            cs_filter = {
+                "application_type__name__in": target_group_types,
+                "migrated_from_id__isnull": False,
+            }
+        else:
+            logger.warning(
+                "ConservationStatusImporter: deleting ConservationStatus data..."
+            )
+            cs_filter = {"migrated_from_id__isnull": False}
+
         from django.apps import apps
         from django.db import connections
 
@@ -57,20 +85,16 @@ class ConservationStatusImporter(BaseSheetImporter):
 
         try:
             ConservationStatus = apps.get_model("boranga", "ConservationStatus")
-            # Only delete migrated records? Or all?
-            # Usually we delete all if we are doing a full reload.
-            # But maybe filter by migrated_from_id__isnull=False?
-            # For safety, let's delete all for now as per previous patterns,
-            # or maybe just those with migrated_from_id.
-            # Given the user wants a migration run, usually it implies wiping previous migration data.
-            ConservationStatus.objects.filter(migrated_from_id__isnull=False).delete()
+            # Only delete migrated records
+            ConservationStatus.objects.filter(**cs_filter).delete()
 
-            # Reset sequence?
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT setval(pg_get_serial_sequence('boranga_conservationstatus', 'id'), "
-                    "coalesce(max(id), 1), max(id) IS NOT null) FROM boranga_conservationstatus;"
-                )
+            # Reset sequence? Only if not filtered.
+            if not is_filtered:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT setval(pg_get_serial_sequence('boranga_conservationstatus', 'id'), "
+                        "coalesce(max(id), 1), max(id) IS NOT null) FROM boranga_conservationstatus;"
+                    )
 
         finally:
             if not was_autocommit:

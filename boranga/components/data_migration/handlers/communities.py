@@ -134,48 +134,122 @@ class CommunityImporter(BaseSheetImporter):
             logger.info("CommunityImporter.clear_targets: dry-run, skipping delete")
             return
 
-        logger.warning("CommunityImporter: deleting Community and related data...")
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
+        )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        if is_filtered:
+            if not target_group_types:
+                logger.warning(
+                    "clear_targets: sources %s provided but no associated group_types found in map. Skipping delete.",
+                    sources,
+                )
+                return
+            logger.warning(
+                "CommunityImporter: deleting Community and related data for group_types: %s ...",
+                target_group_types,
+            )
+            comm_filter = {"group_type__name__in": target_group_types}
+            occ_filter = {"group_type__name__in": target_group_types}
+            report_filter = {"group_type__name__in": target_group_types}
+        else:
+            logger.warning(
+                "CommunityImporter: deleting ALL Community and related data..."
+            )
+            comm_filter = {}
+            occ_filter = {}
+            report_filter = {}
 
         # Perform deletes in an autocommit block so they are committed immediately.
         from django.db import connections
+
+        from boranga.components.occurrence.models import Occurrence, OccurrenceReport
+        from boranga.components.species_and_communities.models import Community
 
         conn = connections["default"]
         was_autocommit = conn.get_autocommit()
         if not was_autocommit:
             conn.set_autocommit(True)
         try:
-            vendor = getattr(conn, "vendor", None)
-            if vendor == "postgresql":
-                logger.info(
-                    "CommunityImporter: using TRUNCATE CASCADE for efficient bulk deletion"
-                )
-                try:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            f"TRUNCATE TABLE {Community._meta.db_table} CASCADE"
-                        )
-                        logger.info(
-                            "CommunityImporter: successfully truncated %s with CASCADE",
-                            Community._meta.db_table,
-                        )
-                except Exception:
-                    logger.exception(
-                        "Failed to truncate tables with CASCADE; falling back to DELETE"
+            if not is_filtered:
+                vendor = getattr(conn, "vendor", None)
+                if vendor == "postgresql":
+                    logger.info(
+                        "CommunityImporter: using TRUNCATE CASCADE for efficient bulk deletion"
                     )
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                f"TRUNCATE TABLE {Community._meta.db_table} CASCADE"
+                            )
+                            logger.info(
+                                "CommunityImporter: successfully truncated %s with CASCADE",
+                                Community._meta.db_table,
+                            )
+                        # Also truncate dependent tables
+                        try:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    f"TRUNCATE TABLE {OccurrenceReport._meta.db_table} CASCADE"
+                                )
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    f"TRUNCATE TABLE {Occurrence._meta.db_table} CASCADE"
+                                )
+                        except Exception:
+                            logger.warning(
+                                "Failed to truncate dependent tables, skipping"
+                            )
+
+                    except Exception:
+                        logger.exception(
+                            "Failed to truncate tables with CASCADE; falling back to DELETE"
+                        )
+
+                        OccurrenceReport.objects.all().delete()
+                        Occurrence.objects.all().update(combined_occurrence=None)
+                        Occurrence.objects.all().delete()
+                        Community.objects.all().delete()
+                else:
+                    # Non-Postgres
+                    OccurrenceReport.objects.all().delete()
+                    Occurrence.objects.all().update(combined_occurrence=None)
+                    Occurrence.objects.all().delete()
                     Community.objects.all().delete()
             else:
-                Community.objects.all().delete()
+                # Filtered delete
+                try:
+                    OccurrenceReport.objects.filter(**report_filter).delete()
+                    Occurrence.objects.filter(**occ_filter).update(
+                        combined_occurrence=None
+                    )
+                    Occurrence.objects.filter(**occ_filter).delete()
+                    Community.objects.filter(**comm_filter).delete()
+                except Exception:
+                    logger.exception(
+                        "CommunityImporter: Failed to delete filtered target data"
+                    )
 
             # Reset PK sequence
-            if vendor == "postgresql":
+            if not is_filtered:
                 try:
-                    table = Community._meta.db_table
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                            [table, "id", 1, False],
-                        )
-                    logger.info("Reset primary key sequence for table %s", table)
+                    if getattr(conn, "vendor", None) == "postgresql":
+                        table = Community._meta.db_table
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", 1, False],
+                            )
+                        logger.info("Reset primary key sequence for table %s", table)
                 except Exception:
                     logger.exception("Failed to reset Community primary key sequence")
 

@@ -38,17 +38,47 @@ class OCRConservationThreatImporter(BaseSheetImporter):
         if ctx.dry_run:
             return
 
-        logger = __import__("logging").getLogger(__name__)
-        logger.warning(
-            "OCRConservationThreatImporter: deleting OCRConservationThreat data..."
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
         )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        logger = __import__("logging").getLogger(__name__)
+
+        if is_filtered:
+            if not target_group_types:
+                return
+            logger.warning(
+                "OCRConservationThreatImporter: deleting OCRConservationThreat data for group_types: %s ...",
+                target_group_types,
+            )
+            threat_filter = {
+                "occurrence_report__group_type__name__in": target_group_types
+            }
+        else:
+            logger.warning(
+                "OCRConservationThreatImporter: deleting OCRConservationThreat data..."
+            )
+            threat_filter = {}
+
         from django.db import transaction
 
         with transaction.atomic():
             try:
                 from boranga.components.occurrence.models import OCRConservationThreat
 
-                OCRConservationThreat.objects.all().delete()
+                if is_filtered:
+                    OCRConservationThreat.objects.filter(**threat_filter).delete()
+                else:
+                    OCRConservationThreat.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OCRConservationThreat")
 

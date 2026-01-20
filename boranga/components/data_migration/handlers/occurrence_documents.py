@@ -38,10 +38,35 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
         if ctx.dry_run:
             return
 
-        logger = __import__("logging").getLogger(__name__)
-        logger.warning(
-            "OccurrenceDocumentImporter: deleting OccurrenceDocument data..."
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
         )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        logger = __import__("logging").getLogger(__name__)
+
+        if is_filtered:
+            if not target_group_types:
+                return
+            logger.warning(
+                "OccurrenceDocumentImporter: deleting OccurrenceDocument data for group_types: %s ...",
+                target_group_types,
+            )
+            doc_filter = {"occurrence__group_type__name__in": target_group_types}
+        else:
+            logger.warning(
+                "OccurrenceDocumentImporter: deleting OccurrenceDocument data..."
+            )
+            doc_filter = {}
+
         from django.apps import apps
         from django.db import connections
 
@@ -53,24 +78,28 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
         try:
             OccurrenceDocument = apps.get_model("boranga", "OccurrenceDocument")
             try:
-                OccurrenceDocument.objects.all().delete()
+                if is_filtered:
+                    OccurrenceDocument.objects.filter(**doc_filter).delete()
+                else:
+                    OccurrenceDocument.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OccurrenceDocument")
 
             # Reset the primary key sequence for OccurrenceDocument when using PostgreSQL.
-            try:
-                if getattr(conn, "vendor", None) == "postgresql":
-                    table = OccurrenceDocument._meta.db_table
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                            [table, "id", 1, False],
-                        )
-                    logger.info("Reset primary key sequence for table %s", table)
-            except Exception:
-                logger.exception(
-                    "Failed to reset OccurrenceDocument primary key sequence"
-                )
+            if not is_filtered:
+                try:
+                    if getattr(conn, "vendor", None) == "postgresql":
+                        table = OccurrenceDocument._meta.db_table
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", 1, False],
+                            )
+                        logger.info("Reset primary key sequence for table %s", table)
+                except Exception:
+                    logger.exception(
+                        "Failed to reset OccurrenceDocument primary key sequence"
+                    )
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)

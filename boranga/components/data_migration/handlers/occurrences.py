@@ -49,6 +49,7 @@ from boranga.components.occurrence.models import (
     Occurrence,
     OccurrenceDocument,
     OccurrenceGeometry,
+    OccurrenceReport,
     OccurrenceSite,
     OccurrenceUserAction,
     SpeciesRole,
@@ -88,7 +89,43 @@ class OccurrenceImporter(BaseSheetImporter):
             logger.info("OccurrenceImporter.clear_targets: dry-run, skipping delete")
             return
 
-        logger.warning("OccurrenceImporter: deleting Occurrence and related data...")
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
+        )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        # If specific sources are requested, filter deletions by group_type.
+        is_filtered = bool(sources)
+
+        occ_filter = {}
+        report_filter = {}
+        rel_filter = {}
+
+        if is_filtered:
+            if not target_group_types:
+                logger.warning(
+                    "clear_targets: sources %s provided but no associated group_types found in map. Skipping delete.",
+                    sources,
+                )
+                return
+
+            logger.warning(
+                "OccurrenceImporter: deleting Occurrence and related data for group_types: %s ...",
+                target_group_types,
+            )
+            occ_filter = {"group_type__name__in": target_group_types}
+            report_filter = {"group_type__name__in": target_group_types}
+            rel_filter = {"occurrence__group_type__name__in": target_group_types}
+        else:
+            logger.warning(
+                "OccurrenceImporter: deleting ALL Occurrence and related data..."
+            )
 
         # Perform deletes in an autocommit block so they are committed
         # immediately. This avoids the case where clear_targets runs inside a
@@ -101,37 +138,54 @@ class OccurrenceImporter(BaseSheetImporter):
             conn.set_autocommit(True)
         try:
             try:
-                OCCContactDetail.objects.all().delete()
-                OCCLocation.objects.all().delete()
-                OccurrenceSite.objects.all().delete()
-                OCCObservationDetail.objects.all().delete()
-                OCCHabitatComposition.objects.all().delete()
-                OCCFireHistory.objects.all().delete()
-                OCCAssociatedSpecies.objects.all().delete()
-                AssociatedSpeciesTaxonomy.objects.all().delete()
-                OccurrenceDocument.objects.all().delete()
-                OCCIdentification.objects.all().delete()
-                OCCHabitatCondition.objects.all().delete()
-                OccurrenceGeometry.objects.all().delete()
+                # Delete OccurrenceReport objects first as they depend on Occurrences
+                OccurrenceReport.objects.filter(**report_filter).delete()
+
+                # Nullify self-reference that blocks deletion of Occurrence
+                Occurrence.objects.filter(**occ_filter).update(combined_occurrence=None)
+
+                relations = [
+                    OCCContactDetail,
+                    OCCLocation,
+                    OccurrenceSite,
+                    OCCObservationDetail,
+                    OCCHabitatComposition,
+                    OCCFireHistory,
+                    OCCAssociatedSpecies,
+                    OccurrenceDocument,
+                    OCCIdentification,
+                    OCCHabitatCondition,
+                    OccurrenceGeometry,
+                ]
+                for model in relations:
+                    model.objects.filter(**rel_filter).delete()
+
+                if not is_filtered:
+                    AssociatedSpeciesTaxonomy.objects.all().delete()
+
             except Exception:
                 logger.exception("Failed to delete related Occurrence data")
             try:
-                Occurrence.objects.all().delete()
+                Occurrence.objects.filter(**occ_filter).delete()
             except Exception:
                 logger.exception("Failed to delete Occurrence")
 
-            # Reset the primary key sequence for Occurrence when using PostgreSQL.
-            try:
-                if getattr(conn, "vendor", None) == "postgresql":
-                    table = Occurrence._meta.db_table
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                            [table, "id", 1, False],
-                        )
-                    logger.info("Reset primary key sequence for table %s", table)
-            except Exception:
-                logger.exception("Failed to reset Occurrence primary key sequence")
+            # Reset the primary key sequence for Occurrence and OccurrenceReport when using PostgreSQL.
+            if not is_filtered:
+                try:
+                    if getattr(conn, "vendor", None) == "postgresql":
+                        for model in [Occurrence, OccurrenceReport]:
+                            table = model._meta.db_table
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                    [table, "id", 1, False],
+                                )
+                            logger.info(
+                                "Reset primary key sequence for table %s", table
+                            )
+                except Exception:
+                    logger.exception("Failed to reset primary key sequences")
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
