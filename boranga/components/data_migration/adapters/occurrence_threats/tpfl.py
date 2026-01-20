@@ -1,7 +1,8 @@
 from boranga.components.data_migration.registry import (
+    TransformIssue,
     TransformResult,
+    _result,
     build_legacy_map_transform,
-    fk_lookup,
     registry,
     static_value_factory,
 )
@@ -25,8 +26,35 @@ def current_impact_fallback(value, ctx):
         return TransformResult(None)
 
 
+def occurrence_lookup_transform(value, ctx):
+    # Cache on function attribute
+    if not hasattr(occurrence_lookup_transform, "_cache"):
+        mapping = dict(
+            Occurrence.objects.filter(migrated_from_id__isnull=False).values_list(
+                "migrated_from_id", "pk"
+            )
+        )
+        occurrence_lookup_transform._cache = mapping
+
+    if value in (None, ""):
+        return _result(None)
+
+    val_str = str(value)
+    unique_id = occurrence_lookup_transform._cache.get(val_str)
+
+    if unique_id:
+        return _result(unique_id)
+
+    return _result(
+        value,
+        TransformIssue(
+            "error", f"Occurrence with migrated_from_id='{value}' not found"
+        ),
+    )
+
+
 PIPELINES = {
-    "occurrence_id": [fk_lookup(Occurrence, "migrated_from_id")],
+    "occurrence_id": [occurrence_lookup_transform],
     "occurrence_report_threat_id": [],  # Should be None as per condition
     "threat_category_id": [
         build_legacy_map_transform(
