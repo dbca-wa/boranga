@@ -197,7 +197,6 @@ class OccurrenceTpflAdapter(SourceAdapter):
                 GroupType.GROUP_TYPE_FLORA
             )
             canonical_row["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
-            canonical_row["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
             canonical_row["locked"] = True
             canonical_row["lodgment_date"] = canonical_row.get("datetime_created")
 
