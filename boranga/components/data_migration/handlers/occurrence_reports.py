@@ -638,7 +638,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OccurrenceReportGeometry__"):
                     short = k.split("OccurrenceReportGeometry__", 1)[1]
                     geometry_data[short] = extract_value(v)
-                    logger.debug(f"Extracted geometry field: {short}={type(v)}")
                 if k.startswith("OCRPlantCount__"):
                     short = k.split("OCRPlantCount__", 1)[1]
                     plant_count_data[short] = extract_value(v)
@@ -2214,39 +2213,20 @@ class OccurrenceReportImporter(BaseSheetImporter):
         from django.contrib.contenttypes.models import ContentType
 
         ocr_content_type = ContentType.objects.get_for_model(OccurrenceReport)
-        occ_content_type = ContentType.objects.get_for_model(Occurrence)
 
         # Pre-fetch existing geometries for bulk lookup
         # For updates:
         update_ocr_ids = [t[0].pk for t in to_update]
-        update_occ_ids = [t[0].occurrence_id for t in to_update if t[0].occurrence_id]
         # For creates:
         create_ocr_ids = [s.pk for s in created_map.values()]
-        create_occ_ids = [
-            s.occurrence_id for s in created_map.values() if s.occurrence_id
-        ]
 
         all_ocr_ids = update_ocr_ids + create_ocr_ids
-        all_occ_ids = update_occ_ids + create_occ_ids
-
-        # Pre-fetch Occurrences for efficiently checking processing_status in the loop
-        occurrences_lookup = {
-            o.pk: o
-            for o in Occurrence.objects.annotate()
-            .select_related(None)
-            .filter(pk__in=all_occ_ids)
-            .only("id", "processing_status")
-        }
 
         existing_ocr_geoms = {
             g.occurrence_report_id: g
             for g in OccurrenceReportGeometry.objects.filter(
                 occurrence_report_id__in=all_ocr_ids
             )
-        }
-        existing_occ_geoms = {
-            g.occurrence_id: g
-            for g in OccurrenceGeometry.objects.filter(occurrence_id__in=all_occ_ids)
         }
 
         for up in to_update:
@@ -2568,126 +2548,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                         errors += 1
 
-                # If there is a related Occurrence, copy the geometry to it
-                if inst.occurrence_id:
-                    try:
-                        # Use lookup map to avoid N+1 queries; inst.occurrence may be stale
-                        # if occurrence_id was just updated.
-                        occ = occurrences_lookup.get(inst.occurrence_id)
-
-                        if (
-                            occ
-                            and occ.processing_status
-                            == Occurrence.PROCESSING_STATUS_ACTIVE
-                        ):
-                            existing_occ_geom = existing_occ_geoms.get(occ.pk)
-
-                            if existing_occ_geom:
-                                valid_geom_fields = {
-                                    f.name for f in OccurrenceGeometry._meta.fields
-                                }
-                                for field_name, val in gd.items():
-                                    if field_name == "occurrence_report":
-                                        continue
-                                    if (
-                                        val is not None
-                                        and field_name in valid_geom_fields
-                                    ):
-                                        apply_value_to_instance(
-                                            existing_occ_geom, field_name, val
-                                        )
-                                try:
-                                    existing_occ_geom.save()
-                                except Exception as exc:
-                                    logger.exception(
-                                        "Failed to update OccurrenceGeometry for occurrence %s",
-                                        occ.pk,
-                                    )
-                                    errors_details.append(
-                                        {
-                                            "migrated_from_id": mig,
-                                            "column": "OccurrenceGeometry",
-                                            "level": "error",
-                                            "message": (
-                                                f"Failed to update linked OccurrenceGeometry for occurrence "
-                                                f"{occ.pk}: {exc}"
-                                            ),
-                                            "raw_value": (
-                                                str(gd) if "gd" in locals() else ""
-                                            ),
-                                        }
-                                    )
-                            else:
-                                geom_create_kwargs = {
-                                    "occurrence_id": occ.pk,
-                                    "content_type": occ_content_type,
-                                    "object_id": occ.pk,
-                                }
-                                valid_geom_fields = {
-                                    f.name for f in OccurrenceGeometry._meta.fields
-                                }
-                                for field_name, val in gd.items():
-                                    if field_name == "occurrence_report":
-                                        continue
-                                    if (
-                                        val is not None
-                                        and field_name in valid_geom_fields
-                                    ):
-                                        geom_create_kwargs[field_name] = val
-
-                                try:
-                                    buffered_geom = gd.get("geometry")
-                                    if buffered_geom and hasattr(
-                                        buffered_geom, "centroid"
-                                    ):
-                                        original_point = buffered_geom.centroid
-                                        if original_point:
-                                            geom_create_kwargs[
-                                                "original_geometry_ewkb"
-                                            ] = original_point.ewkb
-                                except Exception:
-                                    logger.debug(
-                                        "Could not extract original point geometry for Occurrence"
-                                    )
-
-                                try:
-                                    new_occ_geom = OccurrenceGeometry.objects.create(
-                                        **normalize_create_kwargs(
-                                            OccurrenceGeometry, geom_create_kwargs
-                                        )
-                                    )
-                                    existing_occ_geoms[occ.pk] = new_occ_geom
-                                except Exception as exc:
-                                    logger.exception(
-                                        "Failed to create OccurrenceGeometry for occurrence %s",
-                                        occ.pk,
-                                    )
-                                    errors_details.append(
-                                        {
-                                            "migrated_from_id": mig,
-                                            "column": "OccurrenceGeometry",
-                                            "level": "error",
-                                            "message": (
-                                                f"Failed to create OccurrenceGeometry for occurrence "
-                                                f"{occ.pk}: {exc}"
-                                            ),
-                                            "raw_value": (
-                                                str(gd) if "gd" in locals() else ""
-                                            ),
-                                        }
-                                    )
-                    except Exception as exc:
-                        logger.exception(
-                            "Failed to process OccurrenceGeometry for linked Occurrence"
-                        )
-                        errors_details.append(
-                            {
-                                "migrated_from_id": mig,
-                                "column": "OccurrenceGeometry",
-                                "level": "error",
-                                "message": f"Failed to process OccurrenceGeometry for linked Occurrence: {exc}",
-                            }
-                        )
+                # If there is a related Occurrence, logic for copying geometry has been moved
+                # to the final population phase based on DRF_POP_SECTION_MAP (SECT_CODE='LOCATION')
 
         # Handle created ones
         logger.debug(
@@ -3029,116 +2891,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                         errors += 1
 
-            # If there is a related Occurrence, copy the geometry to it
-            if ocr.occurrence_id and gd.get("geometry"):
-                try:
-                    occ = ocr.occurrence
-                    if occ.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE:
-                        # Check if OccurrenceGeometry already exists
-                        existing_occ_geom = existing_occ_geoms.get(occ.pk)
-
-                        if existing_occ_geom:
-                            # Update existing geometry
-                            valid_geom_fields = {
-                                f.name for f in OccurrenceGeometry._meta.fields
-                            }
-                            for field_name, val in gd.items():
-                                if field_name == "occurrence_report":
-                                    continue
-                                if val is not None and field_name in valid_geom_fields:
-                                    apply_value_to_instance(
-                                        existing_occ_geom, field_name, val
-                                    )
-                            try:
-                                existing_occ_geom.save()
-                            except Exception as exc:
-                                logger.exception(
-                                    "Failed to update OccurrenceGeometry for occurrence %s",
-                                    occ.pk,
-                                )
-                                errors_details.append(
-                                    {
-                                        "migrated_from_id": mig,
-                                        "column": "OccurrenceGeometry",
-                                        "level": "error",
-                                        "message": (
-                                            f"Failed to update linked OccurrenceGeometry for occurrence {occ.pk}: "
-                                            f"{exc}"
-                                        ),
-                                        "raw_value": (
-                                            str(gd) if "gd" in locals() else ""
-                                        ),
-                                    }
-                                )
-                        else:
-                            # Create new geometry
-                            geom_create_kwargs = {
-                                "occurrence_id": occ.pk,
-                                "content_type": occ_content_type,
-                                "object_id": occ.pk,
-                            }
-                            # Add geometry fields from gd
-                            valid_geom_fields = {
-                                f.name for f in OccurrenceGeometry._meta.fields
-                            }
-                            for field_name, val in gd.items():
-                                if field_name == "occurrence_report":
-                                    continue
-                                if val is not None and field_name in valid_geom_fields:
-                                    geom_create_kwargs[field_name] = val
-
-                            # Store the original point geometry (before buffering) in EWKB format
-                            try:
-                                buffered_geom = gd.get("geometry")
-                                if buffered_geom and hasattr(buffered_geom, "centroid"):
-                                    original_point = buffered_geom.centroid
-                                    if original_point:
-                                        geom_create_kwargs["original_geometry_ewkb"] = (
-                                            original_point.ewkb
-                                        )
-                            except Exception:
-                                logger.debug(
-                                    "Could not extract original point geometry for Occurrence"
-                                )
-
-                            try:
-                                new_occ_geom = OccurrenceGeometry.objects.create(
-                                    **normalize_create_kwargs(
-                                        OccurrenceGeometry, geom_create_kwargs
-                                    )
-                                )
-                                existing_occ_geoms[occ.pk] = new_occ_geom
-                            except Exception as exc:
-                                logger.exception(
-                                    "Failed to create OccurrenceGeometry for occurrence %s",
-                                    occ.pk,
-                                )
-                                errors_details.append(
-                                    {
-                                        "migrated_from_id": mig,
-                                        "column": "OccurrenceGeometry",
-                                        "level": "error",
-                                        "message": (
-                                            f"Failed to create OccurrenceGeometry for occurrence "
-                                            f"{occ.pk}: {exc}"
-                                        ),
-                                        "raw_value": (
-                                            str(gd) if "gd" in locals() else ""
-                                        ),
-                                    }
-                                )
-                except Exception as exc:
-                    logger.exception(
-                        "Failed to process OccurrenceGeometry for linked Occurrence"
-                    )
-                    errors_details.append(
-                        {
-                            "migrated_from_id": mig,
-                            "column": "OccurrenceGeometry",
-                            "level": "error",
-                            "message": f"Failed to process OccurrenceGeometry for linked Occurrence: {exc}",
-                        }
-                    )
+            # Geometry copying to Occurrence is handled in the final population phase
 
         if habs_to_create:
             try:
@@ -3833,6 +3586,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
             section_config = {
                 "LOCATION": [
                     (OCRLocation, OCCLocation, "copied_ocr_location"),
+                    (
+                        OccurrenceReportGeometry,
+                        OccurrenceGeometry,
+                        "copied_ocr_geometry",
+                    ),
                 ],
                 "PLNT_CNT": [
                     (OCRPlantCount, OCCPlantCount, "copied_ocr_plant_count"),
@@ -3868,13 +3626,18 @@ class OccurrenceReportImporter(BaseSheetImporter):
             cloned_count = 0
             for ocr in all_processed_ocrs:
                 sheetno = ocr.migrated_from_id
-                if not sheetno or sheetno not in pop_section_map:
+                if not sheetno:
                     continue
 
-                # Get the list of sections to copy for this SHEETNO
-                # Each entry is (POP_ID, SECT_CODE)
-                entries = pop_section_map[sheetno]
+                entries = pop_section_map.get(sheetno)
+                if not entries and "-" in sheetno:
+                    # Try stripping prefix (e.g. "tpfl-12345" -> "12345")
+                    entries = pop_section_map.get(sheetno.split("-", 1)[1])
 
+                if not entries:
+                    continue
+
+                # Each entry is (POP_ID, SECT_CODE)
                 for pop_id, sect_code in entries:
                     if sect_code not in section_config:
                         # Some codes might not be implemented or relevant
@@ -3915,6 +3678,19 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             # Create new instance
                             target_obj = occ_model(occurrence=occurrence)
 
+                        # Set content_type/object_id if model supports them (e.g. GeometryBase)
+                        # We must do this explicitly and exclude them from common_fields to prevent
+                        # finding/copying the source's content_type (which would be OccurrenceReport).
+                        if hasattr(target_obj, "content_type_id") and hasattr(
+                            target_obj, "object_id"
+                        ):
+                            from django.contrib.contenttypes.models import ContentType
+
+                            target_obj.content_type = ContentType.objects.get_for_model(
+                                occurrence
+                            )
+                            target_obj.object_id = occurrence.pk
+
                         # 3. Clone data
                         try:
                             # Copy fields that exist in both models
@@ -3928,9 +3704,22 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     "occurrence_report",
                                     "occurrence",
                                     "migrated_from_id",
+                                    "content_type",
+                                    "object_id",
                                 ]:
                                     continue
+
                                 val = getattr(source_obj, field_name)
+                                # Default missing color/stroke for OccurrenceGeometry if missing
+                                if field_name == "color" and not val:
+                                    val = target_obj._meta.get_field(
+                                        "color"
+                                    ).get_default()
+                                if field_name == "stroke" and not val:
+                                    val = target_obj._meta.get_field(
+                                        "stroke"
+                                    ).get_default()
+
                                 setattr(target_obj, field_name, val)
 
                             # Set the traceability field
