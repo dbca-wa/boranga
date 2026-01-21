@@ -183,8 +183,8 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             Occurrence.objects.filter(
                 migrated_from_id__isnull=False,
                 processing_status=Occurrence.PROCESSING_STATUS_ACTIVE,
-                occurrencegeometry__isnull=False,
-                occurrencegeometry__geometry__isnull=False,
+                occ_geometry__isnull=False,
+                occ_geometry__geometry__isnull=False,
             )
             .exclude(migrated_from_id="")
             .values_list("migrated_from_id", "pk")
