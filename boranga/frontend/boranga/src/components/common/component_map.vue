@@ -1365,6 +1365,7 @@
                 <div
                     v-show="map"
                     id="popup"
+                    ref="popup"
                     class="ol-popup ol-selectable overlay-feature-popup"
                 >
                     <template v-if="overlayFeatureInfo">
@@ -2410,39 +2411,10 @@ export default {
                 )
             );
         }
-        Promise.all([...initialisers, ...additionalInitialisers]).then(
-            (initialised) => {
-                const proposals = this.initialiseProposals(initialised.shift()); // pop first element
-                const baseLayers = this.initialiseBaseLayers(
-                    initialised.shift()
-                );
-                this.gisExtentArray = initialised.shift(); // pop the GIS extent tuple
-                this.createMap(baseLayers);
-                this.addTileLayers();
-                this.initialiseMap();
-                // Query Layer
-                this.loadMapFeatures(proposals, this.queryLayerDefinition.name);
-                for (let i = 0; i < initialised.length; i++) {
-                    const layerDef = this.additionalLayersDefinitions[i];
-                    let features = this.initialiseProposals(
-                        initialised[i],
-                        layerDef
-                    );
-
-                    if (layerDef.handler) {
-                        features = layerDef.handler(features);
-                    }
-                    this.loadMapFeatures(features, layerDef.name);
-                }
-
-                console.log('Done fetching map initilisation data');
-                this.setLoadingMap(false);
-                if (this.zoomToFeaturesOnLoad) {
-                    this.displayAllFeatures();
-                }
-                this.takeSnapshot();
-            }
-        );
+        this.mapInitialisationPromise = Promise.all([
+            ...initialisers,
+            ...additionalInitialisers,
+        ]);
 
         this.selectedSpatialOperation =
             this.spatialOperationsAvailable.length == 0
@@ -2458,6 +2430,34 @@ export default {
         // Import the map-marker svg
         assets.asset(this.mapMarkerPath, 'url').then((result) => {
             vm.mapMarker = result.default;
+        });
+
+        this.mapInitialisationPromise.then((initialised) => {
+            const proposals = vm.initialiseProposals(initialised.shift()); // pop first element
+            const baseLayers = vm.initialiseBaseLayers(initialised.shift());
+            vm.gisExtentArray = initialised.shift(); // pop the GIS extent tuple
+            vm.createMap(baseLayers);
+            vm.map.updateSize(); // Ensure map knows its size
+            vm.addTileLayers();
+            vm.initialiseMap();
+            // Query Layer
+            vm.loadMapFeatures(proposals, vm.queryLayerDefinition.name);
+            for (let i = 0; i < initialised.length; i++) {
+                const layerDef = vm.additionalLayersDefinitions[i];
+                let features = vm.initialiseProposals(initialised[i], layerDef);
+
+                if (layerDef.handler) {
+                    features = layerDef.handler(features);
+                }
+                vm.loadMapFeatures(features, layerDef.name);
+            }
+
+            console.log('Done fetching map initilisation data');
+            vm.setLoadingMap(false);
+            if (vm.zoomToFeaturesOnLoad) {
+                vm.displayAllFeatures();
+            }
+            vm.takeSnapshot();
         });
 
         this.$nextTick(() => {
@@ -3631,7 +3631,8 @@ export default {
             return snap;
         },
         createMap: function (baseLayers) {
-            let container = document.getElementById('popup');
+            let container =
+                this.$refs.popup || document.getElementById('popup');
             let overlay = new Overlay({
                 element: container,
                 autoPan: {
