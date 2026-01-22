@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
 
@@ -173,35 +174,47 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             return stats
 
         # Preload Occurrence map for performance (migrated_from_id -> pk)
-        # Optimization: Only include active occurrences since geometries are only created for them.
-        # Filter out Occurrences that don't have a geometry
+        # Optimization: We load ALL occurrences to correctly distinguish between
+        # "Not Found" vs "Skipped (Inactive/NoGeom)"
         occurrence_map = {}
         # Track duplicates to mimic original behavior
         duplicate_mids = set()
 
+        from boranga.components.occurrence.models import OccurrenceGeometry
+
+        # Subquery to check if a valid geometry exists and get its PK
+        # This prevents N+1 queries later and allows us to verify geometry existence efficiently
+        geom_qs = (
+            OccurrenceGeometry.objects.filter(
+                occurrence=OuterRef("pk"), geometry__isnull=False
+            )
+            .order_by("-id")
+            .values("pk")[:1]
+        )
+
         qs_occs = (
             Occurrence.objects.filter(
                 migrated_from_id__isnull=False,
-                processing_status=Occurrence.PROCESSING_STATUS_ACTIVE,
-                occ_geometry__isnull=False,
-                occ_geometry__geometry__isnull=False,
             )
             .exclude(migrated_from_id="")
-            .values_list("migrated_from_id", "pk")
+            .annotate(geom_pk=Subquery(geom_qs))
+            .values_list("migrated_from_id", "pk", "processing_status", "geom_pk")
         )
 
-        for mid, pk in qs_occs:
+        for mid, pk, status, geom_pk in qs_occs:
             if mid in occurrence_map:
                 duplicate_mids.add(mid)
             else:
-                occurrence_map[mid] = pk
+                occurrence_map[mid] = {
+                    "pk": pk,
+                    "active": status == Occurrence.PROCESSING_STATUS_ACTIVE,
+                    "geom_pk": geom_pk,
+                }
 
         # Remove duplicates from map
         for mid in duplicate_mids:
             if mid in occurrence_map:
                 del occurrence_map[mid]
-
-        from boranga.components.occurrence.models import OccurrenceGeometry
 
         # Preload set of occurrence_geometry IDs that already have tenure
         # This avoids the N+1Exists query inside the loop for non-wipe runs
@@ -275,8 +288,8 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 warnings_count += 1
                 continue
 
-            occurrence_pk = occurrence_map.get(migrated_from_id)
-            if not occurrence_pk:
+            occ_data = occurrence_map.get(migrated_from_id)
+            if not occ_data:
                 msg = f"Occurrence with migrated_from_id {migrated_from_id} not found"
                 errors_details.append(
                     {
@@ -294,33 +307,28 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 warnings_count += 1
                 continue
 
+            # Check validity before proceeding (avoid DB hit for invalid records)
+            if not occ_data["active"]:
+                skipped += 1
+                continue
+
+            if not occ_data["geom_pk"]:
+                skipped += 1
+                continue
+
+            occurrence_pk = occ_data["pk"]
+            geom_pk = occ_data["geom_pk"]
+
             # Use hollow object for FK lookup
             occurrence = Occurrence(pk=occurrence_pk)
             occurrence_str = f"Occurrence {occurrence_pk} ({migrated_from_id})"
 
             # Get Geometry
             try:
-                # Assuming one geometry per occurrence for now, or taking the first one
-                # OccurrenceGeometry has a OneToOne or ForeignKey?
-                geometry_instance = OccurrenceGeometry.objects.get(
-                    occurrence=occurrence
-                )
+                geometry_instance = OccurrenceGeometry.objects.get(pk=geom_pk)
             except OccurrenceGeometry.DoesNotExist:
-                msg = f"No geometry for {occurrence_str}"
-                errors_details.append(
-                    {
-                        "migrated_from_id": migrated_from_id,
-                        "column": "geometry",
-                        "level": "warning",
-                        "message": msg,
-                        "raw_value": None,
-                        "reason": "No geometry",
-                        "row_json": json.dumps(row, default=str),
-                        "timestamp": timezone.now().isoformat(),
-                    }
-                )
+                # Should not happen given geom_pk check, but safety net
                 skipped += 1
-                warnings_count += 1
                 continue
             except OccurrenceGeometry.MultipleObjectsReturned:
                 # If multiple, maybe process all?
@@ -331,21 +339,7 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 ).first()
 
             if not geometry_instance.geometry:
-                msg = f"Geometry object found but geometry field is None for {occurrence_str}"
-                errors_details.append(
-                    {
-                        "migrated_from_id": migrated_from_id,
-                        "column": "geometry",
-                        "level": "warning",
-                        "message": msg,
-                        "raw_value": None,
-                        "reason": "Empty geometry",
-                        "row_json": json.dumps(row, default=str),
-                        "timestamp": timezone.now().isoformat(),
-                    }
-                )
                 skipped += 1
-                warnings_count += 1
                 continue
 
             if ctx.dry_run:
@@ -369,37 +363,41 @@ class OccurrenceTenureImporter(BaseSheetImporter):
 
                 features = intersect_data.get("features", [])
                 if not features:
-                    msg = f"No intersecting tenure features for {occurrence_str}"
-                    errors_details.append(
-                        {
-                            "migrated_from_id": migrated_from_id,
-                            "column": "geometry",
-                            "level": "warning",
-                            "message": msg,
-                            "raw_value": None,
-                            "reason": "No intersection",
-                            "row_json": json.dumps(row, default=str),
-                            "timestamp": timezone.now().isoformat(),
-                        }
-                    )
                     skipped += 1
-                    warnings_count += 1
                     continue
 
                 # Populate Tenure
                 # This creates/updates OccurrenceTenure objects
+                tenure_count_before = OccurrenceTenure.objects.filter(
+                    occurrence_geometry=geometry_instance
+                ).count()
+
                 populate_occurrence_tenure_data(geometry_instance, features, request)
 
                 # Now update with CSV data
                 purpose_id = transformed.get("OccurrenceTenure__purpose_id")
                 vesting_id = transformed.get("OccurrenceTenure__vesting_id")
 
-                # Only apply to the first tenure if multiple exist
+                # Get all tenures for this geometry (could be multiple if intersecting multiple features)
                 tenures = OccurrenceTenure.objects.filter(
                     occurrence_geometry=geometry_instance
                 ).order_by("id")
-                if tenures.exists():
-                    tenure = tenures.first()
+
+                tenure_count_after = tenures.count()
+
+                # Update stats accurately
+                if not exists_before:
+                    created += tenure_count_after
+                else:
+                    # If it already had tenures, we count new ones as created and existing as updated
+                    num_new = max(0, tenure_count_after - tenure_count_before)
+                    created += num_new
+                    updated += tenure_count_before
+
+                # Apply CSV data to the tenures
+                # If there are multiple tenures, we apply it to all of them as it is likely
+                # intended for the entire occurrence population represented by this row.
+                for tenure in tenures:
                     updated_fields = []
                     if purpose_id:
                         tenure.purpose_id = purpose_id
@@ -412,11 +410,6 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                     updated_fields.append("significant_to_occurrence")
 
                     tenure.save(version_user=user)
-
-                    if not exists_before:
-                        created += 1
-                    else:
-                        updated += 1
 
                     # duration = time.time() - row_start_time
                     # logger.info(
