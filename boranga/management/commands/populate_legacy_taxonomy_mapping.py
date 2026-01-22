@@ -20,10 +20,10 @@ class Command(BaseCommand):
     - list_name (required unless overridden with `--list-name`)
       - legacy_canonical_name (required)
       - taxon_name_id (required)
-      - TAXONID (required) -> maps to legacy_taxon_name_id
+      - TAXONID (optional) -> maps to legacy_taxon_name_id
 
     The command will:
-      - fail a row if any of the four required fields are missing
+      - fail a row if list_name, legacy_canonical_name, or taxon_name_id are missing
       - lookup a `Taxonomy` by `taxon_name_id` and fail the row if none found
       - skip rows where an existing mapping is already fully populated
       (taxonomy set, taxon_name_id matches, and legacy_taxon_name_id matches)
@@ -100,16 +100,10 @@ class Command(BaseCommand):
                     r, "taxon_name_id", "taxon_id", "taxonnameid", "nomos_taxon_id"
                 )
 
-                if not (
-                    list_name
-                    and legacy_name
-                    and taxon_name_id_raw
-                    and legacy_taxon_name_id
-                ):
+                if not (list_name and legacy_name and taxon_name_id_raw):
                     self.stderr.write(
                         f"Missing required fields in row: list_name={list_name} "
-                        f"legacy_canonical_name={legacy_name} taxon_name_id={taxon_name_id_raw} "
-                        f"legacy_taxon_name_id={legacy_taxon_name_id}"
+                        f"legacy_canonical_name={legacy_name} taxon_name_id={taxon_name_id_raw}"
                     )
                     failed += 1
                     continue
