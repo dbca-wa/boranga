@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import json
 import logging
 import os
@@ -27,6 +28,7 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
+from boranga.components.main.models import LegacyTaxonomyMapping
 from boranga.components.occurrence.models import (
     AssociatedSpeciesTaxonomy,
     Intensity,
@@ -218,6 +220,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
             nargs="+",
             metavar="SRC=PATH",
             help="Per-source path overrides (e.g. TPFL=/tmp/tpfl.xlsx). If omitted, --path is reused.",
+        )
+        parser.add_argument(
+            "--fuzzy-match",
+            action="store_true",
+            help="Enable fuzzy matching for unresolved associated species names (slow).",
         )
 
     def _parse_path_map(self, pairs):
@@ -1018,7 +1025,18 @@ class OccurrenceReportImporter(BaseSheetImporter):
             }
             lower_names = list(lower_names)
 
+            # 1. Resolve name -> taxonomy via Legacy Mapping if exists (highest priority)
+            legacy_mappings = {
+                m.legacy_canonical_name: m.taxonomy
+                for m in LegacyTaxonomyMapping.objects.filter(
+                    list_name="TPFL AssociatedSpecies",
+                    legacy_canonical_name__in=uniq_names,
+                    taxonomy__isnull=False,
+                )
+            }
+
             taxa_map = {}
+            ambiguous_species = {}
             if lower_names:
                 # Resolve table and index names
                 from django.db.models.functions import Lower
@@ -1036,7 +1054,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # Let's use the IN-clause with batching, but selecting *all* matches.
 
                 matches_by_name = defaultdict(list)
-                ambiguous_species = {}
 
                 batch_size = 2000
                 for i in range(0, len(lower_names), batch_size):
@@ -1056,6 +1073,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                 # Now resolve "best" match per name
                 for name in uniq_names:
+                    # If we have a legacy mapping, we don't need to resolve via scientific name
+                    # and we definitely don't want to warn about ambiguity for this name.
+                    if name in legacy_mappings:
+                        continue
+
                     lname = name.strip().casefold()
                     candidates = matches_by_name.get(lname, [])
 
@@ -1092,16 +1114,109 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         candidates.sort(key=lambda x: x.pk, reverse=True)
                         taxa_map[lname] = candidates[0]
 
-            # Resolve name -> taxonomy using scientific_name only (no vernacular lookup)
             name_to_tax: dict[str, Taxonomy] = {}
             unresolved = []
+            best_guess_map = {}
             for name in uniq_names:
-                ln = name.casefold()
-                tax = taxa_map.get(ln)
+                # 1. Try Legacy Mapping first (exact match)
+                tax = legacy_mappings.get(name)
+
+                # 2. Try case-insensitive scientific name match
                 if not tax:
+                    ln = name.casefold()
+                    tax = taxa_map.get(ln)
+
+                if tax:
+                    name_to_tax[name] = tax
+                else:
                     unresolved.append(name)
-                    continue
-                name_to_tax[name] = tax
+
+            # 3. Best-guess fuzzy matching for unresolved names
+            if unresolved and options.get("fuzzy_match"):
+                still_unresolved = []
+                for name in unresolved:
+                    if len(name) < 5:
+                        still_unresolved.append(name)
+                        continue
+
+                    parts = name.split()
+                    genus = parts[0] if parts else None
+                    if not genus:
+                        still_unresolved.append(name)
+                        continue
+
+                    # Try to find candidates sharing the same genus
+                    candidates = list(
+                        Taxonomy.objects.filter(
+                            is_current=True, genera_name__iexact=genus
+                        )
+                        .values_list("scientific_name", flat=True)
+                        .order_by("scientific_name")
+                    )
+
+                    if not candidates:
+                        # Fallback try startswith
+                        candidates = list(
+                            Taxonomy.objects.filter(
+                                is_current=True, scientific_name__istartswith=genus
+                            )
+                            .values_list("scientific_name", flat=True)
+                            .order_by("scientific_name")
+                        )
+
+                    if candidates:
+                        matches = difflib.get_close_matches(
+                            name, candidates, n=1, cutoff=0.85
+                        )
+                        if matches:
+                            guess_name = matches[0]
+                            tax = Taxonomy.objects.filter(
+                                is_current=True, scientific_name=guess_name
+                            ).first()
+                            if tax:
+                                name_to_tax[name] = tax
+                                best_guess_map[name] = tax
+                                continue
+
+                    still_unresolved.append(name)
+                unresolved = still_unresolved
+
+            if best_guess_map:
+                # Build mapping: raw_sheet_no -> [list of best guesses on this sheet]
+                sheet_to_guesses = defaultdict(list)
+                for sheet_no, sp_list in sheet_to_species.items():
+                    guesses_on_sheet = [s for s in sp_list if s in best_guess_map]
+                    if guesses_on_sheet:
+                        sheet_to_guesses[str(sheet_no)] = guesses_on_sheet
+
+                # Check active import groups for matches
+                for migrated_from_id in groups:
+                    if "-" in migrated_from_id:
+                        suffix = migrated_from_id.split("-", 1)[1]
+                    else:
+                        suffix = migrated_from_id
+
+                    if suffix in sheet_to_guesses:
+                        for raw_name in sheet_to_guesses[suffix]:
+                            tax = best_guess_map[raw_name]
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": migrated_from_id,
+                                    "column": "associated_species",
+                                    "level": "warning",
+                                    "message": (
+                                        f"Best-guess taxonomy match for '{raw_name}': "
+                                        f"using '{tax.scientific_name}'"
+                                    ),
+                                    "raw_value": raw_name,
+                                    "reason": "associated_species_best_guess",
+                                    "row": {},
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+                            # We don't necessarily want to treat this as a high-priority warning
+                            # but it's good to have in the report.
+                            warn_count += 1
 
             if ambiguous_species:
                 # Build mapping: raw_sheet_no -> [list of ambiguous species on this sheet]
@@ -1305,7 +1420,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     for assoc in created_assocs:
                         r_list = ocr_id_to_resolved.get(assoc.occurrence_report_id)
                         if r_list:
+                            # Deduplicate taxonomy objects to avoid IntegrityError on bulk_create
+                            unique_tax_ids = set()
                             for tax_obj in r_list:
+                                if tax_obj.id in unique_tax_ids:
+                                    continue
+                                unique_tax_ids.add(tax_obj.id)
                                 m2m_links.append(
                                     ThroughModel(
                                         ocrassociatedspecies_id=assoc.id,
@@ -1539,9 +1659,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             )
                         }
 
-                        # Prepare duplicates to create: list of (occ_assoc_pk, AST instance to create, marker)
+                        # Prepare duplicates to create: list of (occ_assoc_pk, AST instance to create)
                         dup_create_list = []
-                        import uuid
 
                         occ_assoc_to_update = []
                         for o in occ_reports_with_occ:
@@ -1587,16 +1706,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 occ_assoc_to_update.append(occ_assoc)
 
                             for ast in ocr_assoc.related_species.all():
-                                marker = f"__dm_dup__{uuid.uuid4().hex}"
-                                comments = (ast.comments or "") + " " + marker
                                 inst = _AST(
                                     taxonomy_id=ast.taxonomy_id,
                                     species_role_id=getattr(
                                         ast, "species_role_id", None
                                     ),
-                                    comments=comments.strip(),
+                                    comments=ast.comments or "",
                                 )
-                                dup_create_list.append((occ_assoc.pk, inst, marker))
+                                dup_create_list.append((occ_assoc.pk, inst))
 
                         if occ_assoc_to_update:
                             try:
@@ -1622,6 +1739,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             # Bulk create AST duplicates
                             ast_instances = [t[1] for t in dup_create_list]
                             try:
+                                # Django 4.1+ bulk_create sets primary keys on instances (Postgres)
+                                # We rely on this to avoid fetch-back loops.
                                 _AST.objects.bulk_create(
                                     ast_instances, batch_size=BATCH
                                 )
@@ -1630,32 +1749,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     "Failed bulk_create of AssociatedSpeciesTaxonomy duplicates; "
                                     "falling back to individual creates"
                                 )
-                                created = []
-                                for occ_assoc_pk, inst, marker in dup_create_list:
+                                for inst in ast_instances:
                                     try:
                                         inst.save()
-                                        created.append((occ_assoc_pk, inst, marker))
                                     except Exception:
                                         logger.exception(
                                             "Failed to create AssociatedSpeciesTaxonomy duplicate for taxonomy %s",
                                             getattr(inst, "taxonomy_id", None),
                                         )
-                                # replace dup_create_list with created list for downstream linking
-                                dup_create_list = created
-
-                            # Map markers -> created AST instances by querying comments ending with marker
-                            ast_created_map = {}
-                            for occ_assoc_pk, inst, marker in dup_create_list:
-                                try:
-                                    created_inst = _AST.objects.get(
-                                        comments__endswith=marker
-                                    )
-                                except _AST.DoesNotExist:
-                                    created_inst = None
-                                if created_inst:
-                                    ast_created_map.setdefault(occ_assoc_pk, []).append(
-                                        (marker, created_inst)
-                                    )
 
                             # Build through rows for OCCAssociatedSpecies.related_species.through
                             through_occ = OCCAssociatedSpecies.related_species.through
@@ -1679,13 +1780,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 occ_fk_id = occ_fk_field + "_id"
                                 tax_fk_id = tax_fk_field + "_id"
                                 through_to_create = []
-                                for occ_assoc_pk, items in ast_created_map.items():
-                                    for marker, ast_inst in items:
+
+                                # Because ast_instances are references to the same objects in dup_create_list
+                                # and bulk_create populates their PKs, we can iterate dup_create_list.
+                                for occ_assoc_pk, inst in dup_create_list:
+                                    if inst.pk:
                                         through_to_create.append(
                                             through_occ(
                                                 **{
                                                     occ_fk_id: occ_assoc_pk,
-                                                    tax_fk_id: ast_inst.pk,
+                                                    tax_fk_id: inst.pk,
                                                 }
                                             )
                                         )
@@ -1712,26 +1816,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                                     "Failed to create through row for OCCAssociatedSpecies %s",
                                                     getattr(t, occ_fk_id, None),
                                                 )
-
-                                # Cleanup: remove markers from comments on created ASTs
-                                try:
-                                    for items in ast_created_map.values():
-                                        for marker, ast_inst in items:
-                                            if (
-                                                ast_inst
-                                                and ast_inst.comments
-                                                and marker in ast_inst.comments
-                                            ):
-                                                ast_inst.comments = (
-                                                    ast_inst.comments.replace(
-                                                        marker, ""
-                                                    ).strip()
-                                                )
-                                                ast_inst.save()
-                                except Exception:
-                                    logger.exception(
-                                        "Failed to clean up duplicate markers on AssociatedSpeciesTaxonomy"
-                                    )
                 except Exception:
                     logger.exception(
                         "Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences"
@@ -3623,6 +3707,43 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 ],
             }
 
+            # Use bulk pre-fetching to avoid N+1 queries in the loop
+            ocr_ids = [ocr.pk for ocr in all_processed_ocrs]
+            occ_ids = [
+                ocr.occurrence_id for ocr in all_processed_ocrs if ocr.occurrence_id
+            ]
+
+            source_lookup = {}
+            target_lookup = {}
+
+            all_configs = []
+            for cfg_list in section_config.values():
+                all_configs.extend(cfg_list)
+
+            # Pre-fetch source objects (OCR side)
+            unique_ocr_models = {c[0] for c in all_configs}
+            for model_class in unique_ocr_models:
+                # We need {ocr_id: obj}.
+                qs = model_class.objects.filter(occurrence_report_id__in=ocr_ids)
+                objs = list(qs)
+                # Populate dict, only set if not present (to keep first found, mimicking .first())
+                lookup = {}
+                for obj in objs:
+                    if obj.occurrence_report_id not in lookup:
+                        lookup[obj.occurrence_report_id] = obj
+                source_lookup[model_class] = lookup
+
+            # Pre-fetch target objects (OCC side)
+            unique_occ_models = {c[1] for c in all_configs}
+            for model_class in unique_occ_models:
+                qs = model_class.objects.filter(occurrence_id__in=occ_ids)
+                objs = list(qs)
+                lookup = {}
+                for obj in objs:
+                    if obj.occurrence_id not in lookup:
+                        lookup[obj.occurrence_id] = obj
+                target_lookup[model_class] = lookup
+
             cloned_count = 0
             for ocr in all_processed_ocrs:
                 sheetno = ocr.migrated_from_id
@@ -3646,16 +3767,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     configs = section_config[sect_code]
 
                     for ocr_model, occ_model, copied_field in configs:
-                        # 1. Find the source OCR child object
-                        try:
-                            source_obj = ocr_model.objects.get(occurrence_report=ocr)
-                        except ocr_model.DoesNotExist:
-                            # Source doesn't exist, nothing to clone
-                            continue
-                        except ocr_model.MultipleObjectsReturned:
-                            source_obj = ocr_model.objects.filter(
-                                occurrence_report=ocr
-                            ).first()
+                        # 1. Find the source OCR child object from lookup
+                        source_obj = source_lookup.get(ocr_model, {}).get(ocr.pk)
 
                         if not source_obj:
                             continue
@@ -3669,14 +3782,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             )
                             continue
 
-                        # Check if target already exists on the occurrence
-                        target_obj = occ_model.objects.filter(
-                            occurrence=occurrence
-                        ).first()
+                        # Check if target already exists on the occurrence (from lookup)
+                        target_obj = target_lookup.get(occ_model, {}).get(occurrence.pk)
 
                         if not target_obj:
                             # Create new instance
                             target_obj = occ_model(occurrence=occurrence)
+                            # Update lookup slightly so if another OCR maps to same OCC, we reuse this obj
+                            if occ_model not in target_lookup:
+                                target_lookup[occ_model] = {}
+                            target_lookup[occ_model][occurrence.pk] = target_obj
 
                         # Set content_type/object_id if model supports them (e.g. GeometryBase)
                         # We must do this explicitly and exclude them from common_fields to prevent
