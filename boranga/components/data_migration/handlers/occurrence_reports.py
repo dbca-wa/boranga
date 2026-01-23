@@ -208,6 +208,44 @@ class OccurrenceReportImporter(BaseSheetImporter):
             logger.exception(f"Failed to load DRF_POP_SECTION_MAP.csv: {e}")
             return {}
 
+    def preload_sheet_vws_map(self, path: str) -> dict[str, str]:
+        """
+        Load DRF_SHEET_VWS.csv into a dict:
+        SHEETNO -> POP_ID
+        """
+        import csv
+        import os
+
+        # Try to find the file in the same directory as the input path first.
+        base_dir = os.path.dirname(path)
+        map_path = os.path.join(base_dir, "DRF_SHEET_VWS.csv")
+
+        if not os.path.exists(map_path):
+            # Fallback to the known location if the input path is different
+            map_path = "private-media/legacy_data/TPFL/DRF_SHEET_VWS.csv"
+
+        if not os.path.exists(map_path):
+            logger.warning(
+                f"DRF_SHEET_VWS.csv not found at {map_path}. Skipping fallback linking."
+            )
+            return {}
+
+        mapping = {}
+        try:
+            with open(map_path, encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    sheetno = row.get("SHEETNO", "").strip()
+                    pop_id = row.get("POP_ID", "").strip()
+                    if sheetno and pop_id:
+                        mapping[sheetno.casefold()] = pop_id
+
+            logger.info(f"Loaded {len(mapping)} entries from {map_path}")
+            return mapping
+        except Exception as e:
+            logger.exception(f"Failed to load DRF_SHEET_VWS.csv: {e}")
+            return {}
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--sources",
@@ -252,6 +290,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # Load pop_section_map early so we can use it for associated species filtering
         pop_section_map = self.preload_pop_section_map(path)
+        sheet_vws_map = self.preload_sheet_vws_map(path)
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
@@ -702,9 +741,21 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         occ_mig_ids = set()
         for op in ops:
-            lid = get_occ_lookup_id(
-                op["migrated_from_id"], op["canonical"].Occurrence__migrated_from_id
-            )
+            row = op["canonical"]
+            occ_link = row.Occurrence__migrated_from_id
+
+            # Fallback for TPFL if linkage failed via standard mapping
+            if not occ_link and op["migrated_from_id"].startswith("tpfl-"):
+                sheet_no = op["migrated_from_id"].split("-", 1)[1]
+                pop_id = sheet_vws_map.get(sheet_no.casefold())
+                if pop_id:
+                    # In Boranga, TPFL Occurrences use 'tpfl-' prefix in migrated_from_id
+                    occ_mig_id = f"tpfl-{pop_id}"
+                    occ_link = occ_mig_id
+                    # Update canonical row so subsequent logic finds it
+                    row.Occurrence__migrated_from_id = occ_mig_id
+
+            lid = get_occ_lookup_id(op["migrated_from_id"], occ_link)
             if lid:
                 occ_mig_ids.add(lid)
 
