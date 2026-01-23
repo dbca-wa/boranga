@@ -3745,7 +3745,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 target_lookup[model_class] = lookup
 
             cloned_count = 0
+            pop_processed = 0
+            total_ocrs = len(all_processed_ocrs)
             for ocr in all_processed_ocrs:
+                pop_processed += 1
+                if pop_processed % 500 == 0:
+                    logger.info(
+                        f"Population progress: {pop_processed}/{total_ocrs} occurrence reports processed..."
+                    )
+
                 sheetno = ocr.migrated_from_id
                 if not sheetno:
                     continue
