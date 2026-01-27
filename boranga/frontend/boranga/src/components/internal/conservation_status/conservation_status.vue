@@ -10,9 +10,7 @@
                     conservation_status_obj.group_type
                 }}</span>
                 {{ conservation_status_obj.conservation_status_number }}
-                <span v-if="identifier" class="text-capitalize">
-                    - {{ identifier }}</span
-                >
+                <span v-if="identifier"> - {{ identifier }}</span>
             </h3>
             <div class="col-md-3">
                 <CommsLogs
