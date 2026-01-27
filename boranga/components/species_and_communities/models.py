@@ -571,6 +571,8 @@ class Species(RevisionedMixin):
     RELATED_ITEM_CHOICES = [
         ("parent_species", "Species"),
         ("conservation_status", "Conservation Status"),
+        ("occurrences", "Occurrence"),
+        ("occurrence_report", "Occurrence Report"),
     ]
 
     SPLIT_SPECIES_ACTION_RETAINED = "Retained"
