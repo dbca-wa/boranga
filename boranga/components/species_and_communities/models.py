@@ -27,6 +27,7 @@ from boranga.components.main.models import (
 )
 from boranga.components.main.related_item import RelatedItem
 from boranga.helpers import (
+    abbreviate_species_name,
     filefield_exists,
     is_species_communities_approver,
     no_commas_validator,
@@ -1052,7 +1053,7 @@ class Species(RevisionedMixin):
     @property
     def related_item_descriptor(self):
         if self.taxonomy and self.taxonomy.scientific_name:
-            return self.taxonomy.scientific_name
+            return abbreviate_species_name(self.taxonomy.scientific_name)
         return "Descriptor not available"
 
     @property
@@ -2051,11 +2052,9 @@ class Community(RevisionedMixin):
 
     @property
     def related_item_descriptor(self):
-        try:
-            name = self.taxonomy.community_name
-        except CommunityTaxonomy.DoesNotExist:
-            return "Descriptor not available"
-        return name or "Descriptor not available"
+        if self.taxonomy and self.taxonomy.community_common_id:
+            return self.taxonomy.community_common_id
+        return "Descriptor not available"
 
     @property
     def related_item_status(self):

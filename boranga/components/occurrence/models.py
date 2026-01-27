@@ -106,6 +106,7 @@ from boranga.components.users.models import (
     SubmitterInformationModelMixin,
 )
 from boranga.helpers import (
+    abbreviate_species_name,
     belongs_to_by_user_id,
     clone_model,
     get_choices_for_field,
@@ -670,13 +671,22 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
     @property
     def related_item_descriptor(self):
+        descriptor = "Descriptor not available"
         if self.species:
             if self.species.taxonomy and self.species.taxonomy.scientific_name:
-                return self.species.taxonomy.scientific_name
+                descriptor = abbreviate_species_name(
+                    self.species.taxonomy.scientific_name
+                )
         if self.community:
-            if self.community.taxonomy and self.community.taxonomy.community_name:
-                return self.community.taxonomy.community_name
-        return "Descriptor not available"
+            if self.community.taxonomy and self.community.taxonomy.community_common_id:
+                descriptor = self.community.taxonomy.community_common_id
+
+        if self.occurrence and self.occurrence.occurrence_name:
+            if descriptor != "Descriptor not available":
+                return f"{self.occurrence.occurrence_name}; {descriptor}"
+            return self.occurrence.occurrence_name
+
+        return descriptor
 
     @property
     def related_item_status(self):
@@ -4241,22 +4251,27 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
     @property
     def related_item_descriptor(self):
+        descriptor = "Descriptor not available"
         if self.group_type.name in ["flora", "fauna"]:
             if self.species:
                 if self.species.taxonomy and self.species.taxonomy.scientific_name:
-                    return self.species.taxonomy.scientific_name
+                    descriptor = abbreviate_species_name(
+                        self.species.taxonomy.scientific_name
+                    )
         elif self.group_type.name == "community":
             if self.community:
-                if self.community.taxonomy and self.community.taxonomy.community_name:
-                    return self.community.taxonomy.community_name
+                if (
+                    self.community.taxonomy
+                    and self.community.taxonomy.community_common_id
+                ):
+                    descriptor = self.community.taxonomy.community_common_id
 
-        if self.species:
-            if self.species.taxonomy and self.species.taxonomy.scientific_name:
-                return self.species.taxonomy.scientific_name
-        if self.community:
-            if self.community.taxonomy and self.community.taxonomy.community_name:
-                return self.community.taxonomy.community_name
-        return "Descriptor not available"
+        if self.occurrence_name:
+            if descriptor != "Descriptor not available":
+                return f"{self.occurrence_name}; {descriptor}"
+            return self.occurrence_name
+
+        return descriptor
 
     @property
     def related_item_status(self):
