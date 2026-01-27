@@ -30,6 +30,15 @@ from boranga.settings import (
 logger = logging.getLogger(__name__)
 
 
+def abbreviate_species_name(name):
+    if not name:
+        return ""
+    parts = name.split()
+    if len(parts) > 1:
+        return f"{parts[0][0]}. {' '.join(parts[1:])}"
+    return name
+
+
 def check_file(file, model_name):
     from boranga.components.main.models import FileExtensionWhitelist
 
