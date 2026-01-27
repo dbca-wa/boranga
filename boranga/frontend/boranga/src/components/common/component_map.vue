@@ -3017,12 +3017,50 @@ export default {
                 source: modelQuerySource,
                 can_edit: layerDef.can_edit,
                 editing: false,
-                style: (feature) => {
+                style: (feature, resolution) => {
                     const color = feature.get('color') || this.defaultColor;
                     let style = polygonStyle;
+                    let renderAsPoint = false;
+                    let pointGeom = null;
+
                     if (this.isPolygonLikeFeature(feature)) {
-                        style.getFill().setColor(color);
-                    } else if (this.isPointLikeFeature(feature)) {
+                        const extent = feature.getGeometry().getExtent();
+                        const width = extent[2] - extent[0]; // Width in View Units (Degrees)
+                        const widthPx = width / resolution;
+
+                        // Threshold: 20 pixels
+                        if (widthPx < 20) {
+                            renderAsPoint = true;
+                            // Calculate centroid for the marker
+                            const type = feature.getGeometry().getType();
+                            if (type === 'Polygon') {
+                                try {
+                                    pointGeom = feature
+                                        .getGeometry()
+                                        .getInteriorPoint();
+                                } catch {
+                                    // Fallback if interior point fails
+                                    const center = [
+                                        (extent[0] + extent[2]) / 2,
+                                        (extent[1] + extent[3]) / 2,
+                                    ];
+                                    pointGeom = new Point(center);
+                                }
+                            } else {
+                                // MultiPolygon: use center of extent
+                                const center = [
+                                    (extent[0] + extent[2]) / 2,
+                                    (extent[1] + extent[3]) / 2,
+                                ];
+                                pointGeom = new Point(center);
+                            }
+                        } else {
+                            // Render as Polygon (apply color to shared style)
+                            style.getFill().setColor(color);
+                        }
+                    }
+
+                    if (this.isPointLikeFeature(feature) || renderAsPoint) {
                         const rgba = this.colorHexToRgbaValues(color);
                         style = this.createStyle(
                             color,
@@ -3033,6 +3071,10 @@ export default {
                             this.mapMarker,
                             rgba[3]
                         );
+                        if (renderAsPoint && pointGeom) {
+                            // Important: Set the point geometry to draw the marker
+                            style.setGeometry(pointGeom);
+                        }
                     }
                     return style;
                 },
@@ -3679,10 +3721,47 @@ export default {
             // Cache the hover fill so we don't have to create a new one every time
             // Also prevent overwriting property `hoverFill` color
             let _hoverFill = null;
-            function hoverSelect(feature) {
+            function hoverSelect(feature, resolution) {
                 const color = feature.get('color') || vm.defaultColor;
                 let hoverStyle = hoverStylePolygon;
-                if (vm.isPointLikeFeature(feature)) {
+                let renderAsPoint = false;
+                let pointGeom = null;
+
+                // Scale-dependent check for hover
+                if (vm.isPolygonLikeFeature(feature)) {
+                    if (!resolution) {
+                        resolution = vm.map.getView().getResolution();
+                    }
+                    const extent = feature.getGeometry().getExtent();
+                    const width = extent[2] - extent[0];
+                    const widthPx = width / resolution;
+
+                    if (widthPx < 20) {
+                        renderAsPoint = true;
+                        const type = feature.getGeometry().getType();
+                        if (type === 'Polygon') {
+                            try {
+                                pointGeom = feature
+                                    .getGeometry()
+                                    .getInteriorPoint();
+                            } catch {
+                                const center = [
+                                    (extent[0] + extent[2]) / 2,
+                                    (extent[1] + extent[3]) / 2,
+                                ];
+                                pointGeom = new Point(center);
+                            }
+                        } else {
+                            const center = [
+                                (extent[0] + extent[2]) / 2,
+                                (extent[1] + extent[3]) / 2,
+                            ];
+                            pointGeom = new Point(center);
+                        }
+                    }
+                }
+
+                if (vm.isPointLikeFeature(feature) || renderAsPoint) {
                     const rgba = vm.colorHexToRgbaValues(color);
                     hoverStyle = vm.createStyle(
                         vm.hoverFill,
@@ -3693,6 +3772,9 @@ export default {
                         vm.mapMarker,
                         rgba[3]
                     );
+                    if (renderAsPoint && pointGeom) {
+                        hoverStyle.setGeometry(pointGeom);
+                    }
                 }
                 _hoverFill = new Fill({ color: color });
 
@@ -3703,10 +3785,13 @@ export default {
                     hoverStyle.setFill(_hoverFill);
                     hoverStyle.setStroke(vm.clickSelectStroke);
                 } else {
-                    if (vm.isPolygonLikeFeature(feature)) {
+                    if (vm.isPolygonLikeFeature(feature) && !renderAsPoint) {
                         hoverStyle.setFill(vm.hoverFill);
                         hoverStyle.setStroke(vm.hoverStrokePolygon);
-                    } else if (vm.isPointLikeFeature(feature)) {
+                    } else if (
+                        vm.isPointLikeFeature(feature) ||
+                        renderAsPoint
+                    ) {
                         const image = hoverStyle.getImage();
                         // Marker icons don't have a fill or stroke property
                         if (Object.hasOwn(image, 'setFill')) {
@@ -3749,7 +3834,14 @@ export default {
                             vm.modifySetActive(false);
                         }
                     } else {
+                        // Turn off hover styling -> reverts to undefined, which falls back to Layer style or Feature style function (if set)
+                        // Note: If feature.setStyle(undefined) is called, it removes any feature-level style.
+                        // However, features loaded via loadMapFeatures have a feature-level style function set.
+                        // Re-setting it to undefined MIGHT remove that smart function.
+                        // To be safe, we re-apply the smart style function or just leave it undefined if we trust the Layer style.
                         selected.setStyle(undefined);
+
+                        /*
                         if (!(vm.measuring || vm.drawing)) {
                             // Don't highlight features when measuring or drawing
                             const type = selected.getGeometry().getType();
@@ -3768,6 +3860,7 @@ export default {
                                 )
                             );
                         }
+                        */
                     }
                     selected = null;
                 }
@@ -4758,10 +4851,9 @@ export default {
 
             feature.setProperties(featureProperties);
 
-            // eslint-disable-next-line no-unused-vars
             const featureStyleFunction = (feature, resolution) => {
                 if (!style) {
-                    return this.createFeatureStyle(feature);
+                    return this.createFeatureStyle(feature, resolution);
                 }
                 return style;
             };
@@ -5383,7 +5475,7 @@ export default {
                 }
             });
         },
-        createFeatureStyle: function (feature) {
+        createFeatureStyle: function (feature, resolution = null) {
             if (this.isFeatureEligibleToHide(feature)) {
                 return new Style({});
             }
@@ -5392,20 +5484,55 @@ export default {
             const type = feature.getGeometry().getType();
 
             let style = this.createStyle(color, stroke, type, null, 1);
+
+            let renderAsPoint = false;
+            let pointGeom = null;
+
+            if (resolution && ['Polygon', 'MultiPolygon'].includes(type)) {
+                const extent = feature.getGeometry().getExtent();
+                const width = extent[2] - extent[0];
+                const widthPx = width / resolution;
+                if (widthPx < 20) {
+                    renderAsPoint = true;
+                    if (type === 'Polygon') {
+                        try {
+                            pointGeom = feature
+                                .getGeometry()
+                                .getInteriorPoint();
+                        } catch {
+                            const center = [
+                                (extent[0] + extent[2]) / 2,
+                                (extent[1] + extent[3]) / 2,
+                            ];
+                            pointGeom = new Point(center);
+                        }
+                    } else {
+                        const center = [
+                            (extent[0] + extent[2]) / 2,
+                            (extent[1] + extent[3]) / 2,
+                        ];
+                        pointGeom = new Point(center);
+                    }
+                }
+            }
+
             let rgba = color;
             if (!Array.isArray(color)) {
                 rgba = this.colorHexToRgbaValues(color);
             }
-            if (['MultiPoint', 'Point'].includes(type)) {
+            if (['MultiPoint', 'Point'].includes(type) || renderAsPoint) {
                 style = this.createStyle(
                     color,
                     stroke,
-                    type,
+                    'Point',
                     null,
                     null,
                     this.mapMarker,
                     rgba[3]
                 );
+                if (renderAsPoint && pointGeom) {
+                    style.setGeometry(pointGeom);
+                }
             }
 
             return style;
