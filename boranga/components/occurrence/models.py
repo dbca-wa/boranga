@@ -3941,8 +3941,8 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     RELATED_ITEM_CHOICES = [
         ("species", "Species"),
         ("community", "Community"),
-        ("occurrence_report", "Occurrence Report"),
         ("occurrences", "Occurrence"),
+        ("occurrence_report", "Occurrence Report"),
     ]
 
     OCCURRENCE_CHOICE_OCR = "ocr"
