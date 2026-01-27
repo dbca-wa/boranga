@@ -1271,7 +1271,7 @@
                 <div
                     aria-live="polite"
                     aria-atomic="true"
-                    class="toast-container d-flex justify-content-center align-items-center w-100"
+                    class="toast-container d-flex justify-content-center align-items-center w-100 h-100 top-0 start-0"
                 >
                     <div
                         id="featureToast"
