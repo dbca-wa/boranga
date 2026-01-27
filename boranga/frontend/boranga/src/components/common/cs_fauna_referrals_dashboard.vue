@@ -59,7 +59,7 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="cs_ref_genera_lookup">Genera:</label>
+                        <label for="cs_ref_genera_lookup">Genus:</label>
                         <select
                             id="cs_ref_genera_lookup"
                             ref="cs_ref_genera_lookup"
@@ -763,7 +763,7 @@ export default {
                     minimumInputLength: 2,
                     theme: 'bootstrap-5',
                     allowClear: true,
-                    placeholder: 'Select Genera',
+                    placeholder: 'Select Genus',
                     ajax: {
                         url: api_endpoints.genera_lookup,
                         dataType: 'json',

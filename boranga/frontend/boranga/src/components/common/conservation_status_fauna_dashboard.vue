@@ -57,7 +57,7 @@
                 </div>
                 <div class="col-md-3">
                     <div id="select_genera" class="form-group">
-                        <label for="cs_genera_lookup">Genera:</label>
+                        <label for="cs_genera_lookup">Genus:</label>
                         <select
                             id="cs_genera_lookup"
                             ref="cs_genera_lookup"
@@ -850,7 +850,7 @@ export default {
                 'Scientific Name',
                 'Common Name',
                 'Family',
-                'Genera',
+                'Genus',
                 'Informal Group(s)',
                 'Change Type',
                 'WA Priority List',
@@ -1888,7 +1888,7 @@ export default {
                     dropdownParent: $('#select_genera'),
                     theme: 'bootstrap-5',
                     allowClear: true,
-                    placeholder: 'Select Genera',
+                    placeholder: 'Select Genus',
                     ajax: {
                         url: api_endpoints.genera_lookup,
                         dataType: 'json',

@@ -55,7 +55,7 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="genera_lookup">Genera:</label>
+                        <label for="genera_lookup">Genus:</label>
                         <select
                             id="genera_lookup"
                             ref="genera_lookup"
@@ -625,7 +625,7 @@ export default {
                     'Common Name',
                     'Informal Group(s)',
                     'Family',
-                    'Genera',
+                    'Genus',
                     'Region(s)',
                     'District(s)',
                     'WA Priority Category',
@@ -644,7 +644,7 @@ export default {
                     'Common Name',
                     'Informal Group(s)',
                     'Family',
-                    'Genera',
+                    'Genus',
                     'Region(s)',
                     'District(s)',
                     'WA Priority Category',
@@ -1432,7 +1432,7 @@ export default {
                     minimumInputLength: 2,
                     theme: 'bootstrap-5',
                     allowClear: true,
-                    placeholder: 'Select Genera',
+                    placeholder: 'Select Genus',
                     ajax: {
                         url: api_endpoints.genera_lookup,
                         dataType: 'json',
