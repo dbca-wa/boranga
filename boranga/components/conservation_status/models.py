@@ -1997,7 +1997,9 @@ class ConservationStatus(
 
         send_approver_defer_email_notification(request, self, reason)
 
-    def get_related_items(self, filter_type, **kwargs):
+    def get_related_items(
+        self, filter_type, offset=None, limit=None, search_value=None, **kwargs
+    ):
         return_list = []
         if filter_type == "all":
             related_field_names = [
@@ -2011,30 +2013,79 @@ class ConservationStatus(
             related_field_names = [
                 filter_type,
             ]
+
+        total_count = 0
+
+        def get_slice_range(count):
+            if offset is None:
+                return 0, count
+
+            global_start = total_count
+            global_end = total_count + count
+            req_start = int(offset)
+            req_end = int(offset) + int(limit)
+
+            if global_end <= req_start or global_start >= req_end:
+                return 0, 0
+
+            start = max(0, req_start - global_start)
+            end = min(count, req_end - global_start)
+            return start, end
+
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
             if a_field.name in related_field_names:
                 field_objects = []
+                is_queryset = False
                 if a_field.is_relation:
                     if a_field.many_to_many:
                         pass
                     elif a_field.many_to_one:  # foreign key
-                        field_objects = [
-                            getattr(self, a_field.name),
-                        ]
+                        val = getattr(self, a_field.name)
+                        if val:
+                            field_objects = [val]
+                        else:
+                            field_objects = []
                     elif a_field.one_to_many:  # reverse foreign key
-                        field_objects = a_field.related_model.objects.filter(
+                        qs = a_field.related_model.objects.filter(
                             **{a_field.remote_field.name: self}
                         )
+                        field_objects = qs
+                        is_queryset = True
                     elif a_field.one_to_one:
                         if hasattr(self, a_field.name):
                             field_objects = [getattr(self, a_field.name)]
-                for field_object in field_objects:
-                    if field_object:
-                        related_item = field_object.as_related_item
-                        if related_item not in return_list:
+
+                count = 0
+                if is_queryset:
+                    if "exclude_ids" in kwargs:
+                        field_objects = field_objects.exclude(
+                            id__in=kwargs["exclude_ids"]
+                        )
+                    count = field_objects.count()
+                else:
+                    count = len(field_objects)
+
+                start, end = get_slice_range(count)
+
+                if start < end:
+                    subset = field_objects[start:end]
+                    for field_object in subset:
+                        if field_object:
+                            related_item = field_object.as_related_item
+                            if search_value:
+                                if (
+                                    search_value.lower()
+                                    not in related_item.identifier.lower()
+                                    and search_value.lower()
+                                    not in related_item.descriptor.lower()
+                                ):
+                                    continue
                             return_list.append(related_item)
 
+                total_count += count
+
+        # Handle nested related items for species/community
         species_filter = []
         if "occurrences" in related_field_names:
             species_filter.append("occurrences")
@@ -2042,18 +2093,26 @@ class ConservationStatus(
             species_filter.append("occurrence_report")
         for occ_filter_type in species_filter:
             if self.species:
-                species_occurences = self.species.get_related_items(occ_filter_type)
-                if species_occurences:
-                    return_list += species_occurences
+                items = self.species.get_related_items(occ_filter_type)
+                count = len(items)
+                start, end = get_slice_range(count)
+                if start < end:
+                    return_list.extend(items[start:end])
+                total_count += count
             if self.community:
-                community_occurences = self.community.get_related_items(occ_filter_type)
-                if community_occurences:
-                    return_list += community_occurences
+                items = self.community.get_related_items(occ_filter_type)
+                count = len(items)
+                start, end = get_slice_range(count)
+                if start < end:
+                    return_list.extend(items[start:end])
+                total_count += count
 
         # Remove duplicates
-        return_list = list(set(return_list))
+        if offset is None:
+            return_list = list(set(return_list))
+            return return_list
 
-        return return_list
+        return return_list, total_count
 
     @property
     def as_related_item(self):
