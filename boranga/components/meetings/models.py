@@ -474,6 +474,13 @@ class AgendaItem(OrderedModel):
 
     @property
     def as_related_item(self):
+        related_sc_id = ""
+        if self.conservation_status:
+            if self.conservation_status.species:
+                related_sc_id = self.conservation_status.species.species_number
+            elif self.conservation_status.community:
+                related_sc_id = self.conservation_status.community.community_number
+
         related_item = RelatedItem(
             identifier=self.related_item_identifier,
             model_name=self._meta.verbose_name.title(),
@@ -483,6 +490,7 @@ class AgendaItem(OrderedModel):
                 f"<a href=/internal/meetings/{self.meeting.id} "
                 f'target="_blank">View <i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=related_sc_id,
         )
         return related_item
 

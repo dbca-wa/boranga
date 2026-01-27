@@ -1041,6 +1041,7 @@ class Species(RevisionedMixin):
                 f'?group_type_name={self.group_type.name}" target="_blank">View '
                 '<i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=self.species_number,
         )
         return related_item
 
@@ -2040,6 +2041,7 @@ class Community(RevisionedMixin):
                 f'?group_type_name={self.group_type.name}" target="_blank">View '
                 '<i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=self.community_number,
         )
         return related_item
 

@@ -140,6 +140,7 @@
                         ref="cs_related_items"
                         :ajax_url="related_items_ajax_url"
                         :filter_list_url="related_items_filter_list_url"
+                        :display_profile_column="true"
                     >
                     </RelatedItems>
                 </div>

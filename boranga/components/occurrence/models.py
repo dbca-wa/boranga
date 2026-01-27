@@ -684,6 +684,12 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
     @property
     def as_related_item(self):
+        related_sc_id = ""
+        if self.species:
+            related_sc_id = self.species.species_number
+        elif self.community:
+            related_sc_id = self.community.community_number
+
         related_item = RelatedItem(
             identifier=self.related_item_identifier,
             model_name=self._meta.verbose_name.title(),
@@ -694,6 +700,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
                 f'?action=view" target="_blank">View '
                 '<i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=related_sc_id,
         )
         return related_item
 
@@ -4257,6 +4264,12 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
     @property
     def as_related_item(self):
+        related_sc_id = ""
+        if self.species:
+            related_sc_id = self.species.species_number
+        elif self.community:
+            related_sc_id = self.community.community_number
+
         related_item = RelatedItem(
             identifier=self.related_item_identifier,
             model_name=self._meta.verbose_name.title(),
@@ -4267,6 +4280,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 f'?group_type_name={self.group_type.name}" target="_blank">View '
                 '<i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=related_sc_id,
         )
         return related_item
 
