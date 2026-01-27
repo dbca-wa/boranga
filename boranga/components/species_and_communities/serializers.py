@@ -394,6 +394,7 @@ class TaxonomySerializer(BaseModelSerializer):
     conservation_status = serializers.SerializerMethodField()
     species_id = serializers.SerializerMethodField()
     common_names_list = serializers.SerializerMethodField()
+    informal_groups_list = serializers.SerializerMethodField()
 
     class Meta:
         model = Taxonomy
@@ -408,6 +409,7 @@ class TaxonomySerializer(BaseModelSerializer):
             "common_names_list",
             "taxon_previous_name",
             "informal_group",
+            "informal_groups_list",
             "name_authority",
             "name_comments",
             "conservation_status",
@@ -459,6 +461,13 @@ class TaxonomySerializer(BaseModelSerializer):
                 return ", ".join(informal_groups)
         except InformalGroup.DoesNotExist:
             return ""
+
+    def get_informal_groups_list(self, obj):
+        if not obj.informal_groups:
+            return ""
+        return obj.informal_groups.values_list(
+            "classification_system_fk__class_desc", flat=True
+        )
 
     def get_conservation_status(self, obj):
         request = self.context["request"]
