@@ -2291,17 +2291,27 @@ class Community(RevisionedMixin):
             community=self
         ).first()
 
-        if not existing_community:
-            # This will create a new CommunityDistribution instance
-            resulting_community_distribution.pk = None
-        else:
-            # This will overwrite the existing CommunityDistribution instance
-            resulting_community_distribution.pk = (
-                resulting_community.community_distribution.pk
-            )
+        if resulting_community_distribution:
+            if not existing_community:
+                # This will create a new CommunityDistribution instance
+                resulting_community_distribution.pk = None
+            else:
+                # This will overwrite the existing CommunityDistribution instance
+                if (
+                    hasattr(resulting_community, "community_distribution")
+                    and resulting_community.community_distribution
+                ):
+                    resulting_community_distribution.pk = (
+                        resulting_community.community_distribution.pk
+                    )
+                else:
+                    resulting_community_distribution.pk = None
 
-        resulting_community_distribution.community = resulting_community
-        resulting_community_distribution.save()
+            resulting_community_distribution.community = resulting_community
+            resulting_community_distribution.save()
+        else:
+            # If no distribution exists, create a new one
+            CommunityDistribution.objects.create(community=resulting_community)
 
         for new_document in self.community_documents.all():
             new_doc_instance = new_document
