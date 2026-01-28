@@ -471,25 +471,6 @@
                                         <strong>Action</strong><br />
                                     </div>
                                 </div>
-                                <template
-                                    v-if="
-                                        hasAssessorMode &&
-                                        conservation_status_obj.processing_status ==
-                                            'Approved'
-                                    "
-                                >
-                                    <div class="row mb-2">
-                                        <div class="col-sm-12">
-                                            <button
-                                                style="width: 90%"
-                                                class="btn btn-primary"
-                                                @click.prevent="proposeDelist()"
-                                            >
-                                                Propose Delist</button
-                                            ><br />
-                                        </div>
-                                    </div>
-                                </template>
                                 <template v-if="canAction && canUnlock">
                                     <div class="row mb-2">
                                         <div class="col-sm-12">
