@@ -467,10 +467,14 @@ class ConservationStatus(
         PROCESSING_STATUS_WITH_APPROVER,
     )
 
+    PROCESSING_STATUSES_ACTIVE = (
+        PROCESSING_STATUS_APPROVED,
+        PROCESSING_STATUS_DELISTED,
+    )
+
     PROCESSING_STATUSES_INACTIVE = (
         PROCESSING_STATUS_DECLINED,
         PROCESSING_STATUS_CLOSED,
-        PROCESSING_STATUS_DELISTED,
     )
 
     # These statuses are used as front end filters but shouldn't be used in most cases
@@ -1594,8 +1598,16 @@ class ConservationStatus(
             },
         )
 
-        self.processing_status = ConservationStatus.PROCESSING_STATUS_APPROVED
-        self.customer_status = ConservationStatus.CUSTOMER_STATUS_APPROVED
+        if (
+            self.change_code
+            and self.change_code.code == settings.CONSERVATION_CHANGE_CODE_DELIST
+        ):
+            self.processing_status = ConservationStatus.PROCESSING_STATUS_DELISTED
+            self.customer_status = ConservationStatus.CUSTOMER_STATUS_CLOSED
+        else:
+            self.processing_status = ConservationStatus.PROCESSING_STATUS_APPROVED
+            self.customer_status = ConservationStatus.CUSTOMER_STATUS_APPROVED
+
         self.locked = True
         self.assigned_officer = None
         self.approved_by = request.user.id
@@ -1622,9 +1634,12 @@ class ConservationStatus(
             request,
         )
 
-        # Delist / Close the previous approved version
+        # Delist / Close the previous active version (Approved or Delisted)
         previous_approved_version = ConservationStatus.objects.filter(
-            processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED
+            processing_status__in=[
+                ConservationStatus.PROCESSING_STATUS_APPROVED,
+                ConservationStatus.PROCESSING_STATUS_DELISTED,
+            ]
         )
 
         if self.species:
