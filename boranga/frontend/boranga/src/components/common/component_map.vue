@@ -5234,8 +5234,12 @@ export default {
             if (!vm.editable) {
                 return;
             }
-            vm.select.setActive(!active);
-            vm.transform.setActive(active);
+            if (vm.select) {
+                vm.select.setActive(!active);
+            }
+            if (vm.transform) {
+                vm.transform.setActive(active);
+            }
         },
         /**
          * Undoes the last map interaction
