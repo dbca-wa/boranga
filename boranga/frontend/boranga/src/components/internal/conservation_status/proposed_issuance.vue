@@ -185,6 +185,10 @@ export default {
             type: String,
             required: true,
         },
+        change_code: {
+            type: String,
+            default: null,
+        },
     },
     data: function () {
         return {
@@ -232,16 +236,18 @@ export default {
             }
         },
         ok_button_text: function () {
+            let action = this.change_code === 'DeList' ? 'Delist' : 'Approve';
             if (this.state == 'proposed_approval') {
-                return 'Propose to Approve';
+                return `Propose to ${action}`;
             }
-            return 'Approve';
+            return action;
         },
         title: function () {
+            let action = this.change_code === 'DeList' ? 'Delist' : 'Approve';
             if (this.state == 'proposed_approval') {
-                return `Propose to Approve Conservation Status CS${this.conservation_status_id}`;
+                return `Propose to ${action} Conservation Status CS${this.conservation_status_id}`;
             }
-            return `Approve Conservation Status CS${this.conservation_status_id}`;
+            return `${action} Conservation Status CS${this.conservation_status_id}`;
         },
         can_preview: function () {
             return this.processing_status == 'Proposed DeListed' &&

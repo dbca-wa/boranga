@@ -600,7 +600,12 @@
                                                 class="btn btn-primary"
                                                 @click.prevent="issueProposal()"
                                             >
-                                                Approve</button
+                                                {{
+                                                    conservation_status_obj.change_code ===
+                                                    'DeList'
+                                                        ? 'Delist'
+                                                        : 'Approve'
+                                                }}</button
                                             ><br />
                                         </div>
                                     </div>
@@ -633,7 +638,12 @@
                                                 class="btn btn-primary"
                                                 @click.prevent="issueProposal()"
                                             >
-                                                Approve</button
+                                                {{
+                                                    conservation_status_obj.change_code ===
+                                                    'DeList'
+                                                        ? 'Delist'
+                                                        : 'Approve'
+                                                }}</button
                                             ><br />
                                         </div>
                                     </div>
@@ -965,6 +975,7 @@
             ref="proposed_approval"
             :processing_status="conservation_status_obj.processing_status"
             :conservation_status_id="conservation_status_obj.id"
+            :change_code="conservation_status_obj.change_code"
             :is-approval-level-document="isApprovalLevelDocument"
             @refresh-from-response="refreshFromResponse"
         />
@@ -1356,12 +1367,7 @@ export default {
             );
         },
         show_finalised_actions: function () {
-            return (
-                (this.hasAssessorMode &&
-                    this.conservation_status_obj.processing_status ==
-                        'Approved') ||
-                (this.canAction && (this.canUnlock || this.canLock))
-            );
+            return this.canAction && (this.canUnlock || this.canLock);
         },
         shouldShowTimerAndPoll() {
             const cs = this.conservation_status_obj;
