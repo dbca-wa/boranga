@@ -121,10 +121,16 @@ class GetSpeciesDisplay(views.APIView):
         if taxon_id:
             taxonomy = Taxonomy.objects.filter(id=taxon_id)
             if taxonomy.exists():
+                taxon = taxonomy.first()
                 res_json["id"] = taxon_id
-                res_json["name"] = taxonomy.first().scientific_name
-                res_json["taxon_previous_name"] = taxonomy.first().taxon_previous_name
-                res_json["common_name"] = taxonomy.first().taxon_vernacular_name
+                res_json["name"] = taxon.scientific_name
+                res_json["taxon_previous_name"] = taxon.taxon_previous_name
+                res_json["common_name"] = taxon.taxon_vernacular_name
+                res_json["common_names_list"] = (
+                    list(taxon.vernaculars.values_list("vernacular_name", flat=True))
+                    if hasattr(taxon, "vernaculars")
+                    else []
+                )
 
         res_json = json.dumps(res_json)
         return HttpResponse(res_json, content_type="application/json")
