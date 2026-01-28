@@ -654,11 +654,6 @@ export default {
                 { value: 'draft', name: 'Draft', className: '' },
                 { value: 'discarded', name: 'Discarded', className: '' },
                 {
-                    value: 'discarded_by_me',
-                    name: 'Discarded By Me',
-                    className: '',
-                },
-                {
                     value: 'active',
                     name: 'Active',
                     className: 'optionGroup',
@@ -1465,9 +1460,10 @@ export default {
                 constants.GROUPS.INTERNAL_CONTRIBUTORS
             )
         ) {
-            vm.processing_statuses.push({
+            vm.processing_statuses.splice(2, 0, {
                 value: 'discarded_by_me',
                 name: 'Discarded By Me',
+                className: '',
             });
         }
         vm.fetchFilterLists();
