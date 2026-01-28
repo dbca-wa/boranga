@@ -3786,7 +3786,7 @@ export default {
                     hoverStyle.setStroke(vm.clickSelectStroke);
                 } else {
                     if (vm.isPolygonLikeFeature(feature) && !renderAsPoint) {
-                        hoverStyle.setFill(vm.hoverFill);
+                        hoverStyle.setFill(_hoverFill);
                         hoverStyle.setStroke(vm.hoverStrokePolygon);
                     } else if (
                         vm.isPointLikeFeature(feature) ||
