@@ -50,17 +50,28 @@
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Common Name:</label
+                    >Common Name<template v-if="common_names.length > 1"
+                        >s</template
+                    >:</label
                 >
                 <div class="col-sm-9">
-                    <textarea
-                        id="common_name"
-                        v-model="common_name"
-                        :disabled="true"
-                        class="form-control"
-                        rows="1"
-                        placeholder=""
-                    />
+                    <template v-if="common_names.length > 0">
+                        <template v-for="name in common_names" :key="name">
+                            <h5 class="d-inline">
+                                <span class="badge bg-primary me-2">{{
+                                    name
+                                }}</span>
+                            </h5>
+                        </template>
+                    </template>
+                    <template v-else>
+                        <h5 class="d-inline">
+                            <span class="badge bg-secondary me-2"
+                                ><i class="bi bi-ban"></i
+                            ></span>
+                            <span class="visually-hidden">N/A</span>
+                        </h5>
+                    </template>
                 </div>
             </div>
             <div class="row mb-3">
@@ -200,7 +211,7 @@ export default {
             scientific_name_lookup: 'scientific_name_lookup' + uuid(),
             select_scientific_name: 'select_scientific_name' + uuid(),
             select_wild_status: 'select_wild_status' + uuid(),
-            common_name: null,
+            common_names: [],
             occ_profile_dict: {},
             wild_status_list: [],
             occurrence_source_list: [],
@@ -277,14 +288,14 @@ export default {
                     vm.occurrence_obj.species = e.params.data.species_id;
                     vm.species_display = e.params.data.text;
                     vm.taxon_previous_name = e.params.data.taxon_previous_name;
-                    vm.common_name = e.params.data.common_name;
+                    vm.common_names = e.params.data.common_names_list;
                 })
                 .on('select2:unselect', function () {
                     vm.occurrence_obj.species = null;
                     //vm.occurrence_obj.species_id = null
                     vm.species_display = '';
                     vm.taxon_previous_name = '';
-                    vm.common_name = '';
+                    vm.common_names = [];
                 })
                 .on('select2:open', function () {
                     const searchField = $(
@@ -321,7 +332,7 @@ export default {
                     $('#' + vm.scientific_name_lookup).append(newOption);
                     vm.species_display = data.name;
                     vm.taxon_previous_name = data.taxon_previous_name;
-                    vm.common_name = data.common_name;
+                    vm.common_names = data.common_names_list;
                 });
             }
         },
