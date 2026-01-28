@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -146,6 +147,17 @@ def process_species_from_combine_list(
             processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
         ).first()
         if active_conservation_status:
+            # effective_to date should be populated based on the Resultant Profile's Approved CS effective_from date
+            # i.e. Original Closed CS effective_to = Resultant Approved CS effective_from minus one day.
+            resulting_cs = ConservationStatus.objects.filter(
+                species=resulting_species_instance,
+                processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+            ).first()
+            if resulting_cs and resulting_cs.effective_from:
+                active_conservation_status.effective_to = (
+                    resulting_cs.effective_from - timedelta(days=1)
+                )
+
             active_conservation_status.customer_status = (
                 ConservationStatus.CUSTOMER_STATUS_CLOSED
             )
@@ -248,6 +260,17 @@ def rename_species_original_submit(species_instance, new_species, request):
         processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
     ).first()
     if active_conservation_status:
+        # effective_to date should be populated based on the Resultant Profile's Approved CS effective_from date
+        # i.e. Original Closed CS effective_to = Resultant Approved CS effective_from minus one day.
+        new_species_cs = ConservationStatus.objects.filter(
+            species=new_species,
+            processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+        ).first()
+        if new_species_cs and new_species_cs.effective_from:
+            active_conservation_status.effective_to = (
+                new_species_cs.effective_from - timedelta(days=1)
+            )
+
         active_conservation_status.customer_status = (
             ConservationStatus.CUSTOMER_STATUS_CLOSED
         )

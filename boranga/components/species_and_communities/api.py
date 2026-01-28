@@ -1,7 +1,7 @@
 import json
 import logging
 import mimetypes
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.core.cache import cache
@@ -1941,6 +1941,30 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
                 processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
             ).first()
             if active_conservation_status:
+                # effective_to date should be populated based on the most recent effective_from date
+                # from an Approved CS from all the Resultant Profiles.
+                max_effective_from = None
+                for split_item in split_species_list:
+                    tid = split_item.get("taxonomy_id")
+                    if tid:
+                        sp = Species.objects.filter(taxonomy_id=tid).first()
+                        if sp:
+                            cs = ConservationStatus.objects.filter(
+                                species=sp,
+                                processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+                            ).first()
+                            if cs and cs.effective_from:
+                                if (
+                                    max_effective_from is None
+                                    or cs.effective_from > max_effective_from
+                                ):
+                                    max_effective_from = cs.effective_from
+
+                if max_effective_from:
+                    active_conservation_status.effective_to = (
+                        max_effective_from - timedelta(days=1)
+                    )
+
                 active_conservation_status.customer_status = (
                     ConservationStatus.CUSTOMER_STATUS_CLOSED
                 )
@@ -3336,6 +3360,17 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
                 processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
             ).first()
             if active_conservation_status:
+                # effective_to date should be populated based on the Resultant Profile's Approved CS effective_from date
+                # i.e. Original Closed CS effective_to = Resultant Approved CS effective_from minus one day.
+                resulting_community_cs = ConservationStatus.objects.filter(
+                    community=resulting_community,
+                    processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+                ).first()
+                if resulting_community_cs and resulting_community_cs.effective_from:
+                    active_conservation_status.effective_to = (
+                        resulting_community_cs.effective_from - timedelta(days=1)
+                    )
+
                 active_conservation_status.customer_status = (
                     ConservationStatus.CUSTOMER_STATUS_CLOSED
                 )
