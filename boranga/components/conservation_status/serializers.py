@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from boranga.components.conservation_status.models import (
+    ConservationChangeCode,
     ConservationStatus,
     ConservationStatusAmendmentRequest,
     ConservationStatusAmendmentRequestDocument,
@@ -40,6 +41,7 @@ from boranga.helpers import (
 )
 from boranga.ledger_api_utils import retrieve_email_user
 from boranga.settings import (
+    CONSERVATION_CHANGE_CODE_DELIST,
     GROUP_NAME_CONSERVATION_STATUS_APPROVER,
     GROUP_NAME_CONSERVATION_STATUS_ASSESSOR,
 )
@@ -606,6 +608,7 @@ class BaseConservationStatusSerializer(BaseModelSerializer):
     )
     other_conservation_assessment = serializers.SerializerMethodField(read_only=True)
     common_names = serializers.SerializerMethodField(read_only=True)
+    change_code_code = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ConservationStatus
@@ -656,6 +659,8 @@ class BaseConservationStatusSerializer(BaseModelSerializer):
             "datetime_updated",
             "editing_window_minutes",
             "common_names",
+            "change_code",
+            "change_code_code",
         )
 
     def get_wa_legislative_list(self, obj):
@@ -774,6 +779,9 @@ class BaseConservationStatusSerializer(BaseModelSerializer):
             )
 
         return []
+
+    def get_change_code_code(self, obj):
+        return obj.change_code.code if obj.change_code else None
 
 
 class ConservationStatusSerializer(BaseConservationStatusSerializer):
@@ -1208,6 +1216,45 @@ class SaveConservationStatusValidationMixin:
     def validate(self, attrs):
         if not self.instance:
             return super().validate(attrs)
+
+        change_code = None
+        if "change_code_id" in attrs:
+            change_code_id = attrs.get("change_code_id")
+            if change_code_id:
+                try:
+                    change_code = ConservationChangeCode.objects.get(id=change_code_id)
+                except ConservationChangeCode.DoesNotExist:
+                    pass
+        elif self.instance.change_code:
+            change_code = self.instance.change_code
+
+        if change_code and change_code.code == CONSERVATION_CHANGE_CODE_DELIST:
+            # Check for approved CS
+            has_approved = False
+            if self.instance.species:
+                has_approved = (
+                    ConservationStatus.objects.exclude(id=self.instance.id)
+                    .filter(
+                        species=self.instance.species,
+                        processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+                    )
+                    .exists()
+                )
+            elif self.instance.community:
+                has_approved = (
+                    ConservationStatus.objects.exclude(id=self.instance.id)
+                    .filter(
+                        community=self.instance.community,
+                        processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+                    )
+                    .exists()
+                )
+
+            if not has_approved:
+                raise serializers.ValidationError(
+                    "You cannot Delist this Species/Community because it does not "
+                    "have a current Approved Conservation Status listing."
+                )
 
         if (
             self.instance.processing_status
