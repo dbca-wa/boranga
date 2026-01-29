@@ -35,10 +35,40 @@ class OccurrenceThreatImporter(BaseSheetImporter):
         if ctx.dry_run:
             return
 
-        logger = __import__("logging").getLogger(__name__)
-        logger.warning(
-            "OccurrenceThreatImporter: deleting OCCConservationThreat data (where occurrence_report_threat is NULL)..."
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
         )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        logger = __import__("logging").getLogger(__name__)
+
+        if is_filtered:
+            if not target_group_types:
+                return
+            logger.warning(
+                "OccurrenceThreatImporter: deleting OCCConservationThreat data "
+                "(where occurrence_report_threat is NULL) for group_types: %s ...",
+                target_group_types,
+            )
+            threat_filter = {
+                "occurrence_report_threat__isnull": True,
+                "occurrence__group_type__name__in": target_group_types,
+            }
+        else:
+            logger.warning(
+                "OccurrenceThreatImporter: deleting OCCConservationThreat data "
+                "(where occurrence_report_threat is NULL)..."
+            )
+            threat_filter = {"occurrence_report_threat__isnull": True}
+
         from django.apps import apps
         from django.db import connections
 
@@ -51,15 +81,9 @@ class OccurrenceThreatImporter(BaseSheetImporter):
             OCCConservationThreat = apps.get_model("boranga", "OCCConservationThreat")
             try:
                 # Only delete threats that are not linked to a report threat (i.e. direct legacy threats)
-                OCCConservationThreat.objects.filter(
-                    occurrence_report_threat__isnull=True
-                ).delete()
+                OCCConservationThreat.objects.filter(**threat_filter).delete()
             except Exception:
                 logger.exception("Failed to delete OCCConservationThreat")
-
-            # We probably shouldn't reset sequence if we are only deleting a subset
-            # But if we are deleting a large chunk, maybe?
-            # Safest is NOT to reset sequence if we are not deleting ALL.
 
         finally:
             if not was_autocommit:

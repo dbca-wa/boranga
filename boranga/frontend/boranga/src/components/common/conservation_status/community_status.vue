@@ -102,8 +102,11 @@
                                         v-for="change_code in change_codes"
                                         :key="change_code.id"
                                         :value="change_code.id"
+                                        :disabled="
+                                            isOptionDisabled(change_code)
+                                        "
                                     >
-                                        {{ change_code.code }}
+                                        {{ getOptionLabel(change_code) }}
                                     </option>
                                 </select>
                             </template>
@@ -1824,6 +1827,20 @@ export default {
         });
     },
     methods: {
+        isOptionDisabled: function (option) {
+            if (option.code === 'DeList') {
+                return !this.conservation_status_obj
+                    .current_conservation_status;
+            }
+            return false;
+        },
+        getOptionLabel: function (option) {
+            let label = option.code;
+            if (this.isOptionDisabled(option) && option.code === 'DeList') {
+                label += ' (Disabled: No Active Conservation Status Found)';
+            }
+            return label;
+        },
         approvalLevelChanged: function () {
             this.conservation_status_obj.effective_from = null;
         },

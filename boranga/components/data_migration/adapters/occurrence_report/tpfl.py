@@ -474,13 +474,14 @@ def ocr_plant_count_status_transform(value, ctx):
         return _result(COUNT_STATUS_NOT_COUNTED)
 
     # Check detailed count fields
+    # Note: Use canonical field names as `row` has been mapped by schema
     detailed_fields = [
-        "JUVENILE_PLANTS",
-        "MATURE_PLANTS",
-        "SEEDLING_PLANTS",
-        "JUVENILE_DEAD",
-        "MATURE_DEAD",
-        "SEEDLING_DEAD",
+        "OCRPlantCount__detailed_alive_juvenile",
+        "OCRPlantCount__detailed_alive_mature",
+        "OCRPlantCount__detailed_alive_seedling",
+        "OCRPlantCount__detailed_dead_juvenile",
+        "OCRPlantCount__detailed_dead_mature",
+        "OCRPlantCount__detailed_dead_seedling",
     ]
     has_detailed = any(
         row.get(f) is not None and str(row.get(f)).strip() != ""
@@ -491,7 +492,7 @@ def ocr_plant_count_status_transform(value, ctx):
         return _result(COUNT_STATUS_COUNTED)
 
     # Check simple count fields
-    simple_fields = ["SIMPLE_LIVE_TOT", "SIMPLE_DEAD_TOT"]
+    simple_fields = ["OCRPlantCount__simple_alive", "OCRPlantCount__simple_dead"]
     has_simple = any(
         row.get(f) is not None and str(row.get(f)).strip() != "" for f in simple_fields
     )
@@ -555,8 +556,8 @@ PIPELINES = {
         "strip",
         "blank_to_none",
         observer_name_fallback_transform,
-        "required",
     ],
+    "OCRObserverDetail__organisation": ["strip", "blank_to_none"],
     "OCRHabitatComposition__loose_rock_percent": [
         "strip",
         "blank_to_none",
@@ -819,14 +820,30 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                         "OCRVegetationStructure__vegetation_structure_layer_one"
                     ] = veg_codes[3]
 
-            canonical["occurrence_report_name"] = (
-                f"{canonical.get('POP_NUMBER', '').strip()} {canonical.get('SUBPOP_CODE', '').strip()}".strip()
+            # Use SHEET_POP_NUMBER/SHEET_SUBPOP_CODE as POP_NUMBER/SUBPOP_CODE are not in RFR forms
+            # and not in schema column map
+            pop_num = (
+                canonical.get("SHEET_POP_NUMBER")
+                or raw.get("SHEET_POP_NUMBER")
+                or raw.get("POP_NUMBER")
+                or ""
             )
+            sub_pop = (
+                canonical.get("SHEET_SUBPOP_CODE")
+                or raw.get("SHEET_SUBPOP_CODE")
+                or raw.get("SUBPOP_CODE")
+                or ""
+            )
+            canonical["occurrence_report_name"] = (
+                f"{str(pop_num).strip()} {str(sub_pop).strip()}".strip()
+            )
+
             canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
             assessor_data = None
-            REASON_DEACTIVATED = canonical.get("REASON_DEACTIVATED", "").strip()
+            # REASON_DEACTIVATED and DEACTIVATED_DATE are not in schema column map, so read from raw
+            REASON_DEACTIVATED = raw.get("REASON_DEACTIVATED", "").strip()
             if REASON_DEACTIVATED:
-                DEACTIVATED_DATE = canonical.get("DEACTIVATED_DATE", "").strip()
+                DEACTIVATED_DATE = raw.get("DEACTIVATED_DATE", "").strip()
                 assessor_data = (
                     f"Reason Deactivated: {REASON_DEACTIVATED}, {DEACTIVATED_DATE}"
                 )
@@ -1027,6 +1044,11 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 canonical["OccurrenceReportGeometry__locked"] = (
                     True  # Default locked=True
                 )
+
+            # Prepend source prefix to migrated_from_id
+            mid = canonical.get("migrated_from_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical["migrated_from_id"] = f"{Source.TPFL.value.lower()}-{mid}"
 
             # If an explicit occurrence id is present in the source we do not assign
             # it here; the importer will link habitat to the parent OccurrenceReport

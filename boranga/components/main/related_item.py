@@ -6,13 +6,20 @@ from boranga.helpers import is_internal
 
 class RelatedItem:
     def __init__(
-        self, model_name="", identifier="", descriptor="", status="", action_url=""
+        self,
+        model_name="",
+        identifier="",
+        descriptor="",
+        status="",
+        action_url="",
+        related_sc_id="",
     ):
         self.model_name = model_name
         self.identifier = identifier
         self.descriptor = descriptor
         self.status = status
         self.action_url = action_url
+        self.related_sc_id = related_sc_id
 
     def __hash__(self):
         # Use a tuple for hashing so None values are handled safely
@@ -23,6 +30,7 @@ class RelatedItem:
                 self.descriptor,
                 self.status,
                 self.action_url,
+                self.related_sc_id,
             )
         )
 
@@ -36,6 +44,7 @@ class RelatedItem:
             and self.descriptor == other.descriptor
             and self.status == other.status
             and self.action_url == other.action_url
+            and self.related_sc_id == other.related_sc_id
         )
 
     def __str__(self):
@@ -48,6 +57,7 @@ class RelatedItemsSerializer(BaseSerializer):
     descriptor = serializers.CharField()
     status = serializers.CharField()
     action_url = serializers.CharField(allow_blank=True)
+    related_sc_id = serializers.CharField(allow_blank=True)
 
     def to_representation(self, instance):
         # Am using to modify the action urls for external users so they only

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
-import time
 
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
 
@@ -62,6 +63,12 @@ class OccurrenceTenureAdapter(SourceAdapter):
             # Use the shared schema mapping to get migrated_from_id (POP_ID)
             # and map PURPOSE1/VESTING to OccurrenceTenure__* fields
             canonical = schema.map_raw_row(raw)
+
+            # Prepend source prefix so we can match Occurrence.migrated_from_id
+            mid = canonical.get("migrated_from_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical["migrated_from_id"] = f"{Source.TPFL.value.lower()}-{mid}"
+
             rows.append(canonical)
 
         return ExtractionResult(rows=rows, warnings=warnings)
@@ -79,6 +86,21 @@ class DummyRequest:
 class OccurrenceTenureImporter(BaseSheetImporter):
     slug = "occurrence_tenure"
     description = "Create OccurrenceTenure from spatial intersection and legacy CSV"
+
+    def clear_targets(
+        self, ctx: ImportContext, include_children: bool = False, **options
+    ):
+        """Delete OccurrenceTenure target data. Respect `ctx.dry_run`."""
+        if ctx.dry_run:
+            logger.info("Dry run: Would delete all OccurrenceTenure objects")
+            return
+
+        # We don't delete parent Occurrences, only the Tenure links
+        # OccurrenceTenure is just a linking model between OccurrenceGeometry and Tenure features
+        count = OccurrenceTenure.objects.count()
+        logger.info(f"Deleting {count} OccurrenceTenure objects...")
+        OccurrenceTenure.objects.all().delete()
+        logger.info("Deletion complete.")
 
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
@@ -132,9 +154,12 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             pipelines[col] = transform_registry.build_pipeline(names)
 
         processed = 0
+        created = 0
         updated = 0
         skipped = 0
         errors = 0
+        warnings_count = 0
+        errors_details = []
 
         # Get the tenure intersect layer
         try:
@@ -148,9 +173,65 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             logger.error("Multiple tenure intersects query layers found")
             return stats
 
+        # Preload Occurrence map for performance (migrated_from_id -> pk)
+        # Optimization: We load ALL occurrences to correctly distinguish between
+        # "Not Found" vs "Skipped (Inactive/NoGeom)"
+        occurrence_map = {}
+        # Track duplicates to mimic original behavior
+        duplicate_mids = set()
+
+        from boranga.components.occurrence.models import OccurrenceGeometry
+
+        # Subquery to check if a valid geometry exists and get its PK
+        # This prevents N+1 queries later and allows us to verify geometry existence efficiently
+        geom_qs = (
+            OccurrenceGeometry.objects.filter(
+                occurrence=OuterRef("pk"), geometry__isnull=False
+            )
+            .order_by("-id")
+            .values("pk")[:1]
+        )
+
+        qs_occs = (
+            Occurrence.objects.filter(
+                migrated_from_id__isnull=False,
+            )
+            .exclude(migrated_from_id="")
+            .annotate(geom_pk=Subquery(geom_qs))
+            .values_list("migrated_from_id", "pk", "processing_status", "geom_pk")
+        )
+
+        for mid, pk, status, geom_pk in qs_occs:
+            if mid in occurrence_map:
+                duplicate_mids.add(mid)
+            else:
+                occurrence_map[mid] = {
+                    "pk": pk,
+                    "active": status == Occurrence.PROCESSING_STATUS_ACTIVE,
+                    "geom_pk": geom_pk,
+                }
+
+        # Remove duplicates from map
+        for mid in duplicate_mids:
+            if mid in occurrence_map:
+                del occurrence_map[mid]
+
+        # Preload set of occurrence_geometry IDs that already have tenure
+        # This avoids the N+1Exists query inside the loop for non-wipe runs
+        geometry_has_tenure = set()
+        if not options.get("wipe_targets"):
+            geometry_has_tenure = set(
+                OccurrenceTenure.objects.exclude(occurrence_geometry=None)
+                .values_list("occurrence_geometry_id", flat=True)
+                .distinct()
+            )
+
+        # Silence spatial utils logger to avoid chattiness
+        logging.getLogger("boranga.components.spatial.utils").setLevel(logging.WARNING)
+
         for row in all_rows:
             processed += 1
-            if processed % 100 == 0:
+            if processed % 500 == 0:
                 logger.info(f"Processed {processed} rows")
 
             tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
@@ -165,6 +246,18 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                     has_error = True
                     # Log error
                     logger.error(f"Error transforming {col}: {res.issues}")
+                    errors_details.append(
+                        {
+                            "migrated_from_id": row.get("migrated_from_id"),
+                            "column": col,
+                            "level": "error",
+                            "message": str(res.issues),
+                            "raw_value": raw_val,
+                            "reason": "Transform error",
+                            "row_json": json.dumps(row, default=str),
+                            "timestamp": timezone.now().isoformat(),
+                        }
+                    )
 
             if has_error:
                 skipped += 1
@@ -176,44 +269,78 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 skipped += 1
                 continue
 
-            # Find Occurrence
-            try:
-                occurrence = Occurrence.objects.get(migrated_from_id=migrated_from_id)
-            except Occurrence.DoesNotExist:
-                logger.warning(
-                    f"Occurrence with migrated_from_id {migrated_from_id} not found"
+            # Find Occurrence (Optimized)
+            if migrated_from_id in duplicate_mids:
+                msg = f"Multiple Occurrences with migrated_from_id {migrated_from_id} found"
+                errors_details.append(
+                    {
+                        "migrated_from_id": migrated_from_id,
+                        "column": "migrated_from_id",
+                        "level": "warning",
+                        "message": msg,
+                        "raw_value": migrated_from_id,
+                        "reason": "Duplicate occurrence",
+                        "row_json": json.dumps(row, default=str),
+                        "timestamp": timezone.now().isoformat(),
+                    }
                 )
                 skipped += 1
+                warnings_count += 1
                 continue
-            except Occurrence.MultipleObjectsReturned:
-                logger.warning(
-                    f"Multiple Occurrences with migrated_from_id {migrated_from_id} found"
+
+            occ_data = occurrence_map.get(migrated_from_id)
+            if not occ_data:
+                msg = f"Occurrence with migrated_from_id {migrated_from_id} not found"
+                errors_details.append(
+                    {
+                        "migrated_from_id": migrated_from_id,
+                        "column": "migrated_from_id",
+                        "level": "warning",
+                        "message": msg,
+                        "raw_value": migrated_from_id,
+                        "reason": "Occurrence not found",
+                        "row_json": json.dumps(row, default=str),
+                        "timestamp": timezone.now().isoformat(),
+                    }
                 )
                 skipped += 1
+                warnings_count += 1
                 continue
+
+            # Check validity before proceeding (avoid DB hit for invalid records)
+            if not occ_data["active"]:
+                skipped += 1
+                continue
+
+            if not occ_data["geom_pk"]:
+                skipped += 1
+                continue
+
+            occurrence_pk = occ_data["pk"]
+            geom_pk = occ_data["geom_pk"]
+
+            # Use hollow object for FK lookup
+            occurrence = Occurrence(pk=occurrence_pk)
+            occurrence_str = f"Occurrence {occurrence_pk} ({migrated_from_id})"
 
             # Get Geometry
             try:
-                # Assuming one geometry per occurrence for now, or taking the first one
-                # OccurrenceGeometry has a OneToOne or ForeignKey?
-                # In utils.py: InstanceGeometry.objects.filter(**{instance_fk_field_name: instance})
-                # OccurrenceGeometry is the model.
-                from boranga.components.occurrence.models import OccurrenceGeometry
-
-                geometry_instance = OccurrenceGeometry.objects.get(
-                    occurrence=occurrence
-                )
+                geometry_instance = OccurrenceGeometry.objects.get(pk=geom_pk)
             except OccurrenceGeometry.DoesNotExist:
-                logger.warning(f"No geometry for Occurrence {occurrence}")
+                # Should not happen given geom_pk check, but safety net
                 skipped += 1
                 continue
             except OccurrenceGeometry.MultipleObjectsReturned:
                 # If multiple, maybe process all?
                 # For now let's take the first one or log warning
-                logger.warning(f"Multiple geometries for Occurrence {occurrence}")
+                logger.warning(f"Multiple geometries for {occurrence_str}")
                 geometry_instance = OccurrenceGeometry.objects.filter(
                     occurrence=occurrence
                 ).first()
+
+            if not geometry_instance.geometry:
+                skipped += 1
+                continue
 
             if ctx.dry_run:
                 logger.info(
@@ -221,8 +348,13 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 )
                 continue
 
-            row_start_time = time.time()
             try:
+                # Use preloaded set to check existence without DB hit
+                exists_before = (
+                    options.get("wipe_targets") is not True
+                    and geometry_instance.id in geometry_has_tenure
+                )
+
                 # Intersect
                 # intersect_geometry_with_layer expects a GEOSGeometry
                 intersect_data = intersect_geometry_with_layer(
@@ -231,25 +363,41 @@ class OccurrenceTenureImporter(BaseSheetImporter):
 
                 features = intersect_data.get("features", [])
                 if not features:
-                    logger.info(
-                        f"No intersecting tenure features for Occurrence {occurrence}"
-                    )
+                    skipped += 1
                     continue
 
                 # Populate Tenure
                 # This creates/updates OccurrenceTenure objects
+                tenure_count_before = OccurrenceTenure.objects.filter(
+                    occurrence_geometry=geometry_instance
+                ).count()
+
                 populate_occurrence_tenure_data(geometry_instance, features, request)
 
                 # Now update with CSV data
                 purpose_id = transformed.get("OccurrenceTenure__purpose_id")
                 vesting_id = transformed.get("OccurrenceTenure__vesting_id")
 
-                # Only apply to the first tenure if multiple exist
+                # Get all tenures for this geometry (could be multiple if intersecting multiple features)
                 tenures = OccurrenceTenure.objects.filter(
                     occurrence_geometry=geometry_instance
                 ).order_by("id")
-                if tenures.exists():
-                    tenure = tenures.first()
+
+                tenure_count_after = tenures.count()
+
+                # Update stats accurately
+                if not exists_before:
+                    created += tenure_count_after
+                else:
+                    # If it already had tenures, we count new ones as created and existing as updated
+                    num_new = max(0, tenure_count_after - tenure_count_before)
+                    created += num_new
+                    updated += tenure_count_before
+
+                # Apply CSV data to the tenures
+                # If there are multiple tenures, we apply it to all of them as it is likely
+                # intended for the entire occurrence population represented by this row.
+                for tenure in tenures:
                     updated_fields = []
                     if purpose_id:
                         tenure.purpose_id = purpose_id
@@ -262,24 +410,84 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                     updated_fields.append("significant_to_occurrence")
 
                     tenure.save(version_user=user)
-                    updated += 1
 
-                    duration = time.time() - row_start_time
-                    logger.info(
-                        f"Processed Occurrence {occurrence} (Tenure updated) in {duration:.4f}s"
-                    )
+                    # duration = time.time() - row_start_time
+                    # logger.info(
+                    #     f"Processed Occurrence {occurrence} ({action_str}) in {duration:.4f}s"
+                    # )
 
             except Exception as e:
                 logger.exception(
                     f"Error processing tenure for Occurrence {occurrence}: {e}"
                 )
                 errors += 1
+                errors_details.append(
+                    {
+                        "migrated_from_id": migrated_from_id,
+                        "column": "general",
+                        "level": "error",
+                        "message": str(e),
+                        "raw_value": None,
+                        "reason": "Exception",
+                        "row_json": json.dumps(row, default=str),
+                        "timestamp": timezone.now().isoformat(),
+                    }
+                )
+
+        # Write error CSV
+        if errors_details:
+            import csv
+            import os
+
+            csv_path = options.get("error_csv")
+            if csv_path:
+                csv_path = os.path.abspath(csv_path)
+            else:
+                ts = timezone.now().strftime("%Y%m%d_%H%M%S")
+                csv_path = os.path.join(
+                    os.getcwd(),
+                    "private-media/handler_output",
+                    f"{self.slug}_errors_{ts}.csv",
+                )
+            try:
+                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+                with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+                    fieldnames = [
+                        "migrated_from_id",
+                        "column",
+                        "level",
+                        "message",
+                        "raw_value",
+                        "reason",
+                        "row_json",
+                        "timestamp",
+                    ]
+                    writer = csv.DictWriter(fh, fieldnames=fieldnames)
+                    writer.writeheader()
+                    for rec in errors_details:
+                        writer.writerow(
+                            {
+                                "migrated_from_id": rec.get("migrated_from_id"),
+                                "column": rec.get("column"),
+                                "level": rec.get("level"),
+                                "message": rec.get("message"),
+                                "raw_value": rec.get("raw_value"),
+                                "reason": rec.get("reason"),
+                                "row_json": rec.get("row_json"),
+                                "timestamp": rec.get("timestamp"),
+                            }
+                        )
+                logger.info(f"Wrote {len(errors_details)} error details to {csv_path}")
+            except Exception as e:
+                logger.error(f"Failed to write error CSV to {csv_path}: {e}")
 
         stats.update(
             processed=processed,
+            created=created,
             updated=updated,
             skipped=skipped,
             errors=errors,
+            warnings=warnings_count,
         )
 
         elapsed = timezone.now() - start_time

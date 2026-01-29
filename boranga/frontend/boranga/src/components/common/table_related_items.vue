@@ -66,6 +66,10 @@ export default {
             type: String,
             required: true,
         },
+        display_profile_column: {
+            type: Boolean,
+            default: true,
+        },
     },
     data() {
         return {
@@ -81,6 +85,15 @@ export default {
                 orderable: false,
                 searchable: true,
                 visible: true,
+            };
+        },
+        column_profile: function () {
+            return {
+                data: 'related_sc_id',
+                orderable: true,
+                searchable: true,
+                visible: true,
+                name: 'related_sc_id',
             };
         },
         column_type: function () {
@@ -128,6 +141,9 @@ export default {
                 vm.column_status,
                 vm.column_action,
             ];
+            if (vm.display_profile_column) {
+                columns.splice(1, 0, vm.column_profile);
+            }
             return {
                 autoWidth: false,
                 language: {
@@ -158,6 +174,16 @@ export default {
             };
         },
         datatable_headers: function () {
+            if (this.display_profile_column) {
+                return [
+                    'Number',
+                    'Profile',
+                    'Type',
+                    'Description',
+                    'Status',
+                    'Action',
+                ];
+            }
             return ['Number', 'Type', 'Description', 'Status', 'Action'];
         },
         filterApplied: function () {

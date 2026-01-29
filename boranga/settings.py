@@ -568,7 +568,10 @@ DEFAULT_SELECT2_RECORDS_LIMIT = config(
 
 GIS_EXTENT = config(
     "GIS_EXTENT",
-    default="96.0, -35.0, 129.0, -10.0",
+    # default="96.0, -35.0, 129.0, -10.0",
+    # TODO: Changed for now to include much wider extent of WA plus maritime borders
+    # so geometries located around all offshore reefs are included in map views
+    default="112.0, -38.5, 129.1, -13.0",
     cast=Csv(float, post_process=tuple),
 )
 

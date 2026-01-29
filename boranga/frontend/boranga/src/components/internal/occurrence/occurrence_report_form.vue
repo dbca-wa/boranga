@@ -2265,6 +2265,7 @@ export default {
                     vm.updateAssignedOfficerSelect();
                     vm.$nextTick(() => {
                         vm.initialiseReferreeSelect();
+                        vm.enablePopovers();
                     });
                 },
                 (error) => {

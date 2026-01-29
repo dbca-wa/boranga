@@ -114,7 +114,7 @@ class LegacyUsernameEmailuserMappingAdmin(admin.ModelAdmin):
         "last_name",
         "emailuser_id",
     ]
-    search_fields = ["legacy_username", "email_user__email"]
+    search_fields = ["legacy_username", "email"]
 
 
 class LegacyTaxonomyMappingAdmin(admin.ModelAdmin):

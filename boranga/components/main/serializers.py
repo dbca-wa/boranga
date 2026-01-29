@@ -9,6 +9,7 @@ from django.db.models.fields.related import ForeignKey, ManyToManyField, OneToOn
 from ledger_api_client.ledger_models import EmailUserRO
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 from rest_framework import serializers
+from rest_framework.settings import api_settings
 
 from boranga.components.main.models import (
     CommunicationsLogEntry,
@@ -45,7 +46,18 @@ class NH3SanitizeSerializerMixin:
             # receives a clear message instead of an AttributeError.
             if hasattr(self, "child"):
                 return [self.child.to_internal_value(item) for item in data]
-            raise serializers.ValidationError("Expected an object but received a list.")
+
+            logger.warning(
+                f"Received list data for {self.__class__.__name__} which expects a dictionary: {data}"
+            )
+
+            raise serializers.ValidationError(
+                {
+                    api_settings.NON_FIELD_ERRORS_KEY: [
+                        "Expected an object but received a list."
+                    ]
+                }
+            )
 
         if hasattr(data, "lists"):
             # Handle QueryDict

@@ -20,13 +20,6 @@ from boranga.components.species_and_communities.models import (
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 
-
-def tpfl_migrated_id_transform(val, ctx):
-    if val:
-        return f"tpfl-{val}"
-    return val
-
-
 # TPFL-specific transform bindings
 TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
 COORD_SOURCE_TRANSFORM = build_legacy_map_transform(
@@ -71,7 +64,7 @@ VESTING_TRANSFORM = build_legacy_map_transform(
 )
 
 PIPELINES = {
-    "migrated_from_id": ["strip", "required", tpfl_migrated_id_transform],
+    "migrated_from_id": ["strip", "required"],
     "species_id": [
         "strip",
         "blank_to_none",
@@ -169,6 +162,12 @@ class OccurrenceTpflAdapter(SourceAdapter):
         for raw in raw_rows:
             # Map raw row to canonical keys
             canonical_row = SCHEMA.map_raw_row(raw)
+
+            # Prepend source prefix to migrated_from_id
+            mid = canonical_row.get("migrated_from_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical_row["migrated_from_id"] = f"{Source.TPFL.value.lower()}-{mid}"
+
             # Preserve internal keys (starting with _)
             for k, v in raw.items():
                 if k.startswith("_"):
@@ -198,7 +197,6 @@ class OccurrenceTpflAdapter(SourceAdapter):
                 GroupType.GROUP_TYPE_FLORA
             )
             canonical_row["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
-            canonical_row["processing_status"] = Occurrence.PROCESSING_STATUS_ACTIVE
             canonical_row["locked"] = True
             canonical_row["lodgment_date"] = canonical_row.get("datetime_created")
 

@@ -57,7 +57,7 @@
                 </div>
                 <div class="col-md-3">
                     <div id="select_genera" class="form-group">
-                        <label for="cs_genera_lookup">Genera:</label>
+                        <label for="cs_genera_lookup">Genus:</label>
                         <select
                             id="cs_genera_lookup"
                             ref="cs_genera_lookup"
@@ -728,6 +728,21 @@ export default {
                 { value: 'draft', name: 'Draft', className: '' },
                 { value: 'discarded', name: 'Discarded', className: '' },
                 {
+                    value: 'active',
+                    name: 'Active',
+                    className: 'optionGroup',
+                },
+                {
+                    value: 'approved',
+                    name: 'Approved',
+                    className: 'optionChild',
+                },
+                {
+                    value: 'delisted',
+                    name: 'Delisted',
+                    className: 'optionChild',
+                },
+                {
                     value: 'awaiting_assessor_action',
                     name: 'Awaiting Assessor Action',
                     className: 'optionGroup',
@@ -768,11 +783,6 @@ export default {
                     className: 'optionChild',
                 },
                 {
-                    value: 'with_approver',
-                    name: 'Proposed DeListed',
-                    className: 'optionChild',
-                },
-                {
                     value: 'deferred',
                     name: 'Deferred',
                     className: 'optionChild',
@@ -788,12 +798,6 @@ export default {
                     className: 'optionChild',
                 },
                 { value: 'closed', name: 'Closed', className: 'optionChild' },
-                {
-                    value: 'delisted',
-                    name: 'DeListed',
-                    className: 'optionChild',
-                },
-                { value: 'approved', name: 'Approved', className: '' },
             ],
         };
     },
@@ -850,7 +854,7 @@ export default {
                 'Scientific Name',
                 'Common Name',
                 'Family',
-                'Genera',
+                'Genus',
                 'Informal Group(s)',
                 'Change Type',
                 'WA Priority List',
@@ -1583,9 +1587,10 @@ export default {
                 constants.GROUPS.INTERNAL_CONTRIBUTORS
             )
         ) {
-            vm.processing_statuses.push({
+            vm.processing_statuses.splice(2, 0, {
                 value: 'discarded_by_me',
                 name: 'Discarded By Me',
+                className: '',
             });
         }
         vm.fetchFilterLists();
@@ -1888,7 +1893,7 @@ export default {
                     dropdownParent: $('#select_genera'),
                     theme: 'bootstrap-5',
                     allowClear: true,
-                    placeholder: 'Select Genera',
+                    placeholder: 'Select Genus',
                     ajax: {
                         url: api_endpoints.genera_lookup,
                         dataType: 'json',

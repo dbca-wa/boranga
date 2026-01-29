@@ -128,14 +128,7 @@
                             />
                         </div>
                     </div>
-                    <div
-                        v-if="
-                            !occurrence_report_obj.species_id ||
-                            (occurrence_report_obj.common_names &&
-                                occurrence_report_obj.common_names.length > 0)
-                        "
-                        class="row mb-3"
-                    >
+                    <div class="row mb-3 align-items-center">
                         <label for="" class="col-sm-3 col-form-label fw-bold"
                             >Common Name<template
                                 v-if="
@@ -161,23 +154,34 @@
                                     class="form-control"
                                 />
                             </template>
-                            <template
-                                v-else-if="
-                                    occurrence_report_obj.common_names &&
-                                    occurrence_report_obj.common_names.length >
-                                        0
-                                "
-                            >
+                            <template v-else>
                                 <template
-                                    v-for="commonName in occurrence_report_obj.common_names"
-                                    :key="commonName"
+                                    v-if="
+                                        occurrence_report_obj.common_names &&
+                                        occurrence_report_obj.common_names
+                                            .length > 0
+                                    "
                                 >
+                                    <template
+                                        v-for="commonName in occurrence_report_obj.common_names"
+                                        :key="commonName"
+                                    >
+                                        <h5 class="d-inline">
+                                            <span
+                                                class="badge bg-primary me-2"
+                                                >{{ commonName }}</span
+                                            >
+                                        </h5></template
+                                    >
+                                </template>
+                                <template v-else>
                                     <h5 class="d-inline">
-                                        <span class="badge bg-primary me-2">{{
-                                            commonName
-                                        }}</span>
-                                    </h5></template
-                                >
+                                        <span class="badge bg-secondary me-2"
+                                            ><i class="bi bi-ban"></i
+                                        ></span>
+                                        <span class="visually-hidden">N/A</span>
+                                    </h5>
+                                </template>
                             </template>
                         </div>
                     </div>
@@ -189,7 +193,7 @@
                             <input
                                 id="previous_name"
                                 v-model="taxon_previous_name"
-                                readonly
+                                :disabled="true"
                                 type="text"
                                 class="form-control"
                                 placeholder=""

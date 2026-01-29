@@ -522,10 +522,19 @@ def t_ocr_comments_transform(value, ctx):
 def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
     key = f"fk_{model._meta.label_lower}_{lookup_field}"
 
+    # Cache lookup results to avoid repeated DB queries for the same input value
+    # Key: input value, Value: (result_value, list[TransformIssue])
+    _lookup_cache = {}
+
     @registry.register(key)
     def inner(value, ctx):
         if value in (None, ""):
             return _result(None)
+
+        if value in _lookup_cache:
+            res_val, res_issues = _lookup_cache[value]
+            return _result(res_val, *res_issues)
+
         qs = model._default_manager
 
         # Try lookup using the stored (cleaned) form first, then the raw value.
@@ -573,25 +582,31 @@ def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
         for candidate in candidates:
             try:
                 obj = qs.get(**{lookup_field: candidate})
-                return _result(obj.pk)
+                res_val, res_issues = obj.pk, []
+                _lookup_cache[value] = (res_val, res_issues)
+                return _result(res_val, *res_issues)
             except model.DoesNotExist:
                 continue
             except model.MultipleObjectsReturned:
-                return _result(
-                    value,
+                res_val = value
+                res_issues = [
                     TransformIssue(
                         "error",
                         f"Multiple {model.__name__} with {lookup_field}='{value}' found",
-                    ),
-                )
+                    )
+                ]
+                _lookup_cache[value] = (res_val, res_issues)
+                return _result(res_val, *res_issues)
 
-        return _result(
-            value,
+        res_val = value
+        res_issues = [
             TransformIssue(
                 "error",
                 f"{model.__name__} with {lookup_field}='{value}' not found",
-            ),
-        )
+            )
+        ]
+        _lookup_cache[value] = (res_val, res_issues)
+        return _result(res_val, *res_issues)
 
     return key
 
@@ -1544,32 +1559,47 @@ def emailuser_by_legacy_username_factory(legacy_system: str) -> str:
     if name in registry._fns:
         return name
 
+    # Cache lookup results to avoid repeated DB queries
+    # Key: username value, Value: (result_value, list[TransformIssue])
+    _lookup_cache = {}
+
     def inner(value, ctx):
         if value in (None, ""):
             return _result(None)
+
+        if value in _lookup_cache:
+            res_val, res_issues = _lookup_cache[value]
+            return _result(res_val, *res_issues)
+
         username = str(value).strip()
         qs = LegacyUsernameEmailuserMapping.objects.filter(
             legacy_system__iexact=str(legacy_system), legacy_username__iexact=username
         )
         try:
             mapping = qs.get()
-            return _result(mapping.emailuser_id)
+            res_val, res_issues = mapping.emailuser_id, []
+            _lookup_cache[value] = (res_val, res_issues)
+            return _result(res_val, *res_issues)
         except LegacyUsernameEmailuserMapping.DoesNotExist:
-            return _result(
-                value,
+            res_val = value
+            res_issues = [
                 TransformIssue(
                     "error",
                     f"User with legacy username='{value}' not found for system='{legacy_system}'",
-                ),
-            )
+                )
+            ]
+            _lookup_cache[value] = (res_val, res_issues)
+            return _result(res_val, *res_issues)
         except LegacyUsernameEmailuserMapping.MultipleObjectsReturned:
-            return _result(
-                value,
+            res_val = value
+            res_issues = [
                 TransformIssue(
                     "error",
                     f"Multiple users with legacy username='{value}' for system='{legacy_system}'",
-                ),
-            )
+                )
+            ]
+            _lookup_cache[value] = (res_val, res_issues)
+            return _result(res_val, *res_issues)
 
     registry._fns[name] = inner
     return name
@@ -2652,9 +2682,15 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
             if sheetno in (None, ""):
                 return _result(None)
 
+            # Strip prefix if present (e.g. "tpfl-12345" -> "12345") because mapping uses raw SHEETNO
+            sheetno_str = str(sheetno)
+            prefix = f"{legacy_system.lower()}-"
+            if sheetno_str.startswith(prefix):
+                sheetno_str = sheetno_str[len(prefix) :]
+
             # Get POP_ID from SHEETNO using the mapping
             pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno, legacy_system=legacy_system
+                sheetno_str, legacy_system=legacy_system
             )
             if not pop_id:
                 return _result(None)
@@ -2663,6 +2699,11 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
 
             # Check cache for the occurrence PK
             occ_pk = pop_id_to_occurrence_pk_cache.get(pop_id_str)
+            if not occ_pk and legacy_system:
+                occ_pk = pop_id_to_occurrence_pk_cache.get(
+                    f"{legacy_system.lower()}-{pop_id_str}"
+                )
+
             if occ_pk:
                 # Return the Occurrence instance for normalize_create_kwargs to handle
                 occurrence = Occurrence.objects.get(pk=occ_pk)
@@ -2732,9 +2773,15 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
             if sheetno in (None, ""):
                 return _result(None)
 
+            # Strip prefix if present (e.g. "tpfl-12345" -> "12345") because mapping uses raw SHEETNO
+            sheetno_str = str(sheetno)
+            prefix = f"{legacy_system.lower()}-"
+            if sheetno_str.startswith(prefix):
+                sheetno_str = sheetno_str[len(prefix) :]
+
             # Get POP_ID from SHEETNO using the mapping
             pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno, legacy_system=legacy_system
+                sheetno_str, legacy_system=legacy_system
             )
             if not pop_id:
                 return _result(None)
@@ -2743,6 +2790,11 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
 
             # Check cache for the occurrence_number
             occurrence_number = pop_id_to_occurrence_number_cache.get(pop_id_str)
+            if not occurrence_number and legacy_system:
+                occurrence_number = pop_id_to_occurrence_number_cache.get(
+                    f"{legacy_system.lower()}-{pop_id_str}"
+                )
+
             if occurrence_number:
                 return _result(occurrence_number)
             else:
@@ -2787,9 +2839,15 @@ def pop_id_from_sheetno_factory(legacy_system: str = "TPFL"):
             if sheetno in (None, ""):
                 return _result(None)
 
+            # Strip prefix if present (e.g. "tpfl-12345" -> "12345") because mapping uses raw SHEETNO
+            sheetno_str = str(sheetno)
+            prefix = f"{legacy_system.lower()}-"
+            if sheetno_str.startswith(prefix):
+                sheetno_str = sheetno_str[len(prefix) :]
+
             # Get POP_ID from SHEETNO using the mapping
             pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno, legacy_system=legacy_system
+                sheetno_str, legacy_system=legacy_system
             )
             if not pop_id:
                 return _result(None)

@@ -154,9 +154,9 @@ export async function fetchTileLayers(map_component, tileLayerApiUrl) {
             }
             return response.json();
         })
-        .then((layers) => {
+        .then(async (layers) => {
             console.log('tilelayer', layers);
-            tileLayers = _helper.tileLayerFromLayerDefinitions(layers);
+            tileLayers = await _helper.tileLayerFromLayerDefinitions(layers);
         })
         .catch((error) => {
             console.error('Error fetching tilelayer:', error);

@@ -23,9 +23,16 @@
                             <div class="form-group">
                                 <div class="row mb-3">
                                     <div class="col-sm-3">
-                                        <label class="control-label fw-bold"
+                                        <label
+                                            :class="
+                                                isReadOnly
+                                                    ? 'control-label'
+                                                    : 'control-label fw-bold'
+                                            "
                                             >Name
-                                            <span class="text-danger"
+                                            <span
+                                                v-if="!isReadOnly"
+                                                class="text-danger"
                                                 >*</span
                                             ></label
                                         >
@@ -45,10 +52,16 @@
                                 <div class="row mb-3">
                                     <div class="col-sm-3">
                                         <label
-                                            class="control-label fw-bold"
+                                            :class="
+                                                isReadOnly
+                                                    ? 'control-label'
+                                                    : 'control-label fw-bold'
+                                            "
                                             for="role"
                                             >Role
-                                            <span class="text-danger"
+                                            <span
+                                                v-if="!isReadOnly"
+                                                class="text-danger"
                                                 >*</span
                                             ></label
                                         >
@@ -117,10 +130,16 @@
                                 <div class="row mb-3">
                                     <div class="col-sm-3">
                                         <label
-                                            class="control-label fw-bold"
+                                            :class="
+                                                isReadOnly
+                                                    ? 'control-label'
+                                                    : 'control-label fw-bold'
+                                            "
                                             for="category"
                                             >Observer Category
-                                            <span class="text-danger"
+                                            <span
+                                                v-if="!isReadOnly"
+                                                class="text-danger"
                                                 >*</span
                                             ></label
                                         >

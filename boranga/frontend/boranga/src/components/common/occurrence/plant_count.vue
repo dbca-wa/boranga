@@ -946,6 +946,9 @@ export default {
             id: null,
             name: null,
         });
+        vm.$nextTick(() => {
+            vm.resetDirtyState();
+        });
     },
     methods: {
         resetDirtyState: function () {

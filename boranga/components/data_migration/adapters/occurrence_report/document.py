@@ -9,10 +9,10 @@ from boranga.components.data_migration.adapters.base import (
 )
 from boranga.components.data_migration.adapters.schema_base import Schema
 from boranga.components.data_migration.registry import (
+    TransformIssue,
     _result,
     build_legacy_map_transform,
     emailuser_by_legacy_username_factory,
-    fk_lookup,
     fk_lookup_static,
     static_value_factory,
 )
@@ -21,6 +21,8 @@ from boranga.components.species_and_communities.models import (
     DocumentCategory,
     DocumentSubCategory,
 )
+
+from ..sources import Source
 
 # -----------------------------------------------------------------------------
 # Schema Definition
@@ -84,9 +86,39 @@ DOCUMENT_SUB_CATEGORY_TRANSFORM = fk_lookup_static(
     static_value="TPFL Document Reference",
 )
 
+
+def occurrence_report_lookup_transform(value, ctx):
+    # Cache on function attribute
+    if not hasattr(occurrence_report_lookup_transform, "_cache"):
+        # We only really care about TPFL ones for this specific adapter/import run,
+        # but loading all migrated ones is generally safe.
+        mapping = dict(
+            OccurrenceReport.objects.filter(migrated_from_id__isnull=False).values_list(
+                "migrated_from_id", "pk"
+            )
+        )
+        occurrence_report_lookup_transform._cache = mapping
+
+    if value in (None, ""):
+        return _result(None)
+
+    val_str = str(value)
+    unique_id = occurrence_report_lookup_transform._cache.get(val_str)
+
+    if unique_id:
+        return _result(unique_id)
+
+    return _result(
+        value,
+        TransformIssue(
+            "error", f"OccurrenceReport with migrated_from_id='{value}' not found"
+        ),
+    )
+
+
 # Task 11463: Map SHEETNO to OccurrenceReport (using migrated_from_id)
-# We need to look up OccurrenceReport where migrated_from_id == SHEETNO
-FK_OCCURRENCE_REPORT = fk_lookup(OccurrenceReport, "migrated_from_id")
+# Optimization: Use preloaded map instead of generic fk_lookup to avoid N+1 queries
+FK_OCCURRENCE_REPORT = occurrence_report_lookup_transform
 
 # Task 11465: Default = TRUE
 ACTIVE_DEFAULT = static_value_factory(True)
@@ -210,6 +242,11 @@ class OccurrenceReportDocumentAdapter(SourceAdapter):
             # We need to manually run pipelines or use a helper.
             # The Schema class has effective_pipelines() but map_raw_row only does column mapping.
             # We need to run the pipelines on the mapped data.
+
+            # Prepend source prefix
+            mid = canonical.get("occurrence_report_id")
+            if mid and not str(mid).startswith(f"{Source.TPFL.value.lower()}-"):
+                canonical["occurrence_report_id"] = f"{Source.TPFL.value.lower()}-{mid}"
 
             rows.append(canonical)
 

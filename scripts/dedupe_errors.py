@@ -45,8 +45,8 @@ def dedupe(input_path, output_path=None):
 
     # write output
     fieldnames = [
-        "column",
         "level",
+        "column",
         "message",
         "raw_value",
         "count",
@@ -57,18 +57,27 @@ def dedupe(input_path, output_path=None):
     with open(output_path, "w", newline="", encoding="utf-8") as outfh:
         writer = csv.DictWriter(outfh, fieldnames=fieldnames)
         writer.writeheader()
-        for key, cnt in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+
+        def sort_key(item):
+            key, count = item
+            col, level, msg, raw = key
+            # Sort order: error, warning, info, then count desc
+            level_map = {"error": 0, "warning": 1, "info": 2}
+            level_priority = level_map.get(level.lower(), 9)
+            return (level_priority, -count, col, msg, raw)
+
+        for key, count in sorted(counts.items(), key=sort_key):
             col, level, msg, raw = key
             examples = ";".join(migrated_examples.get(key, []))
             first = first_ts.get(key).isoformat() if key in first_ts else ""
             last = last_ts.get(key).isoformat() if key in last_ts else ""
             writer.writerow(
                 {
-                    "column": col,
                     "level": level,
+                    "column": col,
                     "message": msg,
                     "raw_value": raw,
-                    "count": cnt,
+                    "count": count,
                     "example_migrated_from_ids": examples,
                     "first_seen": first,
                     "last_seen": last,

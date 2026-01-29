@@ -74,19 +74,42 @@
                         />
                     </div>
                 </div>
-                <div v-if="showField(common_name)" class="row mb-3">
-                    <label for="" class="col-sm-3 col-form-label"
-                        >Common Name:</label
+                <div class="row mb-3 d-flex align-items-center">
+                    <label for="common_name" class="col-sm-3 col-form-label"
+                        >Common Name<template
+                            v-if="
+                                common_names_list &&
+                                common_names_list.length > 1
+                            "
+                            >s</template
+                        >:</label
                     >
-                    <div class="col-sm-9">
-                        <textarea
-                            id="common_name"
-                            v-model="common_name"
-                            :disabled="true"
-                            class="form-control"
-                            rows="2"
-                            placeholder=""
-                        />
+                    <div id="select_common_name" class="col-sm-9">
+                        <template
+                            v-if="
+                                common_names_list &&
+                                common_names_list.length > 0
+                            "
+                        >
+                            <template
+                                v-for="commonName in common_names_list"
+                                :key="commonName"
+                            >
+                                <h5 class="d-inline">
+                                    <span class="badge bg-primary me-2">{{
+                                        commonName
+                                    }}</span>
+                                </h5></template
+                            >
+                        </template>
+                        <template v-else>
+                            <h5 class="d-inline">
+                                <span class="badge bg-secondary me-2"
+                                    ><i class="bi bi-ban"></i
+                                ></span>
+                                <span class="visually-hidden">N/A</span>
+                            </h5>
+                        </template>
                     </div>
                 </div>
                 <div class="row mb-3">
@@ -119,19 +142,42 @@
                         />
                     </div>
                 </div>
-                <div v-if="showField(informal_group)" class="row mb-3">
-                    <label for="" class="col-sm-3 col-form-label"
-                        >Informal Group:</label
+                <div class="row mb-3 d-flex align-items-center">
+                    <label for="informal_group" class="col-sm-3 col-form-label"
+                        >Informal Group<template
+                            v-if="
+                                informal_groups_list &&
+                                informal_groups_list.length > 1
+                            "
+                            >s</template
+                        >:</label
                     >
-                    <div class="col-sm-9">
-                        <textarea
-                            id="informal_group"
-                            v-model="informal_group"
-                            :disabled="true"
-                            class="form-control"
-                            rows="1"
-                            placeholder=""
-                        />
+                    <div id="select_informal_group" class="col-sm-9">
+                        <template
+                            v-if="
+                                informal_groups_list &&
+                                informal_groups_list.length > 0
+                            "
+                        >
+                            <template
+                                v-for="informalGroup in informal_groups_list"
+                                :key="informalGroup"
+                            >
+                                <h5 class="d-inline">
+                                    <span class="badge bg-primary me-2">{{
+                                        informalGroup
+                                    }}</span>
+                                </h5></template
+                            >
+                        </template>
+                        <template v-else>
+                            <h5 class="d-inline">
+                                <span class="badge bg-secondary me-2"
+                                    ><i class="bi bi-ban"></i
+                                ></span>
+                                <span class="visually-hidden">N/A</span>
+                            </h5>
+                        </template>
                     </div>
                 </div>
                 <div v-if="showField(family)" class="row mb-3">
@@ -1120,9 +1166,11 @@ export default {
             conservation_list: '',
             conservation_criteria: '',
             common_name: null,
+            common_names_list: [],
             taxon_name_id: null,
             taxon_previous_name: null,
             informal_group: null,
+            informal_groups_list: [],
             family: null,
             genus: null,
             name_authority: null,
@@ -1730,9 +1778,12 @@ export default {
                             e.params.data.conservation_status.conservation_criteria;
                     }
                     vm.common_name = e.params.data.common_name;
+                    vm.common_names_list = e.params.data.common_names_list;
                     vm.taxon_name_id = e.params.data.taxon_name_id;
                     vm.taxon_previous_name = e.params.data.taxon_previous_name;
                     vm.informal_group = e.params.data.informal_group;
+                    vm.informal_groups_list =
+                        e.params.data.informal_groups_list;
                     vm.family = e.params.data.family_name;
                     vm.genus = e.params.data.genera_name;
                     vm.name_authority = e.params.data.name_authority;
@@ -1746,9 +1797,11 @@ export default {
                     vm.conservation_criteria = '';
                     vm.conservation_list = '';
                     vm.common_name = '';
+                    vm.common_names_list = [];
                     vm.taxon_name_id = '';
                     vm.taxon_previous_name = '';
                     vm.informal_group = '';
+                    vm.informal_groups_list = [];
                     vm.family = '';
                     vm.genus = '';
                     vm.name_authority = '';
@@ -1787,12 +1840,16 @@ export default {
                 }
                 vm.common_name =
                     vm.species_community.taxonomy_details.common_name;
+                vm.common_names_list =
+                    vm.species_community.taxonomy_details.common_names_list;
                 vm.taxon_name_id =
                     vm.species_community.taxonomy_details.taxon_name_id;
                 vm.taxon_previous_name =
                     vm.species_community.taxonomy_details.taxon_previous_name;
                 vm.informal_group =
                     vm.species_community.taxonomy_details.informal_group;
+                vm.informal_groups_list =
+                    vm.species_community.taxonomy_details.informal_groups_list;
                 vm.family = vm.species_community.taxonomy_details.family_name;
                 vm.genus = vm.species_community.taxonomy_details.genera_name;
                 vm.name_authority =

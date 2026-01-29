@@ -106,6 +106,7 @@ from boranga.components.users.models import (
     SubmitterInformationModelMixin,
 )
 from boranga.helpers import (
+    abbreviate_species_name,
     belongs_to_by_user_id,
     clone_model,
     get_choices_for_field,
@@ -670,13 +671,22 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
     @property
     def related_item_descriptor(self):
+        descriptor = "Descriptor not available"
         if self.species:
             if self.species.taxonomy and self.species.taxonomy.scientific_name:
-                return self.species.taxonomy.scientific_name
+                descriptor = abbreviate_species_name(
+                    self.species.taxonomy.scientific_name
+                )
         if self.community:
-            if self.community.taxonomy and self.community.taxonomy.community_name:
-                return self.community.taxonomy.community_name
-        return "Descriptor not available"
+            if self.community.taxonomy and self.community.taxonomy.community_common_id:
+                descriptor = self.community.taxonomy.community_common_id
+
+        if self.occurrence and self.occurrence.occurrence_name:
+            if descriptor != "Descriptor not available":
+                return f"{self.occurrence.occurrence_name}; {descriptor}"
+            return self.occurrence.occurrence_name
+
+        return descriptor
 
     @property
     def related_item_status(self):
@@ -684,6 +694,12 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
     @property
     def as_related_item(self):
+        related_sc_id = ""
+        if self.species:
+            related_sc_id = self.species.species_number
+        elif self.community:
+            related_sc_id = self.community.community_number
+
         related_item = RelatedItem(
             identifier=self.related_item_identifier,
             model_name=self._meta.verbose_name.title(),
@@ -694,6 +710,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
                 f'?action=view" target="_blank">View '
                 '<i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=related_sc_id,
         )
         return related_item
 
@@ -1062,7 +1079,9 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             Occurrence.objects.filter(occurrence_name=new_occurrence_name).exists()
             or OccurrenceReportApprovalDetails.objects.filter(
                 new_occurrence_name=new_occurrence_name
-            ).exists()
+            )
+            .exclude(occurrence_report=self)
+            .exists()
         ):
             raise ValidationError(
                 f'Occurrence with name "{new_occurrence_name}" already exists or has been proposed for approval'
@@ -3871,7 +3890,7 @@ class OCRConservationThreat(RevisionedMixin):
         null=True,
         blank=True,
     )
-    comment = models.CharField(max_length=512, blank=True, default="")
+    comment = models.TextField(blank=True, default="")
     date_observed = models.DateField(blank=True, null=True)
     visible = models.BooleanField(
         default=True
@@ -3941,8 +3960,8 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     RELATED_ITEM_CHOICES = [
         ("species", "Species"),
         ("community", "Community"),
-        ("occurrence_report", "Occurrence Report"),
         ("occurrences", "Occurrence"),
+        ("occurrence_report", "Occurrence Report"),
     ]
 
     OCCURRENCE_CHOICE_OCR = "ocr"
@@ -4234,22 +4253,27 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
     @property
     def related_item_descriptor(self):
+        descriptor = "Descriptor not available"
         if self.group_type.name in ["flora", "fauna"]:
             if self.species:
                 if self.species.taxonomy and self.species.taxonomy.scientific_name:
-                    return self.species.taxonomy.scientific_name
+                    descriptor = abbreviate_species_name(
+                        self.species.taxonomy.scientific_name
+                    )
         elif self.group_type.name == "community":
             if self.community:
-                if self.community.taxonomy and self.community.taxonomy.community_name:
-                    return self.community.taxonomy.community_name
+                if (
+                    self.community.taxonomy
+                    and self.community.taxonomy.community_common_id
+                ):
+                    descriptor = self.community.taxonomy.community_common_id
 
-        if self.species:
-            if self.species.taxonomy and self.species.taxonomy.scientific_name:
-                return self.species.taxonomy.scientific_name
-        if self.community:
-            if self.community.taxonomy and self.community.taxonomy.community_name:
-                return self.community.taxonomy.community_name
-        return "Descriptor not available"
+        if self.occurrence_name:
+            if descriptor != "Descriptor not available":
+                return f"{self.occurrence_name}; {descriptor}"
+            return self.occurrence_name
+
+        return descriptor
 
     @property
     def related_item_status(self):
@@ -4257,6 +4281,12 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
     @property
     def as_related_item(self):
+        related_sc_id = ""
+        if self.species:
+            related_sc_id = self.species.species_number
+        elif self.community:
+            related_sc_id = self.community.community_number
+
         related_item = RelatedItem(
             identifier=self.related_item_identifier,
             model_name=self._meta.verbose_name.title(),
@@ -4267,6 +4297,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 f'?group_type_name={self.group_type.name}" target="_blank">View '
                 '<i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=related_sc_id,
         )
         return related_item
 
@@ -5336,7 +5367,7 @@ class OCCContactDetail(RevisionedMixin):
     role = models.CharField(max_length=250, blank=True, default="")
     contact = models.CharField(max_length=250, blank=True, default="")
     organisation = models.CharField(max_length=250, blank=True, default="")
-    notes = models.CharField(max_length=512, blank=True, default="")
+    notes = models.CharField(max_length=1000, blank=True, default="")
     visible = models.BooleanField(default=True)
 
     class Meta:
@@ -5397,7 +5428,7 @@ class OCCConservationThreat(RevisionedMixin):
         null=True,
         blank=True,
     )
-    comment = models.CharField(max_length=512, blank=True, default="")
+    comment = models.TextField(blank=True, default="")
     date_observed = models.DateField(blank=True, null=True)
     visible = models.BooleanField(
         default=True
@@ -8900,20 +8931,25 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         email=assigned_officer_email
                     ).id
                 except EmailUser.DoesNotExist:
-                    error_message = (
-                        "No ledger user found for assigned_officer with "
-                        f"email address: {assigned_officer_email}"
-                    )
-                    errors.append(
-                        {
-                            "row_index": index,
-                            "error_type": "column",
-                            "data": assigned_officer_email,
-                            "error_message": error_message,
-                        }
-                    )
-                    errors_added += 1
-                    return cell_value, errors_added
+                    try:
+                        assigned_officer_id = EmailUser.objects.get(
+                            id=int(assigned_officer_email)
+                        ).id
+                    except (ValueError, EmailUser.DoesNotExist):
+                        error_message = (
+                            "No ledger user found for assigned_officer with "
+                            f"email address or ID: {assigned_officer_email}"
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "column",
+                                "data": assigned_officer_email,
+                                "error_message": error_message,
+                            }
+                        )
+                        errors_added += 1
+                        return cell_value, errors_added
 
                 if not belongs_to_by_user_id(
                     assigned_officer_id, settings.GROUP_NAME_OCCURRENCE_ASSESSOR
@@ -8948,20 +8984,25 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         email=assigned_approver_email
                     ).id
                 except EmailUser.DoesNotExist:
-                    error_message = (
-                        "No ledger user found for assigned_approver with "
-                        f"email address: {assigned_approver_email}"
-                    )
-                    errors.append(
-                        {
-                            "row_index": index,
-                            "error_type": "column",
-                            "data": assigned_approver_email,
-                            "error_message": error_message,
-                        }
-                    )
-                    errors_added += 1
-                    return cell_value, errors_added
+                    try:
+                        assigned_approver_id = EmailUser.objects.get(
+                            id=int(assigned_approver_email)
+                        ).id
+                    except (ValueError, EmailUser.DoesNotExist):
+                        error_message = (
+                            "No ledger user found for assigned_approver with "
+                            f"email address or ID: {assigned_approver_email}"
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "column",
+                                "data": assigned_approver_email,
+                                "error_message": error_message,
+                            }
+                        )
+                        errors_added += 1
+                        return cell_value, errors_added
 
                 if not belongs_to_by_user_id(
                     assigned_approver_id, settings.GROUP_NAME_OCCURRENCE_APPROVER
@@ -9029,16 +9070,22 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             try:
                 cell_value = EmailUser.objects.get(email=cell_value).id
             except EmailUser.DoesNotExist:
-                error_message = f"No ledger user found with email address: {cell_value}"
-                errors.append(
-                    {
-                        "row_index": index,
-                        "error_type": "column",
-                        "data": cell_value,
-                        "error_message": error_message,
-                    }
-                )
-                errors_added += 1
+                # Try finding by ID if email lookup fails
+                try:
+                    cell_value = EmailUser.objects.get(id=int(cell_value)).id
+                except (ValueError, EmailUser.DoesNotExist):
+                    error_message = (
+                        f"No ledger user found with email address or ID: {cell_value}"
+                    )
+                    errors.append(
+                        {
+                            "row_index": index,
+                            "error_type": "column",
+                            "data": cell_value,
+                            "error_message": error_message,
+                        }
+                    )
+                    errors_added += 1
             return cell_value, errors_added
 
         if isinstance(field, MultiSelectField):

@@ -121,10 +121,16 @@ class GetSpeciesDisplay(views.APIView):
         if taxon_id:
             taxonomy = Taxonomy.objects.filter(id=taxon_id)
             if taxonomy.exists():
+                taxon = taxonomy.first()
                 res_json["id"] = taxon_id
-                res_json["name"] = taxonomy.first().scientific_name
-                res_json["taxon_previous_name"] = taxonomy.first().taxon_previous_name
-                res_json["common_name"] = taxonomy.first().taxon_vernacular_name
+                res_json["name"] = taxon.scientific_name
+                res_json["taxon_previous_name"] = taxon.taxon_previous_name
+                res_json["common_name"] = taxon.taxon_vernacular_name
+                res_json["common_names_list"] = (
+                    list(taxon.vernaculars.values_list("vernacular_name", flat=True))
+                    if hasattr(taxon, "vernaculars")
+                    else []
+                )
 
         res_json = json.dumps(res_json)
         return HttpResponse(res_json, content_type="application/json")
@@ -1762,11 +1768,25 @@ class ConservationStatusViewSet(
     def get_related_items(self, request, *args, **kwargs):
         instance = self.get_object()
         related_filter_type = request.GET.get("related_filter_type")
-        related_items = instance.get_related_items(related_filter_type)
+
+        draw = request.GET.get("draw")
+        start = request.GET.get("start")
+        length = request.GET.get("length")
+
+        related_items, total_count = instance.get_related_items(
+            related_filter_type, offset=start, limit=length
+        )
         serializer = RelatedItemsSerializer(
             related_items, many=True, context={"request": request}
         )
-        return Response(serializer.data)
+        return Response(
+            {
+                "draw": int(draw),
+                "recordsTotal": total_count,
+                "recordsFiltered": total_count,
+                "data": serializer.data,
+            }
+        )
 
     @detail_route(
         methods=[

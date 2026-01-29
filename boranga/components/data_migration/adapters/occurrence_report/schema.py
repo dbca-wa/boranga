@@ -41,6 +41,7 @@ COLUMN_MAP = {
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
     "OBS_NAME": "OCRObserverDetail__observer_name",
     "OBSERVER_CODE": "OBSERVER_CODE",
+    "OBS_ORG_NAME": "OCRObserverDetail__organisation",
     # SHEET_* fields for ocr_for_occ_name composition in tpfl adapter
     "SHEET_POP_NUMBER": "SHEET_POP_NUMBER",
     "SHEET_SUBPOP_CODE": "SHEET_SUBPOP_CODE",
@@ -83,6 +84,7 @@ COLUMN_MAP = {
     # OccurrenceReportGeometry fields (Task 11359, 11364, 11366)
     "GDA94LAT": "GDA94LAT",
     "GDA94LONG": "GDA94LONG",
+    "DATUM": "DATUM",
     # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
     "PURPOSE1": "PURPOSE1",
     "PURPOSE2": "PURPOSE2",
@@ -272,6 +274,10 @@ class OccurrenceReportRow:
     # OCRFireHistory fields
     OCRFireHistory__comment: str | None = None
     OCRFireHistory__intensity: str | None = None
+
+    # Geometry fields
+    OccurrenceReportGeometry__geometry: object | None = None
+    OccurrenceReportGeometry__locked: bool | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
@@ -477,6 +483,10 @@ class OccurrenceReportRow:
             OCRFireHistory__intensity=utils.safe_strip(
                 d.get("OCRFireHistory__intensity")
             ),
+            OccurrenceReportGeometry__geometry=d.get(
+                "OccurrenceReportGeometry__geometry"
+            ),
+            OccurrenceReportGeometry__locked=d.get("OccurrenceReportGeometry__locked"),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:

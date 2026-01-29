@@ -654,6 +654,21 @@ export default {
                 { value: 'draft', name: 'Draft', className: '' },
                 { value: 'discarded', name: 'Discarded', className: '' },
                 {
+                    value: 'active',
+                    name: 'Active',
+                    className: 'optionGroup',
+                },
+                {
+                    value: 'approved',
+                    name: 'Approved',
+                    className: 'optionChild',
+                },
+                {
+                    value: 'delisted',
+                    name: 'Delisted',
+                    className: 'optionChild',
+                },
+                {
                     value: 'awaiting_assessor_action',
                     name: 'Awaiting Assessor Action',
                     className: 'optionGroup',
@@ -694,11 +709,6 @@ export default {
                     className: 'optionChild',
                 },
                 {
-                    value: 'with_approver',
-                    name: 'Proposed DeListed',
-                    className: 'optionChild',
-                },
-                {
                     value: 'deferred',
                     name: 'Deferred',
                     className: 'optionChild',
@@ -714,12 +724,6 @@ export default {
                     className: 'optionChild',
                 },
                 { value: 'closed', name: 'Closed', className: 'optionChild' },
-                {
-                    value: 'delisted',
-                    name: 'DeListed',
-                    className: 'optionChild',
-                },
-                { value: 'approved', name: 'Approved', className: '' },
             ],
         };
     },
@@ -1456,9 +1460,10 @@ export default {
                 constants.GROUPS.INTERNAL_CONTRIBUTORS
             )
         ) {
-            vm.processing_statuses.push({
+            vm.processing_statuses.splice(2, 0, {
                 value: 'discarded_by_me',
                 name: 'Discarded By Me',
+                className: '',
             });
         }
         vm.fetchFilterLists();

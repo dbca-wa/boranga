@@ -10,9 +10,7 @@
                     conservation_status_obj.group_type
                 }}</span>
                 {{ conservation_status_obj.conservation_status_number }}
-                <span v-if="identifier" class="text-capitalize">
-                    - {{ identifier }}</span
-                >
+                <span v-if="identifier"> - {{ identifier }}</span>
             </h3>
             <div class="col-md-3">
                 <CommsLogs
@@ -473,25 +471,6 @@
                                         <strong>Action</strong><br />
                                     </div>
                                 </div>
-                                <template
-                                    v-if="
-                                        hasAssessorMode &&
-                                        conservation_status_obj.processing_status ==
-                                            'Approved'
-                                    "
-                                >
-                                    <div class="row mb-2">
-                                        <div class="col-sm-12">
-                                            <button
-                                                style="width: 90%"
-                                                class="btn btn-primary"
-                                                @click.prevent="proposeDelist()"
-                                            >
-                                                Propose Delist</button
-                                            ><br />
-                                        </div>
-                                    </div>
-                                </template>
                                 <template v-if="canAction && canUnlock">
                                     <div class="row mb-2">
                                         <div class="col-sm-12">
@@ -621,7 +600,12 @@
                                                 class="btn btn-primary"
                                                 @click.prevent="issueProposal()"
                                             >
-                                                Approve</button
+                                                {{
+                                                    conservation_status_obj.change_code ===
+                                                    'DeList'
+                                                        ? 'Delist'
+                                                        : 'Approve'
+                                                }}</button
                                             ><br />
                                         </div>
                                     </div>
@@ -654,7 +638,12 @@
                                                 class="btn btn-primary"
                                                 @click.prevent="issueProposal()"
                                             >
-                                                Approve</button
+                                                {{
+                                                    conservation_status_obj.change_code ===
+                                                    'DeList'
+                                                        ? 'Delist'
+                                                        : 'Approve'
+                                                }}</button
                                             ><br />
                                         </div>
                                     </div>
@@ -986,6 +975,7 @@
             ref="proposed_approval"
             :processing_status="conservation_status_obj.processing_status"
             :conservation_status_id="conservation_status_obj.id"
+            :change_code="conservation_status_obj.change_code"
             :is-approval-level-document="isApprovalLevelDocument"
             @refresh-from-response="refreshFromResponse"
         />
@@ -1377,12 +1367,7 @@ export default {
             );
         },
         show_finalised_actions: function () {
-            return (
-                (this.hasAssessorMode &&
-                    this.conservation_status_obj.processing_status ==
-                        'Approved') ||
-                (this.canAction && (this.canUnlock || this.canLock))
-            );
+            return this.canAction && (this.canUnlock || this.canLock);
         },
         shouldShowTimerAndPoll() {
             const cs = this.conservation_status_obj;
@@ -2255,6 +2240,7 @@ export default {
                     vm.$nextTick(() => {
                         vm.initialisedSelects = false;
                         vm.initialiseSelects();
+                        vm.enablePopovers();
                     });
                 },
                 (error) => {

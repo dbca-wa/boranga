@@ -22,9 +22,16 @@
                             <div class="form-group">
                                 <div class="row mb-3">
                                     <div class="col-sm-3">
-                                        <label class="control-label fw-bold"
+                                        <label
+                                            :class="
+                                                isReadOnly
+                                                    ? 'control-label'
+                                                    : 'control-label fw-bold'
+                                            "
                                             >Category:
-                                            <span class="text-danger"
+                                            <span
+                                                v-if="!isReadOnly"
+                                                class="text-danger"
                                                 >*</span
                                             ></label
                                         >
@@ -157,17 +164,26 @@
                                     </div>
                                     <div class="col-sm-9">
                                         <textarea
+                                            ref="comment"
                                             v-model="threatObj.comment"
                                             :disabled="isReadOnly"
                                             class="form-control"
+                                            @input="resizeTextarea"
                                         ></textarea>
                                     </div>
                                 </div>
                                 <div class="row mb-3">
                                     <div class="col-sm-3">
-                                        <label class="control-label fw-bold"
+                                        <label
+                                            :class="
+                                                isReadOnly
+                                                    ? 'control-label'
+                                                    : 'control-label fw-bold'
+                                            "
                                             >Current Impact:
-                                            <span class="text-danger"
+                                            <span
+                                                v-if="!isReadOnly"
+                                                class="text-danger"
                                                 >*</span
                                             ></label
                                         >
@@ -478,9 +494,17 @@
                                     <div class="col-sm-3">
                                         <label
                                             for=""
-                                            class="control-label fw-bold"
+                                            :class="
+                                                isReadOnly
+                                                    ? 'control-label'
+                                                    : 'control-label fw-bold'
+                                            "
                                             >Date observed:
-                                            <span class="text-danger">*</span>
+                                            <span
+                                                v-if="!isReadOnly"
+                                                class="text-danger"
+                                                >*</span
+                                            >
                                         </label>
                                     </div>
                                     <div class="col-sm-9">
@@ -606,7 +630,7 @@ export default {
             form: null,
             threat_id: String,
             threat_action: String,
-            threatObj: Object,
+            threatObj: {},
             threat_category_list: [],
             threat_agent_list: [],
             current_impact_list: [],
@@ -640,8 +664,19 @@ export default {
                     this.originalThreatObj = JSON.parse(
                         JSON.stringify(this.threatObj)
                     );
+                    this.resizeTextarea();
                 });
+                // Fallback for cases where data might load after modal opens or transition
+                setTimeout(() => {
+                    this.resizeTextarea();
+                }, 500);
             }
+        },
+        threatObj: {
+            handler: function () {
+                this.resizeTextarea();
+            },
+            deep: true,
         },
     },
     created: async function () {
@@ -672,6 +707,16 @@ export default {
         vm.form = document.forms.threatForm;
     },
     methods: {
+        resizeTextarea: function () {
+            this.$nextTick(() => {
+                let element = this.$refs.comment;
+                if (element) {
+                    element.style.height = 'auto';
+                    element.style.height = element.scrollHeight + 'px';
+                    element.style.overflow = 'hidden';
+                }
+            });
+        },
         hasUnsavedChanges: function () {
             return (
                 JSON.stringify(this.threatObj) !==

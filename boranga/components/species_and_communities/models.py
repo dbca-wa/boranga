@@ -27,6 +27,7 @@ from boranga.components.main.models import (
 )
 from boranga.components.main.related_item import RelatedItem
 from boranga.helpers import (
+    abbreviate_species_name,
     filefield_exists,
     is_species_communities_approver,
     no_commas_validator,
@@ -571,6 +572,8 @@ class Species(RevisionedMixin):
     RELATED_ITEM_CHOICES = [
         ("parent_species", "Species"),
         ("conservation_status", "Conservation Status"),
+        ("occurrences", "Occurrence"),
+        ("occurrence_report", "Occurrence Report"),
     ]
 
     SPLIT_SPECIES_ACTION_RETAINED = "Retained"
@@ -1039,6 +1042,7 @@ class Species(RevisionedMixin):
                 f'?group_type_name={self.group_type.name}" target="_blank">View '
                 '<i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=self.species_number,
         )
         return related_item
 
@@ -1049,7 +1053,7 @@ class Species(RevisionedMixin):
     @property
     def related_item_descriptor(self):
         if self.taxonomy and self.taxonomy.scientific_name:
-            return self.taxonomy.scientific_name
+            return abbreviate_species_name(self.taxonomy.scientific_name)
         return "Descriptor not available"
 
     @property
@@ -2038,6 +2042,7 @@ class Community(RevisionedMixin):
                 f'?group_type_name={self.group_type.name}" target="_blank">View '
                 '<i class="bi bi-box-arrow-up-right"></i></a>'
             ),
+            related_sc_id=self.community_number,
         )
         return related_item
 
@@ -2047,11 +2052,9 @@ class Community(RevisionedMixin):
 
     @property
     def related_item_descriptor(self):
-        try:
-            name = self.taxonomy.community_name
-        except CommunityTaxonomy.DoesNotExist:
-            return "Descriptor not available"
-        return name or "Descriptor not available"
+        if self.taxonomy and self.taxonomy.community_common_id:
+            return self.taxonomy.community_common_id
+        return "Descriptor not available"
 
     @property
     def related_item_status(self):
@@ -2291,17 +2294,27 @@ class Community(RevisionedMixin):
             community=self
         ).first()
 
-        if not existing_community:
-            # This will create a new CommunityDistribution instance
-            resulting_community_distribution.pk = None
-        else:
-            # This will overwrite the existing CommunityDistribution instance
-            resulting_community_distribution.pk = (
-                resulting_community.community_distribution.pk
-            )
+        if resulting_community_distribution:
+            if not existing_community:
+                # This will create a new CommunityDistribution instance
+                resulting_community_distribution.pk = None
+            else:
+                # This will overwrite the existing CommunityDistribution instance
+                if (
+                    hasattr(resulting_community, "community_distribution")
+                    and resulting_community.community_distribution
+                ):
+                    resulting_community_distribution.pk = (
+                        resulting_community.community_distribution.pk
+                    )
+                else:
+                    resulting_community_distribution.pk = None
 
-        resulting_community_distribution.community = resulting_community
-        resulting_community_distribution.save()
+            resulting_community_distribution.community = resulting_community
+            resulting_community_distribution.save()
+        else:
+            # If no distribution exists, create a new one
+            CommunityDistribution.objects.create(community=resulting_community)
 
         for new_document in self.community_documents.all():
             new_doc_instance = new_document

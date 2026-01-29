@@ -917,6 +917,9 @@ export default {
             name: null,
         });
         vm.normaliseMultiSelectFields();
+        vm.$nextTick(() => {
+            vm.resetDirtyState();
+        });
     },
     mounted: function () {
         let vm = this;

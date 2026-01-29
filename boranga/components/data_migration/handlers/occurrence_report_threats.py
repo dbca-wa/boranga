@@ -38,17 +38,47 @@ class OCRConservationThreatImporter(BaseSheetImporter):
         if ctx.dry_run:
             return
 
-        logger = __import__("logging").getLogger(__name__)
-        logger.warning(
-            "OCRConservationThreatImporter: deleting OCRConservationThreat data..."
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
         )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        logger = __import__("logging").getLogger(__name__)
+
+        if is_filtered:
+            if not target_group_types:
+                return
+            logger.warning(
+                "OCRConservationThreatImporter: deleting OCRConservationThreat data for group_types: %s ...",
+                target_group_types,
+            )
+            threat_filter = {
+                "occurrence_report__group_type__name__in": target_group_types
+            }
+        else:
+            logger.warning(
+                "OCRConservationThreatImporter: deleting OCRConservationThreat data..."
+            )
+            threat_filter = {}
+
         from django.db import transaction
 
         with transaction.atomic():
             try:
                 from boranga.components.occurrence.models import OCRConservationThreat
 
-                OCRConservationThreat.objects.all().delete()
+                if is_filtered:
+                    OCRConservationThreat.objects.filter(**threat_filter).delete()
+                else:
+                    OCRConservationThreat.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OCRConservationThreat")
 
@@ -178,28 +208,29 @@ class OCRConservationThreatImporter(BaseSheetImporter):
 
         # helper to filter payload to model fields
         def filter_fields(model, payload: dict):
-            allowed = {
-                f.name
-                for f in model._meta.get_fields()
-                if f.concrete and not f.many_to_many and not f.one_to_many
-            }
+            allowed = set()
+            for f in model._meta.get_fields():
+                if f.concrete and not f.many_to_many and not f.one_to_many:
+                    allowed.add(f.name)
+                    if hasattr(f, "attname"):
+                        allowed.add(f.attname)
             return {k: v for k, v in payload.items() if k in allowed}
 
         to_create = []
 
         for transformed, src, issues in transformed_rows:
             # occurrence_report is FK
-            occurrence_report_id = transformed.get("occurrence_report")
+            occurrence_report_id = transformed.get("occurrence_report_id")
             if occurrence_report_id is None:
-                warnings.append(f"{src}: missing occurrence_report after transform")
+                warnings.append(f"{src}: missing occurrence_report_id after transform")
                 skipped += 1
                 errors += 1
                 errors_details.append(
                     {
-                        "migrated_from_id": transformed.get("occurrence_report"),
-                        "column": "occurrence_report",
+                        "migrated_from_id": transformed.get("occurrence_report_id"),
+                        "column": "occurrence_report_id",
                         "level": "error",
-                        "message": "missing occurrence_report after transform",
+                        "message": "missing occurrence_report_id after transform",
                         "raw_value": None,
                         "reason": "missing_fk",
                         "row": transformed,

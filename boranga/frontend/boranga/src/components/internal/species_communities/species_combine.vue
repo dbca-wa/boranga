@@ -195,7 +195,7 @@
                                                 class="text-secondary mb-3"
                                             >
                                                 <span
-                                                    class="badge bg-light text-primary text-capitalize border p-2 fs-6 me-2"
+                                                    class="badge bg-light text-primary border p-2 fs-6 me-2"
                                                     >{{
                                                         species.species_number
                                                     }}
@@ -218,7 +218,7 @@
 
                                         <div class="border-bottom mb-3 pb-3">
                                             <span
-                                                class="badge bg-light text-primary text-capitalize border p-2 fs-6"
+                                                class="badge bg-light text-primary border p-2 fs-6"
                                                 ><template
                                                     v-if="
                                                         resultingSpecies.species_number

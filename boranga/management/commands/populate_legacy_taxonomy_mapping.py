@@ -13,17 +13,18 @@ class Command(BaseCommand):
 
         Usage:
             ./manage.py populate_legacy_taxonomy_mapping \
-                private-media/legacy_data/TPFL/tpfl-legacy-name-to-taxon-name-id.csv \
+                private-media/legacy_data/TPFL/legacy-species-names-mapped-Nomos-ID-TPFL.csv \
                 --dry-run [--list-name TPFL]
 
     Expected CSV columns (headers case-insensitive):
     - list_name (required unless overridden with `--list-name`)
       - legacy_canonical_name (required)
       - taxon_name_id (required)
-      - TAXONID (required) -> maps to legacy_taxon_name_id
+      - TAXONID (optional) -> maps to legacy_taxon_name_id
 
     The command will:
-      - fail a row if any of the four required fields are missing
+      - fail a row if list_name, legacy_canonical_name, or taxon_name_id are missing
+      - filter rows if `--filter-list-name` is provided (using the list_name from CSV)
       - lookup a `Taxonomy` by `taxon_name_id` and fail the row if none found
       - skip rows where an existing mapping is already fully populated
       (taxonomy set, taxon_name_id matches, and legacy_taxon_name_id matches)
@@ -43,7 +44,17 @@ class Command(BaseCommand):
             help="Optional: override the CSV 'list_name' for all rows",
             default=None,
         )
+        parser.add_argument(
+            "--filter-list-name",
+            dest="filter_list_name",
+            type=str,
+            help="Optional: only process rows where CSV 'list_name' matches this value",
+            default=None,
+        )
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument(
+            "--verbose", action="store_true", help="Show details of skipped rows"
+        )
 
     def _get_field(self, row: dict, *keys):
         """Return the first present, non-empty value from row for given candidate keys."""
@@ -58,8 +69,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         csvfile = options["csvfile"]
         dry_run = options["dry_run"]
+        verbose = options["verbose"]
         # If provided, this will be used for every row instead of the CSV `list_name` value
         list_name_override = options.get("list_name")
+        filter_list_name = options.get("filter_list_name")
 
         rows = []
         with open(csvfile, newline="", encoding="utf-8-sig") as fh:
@@ -71,13 +84,19 @@ class Command(BaseCommand):
         updated = 0
         skipped = 0
         failed = 0
+        filtered_out = 0
 
         with transaction.atomic():
             for r in rows:
+                csv_list_name = self._get_field(r, "list_name", "list")
+
+                # Filter by list_name if filter is provided
+                if filter_list_name and csv_list_name != filter_list_name:
+                    filtered_out += 1
+                    continue
+
                 # Use the CLI override if provided, otherwise read from CSV
-                list_name = list_name_override or self._get_field(
-                    r, "list_name", "list"
-                )
+                list_name = list_name_override or csv_list_name
                 legacy_name = self._get_field(
                     r,
                     "legacy_canonical_name",
@@ -96,16 +115,10 @@ class Command(BaseCommand):
                     r, "taxon_name_id", "taxon_id", "taxonnameid", "nomos_taxon_id"
                 )
 
-                if not (
-                    list_name
-                    and legacy_name
-                    and taxon_name_id_raw
-                    and legacy_taxon_name_id
-                ):
+                if not (list_name and legacy_name and taxon_name_id_raw):
                     self.stderr.write(
                         f"Missing required fields in row: list_name={list_name} "
-                        f"legacy_canonical_name={legacy_name} taxon_name_id={taxon_name_id_raw} "
-                        f"legacy_taxon_name_id={legacy_taxon_name_id}"
+                        f"legacy_canonical_name={legacy_name} taxon_name_id={taxon_name_id_raw}"
                     )
                     failed += 1
                     continue
@@ -130,10 +143,13 @@ class Command(BaseCommand):
                     failed += 1
                     continue
 
-                # find existing mapping by unique key (legacy_taxon_name_id)
+                # find existing mapping by (list_name, legacy_taxon_name_id, legacy_canonical_name)
+                # This allows duplicate legacy_taxon_name_id entries if they have different names
                 try:
                     mapping = LegacyTaxonomyMapping.objects.get(
-                        list_name=list_name, legacy_taxon_name_id=legacy_taxon_name_id
+                        list_name=list_name,
+                        legacy_taxon_name_id=legacy_taxon_name_id,
+                        legacy_canonical_name=legacy_name,
                     )
                     # Determine if fully populated: taxonomy set and taxon_name_id matches
                     if (
@@ -141,6 +157,11 @@ class Command(BaseCommand):
                         and mapping.taxon_name_id == taxon_name_id
                         and mapping.legacy_canonical_name == legacy_name
                     ):
+                        if verbose:
+                            self.stdout.write(
+                                f"Skipping {legacy_name} ({legacy_taxon_name_id}): "
+                                f"DB ID {mapping.taxon_name_id} matches CSV ID {taxon_name_id}"
+                            )
                         skipped += 1
                         continue
 
@@ -179,11 +200,13 @@ class Command(BaseCommand):
                 except LegacyTaxonomyMapping.MultipleObjectsReturned:
                     self.stderr.write(
                         f"Multiple mappings found for list_name={list_name} "
-                        f"legacy_taxon_name_id={legacy_taxon_name_id}; skipping"
+                        f"legacy_taxon_name_id={legacy_taxon_name_id} "
+                        f"legacy_canonical_name={legacy_name}; skipping"
                     )
                     failed += 1
                     continue
 
         self.stdout.write(
-            f"created={created} updated={updated} skipped={skipped} failed={failed} (dry_run={dry_run})"
+            f"created={created} updated={updated} skipped={skipped} failed={failed} "
+            f"filtered_out={filtered_out} (dry_run={dry_run})"
         )

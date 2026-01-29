@@ -849,6 +849,9 @@ export default {
             id: null,
             name: null,
         });
+        vm.$nextTick(() => {
+            vm.resetDirtyState();
+        });
     },
     mounted: function () {
         let vm = this;

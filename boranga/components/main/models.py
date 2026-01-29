@@ -730,7 +730,7 @@ class LegacyTaxonomyMapping(models.Model):
     """
 
     list_name = models.CharField(max_length=50)
-    legacy_taxon_name_id = models.CharField(max_length=255)
+    legacy_taxon_name_id = models.CharField(max_length=255, null=True)
     legacy_canonical_name = models.CharField(max_length=255)
     taxon_name_id = models.PositiveIntegerField()
     taxonomy = models.ForeignKey(
