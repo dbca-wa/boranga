@@ -1249,6 +1249,10 @@ export default {
         });
         vm.speciesListRelatesToOptions =
             vm.listOfValuesDict.species_list_relates_to_list;
+
+        vm.$nextTick(() => {
+            vm.resetDirtyState();
+        });
     },
     mounted: function () {
         let vm = this;
