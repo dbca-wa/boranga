@@ -1600,6 +1600,7 @@ class DTConservationStatusReferralSerializer(BaseModelSerializer):
     referral_comment = serializers.SerializerMethodField()
     submitter = serializers.SerializerMethodField()
     can_user_process = serializers.SerializerMethodField()
+    can_be_processed = serializers.SerializerMethodField()
     group_type = serializers.SerializerMethodField()
 
     # species related fields
@@ -1663,6 +1664,9 @@ class DTConservationStatusReferralSerializer(BaseModelSerializer):
             return False
 
         return obj.assigned_officer == request.user.id
+
+    def get_can_be_processed(self, obj):
+        return obj.can_be_processed
 
     def get_group_type(self, obj):
         if obj.conservation_status:
