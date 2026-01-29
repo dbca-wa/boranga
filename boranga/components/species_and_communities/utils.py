@@ -106,6 +106,36 @@ def community_form_submit(community_instance, request):
     return community_instance
 
 
+def update_related_occurrence_reports(
+    original_species, new_species, request, action_type="renamed"
+):
+    from boranga.components.occurrence.email import (
+        send_occurrence_report_species_renamed_email,
+    )
+    from boranga.components.occurrence.models import OccurrenceReport
+
+    related_orfs = OccurrenceReport.objects.filter(species=original_species).exclude(
+        processing_status=OccurrenceReport.PROCESSING_STATUS_APPROVED
+    )
+
+    for orf in related_orfs:
+        orf.species = new_species
+        orf.save()
+
+        # Log action
+        action_msg = "Species name was automatically changed because the old name {} was {} to {}.".format(
+            original_species.species_number,
+            action_type,
+            new_species.species_number,
+        )
+        orf.log_user_action(action_msg, request)
+
+        # Send email
+        send_occurrence_report_species_renamed_email(
+            request, orf, original_species, new_species
+        )
+
+
 @transaction.atomic
 def process_species_from_combine_list(
     species_instance,
@@ -243,6 +273,10 @@ def process_species_from_combine_list(
         )
         actions[species_instance.id] = Species.COMBINE_SPECIES_ACTION_LEFT_AS_HISTORICAL
 
+    update_related_occurrence_reports(
+        species_instance, resulting_species_instance, request, "combined"
+    )
+
     return species_instance
 
 
@@ -294,6 +328,8 @@ def rename_species_original_submit(species_instance, new_species, request):
 
     # send the rename species email notification
     send_species_rename_email_notification(request, species_instance, new_species)
+
+    update_related_occurrence_reports(species_instance, new_species, request, "renamed")
 
     return species_instance
 
