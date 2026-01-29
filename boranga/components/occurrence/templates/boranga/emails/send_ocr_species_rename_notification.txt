@@ -1,0 +1,7 @@
+Dear Sir/Madam,
+
+The species named in your Occurrence Report {{ occurrence_report.occurrence_report_number }} has undergone a name change. This automatically updated the species name in {{ occurrence_report.occurrence_report_number }} from {{ original_species.taxonomy.scientific_name }} ({{ original_species.species_number }}) to {{ resultant_species.taxonomy.scientific_name }} ({{ resultant_species.species_number }}).
+
+No other details have been changed by this action. This ORF will remain available to you in your Boranga Occurrences Dashboard.
+
+Access Occurrence Report {{ occurrence_report.occurrence_report_number }}: {{ occurrence_report_url }}

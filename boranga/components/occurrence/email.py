@@ -653,3 +653,44 @@ def _log_occurrence_report_referral_email(email_message, referral, sender=None):
     email_entry = OccurrenceReportLogEntry.objects.create(**kwargs)
 
     return email_entry
+
+
+class OccurrenceReportSpeciesRenamedEmail(TemplateEmailBase):
+    subject = "The Species Name for your Occurrence Report has been amended"
+    html_template = "boranga/emails/send_ocr_species_rename_notification.html"
+    txt_template = "boranga/emails/send_ocr_species_rename_notification.txt"
+
+
+def send_occurrence_report_species_renamed_email(
+    request, occurrence_report, original_species, resultant_species
+):
+    email = OccurrenceReportSpeciesRenamedEmail()
+
+    to_user = EmailUser.objects.get(id=occurrence_report.submitter)
+    url_name_prefix = "internal"
+    if not is_internal_by_user_id(to_user.id):
+        url_name_prefix = "external"
+
+    url = request.build_absolute_uri(
+        reverse(
+            f"{url_name_prefix}-occurrence-report-detail",
+            kwargs={"occurrence_report_pk": occurrence_report.id},
+        )
+    )
+    if not is_internal_by_user_id(to_user.id):
+        url = convert_internal_url_to_external_url(url)
+
+    context = {
+        "occurrence_report": occurrence_report,
+        "original_species": original_species,
+        "resultant_species": resultant_species,
+        "occurrence_report_url": url,
+    }
+
+    sender = request.user if request else settings.DEFAULT_FROM_EMAIL
+
+    msg = email.send(to_user.email, context=context)
+
+    _log_occurrence_report_email(msg, occurrence_report, sender=sender)
+
+    return msg
