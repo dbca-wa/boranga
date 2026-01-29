@@ -1005,23 +1005,41 @@ class Species(RevisionedMixin):
 
                 total_count += count
 
-                # Add parent species related items to the list (limited to one degree of separation)
-                if a_field.name == "parent_species":
-                    for parent_species in self.parent_species.all():
-                        if filter_type == "for_occurrence":
-                            items = parent_species.get_related_items(
-                                "conservation_status_and_occurrences"
-                            )
-                        else:
-                            items = parent_species.get_related_items(
-                                "all_except_parent_species"
-                            )
+        # Use kwargs.get("check_parents", True) to check if we should look for related items in parent species
+        # This prevents infinite recursion and allows control over whether to show inherited items
+        check_parents = kwargs.get("check_parents", True)
 
-                        count = len(items)
-                        start, end = get_slice_range(count)
-                        if start < end:
-                            return_list.extend(items[start:end])
-                        total_count += count
+        if check_parents:
+            parent_filter = None
+            if filter_type == "all":
+                parent_filter = "all_except_parent_species"
+            elif filter_type == "for_occurrence":
+                parent_filter = "conservation_status_and_occurrences"
+            elif filter_type == "parent_species":
+                # Do NOT recurse for parent_species (we only want the parent objects themselves,
+                # which are handled by the field loop)
+                parent_filter = None
+            elif filter_type in [
+                "all_except_parent_species",
+                "conservation_status_and_occurrences",
+            ]:
+                # These internal filters imply we are already in a recursion step or limited view
+                parent_filter = None
+            else:
+                # For specific filters like "conservation_status", we search parents too.
+                parent_filter = filter_type
+
+            if parent_filter:
+                for parent_species in self.parent_species.all():
+                    items = parent_species.get_related_items(
+                        parent_filter, check_parents=False
+                    )
+
+                    count = len(items)
+                    start, end = get_slice_range(count)
+                    if start < end:
+                        return_list.extend(items[start:end])
+                    total_count += count
 
         # Remove duplicates
         if offset is None:
@@ -1981,17 +1999,35 @@ class Community(RevisionedMixin):
 
                 total_count += count
 
-                # Add renamed from related items to the list (limited to one degree of separation)
-                if a_field.name == "renamed_from" and self.renamed_from:
-                    if filter_type == "for_occurrence":
-                        items = self.renamed_from.get_related_items(
-                            "conservation_status_and_occurrences"
-                        )
-                    else:
-                        items = self.renamed_from.get_related_items(
-                            "all_except_renamed_community"
-                        )
+        # Use kwargs.get("check_parents", True) to check if we should look for related items
+        # in renamed from/to community This prevents infinite recursion and allows control over
+        #  whether to show inherited items
+        check_parents = kwargs.get("check_parents", True)
 
+        if check_parents:
+            parent_filter = None
+            if filter_type == "all":
+                parent_filter = "all_except_renamed_community"
+            elif filter_type == "for_occurrence":
+                parent_filter = "conservation_status_and_occurrences"
+            elif filter_type in ["renamed_from", "renamed_to"]:
+                # Do NOT recurse for renamed_from/renamed_to (we only want the objects themselves)
+                parent_filter = None
+            elif filter_type in [
+                "all_except_renamed_community",
+                "conservation_status_and_occurrences",
+            ]:
+                parent_filter = None
+            else:
+                # For specific filters like "conservation_status", we search parents too.
+                parent_filter = filter_type
+
+            if parent_filter:
+                # Add renamed from related items to the list (limited to one degree of separation)
+                if self.renamed_from:
+                    items = self.renamed_from.get_related_items(
+                        parent_filter, check_parents=False
+                    )
                     count = len(items)
                     start, end = get_slice_range(count)
                     if start < end:
@@ -1999,17 +2035,11 @@ class Community(RevisionedMixin):
                     total_count += count
 
                 # Add renamed to related items to the list (limited to one degree of separation)
-                if a_field.name == "renamed_to" and self.renamed_to.exists():
+                if self.renamed_to.exists():
                     for community in self.renamed_to.select_related("taxonomy").all():
-                        if filter_type == "for_occurrence":
-                            items = community.get_related_items(
-                                "conservation_status_and_occurrences"
-                            )
-                        else:
-                            items = community.get_related_items(
-                                "all_except_renamed_community"
-                            )
-
+                        items = community.get_related_items(
+                            parent_filter, check_parents=False
+                        )
                         count = len(items)
                         start, end = get_slice_range(count)
                         if start < end:
