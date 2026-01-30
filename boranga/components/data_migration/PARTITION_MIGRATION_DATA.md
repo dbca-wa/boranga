@@ -3,7 +3,7 @@
 ## Commands to create a partitioned file for the main TPFL legacy data files
 
 These will create a much smaller partitioned file so the business users don't have do sift through so many files when doing data verification.
-They can use the report generated as a guide to which records
+They can use the report generated as a guide to which records contain the 'Interesting' columns
 
 python3 scripts/partition_migration_data.py \
  --adapter boranga.components.data_migration.adapters.species.tpfl.SpeciesTpflAdapter \
