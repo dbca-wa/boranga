@@ -9,7 +9,7 @@ python3 scripts/partition_migration_data.py \
  --adapter boranga.components.data_migration.adapters.species.tpfl.SpeciesTpflAdapter \
  --input private-media/legacy_data/TPFL/species-profiles-combined.csv \
  --output private-media/legacy_data/TPFL/species-profiles-partitioned.csv \
- --report private-media/legacy_data/TPFL/species-partition-report.csv \
+ --report private-media/legacy_data/TPFL/species-profiles-partitioned-report.csv \
  --max-cardinality 100 \
  --heaviest-first
 
