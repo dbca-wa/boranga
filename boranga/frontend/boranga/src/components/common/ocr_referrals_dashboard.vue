@@ -416,7 +416,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_referrals_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
             sessionStorage.setItem(
                 vm.filterOCRReferralsOccurrence_cache,
@@ -427,7 +427,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_referrals_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
             sessionStorage.setItem(
                 vm.filterOCRReferralsScientificName_cache,
@@ -438,7 +438,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_referrals_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
             sessionStorage.setItem(
                 vm.filterOCRReferralsName_cache,
@@ -449,7 +449,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_referrals_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
             sessionStorage.setItem(
                 vm.filterOCRReferralsStatus_cache,

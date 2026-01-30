@@ -1340,7 +1340,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaScientificName_cache,
@@ -1351,7 +1351,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaCommonName_cache,
@@ -1362,7 +1362,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaPhylogeneticGroup_cache,
@@ -1373,7 +1373,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaFamily_cache,
@@ -1384,7 +1384,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaGenus_cache,
@@ -1395,7 +1395,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaChangeCode_cache,
@@ -1406,7 +1406,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaWALegislativeList_cache,
@@ -1417,7 +1417,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaWALegislativeCategory_cache,
@@ -1428,7 +1428,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaWAPriorityCategory_cache,
@@ -1439,7 +1439,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaCommonwealthRelevance_cache,
@@ -1450,7 +1450,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaInternationalRelevance_cache,
@@ -1461,7 +1461,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaAssessor_cache,
@@ -1472,7 +1472,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaSubmitter_cache,
@@ -1483,7 +1483,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaSubmitterCategory_cache,
@@ -1494,7 +1494,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFromFaunaEffectiveFromDate_cache,
@@ -1505,7 +1505,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSToFaunaEffectiveFromDate_cache,
@@ -1516,7 +1516,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFromFaunaEffectiveToDate_cache,
@@ -1527,7 +1527,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSToFaunaEffectiveToDate_cache,
@@ -1538,7 +1538,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFromFaunaReviewDueDate_cache,
@@ -1549,7 +1549,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSToFaunaReviewDueDate_cache,
@@ -1560,7 +1560,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaLocked_cache,
@@ -1571,7 +1571,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFaunaApplicationStatus_cache,
@@ -2127,7 +2127,7 @@ export default {
                                 });
                                 vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -2189,7 +2189,7 @@ export default {
                                 });
                                 vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -2216,7 +2216,7 @@ export default {
                     vm.meeting_obj.agenda_items_arr = await response.json();
                     vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
                         helpers.enablePopovers,
-                        false
+                        true
                     );
                     this.$emit('updateAgendaItems');
                 },

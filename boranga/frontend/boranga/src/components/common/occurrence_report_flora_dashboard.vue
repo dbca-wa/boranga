@@ -671,7 +671,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraOccurrence_cache,
@@ -682,7 +682,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraScientificName_cache,
@@ -693,7 +693,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraStatus_cache,
@@ -704,7 +704,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraObservationFromDate_cache,
@@ -715,7 +715,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraObservationToDate_cache,
@@ -726,7 +726,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraSubmittedFromDate_cache,
@@ -737,7 +737,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraSubmittedToDate_cache,
@@ -748,7 +748,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFromFloraDueDate_cache,
@@ -759,7 +759,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRToFloraDueDate_cache,
@@ -770,7 +770,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraAssessor_cache,
@@ -781,7 +781,7 @@ export default {
             let vm = this;
             vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFloraSubmitter_cache,
@@ -1143,7 +1143,7 @@ export default {
                                 });
                                 vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -1205,7 +1205,7 @@ export default {
                                 });
                                 vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

@@ -668,7 +668,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaOccurrence_cache,
@@ -679,7 +679,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaScientificName_cache,
@@ -690,7 +690,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaStatus_cache,
@@ -701,7 +701,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaObservationFromDate_cache,
@@ -712,7 +712,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaObservationToDate_cache,
@@ -723,7 +723,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaSubmittedFromDate_cache,
@@ -734,7 +734,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaSubmittedToDate_cache,
@@ -745,7 +745,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFromFaunaDueDate_cache,
@@ -756,7 +756,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRToFaunaDueDate_cache,
@@ -767,7 +767,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaAssessor_cache,
@@ -778,7 +778,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFaunaSubmitter_cache,
@@ -1140,7 +1140,7 @@ export default {
                                 });
                                 vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -1202,7 +1202,7 @@ export default {
                                 });
                                 vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

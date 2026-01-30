@@ -376,7 +376,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefCommunityMigratedId_cache,
@@ -387,7 +387,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefCommunityName_cache,
@@ -398,7 +398,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefCommunityConservationList_cache,
@@ -409,7 +409,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefCommunityConservationCategory_cache,
@@ -420,7 +420,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefCommunityApplicationStatus_cache,

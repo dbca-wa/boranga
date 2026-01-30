@@ -1245,7 +1245,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityMigratedId_cache,
@@ -1256,7 +1256,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityName_cache,
@@ -1267,7 +1267,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFromCommunityEffectiveFromDate_cache,
@@ -1278,7 +1278,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSToCommunityEffectiveFromDate_cache,
@@ -1289,7 +1289,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFromCommunityEffectiveToDate_cache,
@@ -1300,7 +1300,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSToCommunityEffectiveToDate_cache,
@@ -1311,7 +1311,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSFromCommunityReviewDueDate_cache,
@@ -1322,7 +1322,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSToCommunityReviewDueDate_cache,
@@ -1333,7 +1333,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityLocked_cache,
@@ -1344,7 +1344,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityApplicationStatus_cache,
@@ -1355,7 +1355,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityChangeCode_cache,
@@ -1366,7 +1366,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityWALegislativeList_cache,
@@ -1377,7 +1377,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityWALegislativeCategory_cache,
@@ -1388,7 +1388,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityWAPriorityCategory_cache,
@@ -1399,7 +1399,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityCommonwealthRelevance_cache,
@@ -1410,7 +1410,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityInternationalRelevance_cache,
@@ -1421,7 +1421,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunityAssessor_cache,
@@ -1432,7 +1432,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunitySubmitter_cache,
@@ -1443,7 +1443,7 @@ export default {
             let vm = this;
             vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSCommunitySubmitterCategory_cache,
@@ -1806,7 +1806,7 @@ export default {
                                 });
                                 vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -1868,7 +1868,7 @@ export default {
                                 });
                                 vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -1895,7 +1895,7 @@ export default {
                     vm.meeting_obj.agenda_items_arr = await response.json();
                     vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
                         helpers.enablePopovers,
-                        false
+                        true
                     );
                     this.$emit('updateAgendaItems');
                 },
