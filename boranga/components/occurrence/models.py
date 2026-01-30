@@ -300,6 +300,13 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         (PROCESSING_STATUS_APPROVED, "Approved"),
     ]
 
+    BULK_IMPORT_EMAIL_USER_FIELDS = [
+        "submitter",
+        "assigned_officer",
+        "assigned_approver",
+        "approved_by",
+    ]
+
     FINALISED_STATUSES = [
         PROCESSING_STATUS_APPROVED,
         PROCESSING_STATUS_DECLINED,
@@ -4845,94 +4852,57 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
                 total_count += count
 
-                # Add parent species related items to the list (limited to one degree of separation)
-                if (
-                    a_field.name == "species"
-                    and self.species
-                    and filter_type != "species"
-                ):
-                    # Determine target filter for parent
-                    target_filter = "for_occurrence"
-                    if filter_type == "occurrences":
-                        target_filter = "occurrences"
+        # Add parent species / community related items to the list
+        # We do this OUTSIDE the loop so it happens even if the parent field itself wasn't requested
 
-                    # Calculate local offset/limit for the recursive call
-                    local_offset = None
-                    if offset is not None:
-                        # We need to map the global requested window to the local window of this sub-list.
-                        # Records before this sub-list: total_count
-                        # Desired start global: int(offset)
-                        # Desired end global: int(offset) + int(limit)
+        target_filter = None
+        if filter_type == "all":
+            target_filter = "for_occurrence"
+        elif filter_type == "occurrences":
+            target_filter = "occurrences"
+        elif filter_type == "all_except_parent_species":
+            target_filter = "for_occurrence"
+        elif filter_type in ["species", "community"]:
+            target_filter = None
+        else:
+            target_filter = filter_type
 
-                        req_start = int(offset)
-                        local_offset = max(0, req_start - total_count)
-                        # We pass the full limit; the child function will handle the upper bound clipping
-                        # provided we handle the returned count correctly.
+        if target_filter:
+            delegates = []
+            if self.species:
+                delegates.append(self.species)
+            if self.community:
+                delegates.append(self.community)
 
-                    # Pass ourselves as excluded
-                    exclude_ids = [self.id]
+            for delegate in delegates:
+                local_offset = None
+                if offset is not None:
+                    req_start = int(offset)
+                    local_offset = max(0, req_start - total_count)
 
-                    if local_offset is not None:
-                        items, count = self.species.get_related_items(
-                            target_filter,
-                            offset=local_offset,
-                            limit=limit,
-                            exclude_ids=exclude_ids,
-                            search_value=search_value,
-                        )
-                        return_list.extend(items)
-                        total_count += count
-                    else:
-                        items = self.species.get_related_items(
-                            target_filter,
-                            exclude_ids=exclude_ids,
-                            search_value=search_value,
-                        )
-                        count = len(items)
-                        # Fallback to local slicing if no offset provided (shouldn't happen in paginated context)
-                        start, end = get_slice_range(count)
-                        if start < end:
-                            return_list.extend(items[start:end])
-                        total_count += count
+                exclude_ids = [self.id]
 
-                # Add renamed from / renamed to community related items to the list
-                if (
-                    a_field.name == "community"
-                    and self.community
-                    and filter_type != "community"
-                ):
-                    target_filter = "for_occurrence"
-                    if filter_type == "occurrences":
-                        target_filter = "occurrences"
-
-                    local_offset = None
-                    if offset is not None:
-                        req_start = int(offset)
-                        local_offset = max(0, req_start - total_count)
-
-                    exclude_ids = [self.id]
-
-                    if local_offset is not None:
-                        items, count = self.community.get_related_items(
-                            target_filter,
-                            offset=local_offset,
-                            limit=limit,
-                            exclude_ids=exclude_ids,
-                            search_value=search_value,
-                        )
-                        return_list.extend(items)
-                        total_count += count
-                    else:
-                        items = self.community.get_related_items(
-                            target_filter,
-                            exclude_ids=exclude_ids,
-                            search_value=search_value,
-                        )
-                        count = len(items)
-                        start, end = get_slice_range(count)
-                        if start < end:
-                            return_list.extend(items[start:end])
-                        total_count += count
+                if local_offset is not None:
+                    items, count = delegate.get_related_items(
+                        target_filter,
+                        offset=local_offset,
+                        limit=limit,
+                        exclude_ids=exclude_ids,
+                        search_value=search_value,
+                    )
+                    return_list.extend(items)
+                    total_count += count
+                else:
+                    items = delegate.get_related_items(
+                        target_filter,
+                        exclude_ids=exclude_ids,
+                        search_value=search_value,
+                    )
+                    count = len(items)
+                    start, end = get_slice_range(count)
+                    if start < end:
+                        return_list.extend(items[start:end])
+                    total_count += count
 
         # Remove the occurrence itself from the list if it ended up there
         if offset is None:
@@ -8680,6 +8650,26 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return round(random.uniform(0, max_value), decimal_places)
 
         if isinstance(field, models.IntegerField):
+            if (
+                self.django_import_content_type
+                == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
+                and self.django_import_field_name
+                in OccurrenceReport.BULK_IMPORT_EMAIL_USER_FIELDS
+                and not self.is_emailuser_column
+            ):
+                error_message = (
+                    f"Configuration Hint: The column '{self.xlsx_column_header_name}' "
+                    f"maps to '{self.django_import_field_name}', "
+                    "Please set 'Is Email User Column' to 'YES' for this column in the schema."
+                )
+                errors.append(
+                    {
+                        "error_type": "configuration",
+                        "error_message": error_message,
+                    }
+                )
+                return None
+
             if self.is_emailuser_column:
                 user_qs = EmailUser.objects.filter(is_active=True)
                 if field.name == "assigned_officer":
@@ -8693,7 +8683,19 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     )
                     user_qs = user_qs.filter(id__in=ocr_approver_ids)
                 user = user_qs.order_by("?").first()
-                return user.email
+                if user:
+                    return user.email
+
+                errors.append(
+                    {
+                        "error_type": "no_data",
+                        "error_message": (
+                            f"No active users found for column {self.xlsx_column_header_name} ",
+                            "(Group checks applied if applicable).",
+                        ),
+                    }
+                )
+                return None
             else:
                 min_value = field.min_value if hasattr(field, "min_value") else 0
                 max_value = field.max_value if hasattr(field, "max_value") else 10000
@@ -8959,6 +8961,12 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         f"(Ledger Emailuser ID: {assigned_officer_id}) is not a member"
                         " of the occurrence assessor group"
                     )
+                    if not assigned_officer_column.is_emailuser_column:
+                        error_message += (
+                            ". Hint: The column configuration for 'assigned_officer' does not "
+                            "have 'Is Email User Column' checked."
+                        )
+
                     errors.append(
                         {
                             "row_index": index,
@@ -8993,6 +9001,12 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                             "No ledger user found for assigned_approver with "
                             f"email address or ID: {assigned_approver_email}"
                         )
+                        if not assigned_approver_column.is_emailuser_column:
+                            error_message += (
+                                ". Hint: The column configuration for 'assigned_approver' does not "
+                                "have 'Is Email User Column' checked."
+                            )
+
                         errors.append(
                             {
                                 "row_index": index,
@@ -9012,6 +9026,12 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         f"(Ledger Emailuser ID: {assigned_approver_id}) is not a member"
                         " of the occurrence approver group"
                     )
+                    if not assigned_approver_column.is_emailuser_column:
+                        error_message += (
+                            ". Hint: The column configuration for 'assigned_approver' does not "
+                            "have 'Is Email User Column' checked."
+                        )
+
                     errors.append(
                         {
                             "row_index": index,

@@ -798,7 +798,11 @@ class CommunityImporter(BaseSheetImporter):
                         continue
 
                     # Check if community has publications in the mapping
-                    pub_nos = community_pub_map.get(migrated_id, [])
+                    # Maps are keyed by raw ID, so strip 'tec-' if present
+                    lookup_key = migrated_id
+                    if lookup_key.lower().startswith("tec-"):
+                        lookup_key = lookup_key[4:]
+                    pub_nos = community_pub_map.get(lookup_key, [])
                     if not pub_nos:
                         continue
 
@@ -896,7 +900,12 @@ class CommunityImporter(BaseSheetImporter):
                     continue
 
                 # Check if community has threats in the mapping
-                com_threats = community_threats_map.get(migrated_id, [])
+                # Maps are keyed by raw ID, so strip 'tec-' if present
+                lookup_key = migrated_id
+                if lookup_key.lower().startswith("tec-"):
+                    lookup_key = lookup_key[4:]
+
+                com_threats = community_threats_map.get(lookup_key, [])
                 if not com_threats:
                     continue
 
