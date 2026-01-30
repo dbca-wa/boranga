@@ -29,11 +29,11 @@ def combine_csvs(file_paths, output_path):
         print(f"Reading {file_path}...")
         try:
             # Try reading with default encoding first
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, dtype=str)
         except UnicodeDecodeError:
             # Fallback to potentially common encoding for legacy files
             print(f"Warning: UnicodeDecodeError for {file_path}, trying 'cp1252'...")
-            df = pd.read_csv(file_path, encoding="cp1252")
+            df = pd.read_csv(file_path, encoding="cp1252", dtype=str)
 
         dfs.append(df)
         print(f" - {len(df)} rows, {len(df.columns)} columns")
