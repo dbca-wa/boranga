@@ -52,14 +52,14 @@ mv DRF-2025-11-04T09_10_43_3/\* . && rmdir DRF-2025-11-04T09_10_43_3
 
 ./manage.py populate_legacy_username_map private-media/legacy_data/TPFL/legacy-username-emailuser-map-TPFL.csv --legacy-system TPFL --update
 ./manage.py populate_legacy_value_map private-media/legacy_data/TPFL/legacy-data-map-TPFL.csv --legacy-system TPFL --update
-./manage.py populate_legacy_taxonomy_mapping.py private-media/legacy_data/TPFL/legacy-species-names-mapped-Nomos-ID-TPFL.csv --filter-list-name "TPFL Species" --list-name TPFL
-./manage.py populate_legacy_taxonomy_mapping.py private-media/legacy_data/TPFL/legacy-species-names-mapped-Nomos-ID-TPFL.csv --filter-list-name "TPFL AssociatedSpecies"
+./manage.py populate_legacy_taxonomy_mapping private-media/legacy_data/TPFL/legacy-species-names-mapped-Nomos-ID-TPFL.csv --filter-list-name "TPFL Species" --list-name TPFL
+./manage.py populate_legacy_taxonomy_mapping private-media/legacy_data/TPFL/legacy-species-names-mapped-Nomos-ID-TPFL.csv --filter-list-name "TPFL AssociatedSpecies"
 
 ## Species
 
 python scripts/combine_csvs.py \
  private-media/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv \
- private-media/legacy_data/TPFL/ADDITIONAL_PROFILES_FROM_OLD_NAMES_OCC_NAMES_Sanitised.csv \
+ private-media/legacy_data/TPFL/ADDITIONAL_PROFILES_FROM_OLD_NAMES_OCC_NAMES.csv \
  -o private-media/legacy_data/TPFL/species-profiles-combined.csv
 
 ./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv --sources TPFL --wipe-targets
