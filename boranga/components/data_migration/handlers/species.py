@@ -474,8 +474,13 @@ class SpeciesImporter(BaseSheetImporter):
                 continue
 
             # capture relevant M2M district data for later processing
+            # species_to_district_keys is keyed by raw ID (no prefix), so we must strip 'tpfl-'
+            lookup_key = migrated_from_id
+            if lookup_key.lower().startswith("tpfl-"):
+                lookup_key = lookup_key[5:]
+
             districts_raw = merged.get("districts") or species_to_district_keys.get(
-                migrated_from_id
+                lookup_key
             )
 
             ops.append(

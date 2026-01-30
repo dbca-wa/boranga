@@ -366,6 +366,11 @@ class ConservationStatusImporter(BaseSheetImporter):
                         continue
                 elif community_mig_id:
                     community_obj = community_map.get(community_mig_id)
+                    # Fallback: if source is TEC and ID is raw, try prefixing "tec-"
+                    if not community_obj and _src == Source.TEC.value:
+                        if not str(community_mig_id).lower().startswith("tec-"):
+                            community_obj = community_map.get(f"tec-{community_mig_id}")
+
                     if not community_obj:
                         msg = f"Community not found for migrated_from_id: {community_mig_id}"
                         logger.warning(msg)
