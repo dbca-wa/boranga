@@ -19,10 +19,7 @@ select = [
     "I",   # isort
     "UP",  # pyupgrade
 ]
-ignore = [
-    "E203",  # whitespace before ':'
-    "W503",  # line break before binary operator
-]
+ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "boranga/settings.py" = ["F405", "E402"]
