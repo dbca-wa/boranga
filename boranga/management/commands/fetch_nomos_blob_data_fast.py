@@ -56,34 +56,24 @@ class Command(BaseCommand):
             rank_map = {r.taxon_rank_id: r for r in TaxonomyRank.objects.all()}
             taxonomy_map = {t.taxon_name_id: t for t in Taxonomy.objects.all()}
             vernacular_map = {v.vernacular_id: v for v in TaxonVernacular.objects.all()}
-            class_system_map = {
-                c.classification_system_id: c
-                for c in ClassificationSystem.objects.all()
-            }
+            class_system_map = {c.classification_system_id: c for c in ClassificationSystem.objects.all()}
             # map existing previous_names by id -> model instance (so we can update)
-            prev_name_map = {
-                p.previous_name_id: p for p in TaxonPreviousName.objects.all()
-            }
+            prev_name_map = {p.previous_name_id: p for p in TaxonPreviousName.objects.all()}
 
             # map existing InformalGroup by (taxonomy_id, classification_system_id) to avoid duplicates
             informal_group_map = {
-                (ig.taxonomy_id, ig.classification_system_id): ig
-                for ig in InformalGroup.objects.all()
+                (ig.taxonomy_id, ig.classification_system_id): ig for ig in InformalGroup.objects.all()
             }
 
             new_kingdoms, new_ranks, new_taxonomies = [], [], []
-            taxonomy_updates = (
-                []
-            )  # collect existing Taxonomy instances that need updating
+            taxonomy_updates = []  # collect existing Taxonomy instances that need updating
             new_vernaculars, new_class_systems, new_informal_groups, new_prev_names = (
                 [],
                 [],
                 [],
                 [],
             )
-            prev_updates = (
-                []
-            )  # existing TaxonPreviousName instances to update (set previous_taxonomy)
+            prev_updates = []  # existing TaxonPreviousName instances to update (set previous_taxonomy)
 
             with transaction.atomic():
                 # 1. Collect new Kingdoms
@@ -96,9 +86,7 @@ class Command(BaseCommand):
                         )
                         new_kingdoms.append(k)
                 if new_kingdoms:
-                    Kingdom.objects.bulk_create(
-                        new_kingdoms, ignore_conflicts=True, batch_size=500
-                    )
+                    Kingdom.objects.bulk_create(new_kingdoms, ignore_conflicts=True, batch_size=500)
                 kingdom_map = {k.kingdom_id: k for k in Kingdom.objects.all()}
 
                 # 2. Collect new TaxonomyRanks
@@ -114,9 +102,7 @@ class Command(BaseCommand):
                         )
                         new_ranks.append(r)
                 if new_ranks:
-                    TaxonomyRank.objects.bulk_create(
-                        new_ranks, ignore_conflicts=True, batch_size=500
-                    )
+                    TaxonomyRank.objects.bulk_create(new_ranks, ignore_conflicts=True, batch_size=500)
                 rank_map = {r.taxon_rank_id: r for r in TaxonomyRank.objects.all()}
 
                 # 3. Collect new Taxonomies (and prepare updates for existing ones)
@@ -164,12 +150,8 @@ class Command(BaseCommand):
                                 taxonomy_updates.append(existing)
 
                 if new_taxonomies:
-                    Taxonomy.objects.bulk_create(
-                        new_taxonomies, ignore_conflicts=True, batch_size=500
-                    )
-                    logger.info(
-                        "bulk_created %d new Taxonomy records", len(new_taxonomies)
-                    )
+                    Taxonomy.objects.bulk_create(new_taxonomies, ignore_conflicts=True, batch_size=500)
+                    logger.info("bulk_created %d new Taxonomy records", len(new_taxonomies))
 
                 # apply updates to existing taxonomy rows
                 if taxonomy_updates:
@@ -212,13 +194,8 @@ class Command(BaseCommand):
                                 )
                             )
                 if new_class_systems:
-                    ClassificationSystem.objects.bulk_create(
-                        new_class_systems, ignore_conflicts=True, batch_size=500
-                    )
-                class_system_map = {
-                    c.classification_system_id: c
-                    for c in ClassificationSystem.objects.all()
-                }
+                    ClassificationSystem.objects.bulk_create(new_class_systems, ignore_conflicts=True, batch_size=500)
+                class_system_map = {c.classification_system_id: c for c in ClassificationSystem.objects.all()}
 
                 # 5. Collect new Vernaculars, InformalGroups, and PreviousNames
                 for t in taxon:
@@ -251,9 +228,7 @@ class Command(BaseCommand):
                         new_informal_groups.append(
                             InformalGroup(
                                 taxonomy=taxon_obj,
-                                classification_system_fk=class_system_map.get(
-                                    class_system_id
-                                ),
+                                classification_system_fk=class_system_map.get(class_system_id),
                                 classification_system_id=class_system_id,
                                 taxon_name_id=taxon_obj.taxon_name_id,
                             )
@@ -273,13 +248,8 @@ class Command(BaseCommand):
                             if existing_prev.previous_taxonomy_id != target_id:
                                 existing_prev.previous_taxonomy = prev_tax_fk
                                 # optionally update scientific name if empty
-                                if (
-                                    not existing_prev.previous_scientific_name
-                                    and p.get("name")
-                                ):
-                                    existing_prev.previous_scientific_name = p.get(
-                                        "name"
-                                    )
+                                if not existing_prev.previous_scientific_name and p.get("name"):
+                                    existing_prev.previous_scientific_name = p.get("name")
                                 prev_updates.append(existing_prev)
                         else:
                             new_prev_names.append(
@@ -294,17 +264,11 @@ class Command(BaseCommand):
                             prev_name_map[prev_name_id] = True
 
                 if new_vernaculars:
-                    TaxonVernacular.objects.bulk_create(
-                        new_vernaculars, ignore_conflicts=True, batch_size=500
-                    )
+                    TaxonVernacular.objects.bulk_create(new_vernaculars, ignore_conflicts=True, batch_size=500)
                 if new_informal_groups:
-                    InformalGroup.objects.bulk_create(
-                        new_informal_groups, ignore_conflicts=True, batch_size=500
-                    )
+                    InformalGroup.objects.bulk_create(new_informal_groups, ignore_conflicts=True, batch_size=500)
                 if new_prev_names:
-                    TaxonPreviousName.objects.bulk_create(
-                        new_prev_names, ignore_conflicts=True, batch_size=500
-                    )
+                    TaxonPreviousName.objects.bulk_create(new_prev_names, ignore_conflicts=True, batch_size=500)
                 if prev_updates:
                     TaxonPreviousName.objects.bulk_update(
                         prev_updates,
@@ -324,9 +288,7 @@ class Command(BaseCommand):
             if errors
             else '<strong style="color: green;">Errors: 0</strong>'
         )
-        msg = (
-            f"{cmd_name} completed. Errors: {err_str}. Total IDs updated: {len(taxon)}."
-        )
+        msg = f"{cmd_name} completed. Errors: {err_str}. Total IDs updated: {len(taxon)}."
         logger.info(msg)
 
         if errors:

@@ -54,9 +54,7 @@ def find_duplicates(path, by_kingdom=False, sample_limit=5, csv_path=None):
 
     # prepare results
     rows = []
-    for key, info in sorted(
-        stats.items(), key=lambda kv: (-kv[1]["count"], str(kv[0]))
-    ):
+    for key, info in sorted(stats.items(), key=lambda kv: (-kv[1]["count"], str(kv[0]))):
         if info["count"] > 1:
             if by_kingdom:
                 name, kingdom = key
@@ -65,9 +63,7 @@ def find_duplicates(path, by_kingdom=False, sample_limit=5, csv_path=None):
                         "canonical_name": name,
                         "kingdom_id": kingdom,
                         "count": info["count"],
-                        "sample_taxon_name_ids": ";".join(
-                            [str(x) for x in info["sample_ids"]]
-                        ),
+                        "sample_taxon_name_ids": ";".join([str(x) for x in info["sample_ids"]]),
                     }
                 )
             else:
@@ -75,17 +71,10 @@ def find_duplicates(path, by_kingdom=False, sample_limit=5, csv_path=None):
                     {
                         "canonical_name": key,
                         "kingdom_id": ";".join(
-                            [
-                                str(k)
-                                for k in sorted(
-                                    info["kingdoms"], key=lambda x: (x is None, x)
-                                )
-                            ]
+                            [str(k) for k in sorted(info["kingdoms"], key=lambda x: (x is None, x))]
                         ),
                         "count": info["count"],
-                        "sample_taxon_name_ids": ";".join(
-                            [str(x) for x in info["sample_ids"]]
-                        ),
+                        "sample_taxon_name_ids": ";".join([str(x) for x in info["sample_ids"]]),
                     }
                 )
 
@@ -112,9 +101,7 @@ def find_duplicates(path, by_kingdom=False, sample_limit=5, csv_path=None):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Find duplicate canonical_name entries in a JSON/NDJSON file."
-    )
+    parser = argparse.ArgumentParser(description="Find duplicate canonical_name entries in a JSON/NDJSON file.")
     parser.add_argument("path", help="Path to JSON file (array or NDJSON).")
     parser.add_argument(
         "-k",

@@ -62,9 +62,7 @@ def species_form_submit(species_instance, request, split=False, rename=False):
         # all functions that call this save after - otherwise we can parametise this if need be
         species_instance.save(no_revision=True)
     else:
-        raise ValidationError(
-            "An error occurred while submitting proposal (Submit email notifications failed)"
-        )
+        raise ValidationError("An error occurred while submitting proposal (Submit email notifications failed)")
     return species_instance
 
 
@@ -78,17 +76,13 @@ def community_form_submit(community_instance, request):
 
     # Create a log entry for the proposal
     community_instance.log_user_action(
-        CommunityUserAction.ACTION_CREATE_COMMUNITY.format(
-            community_instance.community_number
-        ),
+        CommunityUserAction.ACTION_CREATE_COMMUNITY.format(community_instance.community_number),
         request,
     )
 
     # Create a log entry for the user
     request.user.log_user_action(
-        CommunityUserAction.ACTION_CREATE_COMMUNITY.format(
-            community_instance.community_number
-        ),
+        CommunityUserAction.ACTION_CREATE_COMMUNITY.format(community_instance.community_number),
         request,
     )
 
@@ -99,16 +93,12 @@ def community_form_submit(community_instance, request):
         community_instance.processing_status = Community.PROCESSING_STATUS_ACTIVE
         community_instance.save(no_revision=True)
     else:
-        raise ValidationError(
-            "An error occurred while submitting proposal (Submit email notifications failed)"
-        )
+        raise ValidationError("An error occurred while submitting proposal (Submit email notifications failed)")
 
     return community_instance
 
 
-def update_related_occurrence_reports(
-    original_species, new_species, request, action_type="renamed"
-):
+def update_related_occurrence_reports(original_species, new_species, request, action_type="renamed"):
     from boranga.components.occurrence.email import (
         send_occurrence_report_species_renamed_email,
     )
@@ -123,17 +113,11 @@ def update_related_occurrence_reports(
         orf.save()
 
         # Log action
-        action_msg = "Species name was automatically changed because the old name {} was {} to {}.".format(
-            original_species.species_number,
-            action_type,
-            new_species.species_number,
-        )
+        action_msg = f"Species name was automatically changed because the old name {original_species.species_number} was {action_type} to {new_species.species_number}."
         orf.log_user_action(action_msg, request)
 
         # Send email
-        send_occurrence_report_species_renamed_email(
-            request, orf, original_species, new_species
-        )
+        send_occurrence_report_species_renamed_email(request, orf, original_species, new_species)
 
 
 @transaction.atomic
@@ -184,16 +168,10 @@ def process_species_from_combine_list(
                 processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
             ).first()
             if resulting_cs and resulting_cs.effective_from:
-                active_conservation_status.effective_to = (
-                    resulting_cs.effective_from - timedelta(days=1)
-                )
+                active_conservation_status.effective_to = resulting_cs.effective_from - timedelta(days=1)
 
-            active_conservation_status.customer_status = (
-                ConservationStatus.CUSTOMER_STATUS_CLOSED
-            )
-            active_conservation_status.processing_status = (
-                ConservationStatus.PROCESSING_STATUS_CLOSED
-            )
+            active_conservation_status.customer_status = ConservationStatus.CUSTOMER_STATUS_CLOSED
+            active_conservation_status.processing_status = ConservationStatus.PROCESSING_STATUS_CLOSED
             active_conservation_status.save(version_user=request.user)
 
             active_conservation_status.log_user_action(
@@ -273,9 +251,7 @@ def process_species_from_combine_list(
         )
         actions[species_instance.id] = Species.COMBINE_SPECIES_ACTION_LEFT_AS_HISTORICAL
 
-    update_related_occurrence_reports(
-        species_instance, resulting_species_instance, request, "combined"
-    )
+    update_related_occurrence_reports(species_instance, resulting_species_instance, request, "combined")
 
     return species_instance
 
@@ -301,16 +277,10 @@ def rename_species_original_submit(species_instance, new_species, request):
             processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
         ).first()
         if new_species_cs and new_species_cs.effective_from:
-            active_conservation_status.effective_to = (
-                new_species_cs.effective_from - timedelta(days=1)
-            )
+            active_conservation_status.effective_to = new_species_cs.effective_from - timedelta(days=1)
 
-        active_conservation_status.customer_status = (
-            ConservationStatus.CUSTOMER_STATUS_CLOSED
-        )
-        active_conservation_status.processing_status = (
-            ConservationStatus.PROCESSING_STATUS_CLOSED
-        )
+        active_conservation_status.customer_status = ConservationStatus.CUSTOMER_STATUS_CLOSED
+        active_conservation_status.processing_status = ConservationStatus.PROCESSING_STATUS_CLOSED
         active_conservation_status.save(version_user=request.user)
 
         active_conservation_status.log_user_action(
@@ -335,15 +305,11 @@ def rename_species_original_submit(species_instance, new_species, request):
 
 
 @transaction.atomic
-def rename_deep_copy(
-    request: HttpRequest, instance: Species, existing_species: Species = None
-) -> Species:
+def rename_deep_copy(request: HttpRequest, instance: Species, existing_species: Species = None) -> Species:
     # related items to instance that needs to create for new rename instance as well
     instance_documents = SpeciesDocument.objects.filter(species=instance.id)
     instance_threats = ConservationThreat.objects.filter(species=instance.id)
-    src_cons_attrs = SpeciesConservationAttributes.objects.filter(
-        species=instance.id
-    ).first()
+    src_cons_attrs = SpeciesConservationAttributes.objects.filter(species=instance.id).first()
     src_distribution = SpeciesDistribution.objects.filter(species=instance.id).first()
 
     if existing_species:
@@ -351,9 +317,7 @@ def rename_deep_copy(
         resulting_species.department_file_numbers = instance.department_file_numbers
         resulting_species.last_data_curation_date = instance.last_data_curation_date
         resulting_species.conservation_plan_exists = instance.conservation_plan_exists
-        resulting_species.conservation_plan_reference = (
-            instance.conservation_plan_reference
-        )
+        resulting_species.conservation_plan_reference = instance.conservation_plan_reference
         resulting_species.comment = instance.comment
     else:
         # clone the species instance into new rename instance
@@ -443,9 +407,7 @@ def rename_deep_copy(
 
     # Conservation Attributes (OneToOne): update-or-create, no duplicates
     if src_cons_attrs:
-        dest_cons_attrs, _ = SpeciesConservationAttributes.objects.get_or_create(
-            species=resulting_species
-        )
+        dest_cons_attrs, _ = SpeciesConservationAttributes.objects.get_or_create(species=resulting_species)
         for f in dest_cons_attrs._meta.concrete_fields:
             if f.name in ("id", "species"):
                 continue
@@ -454,9 +416,7 @@ def rename_deep_copy(
 
     # Distribution (OneToOne): update-or-create, no duplicates
     if src_distribution:
-        dest_distribution, _ = SpeciesDistribution.objects.get_or_create(
-            species=resulting_species
-        )
+        dest_distribution, _ = SpeciesDistribution.objects.get_or_create(species=resulting_species)
         for f in dest_distribution._meta.concrete_fields:
             if f.name in ("id", "species"):
                 continue
@@ -467,15 +427,9 @@ def rename_deep_copy(
 
 
 def process_species_general_data(species_instance, species_request_data):
-    species_instance.department_file_numbers = species_request_data.get(
-        "department_file_numbers", None
-    )
-    species_instance.last_data_curation_date = species_request_data.get(
-        "last_data_curation_date", None
-    )
-    species_instance.conservation_plan_exists = (
-        species_request_data.get("conservation_plan_exists", False) == "true"
-    )
+    species_instance.department_file_numbers = species_request_data.get("department_file_numbers", None)
+    species_instance.last_data_curation_date = species_request_data.get("last_data_curation_date", None)
+    species_instance.conservation_plan_exists = species_request_data.get("conservation_plan_exists", False) == "true"
     species_instance.comment = species_request_data.get("comment", None)
 
 
@@ -485,9 +439,7 @@ def process_species_regions_and_districts(species_instance, species_request_data
 
     if not regions_ids and not districts_ids:
         raise ValidationError(
-            "At least one region or district must be provided for split species with taxonomy id: {}.".format(
-                species_instance.taxonomy_id
-            )
+            f"At least one region or district must be provided for split species with taxonomy id: {species_instance.taxonomy_id}."
         )
 
     regions = Region.objects.filter(id__in=regions_ids)
@@ -501,42 +453,22 @@ def process_species_distribution_data(species_instance, species_request_data):
     distribution_request_data = species_request_data.get("distribution", None)
     if not distribution_request_data:
         raise ValidationError(
-            "Distribution data is required for split species with taxonomy id: {}.".format(
-                species_instance.taxonomy_id
-            )
+            f"Distribution data is required for split species with taxonomy id: {species_instance.taxonomy_id}."
         )
 
-    distribution_instance, created = SpeciesDistribution.objects.get_or_create(
-        species=species_instance
-    )
+    distribution_instance, created = SpeciesDistribution.objects.get_or_create(species=species_instance)
 
-    distribution_instance.number_of_occurrences = distribution_request_data.get(
-        "number_of_occurrences", None
-    )
+    distribution_instance.number_of_occurrences = distribution_request_data.get("number_of_occurrences", None)
     distribution_instance.noo_auto = distribution_request_data.get("noo_auto", None)
-    distribution_instance.extent_of_occurrences = distribution_request_data.get(
-        "extent_of_occurrences", None
-    )
+    distribution_instance.extent_of_occurrences = distribution_request_data.get("extent_of_occurrences", None)
     distribution_instance.eoo_auto = distribution_request_data.get("eoo_auto", None)
-    distribution_instance.area_of_occupancy = distribution_request_data.get(
-        "area_of_occupancy", None
-    )
-    distribution_instance.area_of_occupancy_actual = distribution_request_data.get(
-        "area_of_occupancy_actual", None
-    )
-    distribution_instance.aoo_actual_auto = distribution_request_data.get(
-        "aoo_actual_auto", None
-    )
-    distribution_instance.number_of_iucn_locations = distribution_request_data.get(
-        "number_of_iucn_locations", None
-    )
+    distribution_instance.area_of_occupancy = distribution_request_data.get("area_of_occupancy", None)
+    distribution_instance.area_of_occupancy_actual = distribution_request_data.get("area_of_occupancy_actual", None)
+    distribution_instance.aoo_actual_auto = distribution_request_data.get("aoo_actual_auto", None)
+    distribution_instance.number_of_iucn_locations = distribution_request_data.get("number_of_iucn_locations", None)
     distribution_instance.number_of_iucn_subpopulations = distribution_request_data.get(
         "number_of_iucn_subpopulations", None
     )
-    distribution_instance.iucn_locations_auto = distribution_request_data.get(
-        "iucn_locations_auto", None
-    )
-    distribution_instance.distribution = distribution_request_data.get(
-        "distribution", None
-    )
+    distribution_instance.iucn_locations_auto = distribution_request_data.get("iucn_locations_auto", None)
+    distribution_instance.distribution = distribution_request_data.get("distribution", None)
     distribution_instance.save()

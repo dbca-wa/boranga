@@ -42,9 +42,7 @@ class SpeciesImporter(BaseSheetImporter):
     slug = "species_legacy"
     description = "Import species data from legacy TEC / TFAUNA / TPFL sources"
 
-    def clear_targets(
-        self, ctx: ImportContext, include_children: bool = False, **options
-    ):
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete species target data. Respects `ctx.dry_run` (no-op when True)."""
         if ctx.dry_run:
             logger.info("SpeciesImporter.clear_targets: dry-run, skipping delete")
@@ -108,15 +106,11 @@ class SpeciesImporter(BaseSheetImporter):
                 # Use TRUNCATE CASCADE for PostgreSQL (more efficient than DELETE)
                 # For other databases, fall back to DELETE
                 if vendor == "postgresql":
-                    logger.info(
-                        "SpeciesImporter: using TRUNCATE CASCADE for efficient bulk deletion"
-                    )
+                    logger.info("SpeciesImporter: using TRUNCATE CASCADE for efficient bulk deletion")
                     try:
                         with conn.cursor() as cur:
                             # TRUNCATE CASCADE will delete Species and cascade to all dependent tables
-                            cur.execute(
-                                f"TRUNCATE TABLE {Species._meta.db_table} CASCADE"
-                            )
+                            cur.execute(f"TRUNCATE TABLE {Species._meta.db_table} CASCADE")
                             logger.info(
                                 "SpeciesImporter: successfully truncated %s with CASCADE",
                                 Species._meta.db_table,
@@ -124,17 +118,11 @@ class SpeciesImporter(BaseSheetImporter):
 
                         # Also truncate OccurrenceReport and Occurrence to ensure clean state
                         with conn.cursor() as cur:
-                            cur.execute(
-                                f"TRUNCATE TABLE {OccurrenceReport._meta.db_table} CASCADE"
-                            )
+                            cur.execute(f"TRUNCATE TABLE {OccurrenceReport._meta.db_table} CASCADE")
                         with conn.cursor() as cur:
-                            cur.execute(
-                                f"TRUNCATE TABLE {Occurrence._meta.db_table} CASCADE"
-                            )
+                            cur.execute(f"TRUNCATE TABLE {Occurrence._meta.db_table} CASCADE")
                     except Exception:
-                        logger.exception(
-                            "Truncate failed, falling back to standard delete"
-                        )
+                        logger.exception("Truncate failed, falling back to standard delete")
                         # Fallback
                         OccurrenceReport.objects.all().delete()
                         Occurrence.objects.all().update(combined_occurrence=None)
@@ -152,16 +140,12 @@ class SpeciesImporter(BaseSheetImporter):
                     OccurrenceReport.objects.filter(**report_filter).delete()
 
                     # Unlink combined_occurrence to allow deletion
-                    Occurrence.objects.filter(**occ_filter).update(
-                        combined_occurrence=None
-                    )
+                    Occurrence.objects.filter(**occ_filter).update(combined_occurrence=None)
                     Occurrence.objects.filter(**occ_filter).delete()
 
                     Species.objects.filter(**species_filter).delete()
                 except Exception:
-                    logger.exception(
-                        "SpeciesImporter: Failed to delete filtered target data"
-                    )
+                    logger.exception("SpeciesImporter: Failed to delete filtered target data")
 
             # Reset the primary key sequence for Species, Occurrence, OccurrenceReport
             try:
@@ -306,23 +290,17 @@ class SpeciesImporter(BaseSheetImporter):
 
         # preload region mapping from the other source once (legacy_key -> Region.pk)
         # implement load_legacy_to_pk_map to read LegacyValueMap or build from the other adapter
-        district_map = load_legacy_to_pk_map(
-            legacy_system="TPFL", model_name="District"
-        )
+        district_map = load_legacy_to_pk_map(legacy_system="TPFL", model_name="District")
 
         # 3. Transform every row into canonical form, collect per-key groups
-        groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(
-            list
-        )
+        groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(list)
         # groups[migrated_from_id] -> list of (transformed_dict, source, issues_list)
 
         for row in all_rows:
             processed += 1
             # progress output every 500 rows
             if processed % 500 == 0:
-                logger.info(
-                    "SpeciesImporter %s: processed %d rows so far", self.slug, processed
-                )
+                logger.info("SpeciesImporter %s: processed %d rows so far", self.slug, processed)
 
             tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
             issues = []
@@ -330,9 +308,7 @@ class SpeciesImporter(BaseSheetImporter):
             has_error = False
             # Choose pipeline map based on the row source (fallback to base)
             src = row.get("_source")
-            pipeline_map = pipelines_by_source.get(
-                src, pipelines_by_source.get(None, {})
-            )
+            pipeline_map = pipelines_by_source.get(src, pipelines_by_source.get(None, {}))
             for col, pipeline in pipeline_map.items():
                 raw_val = row.get(col)
                 res = run_pipeline(pipeline, raw_val, tcx)
@@ -379,9 +355,7 @@ class SpeciesImporter(BaseSheetImporter):
             if not key:
                 skipped += 1
                 errors += 1
-                errors_details.append(
-                    {"reason": "missing_migrated_from_id", "row": transformed}
-                )
+                errors_details.append({"reason": "missing_migrated_from_id", "row": transformed})
                 continue
             groups[key].append((transformed, row.get("_source"), issues))
 
@@ -389,11 +363,7 @@ class SpeciesImporter(BaseSheetImporter):
         def merge_group(entries, source_priority):
             entries_sorted = sorted(
                 entries,
-                key=lambda e: (
-                    source_priority.index(e[1])
-                    if e[1] in source_priority
-                    else len(source_priority)
-                ),
+                key=lambda e: (source_priority.index(e[1]) if e[1] in source_priority else len(source_priority)),
             )
             merged = {}
             combined_issues = []
@@ -408,9 +378,7 @@ class SpeciesImporter(BaseSheetImporter):
                 merged[col] = val
             # also merge any adapter-added keys (e.g. group_type_id) that are present
             # in the transformed dicts but not in the schema pipelines
-            extra_keys = set().union(
-                *(set(trans.keys()) for trans, _, _ in entries_sorted)
-            )
+            extra_keys = set().union(*(set(trans.keys()) for trans, _, _ in entries_sorted))
             for extra in sorted(extra_keys):
                 if extra in pipelines:
                     continue
@@ -466,9 +434,7 @@ class SpeciesImporter(BaseSheetImporter):
                 "taxonomy_id": merged.get("taxonomy_id"),
                 "comment": merged.get("comment"),
                 "conservation_plan_exists": merged.get("conservation_plan_exists"),
-                "conservation_plan_reference": merged.get(
-                    "conservation_plan_reference"
-                ),
+                "conservation_plan_reference": merged.get("conservation_plan_reference"),
                 "department_file_numbers": merged.get("department_file_numbers"),
                 "processing_status": merged.get("processing_status"),
                 "submitter": merged.get("submitter"),
@@ -490,9 +456,7 @@ class SpeciesImporter(BaseSheetImporter):
             if lookup_key.lower().startswith("tpfl-"):
                 lookup_key = lookup_key[5:]
 
-            districts_raw = merged.get("districts") or species_to_district_keys.get(
-                lookup_key
-            )
+            districts_raw = merged.get("districts") or species_to_district_keys.get(lookup_key)
 
             ops.append(
                 {
@@ -505,21 +469,13 @@ class SpeciesImporter(BaseSheetImporter):
 
         # Prefetch existing Species by migrated_from_id and taxonomy_id to avoid N queries
         migrated_keys = [o["migrated_from_id"] for o in ops]
-        taxonomy_ids = [
-            o["defaults"].get("taxonomy_id")
-            for o in ops
-            if o["defaults"].get("taxonomy_id")
-        ]
+        taxonomy_ids = [o["defaults"].get("taxonomy_id") for o in ops if o["defaults"].get("taxonomy_id")]
         existing_by_migrated = {
-            s.migrated_from_id: s
-            for s in Species.objects.filter(migrated_from_id__in=migrated_keys)
+            s.migrated_from_id: s for s in Species.objects.filter(migrated_from_id__in=migrated_keys)
         }
         existing_by_taxonomy = {}
         if taxonomy_ids:
-            existing_by_taxonomy = {
-                s.taxonomy_id: s
-                for s in Species.objects.filter(taxonomy_id__in=taxonomy_ids)
-            }
+            existing_by_taxonomy = {s.taxonomy_id: s for s in Species.objects.filter(taxonomy_id__in=taxonomy_ids)}
 
         # Prepare lists for bulk operations
         to_create = []  # Species instances to bulk_create
@@ -527,9 +483,7 @@ class SpeciesImporter(BaseSheetImporter):
         to_update = []  # existing Species instances to bulk_update
         # Handle duplicate taxonomy_id values across ops to avoid unique constraint
         tax_seen = {}  # taxonomy_id -> canonical migrated_from_id
-        tax_collisions = defaultdict(
-            list
-        )  # taxonomy_id -> list of skipped migrated_from_ids
+        tax_collisions = defaultdict(list)  # taxonomy_id -> list of skipped migrated_from_ids
 
         for op in ops:
             migrated_from_id = op["migrated_from_id"]
@@ -623,9 +577,7 @@ class SpeciesImporter(BaseSheetImporter):
                     species_to_update.append(s)
             if species_to_update:
                 try:
-                    Species.objects.bulk_update(
-                        species_to_update, ["species_number"], batch_size=BATCH
-                    )
+                    Species.objects.bulk_update(species_to_update, ["species_number"], batch_size=BATCH)
                 except Exception:
                     # Fall back to individual saves if bulk_update fails
                     for s in species_to_update:
@@ -639,9 +591,7 @@ class SpeciesImporter(BaseSheetImporter):
 
         # Bulk update existing objects collected in to_update
         if to_update:
-            logger.info(
-                "SpeciesImporter: bulk-updating %d existing Species", len(to_update)
-            )
+            logger.info("SpeciesImporter: bulk-updating %d existing Species", len(to_update))
             # extract instances and update fields en-masse
             update_instances = [t[0] for t in to_update]
             # determine fields to update from defaults keys
@@ -672,7 +622,7 @@ class SpeciesImporter(BaseSheetImporter):
                 return [], []
             if isinstance(raw, str):
                 keys = [k.strip() for k in raw.split(";") if k.strip()]
-            elif isinstance(raw, (list, tuple)):
+            elif isinstance(raw, list | tuple):
                 keys = [str(k).strip() for k in raw if k not in (None, "")]
             else:
                 keys = [str(raw)]
@@ -697,18 +647,14 @@ class SpeciesImporter(BaseSheetImporter):
             distribution = merged.get("distribution", None)
             dist_to_update.append((obj.pk, distribution))
 
-            processing_status_is_active = (
-                merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
-            )
+            processing_status_is_active = merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
             publish_to_update.append((obj.pk, processing_status_is_active))
 
             # collect desired district/region pairs for this species
             district_ids, missing = parse_district_keys(districts_raw)
             if missing:
                 warn_count += 1
-                warnings.append(
-                    f"{obj.migrated_from_id}: unknown district keys {missing}"
-                )
+                warnings.append(f"{obj.migrated_from_id}: unknown district keys {missing}")
                 warnings_details.append(
                     {
                         "migrated_from_id": obj.migrated_from_id,
@@ -733,14 +679,10 @@ class SpeciesImporter(BaseSheetImporter):
                 created_species_ids.append(obj.pk)
                 distribution = merged.get("distribution", None)
                 dist_to_create.append(
-                    SpeciesDistribution(
-                        species=obj, aoo_actual_auto=False, distribution=distribution
-                    )
+                    SpeciesDistribution(species=obj, aoo_actual_auto=False, distribution=distribution)
                 )
 
-                processing_status_is_active = (
-                    merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
-                )
+                processing_status_is_active = merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
                 publish_to_create.append(
                     SpeciesPublishingStatus(
                         species=obj,
@@ -754,9 +696,7 @@ class SpeciesImporter(BaseSheetImporter):
                 district_ids, missing = parse_district_keys(districts_raw)
                 if missing:
                     warn_count += 1
-                    warnings.append(
-                        f"{migrated_from_id}: unknown district keys {missing}"
-                    )
+                    warnings.append(f"{migrated_from_id}: unknown district keys {missing}")
                     warnings_details.append(
                         {
                             "migrated_from_id": migrated_from_id,
@@ -769,9 +709,7 @@ class SpeciesImporter(BaseSheetImporter):
         # Bulk create distributions and publishing statuses for created species
         if dist_to_create:
             try:
-                SpeciesDistribution.objects.bulk_create(
-                    dist_to_create, batch_size=BATCH
-                )
+                SpeciesDistribution.objects.bulk_create(dist_to_create, batch_size=BATCH)
             except Exception as e:
                 # Record the failure so it's surfaced in stats/errors_details
                 errors += 1
@@ -779,14 +717,10 @@ class SpeciesImporter(BaseSheetImporter):
                     {
                         "reason": "bulk_create_speciesdistribution_failed",
                         "message": str(e),
-                        "species_ids": [
-                            getattr(d.species, "pk", None) for d in dist_to_create
-                        ],
+                        "species_ids": [getattr(d.species, "pk", None) for d in dist_to_create],
                     }
                 )
-                logger.exception(
-                    "Failed to bulk_create SpeciesDistribution; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create SpeciesDistribution; falling back to individual creates")
                 for d in dist_to_create:
                     try:
                         SpeciesDistribution.objects.update_or_create(
@@ -797,29 +731,21 @@ class SpeciesImporter(BaseSheetImporter):
                             },
                         )
                     except Exception:
-                        logger.exception(
-                            "Failed to create SpeciesDistribution for %s", d.species.pk
-                        )
+                        logger.exception("Failed to create SpeciesDistribution for %s", d.species.pk)
 
         if publish_to_create:
             try:
-                SpeciesPublishingStatus.objects.bulk_create(
-                    publish_to_create, batch_size=BATCH
-                )
+                SpeciesPublishingStatus.objects.bulk_create(publish_to_create, batch_size=BATCH)
             except Exception as e:
                 errors += 1
                 errors_details.append(
                     {
                         "reason": "bulk_create_speciespublishing_failed",
                         "message": str(e),
-                        "species_ids": [
-                            getattr(p.species, "pk", None) for p in publish_to_create
-                        ],
+                        "species_ids": [getattr(p.species, "pk", None) for p in publish_to_create],
                     }
                 )
-                logger.exception(
-                    "Failed to bulk_create SpeciesPublishingStatus; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create SpeciesPublishingStatus; falling back to individual creates")
                 for p in publish_to_create:
                     try:
                         SpeciesPublishingStatus.objects.update_or_create(
@@ -841,10 +767,7 @@ class SpeciesImporter(BaseSheetImporter):
         # Distributions: fetch existing for updated species and update or create as needed
         if dist_to_update:
             species_ids = [sid for sid, _ in dist_to_update]
-            existing_dists = {
-                d.species_id: d
-                for d in SpeciesDistribution.objects.filter(species_id__in=species_ids)
-            }
+            existing_dists = {d.species_id: d for d in SpeciesDistribution.objects.filter(species_id__in=species_ids)}
             to_create_dists = []
             to_update_dists = []
             for sid, distribution in dist_to_update:
@@ -871,9 +794,7 @@ class SpeciesImporter(BaseSheetImporter):
                         batch_size=BATCH,
                     )
                 except Exception:
-                    logger.exception(
-                        "Failed to bulk_update SpeciesDistribution; will fallback to individual saves"
-                    )
+                    logger.exception("Failed to bulk_update SpeciesDistribution; will fallback to individual saves")
                     for inst in to_update_dists:
                         try:
                             inst.save()
@@ -885,9 +806,7 @@ class SpeciesImporter(BaseSheetImporter):
 
             if to_create_dists:
                 try:
-                    SpeciesDistribution.objects.bulk_create(
-                        to_create_dists, batch_size=BATCH
-                    )
+                    SpeciesDistribution.objects.bulk_create(to_create_dists, batch_size=BATCH)
                 except Exception:
                     logger.exception(
                         "Failed to bulk_create SpeciesDistribution (creates); falling back to individual creates"
@@ -905,10 +824,7 @@ class SpeciesImporter(BaseSheetImporter):
         if publish_to_update:
             species_ids = [sid for sid, _ in publish_to_update]
             existing_pubs = {
-                p.species_id: p
-                for p in SpeciesPublishingStatus.objects.filter(
-                    species_id__in=species_ids
-                )
+                p.species_id: p for p in SpeciesPublishingStatus.objects.filter(species_id__in=species_ids)
             }
             to_create_pubs = []
             to_update_pubs = []
@@ -944,9 +860,7 @@ class SpeciesImporter(BaseSheetImporter):
                         batch_size=BATCH,
                     )
                 except Exception:
-                    logger.exception(
-                        "Failed to bulk_update SpeciesPublishingStatus; will fallback to individual saves"
-                    )
+                    logger.exception("Failed to bulk_update SpeciesPublishingStatus; will fallback to individual saves")
                     for inst in to_update_pubs:
                         try:
                             inst.save()
@@ -958,9 +872,7 @@ class SpeciesImporter(BaseSheetImporter):
 
             if to_create_pubs:
                 try:
-                    SpeciesPublishingStatus.objects.bulk_create(
-                        to_create_pubs, batch_size=BATCH
-                    )
+                    SpeciesPublishingStatus.objects.bulk_create(to_create_pubs, batch_size=BATCH)
                 except Exception:
                     logger.exception(
                         "Failed to bulk_create SpeciesPublishingStatus (creates); falling back to individual creates"
@@ -981,11 +893,7 @@ class SpeciesImporter(BaseSheetImporter):
             all_district_ids = {did for _, did in desired_district_pairs}
 
             # map district -> region
-            district_region_map = dict(
-                District.objects.filter(id__in=all_district_ids).values_list(
-                    "id", "region_id"
-                )
-            )
+            district_region_map = dict(District.objects.filter(id__in=all_district_ids).values_list("id", "region_id"))
 
             # build desired region pairs from desired_district_pairs
             for sid, did in list(desired_district_pairs):
@@ -1000,34 +908,22 @@ class SpeciesImporter(BaseSheetImporter):
             # Delete existing m2m links for these species and bulk create desired ones
             try:
                 with transaction.atomic():
-                    DistrictThrough.objects.filter(
-                        species_id__in=all_species_ids
-                    ).delete()
-                    RegionThrough.objects.filter(
-                        species_id__in=all_species_ids
-                    ).delete()
+                    DistrictThrough.objects.filter(species_id__in=all_species_ids).delete()
+                    RegionThrough.objects.filter(species_id__in=all_species_ids).delete()
 
                     # bulk create district links
                     district_objs = [
-                        DistrictThrough(species_id=sid, district_id=did)
-                        for sid, did in desired_district_pairs
+                        DistrictThrough(species_id=sid, district_id=did) for sid, did in desired_district_pairs
                     ]
                     if district_objs:
-                        DistrictThrough.objects.bulk_create(
-                            district_objs, batch_size=BATCH
-                        )
+                        DistrictThrough.objects.bulk_create(district_objs, batch_size=BATCH)
 
                     # bulk create region links
-                    region_objs = [
-                        RegionThrough(species_id=sid, region_id=rid)
-                        for sid, rid in desired_region_pairs
-                    ]
+                    region_objs = [RegionThrough(species_id=sid, region_id=rid) for sid, rid in desired_region_pairs]
                     if region_objs:
                         RegionThrough.objects.bulk_create(region_objs, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk update M2M district/region links; falling back to per-object sets"
-                )
+                logger.exception("Failed to bulk update M2M district/region links; falling back to per-object sets")
                 # fallback to previous safe behavior
                 for sid in all_species_ids:
                     try:
@@ -1037,11 +933,7 @@ class SpeciesImporter(BaseSheetImporter):
                         if dids:
                             species_obj.districts.set(dids)
                         # compute region ids
-                        rids = {
-                            district_region_map.get(did)
-                            for did in dids
-                            if district_region_map.get(did)
-                        }
+                        rids = {district_region_map.get(did) for did in dids if district_region_map.get(did)}
                         if rids:
                             species_obj.regions.set(list(rids))
                     except Exception:
@@ -1052,14 +944,10 @@ class SpeciesImporter(BaseSheetImporter):
 
         # Fetch all target species for action logging
         target_mig_ids = [o["migrated_from_id"] for o in ops]
-        target_species = list(
-            Species.objects.filter(migrated_from_id__in=target_mig_ids)
-        )
+        target_species = list(Species.objects.filter(migrated_from_id__in=target_mig_ids))
 
         existing_actions = set(
-            SpeciesUserAction.objects.filter(species__in=target_species).values_list(
-                "species_id", flat=True
-            )
+            SpeciesUserAction.objects.filter(species__in=target_species).values_list("species_id", flat=True)
         )
 
         want_action_create = []
@@ -1100,13 +988,9 @@ class SpeciesImporter(BaseSheetImporter):
 
         if want_action_create:
             try:
-                SpeciesUserAction.objects.bulk_create(
-                    want_action_create, batch_size=BATCH
-                )
+                SpeciesUserAction.objects.bulk_create(want_action_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create SpeciesUserAction; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create SpeciesUserAction; falling back to individual creates")
                 for obj in want_action_create:
                     try:
                         obj.save()
@@ -1145,8 +1029,7 @@ class SpeciesImporter(BaseSheetImporter):
                     "  taxonomy_id=%s: skipped %d duplicate records (%s)",
                     taxonomy_id,
                     collision_count,
-                    ", ".join(str(mid) for mid in skipped_ids[:3])
-                    + ("..." if collision_count > 3 else ""),
+                    ", ".join(str(mid) for mid in skipped_ids[:3]) + ("..." if collision_count > 3 else ""),
                 )
             logger.info(
                 "SpeciesImporter: total records skipped due to taxonomy collisions: %d",

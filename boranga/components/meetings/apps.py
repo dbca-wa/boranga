@@ -20,6 +20,4 @@ class MeetingsConfig(AppConfig):
         except Exception:
             import logging
 
-            logging.getLogger(__name__).exception(
-                "Failed to apply randomized upload_to wrappers for meetings"
-            )
+            logging.getLogger(__name__).exception("Failed to apply randomized upload_to wrappers for meetings")

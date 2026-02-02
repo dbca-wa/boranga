@@ -75,7 +75,7 @@ def to_float_maybe(v: Any) -> float | None:
     """Return float(v) or None for None/''/invalid."""
     if v is None or v == "":
         return None
-    if isinstance(v, (float, int)):
+    if isinstance(v, float | int):
         return float(v)
     try:
         return float(v)

@@ -16,8 +16,6 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
 
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
-            canonical["group_type"] = (
-                "fauna"  # TODO: Add any other source dependent constants here
-            )
+            canonical["group_type"] = "fauna"  # TODO: Add any other source dependent constants here
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)

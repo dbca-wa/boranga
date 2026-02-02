@@ -20,11 +20,7 @@ def occurrence_lookup_transform(value, ctx):
     # Cache on function attribute
     if not hasattr(occurrence_lookup_transform, "_cache"):
         # Preload all occurrences mapped by migrated_from_id
-        mapping = dict(
-            Occurrence.objects.filter(migrated_from_id__isnull=False).values_list(
-                "migrated_from_id", "pk"
-            )
-        )
+        mapping = dict(Occurrence.objects.filter(migrated_from_id__isnull=False).values_list("migrated_from_id", "pk"))
         occurrence_lookup_transform._cache = mapping
 
     if value in (None, ""):
@@ -38,9 +34,7 @@ def occurrence_lookup_transform(value, ctx):
 
     return _result(
         value,
-        TransformIssue(
-            "error", f"Occurrence with migrated_from_id='{value}' not found"
-        ),
+        TransformIssue("error", f"Occurrence with migrated_from_id='{value}' not found"),
     )
 
 
@@ -73,24 +67,16 @@ class OccurrenceDocumentTpflAdapter(SourceAdapter):
 
         if self._doc_category_id is None:
             try:
-                doc_cat = DocumentCategory.objects.get(
-                    document_category_name=self.DEFAULT_CATEGORY_NAME
-                )
+                doc_cat = DocumentCategory.objects.get(document_category_name=self.DEFAULT_CATEGORY_NAME)
             except DocumentCategory.DoesNotExist:
-                raise ValueError(
-                    f"DocumentCategory '{self.DEFAULT_CATEGORY_NAME}' does not exist"
-                )
+                raise ValueError(f"DocumentCategory '{self.DEFAULT_CATEGORY_NAME}' does not exist")
             self._doc_category_id = doc_cat.id
 
         if self._doc_sub_category_id is None:
             try:
-                doc_sub_cat = DocumentSubCategory.objects.get(
-                    document_sub_category_name=self.DEFAULT_SUBCATEGORY_NAME
-                )
+                doc_sub_cat = DocumentSubCategory.objects.get(document_sub_category_name=self.DEFAULT_SUBCATEGORY_NAME)
             except DocumentSubCategory.DoesNotExist:
-                raise ValueError(
-                    "DocumentSubCategory 'TPFL Liaison Record' does not exist"
-                )
+                raise ValueError("DocumentSubCategory 'TPFL Liaison Record' does not exist")
             self._doc_sub_category_id = doc_sub_cat.id
 
         return self._doc_category_id, self._doc_sub_category_id
@@ -120,9 +106,7 @@ class OccurrenceDocumentTpflAdapter(SourceAdapter):
         if othernames:
             parts.append(f"Name: {othernames}")
 
-        notification_action = self._map_notification_action(
-            raw.get("NOTIFICATION_TYPE")
-        )
+        notification_action = self._map_notification_action(raw.get("NOTIFICATION_TYPE"))
         if notification_action:
             parts.append(f"Action: {notification_action}")
 

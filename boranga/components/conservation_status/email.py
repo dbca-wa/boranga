@@ -18,9 +18,7 @@ from boranga.helpers import (
     is_internal_by_user_id,
 )
 
-private_storage = FileSystemStorage(
-    location=settings.BASE_DIR + "/private-media/", base_url="/private-media/"
-)
+private_storage = FileSystemStorage(location=settings.BASE_DIR + "/private-media/", base_url="/private-media/")
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +42,7 @@ class SubmitSendNotificationEmail(TemplateEmailBase):
 
 
 class ExternalSubmitSendNotificationEmail(TemplateEmailBase):
-    subject = (
-        f"{settings.DEP_NAME} - confirmation - conservation status proposal submitted."
-    )
+    subject = f"{settings.DEP_NAME} - confirmation - conservation status proposal submitted."
     html_template = "boranga/emails/cs_proposals/send_external_submit_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_external_submit_notification.txt"
 
@@ -65,9 +61,7 @@ class ConservationStatusReferralRecallNotificationEmail(TemplateEmailBase):
 
 class ConservationStatusReferralCompleteNotificationEmail(TemplateEmailBase):
     subject = "A referral for a conservation status has been completed."
-    html_template = (
-        "boranga/emails/cs_proposals/send_referral_complete_notification.html"
-    )
+    html_template = "boranga/emails/cs_proposals/send_referral_complete_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_referral_complete_notification.txt"
 
 
@@ -79,53 +73,37 @@ class ConservationStatusAmendmentRequestSendNotificationEmail(TemplateEmailBase)
 
 class ApproverDeclineSendNotificationEmail(TemplateEmailBase):
     subject = "A conservation status proposal has been recommended for decline."
-    html_template = (
-        "boranga/emails/cs_proposals/send_approver_decline_notification.html"
-    )
+    html_template = "boranga/emails/cs_proposals/send_approver_decline_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approver_decline_notification.txt"
 
 
 class ApproverProposeDelistNotificationEmail(TemplateEmailBase):
     subject = "A conservation status proposal has been proposed for delisting."
-    html_template = (
-        "boranga/emails/cs_proposals/send_approver_propose_delist_notification.html"
-    )
-    txt_template = (
-        "boranga/emails/cs_proposals/send_approver_propose_delist_notification.txt"
-    )
+    html_template = "boranga/emails/cs_proposals/send_approver_propose_delist_notification.html"
+    txt_template = "boranga/emails/cs_proposals/send_approver_propose_delist_notification.txt"
 
 
 class ApproverApproveSendNotificationEmail(TemplateEmailBase):
     subject = "A conservation status proposal has been recommended for approval."
-    html_template = (
-        "boranga/emails/cs_proposals/send_approver_approve_notification.html"
-    )
+    html_template = "boranga/emails/cs_proposals/send_approver_approve_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approver_approve_notification.txt"
 
 
 class ApproverProposedForAgendaSendNotificationEmail(TemplateEmailBase):
     subject = "A conservation status proposal has been proposed for agenda."
     html_template = "boranga/emails/cs_proposals/send_approver_proposed_for_agenda_notification.html"
-    txt_template = (
-        "boranga/emails/cs_proposals/send_approver_proposed_for_agenda_notification.txt"
-    )
+    txt_template = "boranga/emails/cs_proposals/send_approver_proposed_for_agenda_notification.txt"
 
 
 class AssessorReadyForAgendaSendNotificationEmail(TemplateEmailBase):
     subject = "A conservation status proposal is ready for agenda."
-    html_template = (
-        "boranga/emails/cs_proposals/send_assessor_ready_for_agenda_notification.html"
-    )
-    txt_template = (
-        "boranga/emails/cs_proposals/send_assessor_ready_for_agenda_notification.txt"
-    )
+    html_template = "boranga/emails/cs_proposals/send_assessor_ready_for_agenda_notification.html"
+    txt_template = "boranga/emails/cs_proposals/send_assessor_ready_for_agenda_notification.txt"
 
 
 class ApproverSendBackNotificationEmail(TemplateEmailBase):
     subject = "A conservation status proposal has been sent back by approver."
-    html_template = (
-        "boranga/emails/cs_proposals/send_approver_sendback_notification.html"
-    )
+    html_template = "boranga/emails/cs_proposals/send_approver_sendback_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approver_sendback_notification.txt"
 
 
@@ -158,11 +136,7 @@ def send_submit_email_notification(request, cs_proposal):
     )
     url = convert_external_url_to_internal_url(url)
 
-    group_type = (
-        cs_proposal.species.group_type
-        if cs_proposal.species
-        else cs_proposal.community.group_type
-    )
+    group_type = cs_proposal.species.group_type if cs_proposal.species else cs_proposal.community.group_type
 
     recipients = SystemEmailGroup.emails_by_group_and_area(
         group_type=group_type,
@@ -217,9 +191,7 @@ def send_submitter_submit_email_notification(request, cs_proposal):
     return msg
 
 
-def send_external_referee_invite_email(
-    conservation_status, request, external_referee_invite, reminder=False
-):
+def send_external_referee_invite_email(conservation_status, request, external_referee_invite, reminder=False):
     """Recipient: Always an external user"""
 
     subject = (
@@ -259,9 +231,7 @@ def send_external_referee_invite_email(
     return msg
 
 
-def send_conservation_status_referral_email_notification(
-    referral, request, reminder=False
-):
+def send_conservation_status_referral_email_notification(referral, request, reminder=False):
     """Recipient: May be internal or external user"""
     email = ConservationStatusReferralSendNotificationEmail()
 
@@ -371,9 +341,7 @@ def send_conservation_status_referral_complete_email_notification(referral, requ
     return msg
 
 
-def send_conservation_status_amendment_email_notification(
-    amendment_request, request, conservation_status
-):
+def send_conservation_status_amendment_email_notification(amendment_request, request, conservation_status):
     """Recipient: May be internal or external user"""
 
     email = ConservationStatusAmendmentRequestSendNotificationEmail()
@@ -459,9 +427,7 @@ def send_approver_decline_email_notification(reason, request, conservation_statu
     return msg
 
 
-def send_approver_propose_delist_email_notification(
-    request, conservation_status, reason
-):
+def send_approver_propose_delist_email_notification(request, conservation_status, reason):
     """Recipient: Always internal users"""
 
     email = ApproverProposeDelistNotificationEmail()
@@ -531,9 +497,7 @@ def send_approver_approve_email_notification(request, conservation_status):
     return msg
 
 
-def send_approver_proposed_for_agenda_email_notification(
-    request, conservation_status, assessor_comment
-):
+def send_approver_proposed_for_agenda_email_notification(request, conservation_status, assessor_comment):
     """Recipient: Always internal users"""
 
     email = ApproverProposedForAgendaSendNotificationEmail()
@@ -564,9 +528,7 @@ def send_approver_proposed_for_agenda_email_notification(
     return msg
 
 
-def send_assessor_ready_for_agenda_email_notification(
-    request, conservation_status, assessor_comment
-):
+def send_assessor_ready_for_agenda_email_notification(request, conservation_status, assessor_comment):
     """Recipient: Always internal users"""
 
     email = AssessorReadyForAgendaSendNotificationEmail()
@@ -676,9 +638,7 @@ def send_approver_defer_email_notification(request, conservation_status, reason)
     return msg
 
 
-def send_conservation_status_decline_email_notification(
-    conservation_status, conservation_status_decline
-):
+def send_conservation_status_decline_email_notification(conservation_status, conservation_status_decline):
     """Recipient: May be internal or external user Note: Currently does not include a url
     If a url is added in future it must be able to handle both internal and external users
     """
@@ -734,17 +694,12 @@ def send_conservation_status_approval_email_notification(conservation_status):
     return msg
 
 
-def _log_conservation_status_email(
-    email_message, cs_proposal, sender=None, file_bytes=None, filename=None
-):
+def _log_conservation_status_email(email_message, cs_proposal, sender=None, file_bytes=None, filename=None):
     from boranga.components.conservation_status.models import ConservationStatusLogEntry
 
     if isinstance(
         email_message,
-        (
-            EmailMultiAlternatives,
-            EmailMessage,
-        ),
+        EmailMultiAlternatives | EmailMessage,
     ):
         # This will log the plain text body
         text = email_message.body
@@ -789,26 +744,19 @@ def _log_conservation_status_email(
 
     if file_bytes and filename:
         # attach the file to the comms_log also
-        path_to_file = "{}/conservation_status/{}/communications/{}".format(
-            settings.MEDIA_APP_DIR, cs_proposal.id, filename
-        )
+        path_to_file = f"{settings.MEDIA_APP_DIR}/conservation_status/{cs_proposal.id}/communications/{filename}"
         private_storage.save(path_to_file, ContentFile(file_bytes))
         email_entry.documents.get_or_create(_file=path_to_file, name=filename)
 
     return email_entry
 
 
-def _log_conservation_status_referral_email(
-    email_message, referral, to_email, sender=None
-):
+def _log_conservation_status_referral_email(email_message, referral, to_email, sender=None):
     from boranga.components.conservation_status.models import ConservationStatusLogEntry
 
     if isinstance(
         email_message,
-        (
-            EmailMultiAlternatives,
-            EmailMessage,
-        ),
+        EmailMultiAlternatives | EmailMessage,
     ):
         text = email_message.body
         subject = email_message.subject

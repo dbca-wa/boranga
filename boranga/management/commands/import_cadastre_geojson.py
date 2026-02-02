@@ -26,14 +26,10 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--schema", default="public", help="Target DB schema (default: public)"
-        )
+        parser.add_argument("--schema", default="public", help="Target DB schema (default: public)")
         parser.add_argument(
             "--table",
-            help=(
-                "Target table name. If omitted, defaults to the KB_LAYER_TABLE setting or 'kb_cadastre'."
-            ),
+            help=("Target table name. If omitted, defaults to the KB_LAYER_TABLE setting or 'kb_cadastre'."),
         )
         parser.add_argument(
             "--srid",
@@ -54,10 +50,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--keep-temp",
             action="store_true",
-            help=(
-                "Do not delete the downloaded temp file after import "
-                "(keeps file under .kb_layer_cache)."
-            ),
+            help=("Do not delete the downloaded temp file after import " "(keeps file under .kb_layer_cache)."),
         )
         parser.add_argument(
             "--chunk-size",
@@ -161,16 +154,12 @@ class Command(BaseCommand):
         )
 
         if not shutil.which("ogr2ogr"):
-            raise CommandError(
-                "ogr2ogr not found on PATH. Install GDAL (ogr2ogr) to use this command."
-            )
+            raise CommandError("ogr2ogr not found on PATH. Install GDAL (ogr2ogr) to use this command.")
 
         # Run ogr2ogr and print output to console; do not write logs to disk.
-        self.stdout.write("Running: %s" % " ".join(cmd))
+        self.stdout.write("Running: {}".format(" ".join(cmd)))
         try:
-            proc = subprocess.run(
-                cmd, check=True, env=env, capture_output=True, text=True
-            )
+            proc = subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             err = e.stderr or e.stdout or str(e)
             raise CommandError(f"ogr2ogr failed: {err}")
@@ -223,9 +212,7 @@ class Command(BaseCommand):
                         if outfh:
                             outfh.write("]}")
                             outfh.close()
-                        partname = os.path.join(
-                            work_dir, f"part_{chunk_index:05d}.geojson"
-                        )
+                        partname = os.path.join(work_dir, f"part_{chunk_index:05d}.geojson")
                         outfh = open(partname, "w", encoding="utf-8")
                         outfh.write('{"type":"FeatureCollection","features":[')
                         chunk_files.append(partname)
@@ -235,9 +222,7 @@ class Command(BaseCommand):
                         outfh.write(",")
                     else:
                         first_in_chunk = False
-                    outfh.write(
-                        json.dumps(feat, ensure_ascii=False, default=_json_default)
-                    )
+                    outfh.write(json.dumps(feat, ensure_ascii=False, default=_json_default))
                     current += 1
                 if outfh:
                     outfh.write("]}")
@@ -253,9 +238,7 @@ class Command(BaseCommand):
         if do_import:
             imported_any = False
             for i, chunk in enumerate(chunk_files):
-                self.stdout.write(
-                    f"Importing chunk {i+1}/{len(chunk_files)}: {os.path.basename(chunk)}"
-                )
+                self.stdout.write(f"Importing chunk {i+1}/{len(chunk_files)}: {os.path.basename(chunk)}")
                 if not imported_any:
                     self._run_ogr2ogr(chunk, dst_pg, layer_name, srid, True, env)
                     imported_any = True
@@ -287,13 +270,9 @@ class Command(BaseCommand):
                         "PRECISION=NO",
                     ]
                     try:
-                        subprocess.run(
-                            cmd, check=True, env=env, capture_output=True, text=True
-                        )
+                        subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
                     except subprocess.CalledProcessError as e:
-                        raise CommandError(
-                            f"ogr2ogr append failed for chunk {chunk}: {e.stderr or e.stdout or str(e)}"
-                        )
+                        raise CommandError(f"ogr2ogr append failed for chunk {chunk}: {e.stderr or e.stdout or str(e)}")
 
         # Remove chunk files unless caller requested they be kept (e.g., --chunks-only + --keep-temp)
         if keep_chunks:
@@ -364,13 +343,9 @@ class Command(BaseCommand):
                     raise CommandError(f"Auth check failed: {e}")
 
             if hr is not None and hr.status_code < 400:
-                self.stdout.write(
-                    self.style.SUCCESS(f"Auth check succeeded (HTTP {hr.status_code})")
-                )
+                self.stdout.write(self.style.SUCCESS(f"Auth check succeeded (HTTP {hr.status_code})"))
                 return
-            raise CommandError(
-                f"Auth check failed (HTTP {hr.status_code if hr is not None else 'error'})"
-            )
+            raise CommandError(f"Auth check failed (HTTP {hr.status_code if hr is not None else 'error'})")
 
         if skip_if_unchanged:
             head_kwargs = {"allow_redirects": True, "timeout": 30}
@@ -409,18 +384,12 @@ class Command(BaseCommand):
                     hr = None
 
             if hr is not None and hr.status_code == 304:
-                self.stdout.write(
-                    self.style.NOTICE(
-                        "Server returned 304 Not Modified; skipping import."
-                    )
-                )
+                self.stdout.write(self.style.NOTICE("Server returned 304 Not Modified; skipping import."))
                 return
             if hr is not None and hr.status_code < 400:
                 remote_headers = hr.headers
                 remote_etag = hr.headers.get("ETag") or hr.headers.get("etag")
-                remote_lm = hr.headers.get("Last-Modified") or hr.headers.get(
-                    "last-modified"
-                )
+                remote_lm = hr.headers.get("Last-Modified") or hr.headers.get("last-modified")
 
                 def _norm(v):
                     if not v:
@@ -434,27 +403,11 @@ class Command(BaseCommand):
 
                 remote_etag = _norm(remote_etag)
                 remote_lm = _norm(remote_lm)
-                if (
-                    remote_etag
-                    and saved.get("etag")
-                    and remote_etag == saved.get("etag")
-                ):
-                    self.stdout.write(
-                        self.style.NOTICE(
-                            "Remote ETag matches saved ETag; skipping import."
-                        )
-                    )
+                if remote_etag and saved.get("etag") and remote_etag == saved.get("etag"):
+                    self.stdout.write(self.style.NOTICE("Remote ETag matches saved ETag; skipping import."))
                     return
-                if (
-                    remote_lm
-                    and saved.get("last_modified")
-                    and remote_lm == saved.get("last_modified")
-                ):
-                    self.stdout.write(
-                        self.style.NOTICE(
-                            "Remote Last-Modified matches saved value; skipping import."
-                        )
-                    )
+                if remote_lm and saved.get("last_modified") and remote_lm == saved.get("last_modified"):
+                    self.stdout.write(self.style.NOTICE("Remote Last-Modified matches saved value; skipping import."))
                     return
 
         dst_pg, password = self._build_pg_connection()
@@ -468,11 +421,7 @@ class Command(BaseCommand):
             env["GDAL_HTTP_PASSWORD"] = str(pwd)
             env["GDAL_HTTP_AUTH"] = "Basic"
 
-        self.stdout.write(
-            self.style.NOTICE(
-                "Using streaming download to a temp file."
-            )
-        )
+        self.stdout.write(self.style.NOTICE("Using streaming download to a temp file."))
         meta_dir = self._meta_dir()
         ts = int(time.time())
         tmp_name = os.path.join(meta_dir, f"kb_layer_{ts}.geojson")
@@ -491,9 +440,7 @@ class Command(BaseCommand):
                 if globs:
                     candidate = sorted(globs)[-1]
             if candidate and os.path.exists(candidate):
-                self.stdout.write(
-                    self.style.NOTICE(f"Reusing cached file: {candidate}")
-                )
+                self.stdout.write(self.style.NOTICE(f"Reusing cached file: {candidate}"))
                 tmp_name = candidate
 
         if not (use_cached and os.path.exists(tmp_name)):
@@ -502,9 +449,7 @@ class Command(BaseCommand):
             req_kwargs = {"stream": True, "timeout": 120}
             if user and pwd:
                 req_kwargs["auth"] = HTTPBasicAuth(user, pwd)
-                self.stdout.write(
-                    self.style.NOTICE("Using HTTP Basic auth for download")
-                )
+                self.stdout.write(self.style.NOTICE("Using HTTP Basic auth for download"))
             elif auth_header:
                 headers = {}
                 if ":" in auth_header:
@@ -526,11 +471,7 @@ class Command(BaseCommand):
                 size = os.path.getsize(tmp_name)
             except Exception:
                 size = None
-            self.stdout.write(
-                self.style.NOTICE(
-                    f"Download finished: {size or 'unknown'} bytes in {elapsed:.2f}s"
-                )
-            )
+            self.stdout.write(self.style.NOTICE(f"Download finished: {size or 'unknown'} bytes in {elapsed:.2f}s"))
 
         try:
             import hashlib
@@ -566,9 +507,7 @@ class Command(BaseCommand):
                     do_import=not chunks_only,
                     keep_chunks=keep_chunks,
                 )
-                self.stdout.write(
-                    self.style.SUCCESS(f"Chunks created under {self._meta_dir()}")
-                )
+                self.stdout.write(self.style.SUCCESS(f"Chunks created under {self._meta_dir()}"))
                 if chunks_only:
                     if not options.get("keep_temp"):
                         try:
@@ -579,9 +518,7 @@ class Command(BaseCommand):
             except Exception as e:
                 raise CommandError(f"Chunked import failed: {e}")
         else:
-            self._run_ogr2ogr(
-                tmp_name, dst_pg, f"{schema}.{table}", srid, overwrite, env
-            )
+            self._run_ogr2ogr(tmp_name, dst_pg, f"{schema}.{table}", srid, overwrite, env)
 
         if not options.get("keep_temp"):
             try:
@@ -593,9 +530,7 @@ class Command(BaseCommand):
             geom_col = self._find_geometry_column(schema, table)
             if not geom_col:
                 self.stdout.write(
-                    self.style.WARNING(
-                        "Could not find geometry column to index; skipping index creation"
-                    )
+                    self.style.WARNING("Could not find geometry column to index; skipping index creation")
                 )
                 return
 

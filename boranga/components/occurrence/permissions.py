@@ -30,21 +30,15 @@ class IsOccurrenceReportReferee(BasePermission):
         return is_occurrence_report_referee(request)
 
     def has_object_permission(self, request, view, obj):
-
         if obj._meta.model_name == "occurrencereport":
-
             if (
                 obj.referrals.filter(referral=request.user.id)
-                .exclude(
-                    processing_status=OccurrenceReportReferral.PROCESSING_STATUS_RECALLED
-                )
+                .exclude(processing_status=OccurrenceReportReferral.PROCESSING_STATUS_RECALLED)
                 .exists()
             ):
                 return True
             # NOTE replace/remove when process_shapefile_document is reworked
-            elif (
-                hasattr(view, "action") and view.action == "process_shapefile_document"
-            ):
+            elif hasattr(view, "action") and view.action == "process_shapefile_document":
                 return obj.referrals.filter(referral=request.user.id).exists()
 
         else:
@@ -73,10 +67,7 @@ class OccurrenceReportPermission(BasePermission):
 
     def is_authorised_to_update(self, request, obj):
         return (
-            (
-                obj.can_user_edit(request)
-                and (request.user.id == obj.submitter or request.user.is_superuser)
-            )
+            (obj.can_user_edit(request) and (request.user.id == obj.submitter or request.user.is_superuser))
             or (obj.has_assessor_mode(request))
             or (obj.has_unlocked_mode(request))
         )
@@ -94,12 +85,8 @@ class OccurrenceReportPermission(BasePermission):
         # - the report must be under approval, the assigner must be in the approver group,
         # and the assignee must be in the approval group
         # AND the Assignee must be the proposed assignee, or already assigned
-        in_assessor_group = assignee and (
-            is_occurrence_assessor(request) or request.user.is_superuser
-        )
-        in_approver_group = assignee and (
-            is_occurrence_approver(request) or request.user.is_superuser
-        )
+        in_assessor_group = assignee and (is_occurrence_assessor(request) or request.user.is_superuser)
+        in_approver_group = assignee and (is_occurrence_approver(request) or request.user.is_superuser)
 
         self_assigning = assigner == assignee
 
@@ -117,16 +104,8 @@ class OccurrenceReportPermission(BasePermission):
             )
             and (
                 (self_assigning and (in_assessor_group or in_approver_group))
-                or (
-                    not (assignee)
-                    and assigner_assigned
-                    and obj.has_assessor_mode(request)
-                )
-                or (
-                    (in_assessor_group or in_approver_group)
-                    and assigner_assigned
-                    and obj.has_assessor_mode(request)
-                )
+                or (not (assignee) and assigner_assigned and obj.has_assessor_mode(request))
+                or ((in_assessor_group or in_approver_group) and assigner_assigned and obj.has_assessor_mode(request))
             )
         ) or (
             (
@@ -137,16 +116,8 @@ class OccurrenceReportPermission(BasePermission):
             )
             and (
                 (self_assigning and in_approver_group)
-                or (
-                    not (assignee)
-                    and assigner_approver
-                    and obj.has_approver_mode(request)
-                )
-                or (
-                    (in_approver_group)
-                    and assigner_assigned
-                    and obj.has_assessor_mode(request)
-                )
+                or (not (assignee) and assigner_approver and obj.has_approver_mode(request))
+                or ((in_approver_group) and assigner_assigned and obj.has_assessor_mode(request))
             )
         )
 
@@ -160,10 +131,7 @@ class OccurrenceReportPermission(BasePermission):
         return is_occurrence_approver(request) or is_occurrence_assessor(request)
 
     def has_object_permission(self, request, view, obj):
-        if (
-            request.method in permissions.SAFE_METHODS
-            or view.action == "process_shapefile_document"
-        ):
+        if request.method in permissions.SAFE_METHODS or view.action == "process_shapefile_document":
             return True
 
         if view.action in ["propose_decline", "propose_approve", "send_referral"]:
@@ -171,8 +139,7 @@ class OccurrenceReportPermission(BasePermission):
 
         if (
             view.action == "back_to_assessor"
-            and obj.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER
+            and obj.processing_status == OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER
         ) or view.action in ["decline", "approve"]:
             return self.is_authorised_to_approve(request, obj)
 
@@ -184,9 +151,7 @@ class OccurrenceReportPermission(BasePermission):
                 user_id = request.data.get("assessor_id", None)
                 user = EmailUser.objects.get(id=user_id)
             except EmailUser.DoesNotExist:
-                raise serializers.ValidationError(
-                    "A user with the id passed in does not exist"
-                )
+                raise serializers.ValidationError("A user with the id passed in does not exist")
             self.is_authorised_to_assign(request, obj, request.user, user)
 
         if view.action == "unassign":
@@ -220,15 +185,11 @@ class ExternalOccurrenceReportPermission(BasePermission):
         )
 
     def has_object_permission(self, request, view, obj):
-        if (
-            request.method in permissions.SAFE_METHODS
-            or view.action == "process_shapefile_document"
-        ):
+        if request.method in permissions.SAFE_METHODS or view.action == "process_shapefile_document":
             return True
 
         if obj.submitter == request.user.id and (
-            obj.can_user_edit(request)
-            or (hasattr(view, "action") and view.action == "process_shapefile_document")
+            obj.can_user_edit(request) or (hasattr(view, "action") and view.action == "process_shapefile_document")
         ):
             return (
                 is_contributor(request)
@@ -252,37 +213,25 @@ class OccurrenceReportObjectPermission(BasePermission):
         if hasattr(view, "action") and view.action == "create":
             request_data = request.data.get("data")
             if not request_data:
-                raise serializers.ValidationError(
-                    "No parameter named 'data' found in request"
-                )
+                raise serializers.ValidationError("No parameter named 'data' found in request")
 
             try:
                 data = json.loads(request_data)
             except (TypeError, json.JSONDecodeError):
-                raise serializers.ValidationError(
-                    "Data parameter is not a valid JSON string"
-                )
+                raise serializers.ValidationError("Data parameter is not a valid JSON string")
 
             try:
                 occurrence_report_id = int(data["occurrence_report"])
-                occurrence_report = OccurrenceReport.objects.get(
-                    id=occurrence_report_id
-                )
+                occurrence_report = OccurrenceReport.objects.get(id=occurrence_report_id)
             except OccurrenceReport.DoesNotExist:
-                raise serializers.ValidationError(
-                    "No occurrence report found with id: {}".format(
-                        occurrence_report_id
-                    )
-                )
+                raise serializers.ValidationError(f"No occurrence report found with id: {occurrence_report_id}")
 
             if view.basename == "ocr_amendment_request":
                 if not occurrence_report.has_assessor_mode(request):
                     return False
             elif view.basename == "occurrencereportdocument":
                 # Allow for referees to upload documents
-                if not is_occurrence_report_referee(
-                    request, occurrence_report=occurrence_report
-                ):
+                if not is_occurrence_report_referee(request, occurrence_report=occurrence_report):
                     return False
             elif not self.is_authorised_to_update(request, occurrence_report):
                 return False
@@ -305,9 +254,7 @@ class OccurrenceReportObjectPermission(BasePermission):
         return (
             (
                 occurrence_report.can_user_edit(request)
-                and (
-                    user.id == occurrence_report.submitter or request.user.is_superuser
-                )
+                and (user.id == occurrence_report.submitter or request.user.is_superuser)
             )
             or (occurrence_report.has_assessor_mode(request))
             or (occurrence_report.has_unlocked_mode(request))
@@ -320,10 +267,7 @@ class OccurrenceReportObjectPermission(BasePermission):
 
         occurrence_report = obj.occurrence_report
 
-        if (
-            obj._meta.model_name == "occurrencereportamendmentrequest"
-            and occurrence_report
-        ):
+        if obj._meta.model_name == "occurrencereportamendmentrequest" and occurrence_report:
             occurrence_report = obj.occurrence_report
             return occurrence_report.has_assessor_mode(request)
 
@@ -343,34 +287,21 @@ class ExternalOccurrenceReportObjectPermission(BasePermission):
         if hasattr(view, "action") and view.action == "create":
             request_data = request.data.get("data")
             if not request_data:
-                raise serializers.ValidationError(
-                    "No parameter named 'data' found in request"
-                )
+                raise serializers.ValidationError("No parameter named 'data' found in request")
 
             try:
                 data = json.loads(request_data)
             except (TypeError, json.JSONDecodeError):
-                raise serializers.ValidationError(
-                    "Data parameter is not a valid JSON string"
-                )
+                raise serializers.ValidationError("Data parameter is not a valid JSON string")
 
             try:
                 occurrence_report_id = int(data["occurrence_report"])
-                occurrence_report = OccurrenceReport.objects.get(
-                    id=occurrence_report_id
-                )
+                occurrence_report = OccurrenceReport.objects.get(id=occurrence_report_id)
             except OccurrenceReport.DoesNotExist:
-                raise serializers.ValidationError(
-                    "No occurrence report found with id: {}".format(
-                        occurrence_report_id
-                    )
-                )
+                raise serializers.ValidationError(f"No occurrence report found with id: {occurrence_report_id}")
             if not (
                 occurrence_report
-                and (
-                    occurrence_report.submitter == request.user.id
-                    or request.user.is_superuser
-                )
+                and (occurrence_report.submitter == request.user.id or request.user.is_superuser)
                 and occurrence_report.can_user_edit(request)
             ):
                 return False
@@ -451,11 +382,7 @@ class OccurrenceReportBulkImportPermission(BasePermission):
         if request.user.is_superuser:
             return True
 
-        if (
-            view.action != "copy"
-            and request.method not in permissions.SAFE_METHODS
-            and obj.is_master
-        ):
+        if view.action != "copy" and request.method not in permissions.SAFE_METHODS and obj.is_master:
             return is_django_admin(request)
 
         return is_django_admin(request) or is_occurrence_approver(request)
@@ -524,24 +451,18 @@ class OccurrenceObjectPermission(BasePermission):
         if hasattr(view, "action") and view.action == "create":
             request_data = request.data.get("data")
             if not request_data:
-                raise serializers.ValidationError(
-                    "No parameter named 'data' found in request"
-                )
+                raise serializers.ValidationError("No parameter named 'data' found in request")
 
             try:
                 data = json.loads(request_data)
             except (TypeError, json.JSONDecodeError):
-                raise serializers.ValidationError(
-                    "Data parameter is not a valid JSON string"
-                )
+                raise serializers.ValidationError("Data parameter is not a valid JSON string")
 
             try:
                 occurrence_id = int(data["occurrence"])
                 occurrence = Occurrence.objects.get(id=occurrence_id)
             except Occurrence.DoesNotExist:
-                raise serializers.ValidationError(
-                    f"No occurrence found with id: {occurrence_id}"
-                )
+                raise serializers.ValidationError(f"No occurrence found with id: {occurrence_id}")
 
             return self.is_authorised_to_update(request, occurrence)
 
@@ -600,9 +521,7 @@ class AssociatedSpeciesTaxonomyPermission(BasePermission):
         elif obj.occassociatedspecies_set.exists():
             root_parent_record = obj.occassociatedspecies_set.first().occurrence
         else:
-            raise serializers.ValidationError(
-                "No associated species found for this object."
-            )
+            raise serializers.ValidationError("No associated species found for this object.")
 
         if not root_parent_record:
             return False

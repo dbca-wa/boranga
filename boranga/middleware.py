@@ -52,7 +52,4 @@ class RevisionOverrideMiddleware(RevisionMiddleware):
     # exclude ledger payments/checkout from revision - hack to overcome basket (lagging status)
     # issue/conflict with reversion
     def request_creates_revision(self, request):
-        return (
-            _request_creates_revision(request)
-            and "checkout" not in request.get_full_path()
-        )
+        return _request_creates_revision(request) and "checkout" not in request.get_full_path()

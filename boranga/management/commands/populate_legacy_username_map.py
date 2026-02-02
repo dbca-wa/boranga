@@ -25,9 +25,7 @@ class Command(BaseCommand):
             action="store_true",
             help="Print per-row result (create/update/skip) and reason",
         )
-        parser.add_argument(
-            "--update", action="store_true", help="update existing rows when present"
-        )
+        parser.add_argument("--update", action="store_true", help="update existing rows when present")
 
     def handle(self, *args, **options):
         csvfile = options["csvfile"]
@@ -45,8 +43,7 @@ class Command(BaseCommand):
             _ = reader.fieldnames  # force fieldnames to be read
             if reader.fieldnames:
                 normalized_fieldnames = [
-                    (fn.strip().lstrip("\ufeff") if fn is not None else fn)
-                    for fn in reader.fieldnames
+                    (fn.strip().lstrip("\ufeff") if fn is not None else fn) for fn in reader.fieldnames
                 ]
                 reader.fieldnames = normalized_fieldnames
             for r in reader:
@@ -60,9 +57,7 @@ class Command(BaseCommand):
         verbose = options.get("verbose", False)
 
         # Preload existing mappings for this legacy_system to avoid per-row queries.
-        existing_qs = LegacyUsernameEmailuserMapping.objects.filter(
-            legacy_system=legacy_system
-        )
+        existing_qs = LegacyUsernameEmailuserMapping.objects.filter(legacy_system=legacy_system)
         existing_map = {m.legacy_username: m for m in existing_qs}
 
         # Collect emails from CSV to resolve EmailUserRO in bulk (case-insensitive).
@@ -76,9 +71,7 @@ class Command(BaseCommand):
         if csv_emails and EmailUserRO is not None:
             try:
                 # annotate with lowercase email for case-insensitive matching
-                qs = EmailUserRO.objects.annotate(email_l=Lower("email")).filter(
-                    email_l__in=list(csv_emails)
-                )
+                qs = EmailUserRO.objects.annotate(email_l=Lower("email")).filter(email_l__in=list(csv_emails))
                 for u in qs:
                     email_map[getattr(u, "email_l")] = u.pk
             except Exception as exc:
@@ -91,9 +84,7 @@ class Command(BaseCommand):
         decisions = []  # tuples (idx, legacy_username, action, reason)
 
         for idx, r in enumerate(rows, start=1):
-            legacy_username = (
-                r.get("legacy_username") or r.get("username") or r.get("legacy") or ""
-            ).strip()
+            legacy_username = (r.get("legacy_username") or r.get("username") or r.get("legacy") or "").strip()
             if not legacy_username:
                 self.stderr.write(f"Skipping row {idx} with no legacy_username")
                 skipped += 1
@@ -117,22 +108,16 @@ class Command(BaseCommand):
                         emailuser_id = email_map[em_l]
                     else:
                         # no match found in preload
-                        self.stderr.write(
-                            f"No EmailUserRO found for email '{email}'; leaving emailuser_id null"
-                        )
+                        self.stderr.write(f"No EmailUserRO found for email '{email}'; leaving emailuser_id null")
 
             if dry_run:
                 # For dry run, just classify and report without modifying DB
                 if legacy_username in existing_map:
                     if not do_update:
                         skipped += 1
-                        decisions.append(
-                            (idx, legacy_username, "skip", "exists (no --update)")
-                        )
+                        decisions.append((idx, legacy_username, "skip", "exists (no --update)"))
                         if verbose:
-                            self.stdout.write(
-                                f"SKIP[{idx}] {legacy_username}: mapping exists (no --update)"
-                            )
+                            self.stdout.write(f"SKIP[{idx}] {legacy_username}: mapping exists (no --update)")
                     else:
                         existing = existing_map[legacy_username]
                         changed_fields = []
@@ -159,13 +144,9 @@ class Command(BaseCommand):
                                 )
                         else:
                             skipped += 1
-                            decisions.append(
-                                (idx, legacy_username, "skip", "no changes")
-                            )
+                            decisions.append((idx, legacy_username, "skip", "no changes"))
                             if verbose:
-                                self.stdout.write(
-                                    f"SKIP[{idx}] {legacy_username}: no changes (identical)"
-                                )
+                                self.stdout.write(f"SKIP[{idx}] {legacy_username}: no changes (identical)")
                 else:
                     decisions.append(
                         (
@@ -187,13 +168,9 @@ class Command(BaseCommand):
                 existing = existing_map[legacy_username]
                 if not do_update:
                     skipped += 1
-                    decisions.append(
-                        (idx, legacy_username, "skip", "exists (no --update)")
-                    )
+                    decisions.append((idx, legacy_username, "skip", "exists (no --update)"))
                     if verbose:
-                        self.stdout.write(
-                            f"SKIP[{idx}] {legacy_username}: mapping exists (no --update)"
-                        )
+                        self.stdout.write(f"SKIP[{idx}] {legacy_username}: mapping exists (no --update)")
                     continue
                 # check for changes
                 changed_fields = []
@@ -211,9 +188,7 @@ class Command(BaseCommand):
                     changed_fields.append("emailuser_id")
                 if changed_fields:
                     to_update.append(existing)
-                    decisions.append(
-                        (idx, legacy_username, "update", ", ".join(changed_fields))
-                    )
+                    decisions.append((idx, legacy_username, "update", ", ".join(changed_fields)))
                     if verbose:
                         self.stdout.write(
                             f"UPDATE[{idx}] {legacy_username}: queued update fields {', '.join(changed_fields)}"
@@ -222,9 +197,7 @@ class Command(BaseCommand):
                     skipped += 1
                     decisions.append((idx, legacy_username, "skip", "no changes"))
                     if verbose:
-                        self.stdout.write(
-                            f"SKIP[{idx}] {legacy_username}: no changes (identical)"
-                        )
+                        self.stdout.write(f"SKIP[{idx}] {legacy_username}: no changes (identical)")
             else:
                 # create new instance (not saved yet)
                 inst = LegacyUsernameEmailuserMapping(
@@ -255,9 +228,7 @@ class Command(BaseCommand):
                 created = 0
                 updated = 0
                 if to_create:
-                    LegacyUsernameEmailuserMapping.objects.bulk_create(
-                        to_create, batch_size=500
-                    )
+                    LegacyUsernameEmailuserMapping.objects.bulk_create(to_create, batch_size=500)
                     created = len(to_create)
                 if to_update:
                     LegacyUsernameEmailuserMapping.objects.bulk_update(
@@ -273,6 +244,4 @@ class Command(BaseCommand):
             self.stderr.write(f"Failed to apply batched writes: {exc}")
             errors += 1
 
-        self.stdout.write(
-            f"created={created} updated={updated} skipped={skipped} errors={errors} (dry_run={dry_run})"
-        )
+        self.stdout.write(f"created={created} updated={updated} skipped={skipped} errors={errors} (dry_run={dry_run})")

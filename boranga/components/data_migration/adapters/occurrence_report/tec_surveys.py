@@ -19,22 +19,12 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
         "internal_application": [static_value_factory(True)],
         "submitter": [TEC_USER_LOOKUP, "required"],
         # Copy submitter to other user fields
-        "assigned_approver_id": [
-            dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
-        ],
-        "assigned_officer_id": [
-            dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
-        ],
-        "approved_by": [
-            dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
-        ],
+        "assigned_approver_id": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
+        "assigned_officer_id": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
+        "approved_by": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
         # Also populate SubmitterInformation with the same user
-        "SubmitterInformation__email_user": [
-            dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
-        ],
-        "processing_status": [
-            lambda val, ctx: _result("Approved") if not val else _result(val)
-        ],
+        "SubmitterInformation__email_user": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
+        "processing_status": [lambda val, ctx: _result("Approved") if not val else _result(val)],
         "customer_status": [
             dependent_from_column_factory(
                 "processing_status",

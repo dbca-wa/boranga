@@ -79,12 +79,7 @@ def build_pg_connection():
         if val is None:
             return None
         s = str(val)
-        if (
-            not any(c.isspace() for c in s)
-            and "'" not in s
-            and '"' not in s
-            and "\\" not in s
-        ):
+        if not any(c.isspace() for c in s) and "'" not in s and '"' not in s and "\\" not in s:
             return s
         s = s.replace("\\", "\\\\").replace("'", "\\'")
         return f"'{s}'"
@@ -134,8 +129,7 @@ def find_geometry_column(conn, schema, table):
     # conn is a Django connection object
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT f_geometry_column FROM geometry_columns "
-            "WHERE f_table_schema=%s AND f_table_name=%s",
+            "SELECT f_geometry_column FROM geometry_columns " "WHERE f_table_schema=%s AND f_table_name=%s",
             [schema, table],
         )
         row = cursor.fetchone()

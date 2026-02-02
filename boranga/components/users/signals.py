@@ -24,9 +24,7 @@ def ocr_process_ocr_external_referee_invite(sender, user, request, **kwargs):
     """
     Check if the user logging in has an external referee invite and if so, process it.
     """
-    logger.info(
-        "user_logged_in_signal running ocr_process_external_referee_invite function"
-    )
+    logger.info("user_logged_in_signal running ocr_process_external_referee_invite function")
     logger.info("Checking if there are any external referee invites for user: %s", user)
     if not OCRExternalRefereeInvite.objects.filter(
         archived=False, email__iexact=user.email, datetime_first_logged_in__isnull=True
@@ -74,9 +72,7 @@ def cs_process_cs_external_referee_invite(sender, user, request, **kwargs):
     """
     Check if the user logging in has an external referee invite and if so, process it.
     """
-    logger.info(
-        "user_logged_in_signal running cs_process_external_referee_invite function"
-    )
+    logger.info("user_logged_in_signal running cs_process_external_referee_invite function")
     logger.info("Checking if there are any external referee invites for user: %s", user)
     if not CSExternalRefereeInvite.objects.filter(
         archived=False, email__iexact=user.email, datetime_first_logged_in__isnull=True
@@ -125,13 +121,9 @@ def process_external_referee_invites(sender, user, request, **kwargs):
 
 
 def add_external_user_to_external_contributors_group(sender, user, request, **kwargs):
-    logger.info(
-        "user_logged_in_signal running add_external_user_to_external_contributors_group function"
-    )
+    logger.info("user_logged_in_signal running add_external_user_to_external_contributors_group function")
 
-    external_contributor_group = SystemGroup.objects.get(
-        name=settings.GROUP_NAME_EXTERNAL_CONTRIBUTOR
-    )
+    external_contributor_group = SystemGroup.objects.get(name=settings.GROUP_NAME_EXTERNAL_CONTRIBUTOR)
 
     # Only add external users to the external contributors group
     # The check here has to check if the user is an internal contributor as well because
@@ -139,12 +131,8 @@ def add_external_user_to_external_contributors_group(sender, user, request, **kw
     # in settings.py
     if is_internal(request) or is_internal_contributor(request):
         # Check if the internal user is in the external contributors group and remove them if so
-        if SystemGroupPermission.objects.filter(
-            system_group=external_contributor_group, emailuser=user
-        ).exists():
-            SystemGroupPermission.objects.filter(
-                system_group=external_contributor_group, emailuser=user
-            ).delete()
+        if SystemGroupPermission.objects.filter(system_group=external_contributor_group, emailuser=user).exists():
+            SystemGroupPermission.objects.filter(system_group=external_contributor_group, emailuser=user).delete()
             external_contributor_group.save()
         return
 
@@ -157,9 +145,7 @@ def add_external_user_to_external_contributors_group(sender, user, request, **kw
 
     # If user is already in the external contributors group, don't add them again
 
-    if SystemGroupPermission.objects.filter(
-        system_group=external_contributor_group, emailuser=user
-    ).exists():
+    if SystemGroupPermission.objects.filter(system_group=external_contributor_group, emailuser=user).exists():
         return
 
     # Add user to the external contributors group
@@ -167,9 +153,7 @@ def add_external_user_to_external_contributors_group(sender, user, request, **kw
         f"User with email {user} has logged in for the first time. Adding them to the external contributors group."
     )
 
-    SystemGroupPermission.objects.create(
-        system_group=external_contributor_group, emailuser=user
-    )
+    SystemGroupPermission.objects.create(system_group=external_contributor_group, emailuser=user)
     # Have to save the group to flush the member cache
     external_contributor_group.save()
 

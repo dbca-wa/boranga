@@ -25,9 +25,7 @@ class ReferralCanNotSend(PermissionDenied):
 
 
 class ProposalReferralCannotBeSent(PermissionDenied):
-    default_detail = (
-        "Referrals can only be sent if it is in the right processing status"
-    )
+    default_detail = "Referrals can only be sent if it is in the right processing status"
     default_code = "proposal_referral_cannot_be_sent"
 
 
@@ -71,9 +69,7 @@ def custom_exception_handler(exc, context):
     """
 
     # Django rest framework errors are already in json format
-    if isinstance(
-        exc, (serializers.ValidationError, Http404, NotAuthenticated, PermissionDenied)
-    ):
+    if isinstance(exc, serializers.ValidationError | Http404 | NotAuthenticated | PermissionDenied):
         pass
 
     # handle django validation errors

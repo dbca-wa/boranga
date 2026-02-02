@@ -278,18 +278,11 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
 
             filter_community_name = request.GET.get("filter_community_name")
             if filter_community_name and not filter_community_name.lower() == "all":
-                queryset = queryset.filter(
-                    community__taxonomy__id=filter_community_name
-                )
+                queryset = queryset.filter(community__taxonomy__id=filter_community_name)
 
             filter_community_common_id = request.GET.get("filter_community_common_id")
-            if (
-                filter_community_common_id
-                and not filter_community_common_id.lower() == "all"
-            ):
-                queryset = queryset.filter(
-                    community__taxonomy__id=filter_community_common_id
-                )
+            if filter_community_common_id and not filter_community_common_id.lower() == "all":
+                queryset = queryset.filter(community__taxonomy__id=filter_community_common_id)
 
             filter_status = request.GET.get("filter_status")
             if filter_status and not filter_status.lower() == "all":
@@ -312,14 +305,10 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
             filter_submitted_from_date = get_date("filter_submitted_from_date")
             filter_submitted_to_date = get_date("filter_submitted_to_date")
             if filter_submitted_to_date:
-                filter_submitted_to_date = datetime.combine(
-                    filter_submitted_to_date, time.max
-                )
+                filter_submitted_to_date = datetime.combine(filter_submitted_to_date, time.max)
 
             if filter_submitted_from_date and not filter_submitted_to_date:
-                queryset = queryset.filter(
-                    lodgement_date__gte=filter_submitted_from_date
-                )
+                queryset = queryset.filter(lodgement_date__gte=filter_submitted_from_date)
 
             if filter_submitted_from_date and filter_submitted_to_date:
                 queryset = queryset.filter(
@@ -332,19 +321,13 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
             if filter_submitted_to_date and not filter_submitted_from_date:
                 queryset = queryset.filter(lodgement_date__lte=filter_submitted_to_date)
 
-            filter_from_observation_date = request.GET.get(
-                "filter_observation_from_date"
-            )
+            filter_from_observation_date = request.GET.get("filter_observation_from_date")
             filter_to_observation_date = request.GET.get("filter_observation_to_date")
 
             if filter_from_observation_date:
-                queryset = queryset.filter(
-                    observation_date__gte=filter_from_observation_date
-                )
+                queryset = queryset.filter(observation_date__gte=filter_from_observation_date)
             if filter_to_observation_date:
-                queryset = queryset.filter(
-                    observation_date__lte=filter_to_observation_date
-                )
+                queryset = queryset.filter(observation_date__lte=filter_to_observation_date)
 
         else:
             total_count = queryset.count()
@@ -364,10 +347,7 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
                 queryset = queryset.filter(community=filter_community_name)
 
             filter_application_status = request.GET.get("filter_application_status")
-            if (
-                filter_application_status
-                and not filter_application_status.lower() == "all"
-            ):
+            if filter_application_status and not filter_application_status.lower() == "all":
                 queryset = queryset.filter(customer_status=filter_application_status)
 
         fields = self.get_fields(request)
@@ -383,8 +363,7 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
                 .values_list("occurrence_report__id", flat=True)
             )
             search_queryset = queryset.filter(
-                Q(submitter_information__name__icontains=search_text)
-                | Q(id__in=observer_ids)
+                Q(submitter_information__name__icontains=search_text) | Q(id__in=observer_ids)
             )
 
         queryset = super().filter_queryset(request, queryset, view)
@@ -417,13 +396,8 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset()
         if is_internal(self.request) or self.request.user.is_superuser:
             return qs
-        elif is_occurrence_report_referee(self.request) and is_contributor(
-            self.request
-        ):
-            return qs.filter(
-                Q(submitter=self.request.user.id)
-                | Q(referrals__referral=self.request.user.id)
-            )
+        elif is_occurrence_report_referee(self.request) and is_contributor(self.request):
+            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id))
         elif is_occurrence_report_referee(self.request):
             qs = qs.filter(referrals__referral=self.request.user.id)
         elif is_contributor(self.request):
@@ -436,9 +410,7 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
             "GET",
         ],
         detail=False,
-        permission_classes=[
-            OccurrenceReportPermission | ExternalOccurrenceReportPermission
-        ],
+        permission_classes=[OccurrenceReportPermission | ExternalOccurrenceReportPermission],
     )
     def occurrence_report_external(self, request, *args, **kwargs):
         qs = self.get_queryset()
@@ -446,9 +418,7 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         qs = self.filter_queryset(qs)
 
         result_page = self.paginator.paginate_queryset(qs, request)
-        serializer = ListOccurrenceReportSerializer(
-            result_page, context={"request": request}, many=True
-        )
+        serializer = ListOccurrenceReportSerializer(result_page, context={"request": request}, many=True)
         return self.paginator.get_paginated_response(serializer.data)
 
     @list_route(
@@ -462,9 +432,7 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         qs = self.filter_queryset(qs)
 
         result_page = self.paginator.paginate_queryset(qs, request)
-        serializer = ListInternalOccurrenceReportSerializer(
-            result_page, context={"request": request}, many=True
-        )
+        serializer = ListInternalOccurrenceReportSerializer(result_page, context={"request": request}, many=True)
         return self.paginator.get_paginated_response(serializer.data)
 
     @list_route(
@@ -483,9 +451,7 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         qs = self.filter_queryset(qs)
 
         result_page = self.paginator.paginate_queryset(qs, request)
-        serializer = DTOccurrenceReportReferralSerializer(
-            result_page, context={"request": request}, many=True
-        )
+        serializer = DTOccurrenceReportReferralSerializer(result_page, context={"request": request}, many=True)
         return self.paginator.get_paginated_response(serializer.data)
 
 
@@ -497,12 +463,8 @@ class OccurrenceReportViewSet(
     queryset = OccurrenceReport.objects.all()
     serializer_class = OccurrenceReportSerializer
     lookup_field = "id"
-    permission_classes = [
-        OccurrenceReportPermission | ExternalOccurrenceReportPermission
-    ]
-    UNLOCKED_EDITING_WINDOW_MINUTES = (
-        settings.UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES
-    )
+    permission_classes = [OccurrenceReportPermission | ExternalOccurrenceReportPermission]
+    UNLOCKED_EDITING_WINDOW_MINUTES = settings.UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES
 
     def get_queryset(self):
         request = self.request
@@ -511,9 +473,7 @@ class OccurrenceReportViewSet(
         if is_internal(self.request) or self.request.user.is_superuser:
             return qs
         elif is_contributor(request) and is_occurrence_report_referee(request):
-            qs = OccurrenceReport.objects.filter(
-                Q(submitter=request.user.id) | Q(referrals__referral=request.user.id)
-            )
+            qs = OccurrenceReport.objects.filter(Q(submitter=request.user.id) | Q(referrals__referral=request.user.id))
         elif is_contributor(request):
             qs = OccurrenceReport.objects.filter(submitter=request.user.id)
         elif is_occurrence_report_referee(request):
@@ -587,15 +547,11 @@ class OccurrenceReportViewSet(
 
         # Log the creation of the new occurrence report
         new_instance.log_user_action(
-            OccurrenceReportUserAction.ACTION_CREATE_OCCURRENCE_REPORT.format(
-                new_instance.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_CREATE_OCCURRENCE_REPORT.format(new_instance.occurrence_report_number),
             request,
         )
         request.user.log_user_action(
-            OccurrenceReportUserAction.ACTION_CREATE_OCCURRENCE_REPORT.format(
-                new_instance.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_CREATE_OCCURRENCE_REPORT.format(new_instance.occurrence_report_number),
             request,
         )
 
@@ -669,9 +625,7 @@ class OccurrenceReportViewSet(
             raise serializers.ValidationError("Unit is required")
 
         try:
-            res_json = spatially_process_geometry(
-                json.loads(geometry), operation, parameters, unit
-            )
+            res_json = spatially_process_geometry(json.loads(geometry), operation, parameters, unit)
         except Exception as e:
             raise e
         else:
@@ -697,14 +651,9 @@ class OccurrenceReportViewSet(
             logger.error(f"Occurrence Report with id {id} not found")
         else:
             ocr_geometries = qs.ocr_geometry.all().exclude(**{"geometry": None})
-            epsg_codes = [
-                str(g.srid)
-                for g in ocr_geometries.values_list("geometry", flat=True).distinct()
-            ]
+            epsg_codes = [str(g.srid) for g in ocr_geometries.values_list("geometry", flat=True).distinct()]
             # Add the srids of the original geometries to epsg_codes
-            original_geometry_srids = [
-                str(g.original_geometry_srid) for g in ocr_geometries
-            ]
+            original_geometry_srids = [str(g.original_geometry_srid) for g in ocr_geometries]
             epsg_codes += [g for g in original_geometry_srids if g.isnumeric()]
             epsg_codes = list(set(epsg_codes))
             datum_list = search_datums("", codes=epsg_codes)
@@ -854,7 +803,6 @@ class OccurrenceReportViewSet(
         permission_classes=[OccurrenceReportPermission],
     )
     def section_values(self, request, *args, **kwargs):
-
         section = request.GET.get("section")
         ocr = self.get_object()
         res_json = {}
@@ -864,11 +812,7 @@ class OccurrenceReportViewSet(
             section_fields = section_value._meta.get_fields()
 
             for i in section_fields:
-                if (
-                    i.name == "id"
-                    or i.name == "occurrence_report"
-                    or isinstance(i, models.ManyToOneRel)
-                ):
+                if i.name == "id" or i.name == "occurrence_report" or isinstance(i, models.ManyToOneRel):
                     continue
 
                 # ensure many to many fields are assigned an appropriate __str__
@@ -886,12 +830,8 @@ class OccurrenceReportViewSet(
                     if sub_section_value is not None:
                         # For models that inherit from ArchivableModel or OrderedModel,
                         # only show the 'name' field to avoid cluttering with 'order' and 'archived'
-                        is_archivable_or_ordered = isinstance(
-                            sub_section_value, (ArchivableModel, OrderedModel)
-                        )
-                        if is_archivable_or_ordered and hasattr(
-                            sub_section_value, "name"
-                        ):
+                        is_archivable_or_ordered = isinstance(sub_section_value, ArchivableModel | OrderedModel)
+                        if is_archivable_or_ordered and hasattr(sub_section_value, "name"):
                             res_json[i.name] = str(sub_section_value.name)
                         else:
                             res_json[i.name] = {}
@@ -904,9 +844,7 @@ class OccurrenceReportViewSet(
                                     and not isinstance(j, models.ManyToManyRel)
                                     and getattr(sub_section_value, j.name) is not None
                                 ):
-                                    res_json[i.name][j.name] = str(
-                                        getattr(sub_section_value, j.name)
-                                    )
+                                    res_json[i.name][j.name] = str(getattr(sub_section_value, j.name))
                             # if the num sub section has only one value, assign as section
                             if len(res_json[i.name]) == 1:
                                 res_json[i.name] = list(res_json[i.name].values())[0]
@@ -937,16 +875,13 @@ class OccurrenceReportViewSet(
                 elif getattr(section_value, i.name) is not None:
                     res_json[i.name] = str(getattr(section_value, i.name))
                 else:
-                    logger.warning(
-                        f"Field {i.name} of section {section} is None for Occurrence Report {ocr.id}"
-                    )
+                    logger.warning(f"Field {i.name} of section {section} is None for Occurrence Report {ocr.id}")
 
         res_json = json.dumps(res_json)
         return HttpResponse(res_json, content_type="application/json")
 
     @detail_route(methods=["post"], detail=True)
     def add_related_species(self, request, *args, **kwargs):
-
         instance = self.get_object()
         if instance.associated_species:
             related_species = instance.associated_species.related_species
@@ -969,16 +904,12 @@ class OccurrenceReportViewSet(
                 f"Occurrence Report: {instance.occurrence_report_number}"
             )
 
-        associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.create(
-            taxonomy=taxon
-        )
+        associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.create(taxonomy=taxon)
         related_species.add(associated_species_taxonomy)
 
         instance.save(version_user=request.user)
 
-        serializer = AssociatedSpeciesTaxonomySerializer(
-            related_species, many=True, context={"request": request}
-        )
+        serializer = AssociatedSpeciesTaxonomySerializer(related_species, many=True, context={"request": request})
 
         if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
@@ -1001,13 +932,9 @@ class OccurrenceReportViewSet(
         related_species_id = request.data.get("related_species_id")
 
         try:
-            associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.get(
-                id=related_species_id
-            )
+            associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.get(id=related_species_id)
         except AssociatedSpeciesTaxonomy.DoesNotExist:
-            raise serializers.ValidationError(
-                "AssociatedSpeciesTaxonomy does not exist"
-            )
+            raise serializers.ValidationError("AssociatedSpeciesTaxonomy does not exist")
 
         if associated_species_taxonomy in related_species.all():
             related_species.remove(associated_species_taxonomy)
@@ -1016,9 +943,7 @@ class OccurrenceReportViewSet(
 
         instance.save(version_user=request.user)
 
-        serializer = AssociatedSpeciesTaxonomySerializer(
-            related_species, many=True, context={"request": request}
-        )
+        serializer = AssociatedSpeciesTaxonomySerializer(related_species, many=True, context={"request": request})
 
         if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
@@ -1028,13 +953,8 @@ class OccurrenceReportViewSet(
     @detail_route(methods=["get"], detail=True)
     def get_related_species(self, request, *args, **kwargs):
         instance = self.get_object()
-        if (
-            not hasattr(instance, "associated_species")
-            or not instance.associated_species
-        ):
-            logger.warning(
-                f"Occurrence Report {instance.id} does not have associated species returning empty list."
-            )
+        if not hasattr(instance, "associated_species") or not instance.associated_species:
+            logger.warning(f"Occurrence Report {instance.id} does not have associated species returning empty list.")
             return Response([])
         serializer = AssociatedSpeciesTaxonomySerializer(
             instance.associated_species.related_species.all(),
@@ -1047,16 +967,12 @@ class OccurrenceReportViewSet(
             "GET",
         ],
         detail=False,
-        permission_classes=[
-            OccurrenceReportPermission | ExternalOccurrenceReportPermission
-        ],
+        permission_classes=[OccurrenceReportPermission | ExternalOccurrenceReportPermission],
     )
     def observation_times(self, request, *args, **kwargs):
         """used for Occurrence Report external form"""
         qs = ObservationTime.objects.active()
-        serializer = ObservationTimeSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = ObservationTimeSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     # used for Occurrence Report Observation external form
@@ -1070,66 +986,32 @@ class OccurrenceReportViewSet(
         group_type = request.GET.get("group_type", None)
 
         if not group_type:
-            raise serializers.ValidationError(
-                "Group Type is required to return correct list of values"
-            )
+            raise serializers.ValidationError("Group Type is required to return correct list of values")
 
-        observation_method_list = list(
-            ObservationMethod.objects.active().values("id", "name")
-        )
-        area_assessment_list = list(
-            AreaAssessment.objects.active().values("id", "name")
-        )
-        plant_count_method_list = list(
-            PlantCountMethod.objects.active().values("id", "name")
-        )
-        plant_count_accuracy_list = list(
-            PlantCountAccuracy.objects.active().values("id", "name")
-        )
-        plant_condition_list = list(
-            PlantCondition.objects.active().values("id", "name")
-        )
-        counted_subject_list = list(
-            CountedSubject.objects.active().values("id", "name")
-        )
-        primary_detection_method_list = list(
-            PrimaryDetectionMethod.objects.all().values("id", "name", "archived")
-        )
+        observation_method_list = list(ObservationMethod.objects.active().values("id", "name"))
+        area_assessment_list = list(AreaAssessment.objects.active().values("id", "name"))
+        plant_count_method_list = list(PlantCountMethod.objects.active().values("id", "name"))
+        plant_count_accuracy_list = list(PlantCountAccuracy.objects.active().values("id", "name"))
+        plant_condition_list = list(PlantCondition.objects.active().values("id", "name"))
+        counted_subject_list = list(CountedSubject.objects.active().values("id", "name"))
+        primary_detection_method_list = list(PrimaryDetectionMethod.objects.all().values("id", "name", "archived"))
         # Add 'disabled' key for archived items
         for item in primary_detection_method_list:
             item["disabled"] = item.pop("archived", False)
-        secondary_sign_list = list(
-            SecondarySign.objects.all().values("id", "name", "archived")
-        )
+        secondary_sign_list = list(SecondarySign.objects.all().values("id", "name", "archived"))
         for item in secondary_sign_list:
             item["disabled"] = item.pop("archived", False)
-        animal_behaviour_list = list(
-            AnimalBehaviour.objects.active().values("id", "name")
-        )
-        reproductive_state_list = list(
-            ReproductiveState.objects.all().values("id", "name", "archived")
-        )
+        animal_behaviour_list = list(AnimalBehaviour.objects.active().values("id", "name"))
+        reproductive_state_list = list(ReproductiveState.objects.all().values("id", "name", "archived"))
         # Add 'disabled' key for archived items
         for item in reproductive_state_list:
             item["disabled"] = item.pop("archived", False)
-        death_injury_reason_list = list(
-            DeathReason.objects.active().values("id", "name")
-        )
+        death_injury_reason_list = list(DeathReason.objects.active().values("id", "name"))
         animal_health_list = list(AnimalHealth.objects.active().values("id", "name"))
-        identification_certainty_list = list(
-            IdentificationCertainty.objects.active().values("id", "name")
-        )
-        sample_type_list = list(
-            SampleType.objects.active()
-            .filter(group_type__name=group_type)
-            .values("id", "name")
-        )
+        identification_certainty_list = list(IdentificationCertainty.objects.active().values("id", "name"))
+        sample_type_list = list(SampleType.objects.active().filter(group_type__name=group_type).values("id", "name"))
         sample_dest_list = list(SampleDestination.objects.active().values("id", "name"))
-        permit_type_list = list(
-            PermitType.objects.active()
-            .filter(group_type__name=group_type)
-            .values("id", "name")
-        )
+        permit_type_list = list(PermitType.objects.active().filter(group_type__name=group_type).values("id", "name"))
 
         res_json = {
             "animal_behaviour_list": animal_behaviour_list,
@@ -1221,30 +1103,20 @@ class OccurrenceReportViewSet(
     def animal_observation_list_of_values(self, request, *args, **kwargs):
         """used for Occurrence Report external form"""
 
-        primary_detection_method_list = list(
-            PrimaryDetectionMethod.objects.all().values("id", "name", "archived")
-        )
+        primary_detection_method_list = list(PrimaryDetectionMethod.objects.all().values("id", "name", "archived"))
         # Add 'disabled' key for archived items
         for item in primary_detection_method_list:
             item["disabled"] = item.pop("archived", False)
 
-        secondary_sign_list = list(
-            SecondarySign.objects.all().values("id", "name", "archived")
-        )
+        secondary_sign_list = list(SecondarySign.objects.all().values("id", "name", "archived"))
         for item in secondary_sign_list:
             item["disabled"] = item.pop("archived", False)
-        animal_behaviour_list = list(
-            AnimalBehaviour.objects.active().values("id", "name")
-        )
-        reproductive_state_list = list(
-            ReproductiveState.objects.all().values("id", "name", "archived")
-        )
+        animal_behaviour_list = list(AnimalBehaviour.objects.active().values("id", "name"))
+        reproductive_state_list = list(ReproductiveState.objects.all().values("id", "name", "archived"))
         # Add 'disabled' key for archived items
         for item in reproductive_state_list:
             item["disabled"] = item.pop("archived", False)
-        death_injury_reason_list = list(
-            DeathReason.objects.active().values("id", "name")
-        )
+        death_injury_reason_list = list(DeathReason.objects.active().values("id", "name"))
         animal_health_list = list(AnimalHealth.objects.active().values("id", "name"))
 
         res_json = {
@@ -1262,9 +1134,7 @@ class OccurrenceReportViewSet(
         instance = self.get_object()
         request = self.request
         if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
-            serializer = BackToAssessorSerializer(
-                data={"reason": "Change made after unlock"}
-            )
+            serializer = BackToAssessorSerializer(data={"reason": "Change made after unlock"})
             serializer.is_valid(raise_exception=True)
             instance.back_to_assessor(request, serializer.validated_data)
 
@@ -1303,9 +1173,7 @@ class OccurrenceReportViewSet(
     def update_location_details(self, request, *args, **kwargs):
         ocr_instance = self.get_object()
 
-        location_instance, created = OCRLocation.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        location_instance, created = OCRLocation.objects.get_or_create(occurrence_report=ocr_instance)
 
         # ocr geometry data to save seperately
         geometry_data = request.data.get("ocr_geometry")
@@ -1313,16 +1181,11 @@ class OccurrenceReportViewSet(
             save_geometry(request, ocr_instance, geometry_data, "occurrence_report")
 
         location_data = request.data.get("location")
-        serializer = SaveOCRLocationSerializer(
-            location_instance, data=location_data, context={"request": request}
-        )
+        serializer = SaveOCRLocationSerializer(location_instance, data=location_data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRLocationSerializer(new_instance).data)
@@ -1336,9 +1199,7 @@ class OccurrenceReportViewSet(
     def update_habitat_composition_details(self, request, *args, **kwargs):
         ocr_instance = self.get_object()
 
-        habitat_instance, created = OCRHabitatComposition.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        habitat_instance, created = OCRHabitatComposition.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the habitat composition data thats been sent from front end
         serializer = SaveOCRHabitatCompositionSerializer(
             habitat_instance, data=request.data, context={"request": request}
@@ -1346,10 +1207,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRHabitatCompositionSerializer(new_instance).data)
@@ -1361,11 +1219,8 @@ class OccurrenceReportViewSet(
         detail=True,
     )
     def update_habitat_condition_details(self, request, *args, **kwargs):
-
         ocr_instance = self.get_object()
-        habitat_instance, created = OCRHabitatCondition.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        habitat_instance, created = OCRHabitatCondition.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the habitat condition data thats been sent from front end
         serializer = SaveOCRHabitatConditionSerializer(
             habitat_instance, data=request.data, context={"request": request}
@@ -1373,10 +1228,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRHabitatConditionSerializer(new_instance).data)
@@ -1388,11 +1240,8 @@ class OccurrenceReportViewSet(
         detail=True,
     )
     def update_vegetation_structure(self, request, *args, **kwargs):
-
         ocr_instance = self.get_object()
-        vegetation_instance, created = OCRVegetationStructure.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        vegetation_instance, created = OCRVegetationStructure.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the habitat condition data thats been sent from front end
         serializer = SaveOCRVegetationStructureSerializer(
             vegetation_instance, data=request.data, context={"request": request}
@@ -1400,10 +1249,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRVegetationStructureSerializer(new_instance).data)
@@ -1415,22 +1261,14 @@ class OccurrenceReportViewSet(
         detail=True,
     )
     def update_fire_history_details(self, request, *args, **kwargs):
-
         ocr_instance = self.get_object()
-        fire_instance, created = OCRFireHistory.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        fire_instance, created = OCRFireHistory.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the habitat composition data thats been sent from front end
-        serializer = SaveOCRFireHistorySerializer(
-            fire_instance, data=request.data, context={"request": request}
-        )
+        serializer = SaveOCRFireHistorySerializer(fire_instance, data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRFireHistorySerializer(new_instance).data)
@@ -1442,11 +1280,8 @@ class OccurrenceReportViewSet(
         detail=True,
     )
     def update_associated_species_details(self, request, *args, **kwargs):
-
         ocr_instance = self.get_object()
-        assoc_species_instance, created = OCRAssociatedSpecies.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        assoc_species_instance, created = OCRAssociatedSpecies.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the habitat composition data thats been sent from front end
         serializer = SaveOCRAssociatedSpeciesSerializer(
             assoc_species_instance, data=request.data, context={"request": request}
@@ -1454,10 +1289,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRAssociatedSpeciesSerializer(new_instance).data)
@@ -1469,11 +1301,8 @@ class OccurrenceReportViewSet(
         detail=True,
     )
     def update_observation_details(self, request, *args, **kwargs):
-
         ocr_instance = self.get_object()
-        obs_det_instance, created = OCRObservationDetail.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        obs_det_instance, created = OCRObservationDetail.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the observation detail data thats been sent from front end
         serializer = SaveOCRObservationDetailSerializer(
             obs_det_instance, data=request.data, context={"request": request}
@@ -1481,10 +1310,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRObservationDetailSerializer(new_instance).data)
@@ -1496,22 +1322,14 @@ class OccurrenceReportViewSet(
         detail=True,
     )
     def update_plant_count_details(self, request, *args, **kwargs):
-
         ocr_instance = self.get_object()
-        plant_count_instance, created = OCRPlantCount.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        plant_count_instance, created = OCRPlantCount.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the plant count data thats been sent from front end
-        serializer = SaveOCRPlantCountSerializer(
-            plant_count_instance, data=request.data, context={"request": request}
-        )
+        serializer = SaveOCRPlantCountSerializer(plant_count_instance, data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
         return Response(OCRPlantCountSerializer(new_instance).data)
 
@@ -1522,11 +1340,8 @@ class OccurrenceReportViewSet(
         detail=True,
     )
     def update_animal_observation_details(self, request, *args, **kwargs):
-
         ocr_instance = self.get_object()
-        animal_obs_instance, created = OCRAnimalObservation.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        animal_obs_instance, created = OCRAnimalObservation.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the animal obs data thats been sent from front end
         serializer = SaveOCRAnimalObservationSerializer(
             animal_obs_instance, data=request.data, context={"request": request}
@@ -1534,10 +1349,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRAnimalObservationSerializer(new_instance).data)
@@ -1549,11 +1361,8 @@ class OccurrenceReportViewSet(
         detail=True,
     )
     def update_identification_details(self, request, *args, **kwargs):
-
         ocr_instance = self.get_object()
-        identification_instance, created = OCRIdentification.objects.get_or_create(
-            occurrence_report=ocr_instance
-        )
+        identification_instance, created = OCRIdentification.objects.get_or_create(occurrence_report=ocr_instance)
         # the request.data is only the identification data thats been sent from front end
         serializer = SaveOCRIdentificationSerializer(
             identification_instance, data=request.data, context={"request": request}
@@ -1561,10 +1370,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if (
-            ocr_instance.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor()
 
         return Response(OCRIdentificationSerializer(new_instance).data)
@@ -1579,15 +1385,9 @@ class OccurrenceReportViewSet(
     def observer_details(self, request, *args, **kwargs):
         instance = self.get_object()
         qs = instance.observer_detail.all()
-        serializer = OCRObserverDetailLimitedSerializer(
-            qs, many=True, context={"request": request}
-        )
-        if is_internal(request) or (
-            (is_contributor(request)) and instance.submitter == request.user.id
-        ):
-            serializer = OCRObserverDetailSerializer(
-                qs, many=True, context={"request": request}
-            )
+        serializer = OCRObserverDetailLimitedSerializer(qs, many=True, context={"request": request})
+        if is_internal(request) or ((is_contributor(request)) and instance.submitter == request.user.id):
+            serializer = OCRObserverDetailSerializer(qs, many=True, context={"request": request})
 
         return Response(serializer.data)
 
@@ -1595,9 +1395,7 @@ class OccurrenceReportViewSet(
     def list_for_map(self, request, *args, **kwargs):
         """Returns the proposals for the map"""
         occurrence_report_ids = [
-            int(id)
-            for id in request.query_params.get("proposal_ids", "").split(",")
-            if id.lstrip("-").isnumeric()
+            int(id) for id in request.query_params.get("proposal_ids", "").split(",") if id.lstrip("-").isnumeric()
         ]
 
         if len(occurrence_report_ids) == 0:
@@ -1610,30 +1408,21 @@ class OccurrenceReportViewSet(
             .prefetch_related("ocr_geometry")
         )
 
-        serializer = ListOCRReportMinimalSerializer(
-            qs, context={"request": request}, many=True
-        )
+        serializer = ListOCRReportMinimalSerializer(qs, context={"request": request}, many=True)
         return Response(serializer.data)
 
     @detail_route(methods=["post"], detail=True)
     @renderer_classes((JSONRenderer,))
     @transaction.atomic
     def draft(self, request, *args, **kwargs):
-
         instance = self.get_object()
         # request_data = request.data
-        proposal_data = (
-            request.data.get("proposal") if request.data.get("proposal") else {}
-        )
+        proposal_data = request.data.get("proposal") if request.data.get("proposal") else {}
         # request.data['submitter'] = u'{}'.format(request.user.id)
         if "submitter" in proposal_data and proposal_data["submitter"]:
-            request.data.get("proposal")["submitter"] = "{}".format(
-                proposal_data["submitter"].get("id")
-            )
+            request.data.get("proposal")["submitter"] = "{}".format(proposal_data["submitter"].get("id"))
         if proposal_data.get("habitat_composition"):
-            habitat_instance, created = OCRHabitatComposition.objects.get_or_create(
-                occurrence_report=instance
-            )
+            habitat_instance, created = OCRHabitatComposition.objects.get_or_create(occurrence_report=instance)
             serializer = SaveOCRHabitatCompositionSerializer(
                 habitat_instance, data=proposal_data.get("habitat_composition")
             )
@@ -1641,9 +1430,7 @@ class OccurrenceReportViewSet(
             serializer.save()
 
         if proposal_data.get("habitat_condition"):
-            hab_cond_instance, created = OCRHabitatCondition.objects.get_or_create(
-                occurrence_report=instance
-            )
+            hab_cond_instance, created = OCRHabitatCondition.objects.get_or_create(occurrence_report=instance)
             serializer = SaveOCRHabitatConditionSerializer(
                 hab_cond_instance, data=proposal_data.get("habitat_condition")
             )
@@ -1651,9 +1438,7 @@ class OccurrenceReportViewSet(
             serializer.save()
 
         if proposal_data.get("vegetation_structure"):
-            veg_struct_instance, created = OCRVegetationStructure.objects.get_or_create(
-                occurrence_report=instance
-            )
+            veg_struct_instance, created = OCRVegetationStructure.objects.get_or_create(occurrence_report=instance)
             serializer = SaveOCRVegetationStructureSerializer(
                 veg_struct_instance, data=proposal_data.get("vegetation_structure")
             )
@@ -1661,19 +1446,13 @@ class OccurrenceReportViewSet(
             serializer.save()
 
         if proposal_data.get("fire_history"):
-            fire_instance, created = OCRFireHistory.objects.get_or_create(
-                occurrence_report=instance
-            )
-            serializer = SaveOCRFireHistorySerializer(
-                fire_instance, data=proposal_data.get("fire_history")
-            )
+            fire_instance, created = OCRFireHistory.objects.get_or_create(occurrence_report=instance)
+            serializer = SaveOCRFireHistorySerializer(fire_instance, data=proposal_data.get("fire_history"))
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
         if proposal_data.get("associated_species"):
-            assoc_species_instance, created = (
-                OCRAssociatedSpecies.objects.get_or_create(occurrence_report=instance)
-            )
+            assoc_species_instance, created = OCRAssociatedSpecies.objects.get_or_create(occurrence_report=instance)
             serializer = SaveOCRAssociatedSpeciesSerializer(
                 assoc_species_instance,
                 data=proposal_data.get("associated_species"),
@@ -1682,32 +1461,21 @@ class OccurrenceReportViewSet(
             serializer.save()
 
         if proposal_data.get("observation_detail"):
-            obs_det_instance, created = OCRObservationDetail.objects.get_or_create(
-                occurrence_report=instance
-            )
+            obs_det_instance, created = OCRObservationDetail.objects.get_or_create(occurrence_report=instance)
             serializer = SaveOCRObservationDetailSerializer(
                 obs_det_instance, data=proposal_data.get("observation_detail")
             )
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
-        if (
-            instance.group_type.name == GroupType.GROUP_TYPE_FLORA
-            and proposal_data.get("plant_count")
-        ):
-            plant_count_instance, created = OCRPlantCount.objects.get_or_create(
-                occurrence_report=instance
-            )
-            serializer = SaveOCRPlantCountSerializer(
-                plant_count_instance, data=proposal_data.get("plant_count")
-            )
+        if instance.group_type.name == GroupType.GROUP_TYPE_FLORA and proposal_data.get("plant_count"):
+            plant_count_instance, created = OCRPlantCount.objects.get_or_create(occurrence_report=instance)
+            serializer = SaveOCRPlantCountSerializer(plant_count_instance, data=proposal_data.get("plant_count"))
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
         if proposal_data.get("animal_observation"):
-            animal_obs_instance, created = OCRAnimalObservation.objects.get_or_create(
-                occurrence_report=instance
-            )
+            animal_obs_instance, created = OCRAnimalObservation.objects.get_or_create(occurrence_report=instance)
             serializer = SaveOCRAnimalObservationSerializer(
                 animal_obs_instance,
                 data=proposal_data.get("animal_observation"),
@@ -1716,9 +1484,7 @@ class OccurrenceReportViewSet(
             serializer.save()
 
         if proposal_data.get("identification"):
-            identification_instance, created = OCRIdentification.objects.get_or_create(
-                occurrence_report=instance
-            )
+            identification_instance, created = OCRIdentification.objects.get_or_create(occurrence_report=instance)
             serializer = SaveOCRIdentificationSerializer(
                 identification_instance,
                 data=proposal_data.get("identification"),
@@ -1727,12 +1493,8 @@ class OccurrenceReportViewSet(
             serializer.save()
 
         if proposal_data.get("location"):
-            location_instance, created = OCRLocation.objects.get_or_create(
-                occurrence_report=instance
-            )
-            serializer = SaveOCRLocationSerializer(
-                location_instance, data=proposal_data.get("location")
-            )
+            location_instance, created = OCRLocation.objects.get_or_create(occurrence_report=instance)
+            serializer = SaveOCRLocationSerializer(location_instance, data=proposal_data.get("location"))
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
@@ -1740,9 +1502,7 @@ class OccurrenceReportViewSet(
         geometry_data = proposal_data.get("ocr_geometry", None)
         if geometry_data:
             save_geometry(request, instance, geometry_data, "occurrence_report")
-        serializer = SaveOccurrenceReportSerializer(
-            instance, data=proposal_data, partial=True
-        )
+        serializer = SaveOccurrenceReportSerializer(instance, data=proposal_data, partial=True)
         serializer.is_valid(raise_exception=True)
         if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             serializer.save(no_revision=True)
@@ -1761,9 +1521,7 @@ class OccurrenceReportViewSet(
 
         # This will validate the keighery scale percentages
         habitat_condition_instance = instance.habitat_condition
-        serializer = SaveBeforeSubmitOCRHabitatConditionSerializer(
-            data=habitat_condition_instance.__dict__
-        )
+        serializer = SaveBeforeSubmitOCRHabitatConditionSerializer(data=habitat_condition_instance.__dict__)
         serializer.is_valid(raise_exception=True)
 
         ocr_proposal_submit(instance, request)
@@ -1806,7 +1564,6 @@ class OccurrenceReportViewSet(
     @renderer_classes((JSONRenderer,))
     @transaction.atomic
     def add_comms_log(self, request, *args, **kwargs):
-
         instance = self.get_object()
         mutable = request.data._mutable
         request.data._mutable = True
@@ -1852,9 +1609,7 @@ class OccurrenceReportViewSet(
                 )
 
         qs = qs.order_by("-uploaded_date")
-        serializer = OccurrenceReportDocumentSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = OccurrenceReportDocumentSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -1868,18 +1623,14 @@ class OccurrenceReportViewSet(
         qs = instance.ocr_threats.all()
         filter_backend = OCCConservationThreatFilterBackend()
         qs = filter_backend.filter_queryset(self.request, qs, self)
-        serializer = OCRConservationThreatSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = OCRConservationThreatSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
         methods=["POST"],
         detail=True,
         permission_classes=[
-            IsOccurrenceReportReferee
-            | OccurrenceReportPermission
-            | ExternalOccurrenceReportPermission
+            IsOccurrenceReportReferee | OccurrenceReportPermission | ExternalOccurrenceReportPermission
         ],
     )
     @renderer_classes((JSONRenderer,))
@@ -1916,9 +1667,7 @@ class OccurrenceReportViewSet(
     def assign_request_user(self, request, *args, **kwargs):
         instance = self.get_object()
         instance.assign_officer(request, request.user)
-        serializer = InternalOccurrenceReportSerializer(
-            instance, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -1929,7 +1678,6 @@ class OccurrenceReportViewSet(
         permission_classes=[OccurrenceReportPermission],
     )
     def assign_to(self, request, *args, **kwargs):
-
         instance = self.get_object()
         user_id = request.data.get("assessor_id", None)
         user = None
@@ -1938,13 +1686,9 @@ class OccurrenceReportViewSet(
         try:
             user = EmailUser.objects.get(id=user_id)
         except EmailUser.DoesNotExist:
-            raise serializers.ValidationError(
-                "A user with the id passed in does not exist"
-            )
+            raise serializers.ValidationError("A user with the id passed in does not exist")
         instance.assign_officer(request, user)
-        serializer = InternalOccurrenceReportSerializer(
-            instance, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -1955,12 +1699,9 @@ class OccurrenceReportViewSet(
         permission_classes=[OccurrenceReportPermission],
     )
     def unassign(self, request, *args, **kwargs):
-
         instance = self.get_object()
         instance.unassign(request)
-        serializer = InternalOccurrenceReportSerializer(
-            instance, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -1984,14 +1725,11 @@ class OccurrenceReportViewSet(
         permission_classes=[OccurrenceReportPermission],
     )
     def propose_decline(self, request, *args, **kwargs):
-
         instance = self.get_object()
         serializer = ProposeDeclineSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance.propose_decline(request, serializer.validated_data)
-        serializer = InternalOccurrenceReportSerializer(
-            instance, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -2002,7 +1740,6 @@ class OccurrenceReportViewSet(
         permission_classes=[OccurrenceReportPermission],
     )
     def decline(self, request, *args, **kwargs):
-
         instance = self.get_object()
 
         original_occ = instance.occurrence
@@ -2015,9 +1752,7 @@ class OccurrenceReportViewSet(
         if original_occ:
             original_occ.check_ocr_count_for_discard(request)
 
-        serializer = InternalOccurrenceReportSerializer(
-            instance, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -2032,9 +1767,7 @@ class OccurrenceReportViewSet(
         serializer = BackToAssessorSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance.back_to_assessor(request, serializer.validated_data)
-        serializer = InternalOccurrenceReportSerializer(
-            instance, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -2045,14 +1778,11 @@ class OccurrenceReportViewSet(
         permission_classes=[OccurrenceReportPermission],
     )
     def propose_approve(self, request, *args, **kwargs):
-
         instance = self.get_object()
         serializer = ProposeApproveSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance.propose_approve(request, serializer.validated_data)
-        serializer = InternalOccurrenceReportSerializer(
-            instance, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -2063,7 +1793,6 @@ class OccurrenceReportViewSet(
         permission_classes=[OccurrenceReportPermission],
     )
     def approve(self, request, *args, **kwargs):
-
         instance = self.get_object()
 
         original_occ = instance.occurrence
@@ -2073,20 +1802,14 @@ class OccurrenceReportViewSet(
         if original_occ and original_occ.id != instance.occurrence.id:
             original_occ.check_ocr_count_for_discard(request)
 
-        serializer = InternalOccurrenceReportSerializer(
-            instance, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     # used on referral form
-    @detail_route(
-        methods=["post"], detail=True, permission_classes=[OccurrenceReportPermission]
-    )
+    @detail_route(methods=["post"], detail=True, permission_classes=[OccurrenceReportPermission])
     def send_referral(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SendReferralSerializer(
-            data=request.data, context={"request": request}
-        )
+        serializer = SendReferralSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         instance.send_referral(
             request,
@@ -2104,33 +1827,21 @@ class OccurrenceReportViewSet(
     def referrals(self, request, *args, **kwargs):
         instance = self.get_object()
         qs = instance.referrals.all()
-        serializer = OccurrenceReportProposalReferralSerializer(
-            qs, many=True, context={"request": self.request}
-        )
+        serializer = OccurrenceReportProposalReferralSerializer(qs, many=True, context={"request": self.request})
         return Response(serializer.data)
 
-    @detail_route(
-        methods=["post"], detail=True, permission_classes=[OccurrenceReportPermission]
-    )
+    @detail_route(methods=["post"], detail=True, permission_classes=[OccurrenceReportPermission])
     def external_referee_invite(self, request, *args, **kwargs):
         instance = self.get_object()
         request.data["occurrence_report_id"] = instance.id
-        serializer = OCRExternalRefereeInviteSerializer(
-            data=request.data, context={"request": request}
-        )
+        serializer = OCRExternalRefereeInviteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        if OCRExternalRefereeInvite.objects.filter(
-            archived=False, email__iexact=request.data["email"]
-        ).exists():
+        if OCRExternalRefereeInvite.objects.filter(archived=False, email__iexact=request.data["email"]).exists():
             raise serializers.ValidationError(
-                "An external referee invitation has already been sent to {email}".format(
-                    email=request.data["email"]
-                ),
+                "An external referee invitation has already been sent to {email}".format(email=request.data["email"]),
                 code="invalid",
             )
-        external_referee_invite = OCRExternalRefereeInvite.objects.create(
-            sent_by=request.user.id, **request.data
-        )
+        external_referee_invite = OCRExternalRefereeInvite.objects.create(sent_by=request.user.id, **request.data)
         send_external_referee_invite_email(instance, request, external_referee_invite)
 
         serializer_class = self.get_serializer_class()
@@ -2151,20 +1862,14 @@ class OccurrenceReportViewSet(
         if show_on_map is None:
             raise serializers.ValidationError("show_on_map is required")
         if show_on_map not in [True, False]:
-            raise serializers.ValidationError(
-                "show_on_map must be a boolean value (True or False)"
-            )
+            raise serializers.ValidationError("show_on_map must be a boolean value (True or False)")
         ocr_geometries = instance.ocr_geometry.all()
         if not ocr_geometries.exists():
-            raise serializers.ValidationError(
-                "No ocr_geometry exists for this occurrence report"
-            )
+            raise serializers.ValidationError("No ocr_geometry exists for this occurrence report")
         model_id = request.data.get("model_id", None)
         if model_id:
             if not instance.ocr_geometry.filter(id=model_id).exists():
-                raise serializers.ValidationError(
-                    "The model_id provided does not exist in the ocr_geometry"
-                )
+                raise serializers.ValidationError("The model_id provided does not exist in the ocr_geometry")
             ocr_geometries = ocr_geometries.filter(id=model_id)
         ocr_geometries.update(show_on_map=show_on_map)
         serializer = self.get_serializer(instance)
@@ -2246,9 +1951,7 @@ class OccurrenceReportViewSet(
 class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = OCRObserverDetail.objects.all()
     serializer_class = OCRObserverDetailLimitedSerializer
-    permission_classes = [
-        OccurrenceReportObjectPermission | ExternalOccurrenceReportObjectPermission
-    ]
+    permission_classes = [OccurrenceReportObjectPermission | ExternalOccurrenceReportObjectPermission]
 
     def get_serializer_class(self):
         if (
@@ -2265,21 +1968,17 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         if is_internal(self.request) or self.request.user.is_superuser:
             qs = OCRObserverDetail.objects.all().order_by("id")
-        elif is_contributor(self.request) and is_occurrence_report_referee(
-            self.request
-        ):
+        elif is_contributor(self.request) and is_occurrence_report_referee(self.request):
             qs = OCRObserverDetail.objects.filter(
                 Q(occurrence_report__submitter=self.request.user.id)
                 | Q(occurrence_report__referrals__referral=self.request.user.id)
             ).order_by("id")
         elif is_contributor(self.request):
-            qs = OCRObserverDetail.objects.filter(
-                occurrence_report__submitter=self.request.user.id
-            ).order_by("id")
+            qs = OCRObserverDetail.objects.filter(occurrence_report__submitter=self.request.user.id).order_by("id")
         elif is_occurrence_report_referee(self.request):
-            qs = OCRObserverDetail.objects.filter(
-                occurrence_report__referrals__referral=self.request.user.id
-            ).order_by("id")
+            qs = OCRObserverDetail.objects.filter(occurrence_report__referrals__referral=self.request.user.id).order_by(
+                "id"
+            )
 
         return qs
 
@@ -2287,24 +1986,15 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         # Needed an object level way to decide the serializer to use
         instance = self.get_object()
         serializer = self.get_serializer(instance, context={"request": request})
-        if not is_internal(self.request) and is_occurrence_report_referee(
-            request, instance.occurrence_report
-        ):
+        if not is_internal(self.request) and is_occurrence_report_referee(request, instance.occurrence_report):
             # Don't let referees see observer contact details
-            serializer = OCRObserverDetailLimitedSerializer(
-                instance, context={"request": request}
-            )
+            serializer = OCRObserverDetailLimitedSerializer(instance, context={"request": request})
         return Response(serializer.data)
 
     def unlocked_back_to_assessor(self, occurrence_report):
         request = self.request
-        if (
-            occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
-            serializer = BackToAssessorSerializer(
-                data={"reason": "Change made after unlock"}
-            )
+        if occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+            serializer = BackToAssessorSerializer(data={"reason": "Change made after unlock"})
             serializer.is_valid(raise_exception=True)
             occurrence_report.back_to_assessor(request, serializer.validated_data)
 
@@ -2326,23 +2016,14 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         if (
             OCRObserverDetail.objects.exclude(id=instance.id)
-            .filter(
-                Q(observer_name=observer_name)
-                & Q(occurrence_report=occurrence_report)
-                & Q(visible=True)
-            )
+            .filter(Q(observer_name=observer_name) & Q(occurrence_report=occurrence_report) & Q(visible=True))
             .exists()
         ):
-            raise serializers.ValidationError(
-                "Observer with this name already exists for this occurrence report"
-            )
+            raise serializers.ValidationError("Observer with this name already exists for this occurrence report")
 
         serializer.save(version_user=request.user)
 
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         instance.occurrence_report.log_user_action(
@@ -2373,20 +2054,13 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         observer_name = serializer.validated_data["observer_name"]
 
         if OCRObserverDetail.objects.filter(
-            Q(observer_name=observer_name)
-            & Q(occurrence_report=occurrence_report)
-            & Q(visible=True)
+            Q(observer_name=observer_name) & Q(occurrence_report=occurrence_report) & Q(visible=True)
         ).exists():
-            raise serializers.ValidationError(
-                "Observer with this name already exists for this occurrence report"
-            )
+            raise serializers.ValidationError("Observer with this name already exists for this occurrence report")
 
         serializer.save(version_user=request.user)
 
-        if (
-            occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(occurrence_report)
 
         return Response(serializer.data)
@@ -2403,10 +2077,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance.save(version_user=request.user)
 
         serializer = self.get_serializer(instance)
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2421,9 +2092,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance.visible = True
 
         if OCRObserverDetail.objects.filter(
-            Q(observer_name=instance.observer_name)
-            & Q(occurrence_report=instance.occurrence_report)
-            & Q(visible=True)
+            Q(observer_name=instance.observer_name) & Q(occurrence_report=instance.occurrence_report) & Q(visible=True)
         ).exists():
             raise serializers.ValidationError(
                 "Active observer with this name already exists for this occurrence report"
@@ -2432,17 +2101,12 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance.save(version_user=request.user)
 
         serializer = self.get_serializer(instance)
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
 
-class OccurrenceReportAmendmentRequestViewSet(
-    viewsets.GenericViewSet, mixins.RetrieveModelMixin
-):
+class OccurrenceReportAmendmentRequestViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = OccurrenceReportAmendmentRequest.objects.all()
     serializer_class = OccurrenceReportAmendmentRequestSerializer
     permission_classes = [OccurrenceReportObjectPermission]
@@ -2472,9 +2136,7 @@ class OccurrenceReportAmendmentRequestViewSet(
     @renderer_classes((JSONRenderer,))
     def delete_document(self, request, *args, **kwargs):
         instance = self.get_object()
-        OccurrenceReportAmendmentRequestDocument.objects.get(
-            id=request.data.get("id")
-        ).delete()
+        OccurrenceReportAmendmentRequestDocument.objects.get(id=request.data.get("id")).delete()
         return Response(
             [
                 dict(id=i.id, name=i.name, _file=get_relative_url(i._file.url))
@@ -2483,24 +2145,15 @@ class OccurrenceReportAmendmentRequestViewSet(
         )
 
 
-class OccurrenceReportDocumentViewSet(
-    viewsets.GenericViewSet, mixins.RetrieveModelMixin
-):
+class OccurrenceReportDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = OccurrenceReportDocument.objects.all()
     serializer_class = OccurrenceReportDocumentSerializer
-    permission_classes = [
-        OccurrenceReportObjectPermission | ExternalOccurrenceReportObjectPermission
-    ]
+    permission_classes = [OccurrenceReportObjectPermission | ExternalOccurrenceReportObjectPermission]
 
     def unlocked_back_to_assessor(self, occurrence_report):
         request = self.request
-        if (
-            occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
-            serializer = BackToAssessorSerializer(
-                data={"reason": "Change made after unlock"}
-            )
+        if occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+            serializer = BackToAssessorSerializer(data={"reason": "Change made after unlock"})
             serializer.is_valid(raise_exception=True)
             occurrence_report.back_to_assessor(request, serializer.validated_data)
 
@@ -2508,7 +2161,6 @@ class OccurrenceReportDocumentViewSet(
         if is_internal(self.request) or self.request.user.is_superuser:
             return OccurrenceReportDocument.objects.all().order_by("id")
         if is_contributor(self.request):
-
             return OccurrenceReportDocument.objects.filter(
                 Q(
                     occurrence_report__referrals__referral=self.request.user.id,
@@ -2550,10 +2202,7 @@ class OccurrenceReportDocumentViewSet(
             request,
         )
         serializer = self.get_serializer(instance)
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2582,10 +2231,7 @@ class OccurrenceReportDocumentViewSet(
             request,
         )
         serializer = self.get_serializer(instance)
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2595,9 +2241,7 @@ class OccurrenceReportDocumentViewSet(
         data = json.loads(request.data.get("data"))
         serializer = SaveOccurrenceReportDocumentSerializer(instance, data=data)
         if is_internal(self.request):
-            serializer = InternalSaveOccurrenceReportDocumentSerializer(
-                instance, data=data
-            )
+            serializer = InternalSaveOccurrenceReportDocumentSerializer(instance, data=data)
 
         serializer.is_valid(raise_exception=True)
         serializer.save(no_revision=True)
@@ -2618,10 +2262,7 @@ class OccurrenceReportDocumentViewSet(
             ),
             request,
         )
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2655,17 +2296,13 @@ class OccurrenceReportDocumentViewSet(
             ),
             request,
         )
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
 
 class OCRConservationThreatFilterBackend(DatatablesFilterBackend):
     def filter_queryset(self, request, queryset, view):
-
         total_count = queryset.count()
 
         filter_threat_category = request.GET.get("filter_threat_category")
@@ -2673,19 +2310,11 @@ class OCRConservationThreatFilterBackend(DatatablesFilterBackend):
             queryset = queryset.filter(threat_category_id=filter_threat_category)
 
         filter_threat_current_impact = request.GET.get("filter_threat_current_impact")
-        if (
-            filter_threat_current_impact
-            and not filter_threat_current_impact.lower() == "all"
-        ):
+        if filter_threat_current_impact and not filter_threat_current_impact.lower() == "all":
             queryset = queryset.filter(current_impact=filter_threat_current_impact)
 
-        filter_threat_potential_impact = request.GET.get(
-            "filter_threat_potential_impact"
-        )
-        if (
-            filter_threat_potential_impact
-            and not filter_threat_potential_impact.lower() == "all"
-        ):
+        filter_threat_potential_impact = request.GET.get("filter_threat_potential_impact")
+        if filter_threat_potential_impact and not filter_threat_potential_impact.lower() == "all":
             queryset = queryset.filter(potential_impact=filter_threat_potential_impact)
 
         filter_threat_status = request.GET.get("filter_threat_status")
@@ -2724,19 +2353,12 @@ class OCRConservationThreatFilterBackend(DatatablesFilterBackend):
 class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = OCRConservationThreat.objects.all()
     serializer_class = OCRConservationThreatSerializer
-    permission_classes = [
-        OccurrenceReportObjectPermission | ExternalOccurrenceReportObjectPermission
-    ]
+    permission_classes = [OccurrenceReportObjectPermission | ExternalOccurrenceReportObjectPermission]
 
     def unlocked_back_to_assessor(self, occurrence_report):
         request = self.request
-        if (
-            occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
-            serializer = BackToAssessorSerializer(
-                data={"reason": "Change made after unlock"}
-            )
+        if occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+            serializer = BackToAssessorSerializer(data={"reason": "Change made after unlock"})
             serializer.is_valid(raise_exception=True)
             occurrence_report.back_to_assessor(request, serializer.validated_data)
 
@@ -2747,9 +2369,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         if is_internal(self.request) or self.request.user.is_superuser:
             qs = OCRConservationThreat.objects.all().order_by("id")
         elif is_customer(self.request):
-            qs = OCRConservationThreat.objects.filter(
-                occurrence_report__submitter=request_user.id
-            ).order_by("id")
+            qs = OCRConservationThreat.objects.filter(occurrence_report__submitter=request_user.id).order_by("id")
             return qs
         return qs
 
@@ -2779,10 +2399,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         )
         serializer = self.get_serializer(instance)
 
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         return Response(serializer.data)
@@ -2813,10 +2430,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         )
         serializer = self.get_serializer(instance)
 
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         return Response(serializer.data)
@@ -2824,9 +2438,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
     @transaction.atomic
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SaveOCRConservationThreatSerializer(
-            instance, data=json.loads(request.data.get("data"))
-        )
+        serializer = SaveOCRConservationThreatSerializer(instance, data=json.loads(request.data.get("data")))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         serializer.save(version_user=request.user)
@@ -2846,19 +2458,14 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         )
         serializer = self.get_serializer(instance)
 
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         return Response(serializer.data)
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveOCRConservationThreatSerializer(
-            data=json.loads(request.data.get("data"))
-        )
+        serializer = SaveOCRConservationThreatSerializer(data=json.loads(request.data.get("data")))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save(version_user=request.user)
@@ -2878,10 +2485,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         )
         serializer = self.get_serializer(instance)
 
-        if (
-            instance.occurrence_report.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         return Response(serializer.data)
@@ -2889,7 +2493,6 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
 
 class GetOCCProfileDict(views.APIView):
     def get(self, request, format=None):
-
         wild_status_list = list(WildStatus.objects.active().values("id", "name"))
         occurrence_source_list = list(Occurrence.OCCURRENCE_SOURCE_CHOICES)
 
@@ -2911,13 +2514,8 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
 
         filter_community_common_id = request.GET.get("filter_community_common_id")
 
-        if (
-            filter_community_common_id
-            and not filter_community_common_id.lower() == "all"
-        ):
-            queryset = queryset.filter(
-                community__taxonomy__id=filter_community_common_id
-            )
+        if filter_community_common_id and not filter_community_common_id.lower() == "all":
+            queryset = queryset.filter(community__taxonomy__id=filter_community_common_id)
 
         filter_occurrence_name = request.GET.get("filter_occurrence_name")
         if filter_occurrence_name and not filter_occurrence_name.lower() == "all":
@@ -2940,9 +2538,7 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
             if filter_locked.lower() == "true":
                 queryset = queryset.filter(locked=True)
             elif filter_locked.lower() == "false":
-                queryset = queryset.filter(
-                    processing_status=Occurrence.PROCESSING_STATUS_ACTIVE, locked=False
-                )
+                queryset = queryset.filter(processing_status=Occurrence.PROCESSING_STATUS_ACTIVE, locked=False)
 
         filter_from_review_due_date = request.GET.get("filter_from_review_due_date")
         filter_to_review_due_date = request.GET.get("filter_to_review_due_date")
@@ -2995,9 +2591,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         qs = self.filter_queryset(qs)
 
         result_page = self.paginator.paginate_queryset(qs, request)
-        serializer = ListOccurrenceSerializer(
-            result_page, context={"request": request}, many=True
-        )
+        serializer = ListOccurrenceSerializer(result_page, context={"request": request}, many=True)
 
         return self.paginator.get_paginated_response(serializer.data)
 
@@ -3020,10 +2614,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
                 .distinct()
                 .values("id", "occurrence_number")[:10]
             )
-            queryset = [
-                {"id": occurrence["id"], "text": occurrence["occurrence_number"]}
-                for occurrence in queryset
-            ]
+            queryset = [{"id": occurrence["id"], "text": occurrence["occurrence_number"]} for occurrence in queryset]
         return Response({"results": queryset})
 
     @list_route(
@@ -3036,9 +2627,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         active_only = request.GET.get("active_only", "true").lower() == "true"
         queryset = self.get_queryset()
         if active_only:
-            queryset = queryset.filter(
-                processing_status=Occurrence.PROCESSING_STATUS_ACTIVE
-            )
+            queryset = queryset.filter(processing_status=Occurrence.PROCESSING_STATUS_ACTIVE)
         group_type_id = request.GET.get("group_type_id", None)
         if group_type_id:
             try:
@@ -3051,15 +2640,9 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
             occurrence_report_id = request.GET.get("occurrence_report_id", None)
             if occurrence_report_id:
                 try:
-                    occurrence_report = OccurrenceReport.objects.get(
-                        id=occurrence_report_id
-                    )
+                    occurrence_report = OccurrenceReport.objects.get(id=occurrence_report_id)
                 except OccurrenceReport.DoesNotExist:
-                    logger.warning(
-                        "OccurrenceReport with id {} does not exist".format(
-                            occurrence_report_id
-                        )
-                    )
+                    logger.warning(f"OccurrenceReport with id {occurrence_report_id} does not exist")
                     return Response({"results": []})
 
                 if group_type.name in [
@@ -3104,10 +2687,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
                     .values("id", "occurrence_name")[:10]
                 )
 
-                queryset = [
-                    {"id": occurrence["id"], "text": occurrence["occurrence_name"]}
-                    for occurrence in queryset
-                ]
+                queryset = [{"id": occurrence["id"], "text": occurrence["occurrence_name"]} for occurrence in queryset]
         return Response({"results": queryset})
 
     @list_route(
@@ -3140,9 +2720,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
                         GroupType.GROUP_TYPE_FAUNA,
                     ]:
                         # get species and all parents/children of those species
-                        species_ids = get_all_related_species(
-                            main_occurrence.species.id
-                        )
+                        species_ids = get_all_related_species(main_occurrence.species.id)
                         queryset = queryset.filter(species_id__in=species_ids)
 
                     search_term = request.GET.get("term", None)
@@ -3203,9 +2781,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     def combine_key_contacts_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
             occ_ids = json.loads(request.POST.get("occurrence_ids"))
-            contacts = OCCContactDetail.objects.filter(
-                occurrence__id__in=occ_ids
-            ).filter(visible=True)
+            contacts = OCCContactDetail.objects.filter(occurrence__id__in=occ_ids).filter(visible=True)
 
             values_list = list(
                 contacts.values(
@@ -3233,9 +2809,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     def combine_documents_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
             occ_ids = json.loads(request.POST.get("occurrence_ids"))
-            documents = OccurrenceDocument.objects.filter(
-                occurrence__id__in=occ_ids
-            ).filter(active=True)
+            documents = OccurrenceDocument.objects.filter(occurrence__id__in=occ_ids).filter(active=True)
 
             values_list = list(
                 documents.values(
@@ -3265,9 +2839,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     def combine_threats_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
             occ_ids = json.loads(request.POST.get("occurrence_ids"))
-            threats = OCCConservationThreat.objects.filter(
-                occurrence__id__in=occ_ids
-            ).filter(visible=True)
+            threats = OCCConservationThreat.objects.filter(occurrence__id__in=occ_ids).filter(visible=True)
 
             values_list = list(
                 threats.values(
@@ -3299,13 +2871,9 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     def combine_sites_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
             occ_ids = json.loads(request.POST.get("occurrence_ids"))
-            sites = OccurrenceSite.objects.filter(occurrence__id__in=occ_ids).filter(
-                visible=True
-            )
+            sites = OccurrenceSite.objects.filter(occurrence__id__in=occ_ids).filter(visible=True)
 
-            values_list = OccurrenceSiteSerializer(
-                sites, context={"request": request}, many=True
-            )
+            values_list = OccurrenceSiteSerializer(sites, context={"request": request}, many=True)
             id_list = list(sites.values_list("id", flat=True))
 
             return Response({"values_list": values_list.data, "id_list": id_list})
@@ -3321,13 +2889,10 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         if is_internal(self.request):
             occ_ids = json.loads(request.POST.get("occurrence_ids"))
             tenures = OccurrenceTenure.objects.filter(
-                Q(occurrence_geometry__occurrence__id__in=occ_ids)
-                | Q(historical_occurrence__in=occ_ids)
+                Q(occurrence_geometry__occurrence__id__in=occ_ids) | Q(historical_occurrence__in=occ_ids)
             )
 
-            values_list = ListOccurrenceTenureSerializer(
-                tenures, context={"request": request}, many=True
-            )
+            values_list = ListOccurrenceTenureSerializer(tenures, context={"request": request}, many=True)
             id_list = list(tenures.values_list("id", flat=True))
 
             return Response({"values_list": values_list.data, "id_list": id_list})
@@ -3347,9 +2912,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         else:
             qs = instance.documents.none()
         qs = qs.order_by("-uploaded_date")
-        serializer = OccurrenceDocumentSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = OccurrenceDocumentSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -3365,9 +2928,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         else:
             qs = instance.occ_threats.none()
         qs = qs.order_by("-date_observed")
-        serializer = OCCConservationThreatSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = OCCConservationThreatSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(methods=["get"], detail=True)
@@ -3379,9 +2940,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         else:
             related_reports = related_reports.none()
 
-        serializer = ListInternalOccurrenceReportSerializer(
-            related_reports, many=True, context={"request": request}
-        )
+        serializer = ListInternalOccurrenceReportSerializer(related_reports, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(methods=["get"], detail=True)
@@ -3401,9 +2960,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
                 limit=length,
                 search_value=search_value,
             )
-            serializer = RelatedItemsSerializer(
-                related_items, many=True, context={"request": request}
-            )
+            serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
             return Response(
                 {
                     "draw": int(draw),
@@ -3414,9 +2971,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         related_items = instance.get_related_items(related_filter_type)
-        serializer = RelatedItemsSerializer(
-            related_items, many=True, context={"request": request}
-        )
+        serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
         return Response(serializer.data)
 
     @list_route(
@@ -3502,9 +3057,7 @@ class OccurrenceDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
     @transaction.atomic
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SaveOccurrenceDocumentSerializer(
-            instance, data=json.loads(request.data.get("data"))
-        )
+        serializer = SaveOccurrenceDocumentSerializer(instance, data=json.loads(request.data.get("data")))
         serializer.is_valid(raise_exception=True)
         serializer.save(no_revision=True)
         instance.occurrence.log_user_action(
@@ -3528,9 +3081,7 @@ class OccurrenceDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveOccurrenceDocumentSerializer(
-            data=json.loads(request.data.get("data"))
-        )
+        serializer = SaveOccurrenceDocumentSerializer(data=json.loads(request.data.get("data")))
         serializer.is_valid(raise_exception=True)
         instance = serializer.save(no_revision=True)
         instance.add_documents(request, no_revision=True)
@@ -3555,7 +3106,6 @@ class OccurrenceDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
 
 class OCCConservationThreatFilterBackend(DatatablesFilterBackend):
     def filter_queryset(self, request, queryset, view):
-
         total_count = queryset.count()
 
         filter_threat_source = request.GET.get("filter_threat_source")
@@ -3565,9 +3115,7 @@ class OCCConservationThreatFilterBackend(DatatablesFilterBackend):
                     Q(occurrence__occurrence_number=filter_threat_source)
                     & Q(occurrence_report_threat__occurrence_report=None)
                 )
-                | Q(
-                    occurrence_report_threat__occurrence_report__occurrence_report_number=filter_threat_source
-                )
+                | Q(occurrence_report_threat__occurrence_report__occurrence_report_number=filter_threat_source)
             )
 
         filter_threat_category = request.GET.get("filter_threat_category")
@@ -3575,19 +3123,11 @@ class OCCConservationThreatFilterBackend(DatatablesFilterBackend):
             queryset = queryset.filter(threat_category_id=filter_threat_category)
 
         filter_threat_current_impact = request.GET.get("filter_threat_current_impact")
-        if (
-            filter_threat_current_impact
-            and not filter_threat_current_impact.lower() == "all"
-        ):
+        if filter_threat_current_impact and not filter_threat_current_impact.lower() == "all":
             queryset = queryset.filter(current_impact=filter_threat_current_impact)
 
-        filter_threat_potential_impact = request.GET.get(
-            "filter_threat_potential_impact"
-        )
-        if (
-            filter_threat_potential_impact
-            and not filter_threat_potential_impact.lower() == "all"
-        ):
+        filter_threat_potential_impact = request.GET.get("filter_threat_potential_impact")
+        if filter_threat_potential_impact and not filter_threat_potential_impact.lower() == "all":
             queryset = queryset.filter(potential_impact=filter_threat_potential_impact)
 
         filter_threat_status = request.GET.get("filter_threat_status")
@@ -3641,9 +3181,7 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
             qs = OCCConservationThreat.objects.all().order_by("id")
         else:
             user_id = self.request.user.id
-            referral_qs = ConservationStatusReferral.objects.filter(
-                referral=user_id
-            ).values_list(
+            referral_qs = ConservationStatusReferral.objects.filter(referral=user_id).values_list(
                 "conservation_status__species", "conservation_status__community"
             )
 
@@ -3654,20 +3192,12 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
                 OCCConservationThreat.objects.filter(visible=True)
                 .filter(
                     (
-                        Q(
-                            occurrence__species__species_publishing_status__species_public=True
-                        )
-                        & Q(
-                            occurrence__species__species_publishing_status__threats_public=True
-                        )
+                        Q(occurrence__species__species_publishing_status__species_public=True)
+                        & Q(occurrence__species__species_publishing_status__threats_public=True)
                     )
                     | (
-                        Q(
-                            occurrence__community__community_publishing_status__community_public=True
-                        )
-                        & Q(
-                            occurrence__community__community_publishing_status__threats_public=True
-                        )
+                        Q(occurrence__community__community_publishing_status__community_public=True)
+                        & Q(occurrence__community__community_publishing_status__threats_public=True)
                     )
                     | Q(occurrence__species__in=species_ids)
                     | Q(occurrence__community__in=community_ids)
@@ -3734,9 +3264,7 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
     @transaction.atomic
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SaveOCCConservationThreatSerializer(
-            instance, data=json.loads(request.data.get("data"))
-        )
+        serializer = SaveOCCConservationThreatSerializer(instance, data=json.loads(request.data.get("data")))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         serializer.save(version_user=request.user)
@@ -3759,9 +3287,7 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveOCCConservationThreatSerializer(
-            data=json.loads(request.data.get("data"))
-        )
+        serializer = SaveOCCConservationThreatSerializer(data=json.loads(request.data.get("data")))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save(version_user=request.user)
@@ -3787,13 +3313,8 @@ class GetWildStatus(views.APIView):
     def get(self, request, format=None):
         search_term = request.GET.get("term", "")
         if search_term:
-            data = WildStatus.objects.filter(name__icontains=search_term).values(
-                "id", "name"
-            )[:10]
-            data_transform = [
-                {"id": wild_status["id"], "text": wild_status["name"]}
-                for wild_status in data
-            ]
+            data = WildStatus.objects.filter(name__icontains=search_term).values("id", "name")[:10]
+            data_transform = [{"id": wild_status["id"], "text": wild_status["name"]} for wild_status in data]
             return Response({"results": data_transform})
         return Response()
 
@@ -3825,9 +3346,7 @@ class OccurrenceViewSet(
         )
 
         if not is_occurrence_approver(self.request):
-            raise serializers.ValidationError(
-                "User not authorised to create Occurrence"
-            )
+            raise serializers.ValidationError("User not authorised to create Occurrence")
 
         new_instance.save(version_user=request.user)
         data = {"occurrence_id": new_instance.id}
@@ -3879,15 +3398,11 @@ class OccurrenceViewSet(
 
         # Log the creation of the new occurrence
         new_instance.log_user_action(
-            OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
-                new_instance.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(new_instance.occurrence_number),
             request,
         )
         request.user.log_user_action(
-            OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
-                new_instance.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(new_instance.occurrence_number),
             request,
         )
 
@@ -3901,7 +3416,6 @@ class OccurrenceViewSet(
         detail=True,
     )
     def section_values(self, request, *args, **kwargs):
-
         section = request.GET.get("section")
         occ = self.get_object()
         res_json = {}
@@ -3911,11 +3425,7 @@ class OccurrenceViewSet(
             section_fields = section_value._meta.get_fields()
 
             for i in section_fields:
-                if (
-                    i.name == "id"
-                    or i.name == "occurrence"
-                    or isinstance(i, models.ManyToOneRel)
-                ):
+                if i.name == "id" or i.name == "occurrence" or isinstance(i, models.ManyToOneRel):
                     continue
 
                 # ensure many to many fields are assigned an appropriate __str__
@@ -3933,12 +3443,8 @@ class OccurrenceViewSet(
                     if sub_section_value is not None:
                         # For models that inherit from ArchivableModel or OrderedModel,
                         # only show the 'name' field to avoid cluttering with 'order' and 'archived'
-                        is_archivable_or_ordered = isinstance(
-                            sub_section_value, (ArchivableModel, OrderedModel)
-                        )
-                        if is_archivable_or_ordered and hasattr(
-                            sub_section_value, "name"
-                        ):
+                        is_archivable_or_ordered = isinstance(sub_section_value, ArchivableModel | OrderedModel)
+                        if is_archivable_or_ordered and hasattr(sub_section_value, "name"):
                             res_json[i.name] = str(sub_section_value.name)
                         else:
                             res_json[i.name] = {}
@@ -3951,9 +3457,7 @@ class OccurrenceViewSet(
                                     and not isinstance(j, models.ManyToManyRel)
                                     and getattr(sub_section_value, j.name) is not None
                                 ):
-                                    res_json[i.name][j.name] = str(
-                                        getattr(sub_section_value, j.name)
-                                    )
+                                    res_json[i.name][j.name] = str(getattr(sub_section_value, j.name))
                             # if the num sub section has only one value, assign as section
                             if len(res_json[i.name]) == 1:
                                 res_json[i.name] = list(res_json[i.name].values())[0]
@@ -3993,9 +3497,7 @@ class OccurrenceViewSet(
     def combine(self, request, *args, **kwargs):
         instance = self.get_object()
         occ_combine_data = json.loads(request.POST.get("data"))
-        combine_occurrences = Occurrence.objects.exclude(id=instance.id).filter(
-            id__in=occ_combine_data["combine_ids"]
-        )
+        combine_occurrences = Occurrence.objects.exclude(id=instance.id).filter(id__in=occ_combine_data["combine_ids"])
         # validate species
         if instance.group_type.name in [
             GroupType.GROUP_TYPE_FLORA,
@@ -4003,13 +3505,8 @@ class OccurrenceViewSet(
         ]:
             # get species and all parents/children of those species
             species_ids = get_all_related_species(instance.species.id)
-            if (
-                combine_occurrences.filter(species_id__in=species_ids).count()
-                != combine_occurrences.count()
-            ):
-                raise serializers.ValidationError(
-                    "Selected Occurrence has invalid Species"
-                )
+            if combine_occurrences.filter(species_id__in=species_ids).count() != combine_occurrences.count():
+                raise serializers.ValidationError("Selected Occurrence has invalid Species")
 
         instance.combine(request)
 
@@ -4168,9 +3665,7 @@ class OccurrenceViewSet(
         else:
             qs = instance.documents.none()
         qs = qs.order_by("-uploaded_date")
-        serializer = OccurrenceDocumentSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = OccurrenceDocumentSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -4187,9 +3682,7 @@ class OccurrenceViewSet(
             qs = instance.occ_threats.none()
         filter_backend = OCCConservationThreatFilterBackend()
         qs = filter_backend.filter_queryset(self.request, qs, self)
-        serializer = OCCConservationThreatSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = OCCConservationThreatSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -4204,14 +3697,11 @@ class OccurrenceViewSet(
         data = []
         if is_internal(self.request):
             # distinct on OCR
-            qs = instance.occ_threats.distinct(
-                "occurrence_report_threat__occurrence_report"
-            ).exclude(occurrence_report_threat=None)
+            qs = instance.occ_threats.distinct("occurrence_report_threat__occurrence_report").exclude(
+                occurrence_report_threat=None
+            )
             # format
-            data = [
-                threat.occurrence_report_threat.occurrence_report.occurrence_report_number
-                for threat in qs
-            ]
+            data = [threat.occurrence_report_threat.occurrence_report.occurrence_report_number for threat in qs]
 
         # if any occ threats exist with an ocr threat, then the source must be the occ
         if instance.occ_threats.filter(occurrence_report_threat=None).exists():
@@ -4221,7 +3711,6 @@ class OccurrenceViewSet(
 
     @detail_route(methods=["post"], detail=True)
     def add_related_species(self, request, *args, **kwargs):
-
         instance = self.get_object()
         if instance.associated_species:
             related_species = instance.associated_species.related_species
@@ -4244,16 +3733,12 @@ class OccurrenceViewSet(
                 f"Occurrence: {instance.occurrence_number}"
             )
 
-        associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.create(
-            taxonomy=taxon
-        )
+        associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.create(taxonomy=taxon)
         related_species.add(associated_species_taxonomy)
 
         instance.save(version_user=request.user)
 
-        serializer = AssociatedSpeciesTaxonomySerializer(
-            related_species, many=True, context={"request": request}
-        )
+        serializer = AssociatedSpeciesTaxonomySerializer(related_species, many=True, context={"request": request})
 
         return Response(serializer.data)
 
@@ -4273,13 +3758,9 @@ class OccurrenceViewSet(
         related_species_id = request.data.get("related_species_id")
 
         try:
-            associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.get(
-                id=related_species_id
-            )
+            associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.get(id=related_species_id)
         except AssociatedSpeciesTaxonomy.DoesNotExist:
-            raise serializers.ValidationError(
-                "AssociatedSpeciesTaxonomy does not exist"
-            )
+            raise serializers.ValidationError("AssociatedSpeciesTaxonomy does not exist")
 
         if associated_species_taxonomy in related_species.all():
             related_species.remove(associated_species_taxonomy)
@@ -4288,22 +3769,15 @@ class OccurrenceViewSet(
 
         instance.save(version_user=request.user)
 
-        serializer = AssociatedSpeciesTaxonomySerializer(
-            related_species, many=True, context={"request": request}
-        )
+        serializer = AssociatedSpeciesTaxonomySerializer(related_species, many=True, context={"request": request})
 
         return Response(serializer.data)
 
     @detail_route(methods=["get"], detail=True)
     def get_related_species(self, request, *args, **kwargs):
         instance = self.get_object()
-        if (
-            not hasattr(instance, "associated_species")
-            or not instance.associated_species
-        ):
-            logger.warning(
-                f"Occurrence {instance.id} does not have associated species returning empty list."
-            )
+        if not hasattr(instance, "associated_species") or not instance.associated_species:
+            logger.warning(f"Occurrence {instance.id} does not have associated species returning empty list.")
             return Response([])
 
         serializer = AssociatedSpeciesTaxonomySerializer(
@@ -4320,9 +3794,7 @@ class OccurrenceViewSet(
             related_reports = related_reports.all()
         else:
             related_reports = related_reports.none()
-        serializer = ListInternalOccurrenceReportSerializer(
-            related_reports, many=True, context={"request": request}
-        )
+        serializer = ListInternalOccurrenceReportSerializer(related_reports, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(methods=["get"], detail=True)
@@ -4334,16 +3806,14 @@ class OccurrenceViewSet(
             .exclude(occurrence_report_threat=None)
             .values_list("occurrence_report_threat_id", flat=True)
         )
-        threats = OCRConservationThreat.objects.filter(
-            occurrence_report_id__in=related_reports
-        ).exclude(id__in=addedThreats)
+        threats = OCRConservationThreat.objects.filter(occurrence_report_id__in=related_reports).exclude(
+            id__in=addedThreats
+        )
         if is_internal(self.request):
             threats = threats.all()
         else:
             threats = threats.none()
-        serializer = OCRConservationThreatSerializer(
-            threats, many=True, context={"request": request}
-        )
+        serializer = OCRConservationThreatSerializer(threats, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(methods=["get"], detail=True)
@@ -4363,9 +3833,7 @@ class OccurrenceViewSet(
                 limit=length,
                 search_value=search_value,
             )
-            serializer = RelatedItemsSerializer(
-                related_items, many=True, context={"request": request}
-            )
+            serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
             return Response(
                 {
                     "draw": int(draw),
@@ -4376,9 +3844,7 @@ class OccurrenceViewSet(
             )
 
         related_items = instance.get_related_items(related_filter_type)
-        serializer = RelatedItemsSerializer(
-            related_items, many=True, context={"request": request}
-        )
+        serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
         return Response(serializer.data)
 
     @list_route(
@@ -4414,14 +3880,9 @@ class OccurrenceViewSet(
         else:
             pass
             occ_geometries = qs.occ_geometry.all().exclude(**{"geometry": None})
-            epsg_codes = [
-                str(g.srid)
-                for g in occ_geometries.values_list("geometry", flat=True).distinct()
-            ]
+            epsg_codes = [str(g.srid) for g in occ_geometries.values_list("geometry", flat=True).distinct()]
             # Add the srids of the original geometries to epsg_codes
-            original_geometry_srids = [
-                str(g.original_geometry_srid) for g in occ_geometries
-            ]
+            original_geometry_srids = [str(g.original_geometry_srid) for g in occ_geometries]
             epsg_codes += [g for g in original_geometry_srids if g.isnumeric()]
             epsg_codes = list(set(epsg_codes))
             datum_list = search_datums("", codes=epsg_codes)
@@ -4458,14 +3919,11 @@ class OccurrenceViewSet(
     @renderer_classes((JSONRenderer,))
     @transaction.atomic
     def occurrence_save(self, request, *args, **kwargs):
-
         instance = self.get_object()
         request_data = request.data
 
         if request_data.get("habitat_composition"):
-            habitat_instance, created = OCCHabitatComposition.objects.get_or_create(
-                occurrence=instance
-            )
+            habitat_instance, created = OCCHabitatComposition.objects.get_or_create(occurrence=instance)
             serializer = SaveOCCHabitatCompositionSerializer(
                 habitat_instance, data=request_data.get("habitat_composition")
             )
@@ -4473,9 +3931,7 @@ class OccurrenceViewSet(
             serializer.save()
 
         if request_data.get("habitat_condition"):
-            hab_cond_instance, created = OCCHabitatCondition.objects.get_or_create(
-                occurrence=instance
-            )
+            hab_cond_instance, created = OCCHabitatCondition.objects.get_or_create(occurrence=instance)
             serializer = SaveOCCHabitatConditionSerializer(
                 hab_cond_instance, data=request_data.get("habitat_condition")
             )
@@ -4483,9 +3939,7 @@ class OccurrenceViewSet(
             serializer.save()
 
         if request_data.get("vegetation_structure"):
-            veg_struct_instance, created = OCCVegetationStructure.objects.get_or_create(
-                occurrence=instance
-            )
+            veg_struct_instance, created = OCCVegetationStructure.objects.get_or_create(occurrence=instance)
             serializer = SaveOCCVegetationStructureSerializer(
                 veg_struct_instance, data=request_data.get("vegetation_structure")
             )
@@ -4493,19 +3947,13 @@ class OccurrenceViewSet(
             serializer.save()
 
         if request_data.get("fire_history"):
-            fire_instance, created = OCCFireHistory.objects.get_or_create(
-                occurrence=instance
-            )
-            serializer = SaveOCCFireHistorySerializer(
-                fire_instance, data=request_data.get("fire_history")
-            )
+            fire_instance, created = OCCFireHistory.objects.get_or_create(occurrence=instance)
+            serializer = SaveOCCFireHistorySerializer(fire_instance, data=request_data.get("fire_history"))
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
         if request_data.get("associated_species"):
-            assoc_species_instance, created = (
-                OCCAssociatedSpecies.objects.get_or_create(occurrence=instance)
-            )
+            assoc_species_instance, created = OCCAssociatedSpecies.objects.get_or_create(occurrence=instance)
             serializer = SaveOCCAssociatedSpeciesSerializer(
                 assoc_species_instance,
                 data=request_data.get("associated_species"),
@@ -4514,9 +3962,7 @@ class OccurrenceViewSet(
             serializer.save()
 
         if request_data.get("observation_detail"):
-            obs_det_instance, created = OCCObservationDetail.objects.get_or_create(
-                occurrence=instance
-            )
+            obs_det_instance, created = OCCObservationDetail.objects.get_or_create(occurrence=instance)
             serializer = SaveOCCObservationDetailSerializer(
                 obs_det_instance, data=request_data.get("observation_detail")
             )
@@ -4524,19 +3970,13 @@ class OccurrenceViewSet(
             serializer.save()
 
         if request_data.get("plant_count"):
-            plant_count_instance, created = OCCPlantCount.objects.get_or_create(
-                occurrence=instance
-            )
-            serializer = SaveOCCPlantCountSerializer(
-                plant_count_instance, data=request_data.get("plant_count")
-            )
+            plant_count_instance, created = OCCPlantCount.objects.get_or_create(occurrence=instance)
+            serializer = SaveOCCPlantCountSerializer(plant_count_instance, data=request_data.get("plant_count"))
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
         if request_data.get("animal_observation"):
-            animal_obs_instance, created = OCCAnimalObservation.objects.get_or_create(
-                occurrence=instance
-            )
+            animal_obs_instance, created = OCCAnimalObservation.objects.get_or_create(occurrence=instance)
             serializer = SaveOCCAnimalObservationSerializer(
                 animal_obs_instance,
                 data=request_data.get("animal_observation"),
@@ -4545,9 +3985,7 @@ class OccurrenceViewSet(
             serializer.save()
 
         if request_data.get("identification"):
-            identification_instance, created = OCCIdentification.objects.get_or_create(
-                occurrence=instance
-            )
+            identification_instance, created = OCCIdentification.objects.get_or_create(occurrence=instance)
             serializer = SaveOCCIdentificationSerializer(
                 identification_instance,
                 data=request_data.get("identification"),
@@ -4556,29 +3994,21 @@ class OccurrenceViewSet(
             serializer.save()
 
         if request_data.get("location"):
-            location_instance, created = OCCLocation.objects.get_or_create(
-                occurrence=instance
-            )
-            serializer = SaveOCCLocationSerializer(
-                location_instance, data=request_data.get("location")
-            )
+            location_instance, created = OCCLocation.objects.get_or_create(occurrence=instance)
+            serializer = SaveOCCLocationSerializer(location_instance, data=request_data.get("location"))
             serializer.is_valid(raise_exception=True)
             serializer.save()
 
         # occ geometry data to save seperately
         geometry_data = request_data.get("occ_geometry", None)
         if geometry_data:
-            intersect_data = save_geometry(
-                request, instance, geometry_data, "occurrence"
-            )
+            intersect_data = save_geometry(request, instance, geometry_data, "occurrence")
             instance.occ_geometry.all()
 
             if intersect_data:
                 for key, value in intersect_data.items():
                     occurrence_geometry = OccurrenceGeometry.objects.get(id=key)
-                    populate_occurrence_tenure_data(
-                        occurrence_geometry, value.get("features", []), request
-                    )
+                    populate_occurrence_tenure_data(occurrence_geometry, value.get("features", []), request)
 
         occ_sites = OccurrenceSite.objects
         site_geometry_data = json.loads(request.data.get("site_geometry", None))
@@ -4587,9 +4017,7 @@ class OccurrenceViewSet(
             for i in site_geometry_data["features"]:
                 try:
                     update_site = occ_sites.get(id=i["id"])
-                    point_data = "POINT({} {})".format(
-                        i["geometry"]["coordinates"][0], i["geometry"]["coordinates"][1]
-                    )
+                    point_data = "POINT({} {})".format(i["geometry"]["coordinates"][0], i["geometry"]["coordinates"][1])
                     original_point_data = "POINT({} {})".format(
                         i["properties"]["original_geometry"]["coordinates"][0],
                         i["properties"]["original_geometry"]["coordinates"][1],
@@ -4598,9 +4026,7 @@ class OccurrenceViewSet(
                     geom_4326 = GEOSGeometry(point_data, srid=4326)
                     geom_original = GEOSGeometry(
                         original_point_data,
-                        srid=int(
-                            i["properties"]["original_geometry"]["properties"]["srid"]
-                        ),
+                        srid=int(i["properties"]["original_geometry"]["properties"]["srid"]),
                     ).ewkb
 
                     update_site.geometry = geom_4326
@@ -4612,9 +4038,9 @@ class OccurrenceViewSet(
 
         # Soft-delete any existing sites not included in the posted payload
         if site_geometry_data and "features" in site_geometry_data:
-            to_hide_qs = OccurrenceSite.objects.filter(
-                occurrence=instance, visible=True
-            ).exclude(id__in=posted_site_ids)
+            to_hide_qs = OccurrenceSite.objects.filter(occurrence=instance, visible=True).exclude(
+                id__in=posted_site_ids
+            )
 
             count = 0
             for site in to_hide_qs:
@@ -4627,22 +4053,16 @@ class OccurrenceViewSet(
                     count,
                     instance.id,
                 )
-        serializer = SaveOccurrenceSerializer(
-            instance, data=request_data, partial=True, context={"request": request}
-        )
+        serializer = SaveOccurrenceSerializer(instance, data=request_data, partial=True, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save(version_user=request.user)
 
         instance.log_user_action(
-            OccurrenceUserAction.ACTION_SAVE_OCCURRENCE.format(
-                instance.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_SAVE_OCCURRENCE.format(instance.occurrence_number),
             request,
         )
         request.user.log_user_action(
-            OccurrenceUserAction.ACTION_SAVE_OCCURRENCE.format(
-                instance.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_SAVE_OCCURRENCE.format(instance.occurrence_number),
             request,
         )
 
@@ -4665,11 +4085,7 @@ class OccurrenceViewSet(
 
         section_fields = type(ocrSection)._meta.get_fields()
         for i in section_fields:
-            if (
-                i.name != "id"
-                and i.name != "occurrence_report"
-                and hasattr(occSection, i.name)
-            ):
+            if i.name != "id" and i.name != "occurrence_report" and hasattr(occSection, i.name):
                 if isinstance(i, models.ManyToManyField):
                     ocrValue = getattr(ocrSection, i.name)
                     occValue = getattr(occSection, i.name)
@@ -4682,10 +4098,7 @@ class OccurrenceViewSet(
 
         occ_section_fields = type(occSection)._meta.get_fields()
         for i in occ_section_fields:
-            if (
-                isinstance(i, models.ForeignKey)
-                and i.related_model.__name__ == ocrSection.__class__.__name__
-            ):
+            if isinstance(i, models.ForeignKey) and i.related_model.__name__ == ocrSection.__class__.__name__:
                 setattr(occSection, i.name, ocrSection)
 
         occSection.save()
@@ -4703,22 +4116,16 @@ class OccurrenceViewSet(
     def update_location_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
 
-        location_instance, created = OCCLocation.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        location_instance, created = OCCLocation.objects.get_or_create(occurrence=occ_instance)
 
         # occ geometry data to save seperately
         geometry_data = request.data.get("occ_geometry")
         if geometry_data:
-            intersect_data = save_geometry(
-                request, occ_instance, geometry_data, "occurrence"
-            )
+            intersect_data = save_geometry(request, occ_instance, geometry_data, "occurrence")
             if intersect_data:
                 for key, value in intersect_data.items():
                     occurrence_geometry = OccurrenceGeometry.objects.get(id=key)
-                    populate_occurrence_tenure_data(
-                        occurrence_geometry, value.get("features", []), request
-                    )
+                    populate_occurrence_tenure_data(occurrence_geometry, value.get("features", []), request)
 
         occ_sites = OccurrenceSite.objects
         site_geometry_data = json.loads(request.data.get("site_geometry", None))
@@ -4727,9 +4134,7 @@ class OccurrenceViewSet(
             for i in site_geometry_data["features"]:
                 try:
                     update_site = occ_sites.get(id=i["id"])
-                    point_data = "POINT({} {})".format(
-                        i["geometry"]["coordinates"][0], i["geometry"]["coordinates"][1]
-                    )
+                    point_data = "POINT({} {})".format(i["geometry"]["coordinates"][0], i["geometry"]["coordinates"][1])
                     original_point_data = "POINT({} {})".format(
                         i["properties"]["original_geometry"]["coordinates"][0],
                         i["properties"]["original_geometry"]["coordinates"][1],
@@ -4738,9 +4143,7 @@ class OccurrenceViewSet(
                     geom_4326 = GEOSGeometry(point_data, srid=4326)
                     geom_original = GEOSGeometry(
                         original_point_data,
-                        srid=int(
-                            i["properties"]["original_geometry"]["properties"]["srid"]
-                        ),
+                        srid=int(i["properties"]["original_geometry"]["properties"]["srid"]),
                     ).ewkb
 
                     update_site.geometry = geom_4326
@@ -4752,9 +4155,9 @@ class OccurrenceViewSet(
 
         # Soft-delete any existing sites not included in the posted payload
         if site_geometry_data and "features" in site_geometry_data:
-            to_hide_qs = OccurrenceSite.objects.filter(
-                occurrence=occ_instance, visible=True
-            ).exclude(id__in=posted_site_ids)
+            to_hide_qs = OccurrenceSite.objects.filter(occurrence=occ_instance, visible=True).exclude(
+                id__in=posted_site_ids
+            )
 
             count = 0
             for site in to_hide_qs:
@@ -4770,9 +4173,7 @@ class OccurrenceViewSet(
 
         # the request.data is only the habitat composition data thats been sent from front end
         location_data = request.data.get("location")
-        serializer = SaveOCCLocationSerializer(
-            location_instance, data=location_data, context={"request": request}
-        )
+        serializer = SaveOCCLocationSerializer(location_instance, data=location_data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
@@ -4786,9 +4187,7 @@ class OccurrenceViewSet(
     )
     def update_habitat_composition_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
-        habitat_instance, created = OCCHabitatComposition.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        habitat_instance, created = OCCHabitatComposition.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the habitat composition data thats been sent from front end
         serializer = SaveOCCHabitatCompositionSerializer(
             habitat_instance, data=request.data, context={"request": request}
@@ -4804,11 +4203,8 @@ class OccurrenceViewSet(
         detail=True,
     )
     def update_vegetation_structure(self, request, *args, **kwargs):
-
         occ_instance = self.get_object()
-        vegetation_instance, created = OCCVegetationStructure.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        vegetation_instance, created = OCCVegetationStructure.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the habitat condition data thats been sent from front end
         serializer = SaveOCCVegetationStructureSerializer(
             vegetation_instance, data=request.data, context={"request": request}
@@ -4826,9 +4222,7 @@ class OccurrenceViewSet(
     )
     def update_habitat_condition_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
-        habitat_instance, created = OCCHabitatCondition.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        habitat_instance, created = OCCHabitatCondition.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the habitat condition data thats been sent from front end
         serializer = SaveOCCHabitatConditionSerializer(
             habitat_instance, data=request.data, context={"request": request}
@@ -4845,13 +4239,9 @@ class OccurrenceViewSet(
     )
     def update_fire_history_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
-        fire_instance, created = OCCFireHistory.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        fire_instance, created = OCCFireHistory.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the habitat composition data thats been sent from front end
-        serializer = SaveOCCFireHistorySerializer(
-            fire_instance, data=request.data, context={"request": request}
-        )
+        serializer = SaveOCCFireHistorySerializer(fire_instance, data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
         return Response(OCCFireHistorySerializer(new_instance).data)
@@ -4864,9 +4254,7 @@ class OccurrenceViewSet(
     )
     def update_associated_species_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
-        assoc_species_instance, created = OCCAssociatedSpecies.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        assoc_species_instance, created = OCCAssociatedSpecies.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the habitat composition data thats been sent from front end
         serializer = SaveOCCAssociatedSpeciesSerializer(
             assoc_species_instance, data=request.data, context={"request": request}
@@ -4883,9 +4271,7 @@ class OccurrenceViewSet(
     )
     def update_observation_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
-        obs_det_instance, created = OCCObservationDetail.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        obs_det_instance, created = OCCObservationDetail.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the observation detail data thats been sent from front end
         serializer = SaveOCCObservationDetailSerializer(
             obs_det_instance, data=request.data, context={"request": request}
@@ -4902,13 +4288,9 @@ class OccurrenceViewSet(
     )
     def update_plant_count_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
-        plant_count_instance, created = OCCPlantCount.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        plant_count_instance, created = OCCPlantCount.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the plant count data thats been sent from front end
-        serializer = SaveOCCPlantCountSerializer(
-            plant_count_instance, data=request.data, context={"request": request}
-        )
+        serializer = SaveOCCPlantCountSerializer(plant_count_instance, data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
         return Response(OCCPlantCountSerializer(new_instance).data)
@@ -4921,9 +4303,7 @@ class OccurrenceViewSet(
     )
     def update_animal_observation_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
-        animal_obs_instance, created = OCCAnimalObservation.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        animal_obs_instance, created = OCCAnimalObservation.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the animal obs data thats been sent from front end
         serializer = SaveOCCAnimalObservationSerializer(
             animal_obs_instance, data=request.data, context={"request": request}
@@ -4940,9 +4320,7 @@ class OccurrenceViewSet(
     )
     def update_identification_details(self, request, *args, **kwargs):
         occ_instance = self.get_object()
-        identification_instance, created = OCCIdentification.objects.get_or_create(
-            occurrence=occ_instance
-        )
+        identification_instance, created = OCCIdentification.objects.get_or_create(occurrence=occ_instance)
         # the request.data is only the identification data thats been sent from front end
         serializer = SaveOCCIdentificationSerializer(
             identification_instance, data=request.data, context={"request": request}
@@ -5070,66 +4448,32 @@ class OccurrenceViewSet(
         group_type = request.GET.get("group_type", None)
 
         if not group_type:
-            raise serializers.ValidationError(
-                "Group Type is required to return correct list of values"
-            )
+            raise serializers.ValidationError("Group Type is required to return correct list of values")
 
-        observation_method_list = list(
-            ObservationMethod.objects.active().values("id", "name")
-        )
-        area_assessment_list = list(
-            AreaAssessment.objects.active().values("id", "name")
-        )
-        plant_count_method_list = list(
-            PlantCountMethod.objects.active().values("id", "name")
-        )
-        plant_count_accuracy_list = list(
-            PlantCountAccuracy.objects.active().values("id", "name")
-        )
-        plant_condition_list = list(
-            PlantCondition.objects.active().values("id", "name")
-        )
-        counted_subject_list = list(
-            CountedSubject.objects.active().values("id", "name")
-        )
-        primary_detection_method_list = list(
-            PrimaryDetectionMethod.objects.all().values("id", "name", "archived")
-        )
+        observation_method_list = list(ObservationMethod.objects.active().values("id", "name"))
+        area_assessment_list = list(AreaAssessment.objects.active().values("id", "name"))
+        plant_count_method_list = list(PlantCountMethod.objects.active().values("id", "name"))
+        plant_count_accuracy_list = list(PlantCountAccuracy.objects.active().values("id", "name"))
+        plant_condition_list = list(PlantCondition.objects.active().values("id", "name"))
+        counted_subject_list = list(CountedSubject.objects.active().values("id", "name"))
+        primary_detection_method_list = list(PrimaryDetectionMethod.objects.all().values("id", "name", "archived"))
         # Add 'disabled' key for archived items
         for item in primary_detection_method_list:
             item["disabled"] = item.pop("archived", False)
-        secondary_sign_list = list(
-            SecondarySign.objects.all().values("id", "name", "archived")
-        )
+        secondary_sign_list = list(SecondarySign.objects.all().values("id", "name", "archived"))
         for item in secondary_sign_list:
             item["disabled"] = item.pop("archived", False)
-        animal_behaviour_list = list(
-            AnimalBehaviour.objects.active().values("id", "name")
-        )
-        reproductive_state_list = list(
-            ReproductiveState.objects.all().values("id", "name", "archived")
-        )
+        animal_behaviour_list = list(AnimalBehaviour.objects.active().values("id", "name"))
+        reproductive_state_list = list(ReproductiveState.objects.all().values("id", "name", "archived"))
         # Add 'disabled' key for archived items
         for item in reproductive_state_list:
             item["disabled"] = item.pop("archived", False)
-        death_injury_reason_list = list(
-            DeathReason.objects.active().values("id", "name")
-        )
+        death_injury_reason_list = list(DeathReason.objects.active().values("id", "name"))
         animal_health_list = list(AnimalHealth.objects.active().values("id", "name"))
-        identification_certainty_list = list(
-            IdentificationCertainty.objects.active().values("id", "name")
-        )
-        sample_type_list = list(
-            SampleType.objects.active()
-            .filter(group_type__name=group_type)
-            .values("id", "name")
-        )
+        identification_certainty_list = list(IdentificationCertainty.objects.active().values("id", "name"))
+        sample_type_list = list(SampleType.objects.active().filter(group_type__name=group_type).values("id", "name"))
         sample_dest_list = list(SampleDestination.objects.active().values("id", "name"))
-        permit_type_list = list(
-            PermitType.objects.active()
-            .filter(group_type__name=group_type)
-            .values("id", "name")
-        )
+        permit_type_list = list(PermitType.objects.active().filter(group_type__name=group_type).values("id", "name"))
 
         res_json = {
             "animal_behaviour_list": animal_behaviour_list,
@@ -5221,30 +4565,20 @@ class OccurrenceViewSet(
     def animal_observation_list_of_values(self, request, *args, **kwargs):
         """used for Occurrence external form"""
 
-        primary_detection_method_list = list(
-            PrimaryDetectionMethod.objects.all().values("id", "name", "archived")
-        )
+        primary_detection_method_list = list(PrimaryDetectionMethod.objects.all().values("id", "name", "archived"))
         # Add 'disabled' key for archived items
         for item in primary_detection_method_list:
             item["disabled"] = item.pop("archived", False)
 
-        secondary_sign_list = list(
-            SecondarySign.objects.all().values("id", "name", "archived")
-        )
+        secondary_sign_list = list(SecondarySign.objects.all().values("id", "name", "archived"))
         for item in secondary_sign_list:
             item["disabled"] = item.pop("archived", False)
-        animal_behaviour_list = list(
-            AnimalBehaviour.objects.active().values("id", "name")
-        )
-        reproductive_state_list = list(
-            ReproductiveState.objects.all().values("id", "name", "archived")
-        )
+        animal_behaviour_list = list(AnimalBehaviour.objects.active().values("id", "name"))
+        reproductive_state_list = list(ReproductiveState.objects.all().values("id", "name", "archived"))
         # Add 'disabled' key for archived items
         for item in reproductive_state_list:
             item["disabled"] = item.pop("archived", False)
-        death_injury_reason_list = list(
-            DeathReason.objects.active().values("id", "name")
-        )
+        death_injury_reason_list = list(DeathReason.objects.active().values("id", "name"))
         animal_health_list = list(AnimalHealth.objects.active().values("id", "name"))
 
         res_json = {
@@ -5284,39 +4618,23 @@ class OccurrenceViewSet(
             # Site geometries
             site_geometries = qs.sites.all().distinct().exclude(**{"geometry": None})
 
-            ocr_geometries_ids = (
-                qs.occurrence_reports.all()
-                .values_list("ocr_geometry", flat=True)
-                .distinct()
-            )
+            ocr_geometries_ids = qs.occurrence_reports.all().values_list("ocr_geometry", flat=True).distinct()
             # Occurrence report geoemtries
-            ocr_geometries = OccurrenceReportGeometry.objects.filter(
-                id__in=ocr_geometries_ids
-            ).exclude(**{"geometry": None})
+            ocr_geometries = OccurrenceReportGeometry.objects.filter(id__in=ocr_geometries_ids).exclude(
+                **{"geometry": None}
+            )
 
             # Start building up list of epsg codes covering all geometries for this occurrence
             epsg_codes = []
-            epsg_codes += [
-                str(g.srid)
-                for g in occ_geometries.values_list("geometry", flat=True).distinct()
-            ]
+            epsg_codes += [str(g.srid) for g in occ_geometries.values_list("geometry", flat=True).distinct()]
 
-            epsg_codes += [
-                str(g.srid)
-                for g in ocr_geometries.values_list("geometry", flat=True).distinct()
-            ]
+            epsg_codes += [str(g.srid) for g in ocr_geometries.values_list("geometry", flat=True).distinct()]
             # Add the srids of the original ocr and occ geometries to epsg_codes
-            original_geometry_srids = [
-                str(g.original_geometry_srid) for g in ocr_geometries
-            ]
-            original_geometry_srids += [
-                str(g.original_geometry_srid) for g in occ_geometries
-            ]
+            original_geometry_srids = [str(g.original_geometry_srid) for g in ocr_geometries]
+            original_geometry_srids += [str(g.original_geometry_srid) for g in occ_geometries]
 
             # Add the srids of the original site geometries to epsg_codes
-            original_geometry_srids += [
-                str(g.original_geometry_srid) for g in site_geometries
-            ]
+            original_geometry_srids += [str(g.original_geometry_srid) for g in site_geometries]
 
             epsg_codes += [g for g in original_geometry_srids if g.isnumeric()]
 
@@ -5332,9 +4650,7 @@ class OccurrenceViewSet(
     @list_route(methods=["GET"], detail=False)
     def list_for_map(self, request, *args, **kwargs):
         occurrence_ids = [
-            int(id)
-            for id in request.query_params.get("proposal_ids", "").split(",")
-            if id.lstrip("-").isnumeric()
+            int(id) for id in request.query_params.get("proposal_ids", "").split(",") if id.lstrip("-").isnumeric()
         ]
 
         if len(occurrence_ids) == 0:
@@ -5347,9 +4663,7 @@ class OccurrenceViewSet(
             .prefetch_related("occ_geometry")
         )
 
-        serializer = ListOCCMinimalSerializer(
-            qs, context={"request": request}, many=True
-        )
+        serializer = ListOCCMinimalSerializer(qs, context={"request": request}, many=True)
         return Response(serializer.data)
 
     @detail_route(
@@ -5361,9 +4675,7 @@ class OccurrenceViewSet(
     def contact_details(self, request, *args, **kwargs):
         instance = self.get_object()
         qs = instance.contact_detail.all()
-        serializer = OCCContactDetailSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = OCCContactDetailSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -5375,9 +4687,7 @@ class OccurrenceViewSet(
     def sites(self, request, *args, **kwargs):
         instance = self.get_object()
         qs = instance.sites.all()
-        serializer = OccurrenceSiteSerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = OccurrenceSiteSerializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -5388,7 +4698,6 @@ class OccurrenceViewSet(
         url_path="plausibility-geometry",
     )
     def plausibility_geometry(self, request, *args, **kwargs):
-
         cache_key = settings.CACHE_KEY_PLAUSIBILITY_GEOMETRY.format(
             **{"geometry_model": PlausibilityGeometry.OCCURRENCE_GEOMETRY}
         )
@@ -5399,9 +4708,7 @@ class OccurrenceViewSet(
             )
             cache.set(cache_key, qs, settings.CACHE_TIMEOUT_24_HOURS)
 
-        serializer = PlausibilityGeometrySerializer(
-            qs, many=True, context={"request": request}
-        )
+        serializer = PlausibilityGeometrySerializer(qs, many=True, context={"request": request})
 
         return Response(serializer.data)
 
@@ -5450,9 +4757,7 @@ class OccurrenceViewSet(
             raise serializers.ValidationError("Unit is required")
 
         try:
-            res_json = spatially_process_geometry(
-                json.loads(geometry), operation, parameters, unit
-            )
+            res_json = spatially_process_geometry(json.loads(geometry), operation, parameters, unit)
         except Exception as e:
             raise e
         else:
@@ -5472,9 +4777,7 @@ class OccurrenceViewSet(
         return Response(serializer.data)
 
 
-class OccurrenceReportReferralViewSet(
-    viewsets.GenericViewSet, mixins.RetrieveModelMixin
-):
+class OccurrenceReportReferralViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = OccurrenceReportReferral.objects.all()
     serializer_class = OccurrenceReportReferralSerializer
     permission_classes = [OccurrenceReportObjectPermission | IsOccurrenceReportReferee]
@@ -5482,13 +4785,8 @@ class OccurrenceReportReferralViewSet(
     def get_queryset(self):
         qs = super().get_queryset()
         if not (is_internal(self.request) or self.request.user.is_superuser):
-            if is_contributor(self.request) and is_occurrence_report_referee(
-                self.request
-            ):
-                qs = qs.filter(
-                    Q(occurrence_report__submitter=self.request.user.id)
-                    | Q(referral=self.request.user.id)
-                )
+            if is_contributor(self.request) and is_occurrence_report_referee(self.request):
+                qs = qs.filter(Q(occurrence_report__submitter=self.request.user.id) | Q(referral=self.request.user.id))
             elif is_contributor(self.request):
                 qs = qs.filter(occurrence_report__submitter=self.request.user.id)
             elif is_occurrence_report_referee(self.request):
@@ -5503,9 +4801,7 @@ class OccurrenceReportReferralViewSet(
     )
     def referral_list(self, request, *args, **kwargs):
         instance = self.get_object()
-        qs = self.get_queryset().filter(
-            sent_by=instance.referral, occurrence_report=instance.occurrence_report
-        )
+        qs = self.get_queryset().filter(sent_by=instance.referral, occurrence_report=instance.occurrence_report)
         serializer = self.get_serializer(qs, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -5526,9 +4822,7 @@ class OccurrenceReportReferralViewSet(
     def remind(self, request, *args, **kwargs):
         instance = self.get_object()
         instance.remind(request)
-        serializer = InternalOccurrenceReportSerializer(
-            instance.occurrence_report, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance.occurrence_report, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -5541,9 +4835,7 @@ class OccurrenceReportReferralViewSet(
     def recall(self, request, *args, **kwargs):
         instance = self.get_object()
         instance.recall(request)
-        serializer = InternalOccurrenceReportSerializer(
-            instance.occurrence_report, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance.occurrence_report, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(
@@ -5556,9 +4848,7 @@ class OccurrenceReportReferralViewSet(
     def resend(self, request, *args, **kwargs):
         instance = self.get_object()
         instance.resend(request)
-        serializer = InternalOccurrenceReportSerializer(
-            instance.occurrence_report, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance.occurrence_report, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(methods=["post"], detail=True)
@@ -5571,13 +4861,9 @@ class OccurrenceReportReferralViewSet(
         instance.save()
 
         # Save the geometry data
-        geometry_data = request_data.get("occurrence_report", {}).get(
-            "ocr_geometry", None
-        )
+        geometry_data = request_data.get("occurrence_report", {}).get("ocr_geometry", None)
         if geometry_data:
-            save_geometry(
-                request, instance.occurrence_report, geometry_data, "occurrence_report"
-            )
+            save_geometry(request, instance.occurrence_report, geometry_data, "occurrence_report")
 
         # Create a log entry for the occurrence report
         instance.occurrence_report.log_user_action(
@@ -5606,9 +4892,7 @@ class OccurrenceTenureFilterBackend(DatatablesFilterBackend):
         total_count = queryset.count()
 
         query_params = {
-            p: request.query_params[p]
-            for p in request.query_params
-            if request.query_params[p] not in ["all"]
+            p: request.query_params[p] for p in request.query_params if request.query_params[p] not in ["all"]
         }
 
         filter_status = query_params.get("filter_status", None)
@@ -5617,11 +4901,7 @@ class OccurrenceTenureFilterBackend(DatatablesFilterBackend):
         purpose = query_params.get("purpose", None)
 
         queryset = queryset.filter(status=filter_status) if filter_status else queryset
-        queryset = (
-            queryset.filter(tenure_area_id=tenure_area_id)
-            if tenure_area_id
-            else queryset
-        )
+        queryset = queryset.filter(tenure_area_id=tenure_area_id) if tenure_area_id else queryset
         queryset = queryset.filter(vesting=vesting) if vesting else queryset
         queryset = queryset.filter(purpose=purpose) if purpose else queryset
 
@@ -5659,8 +4939,7 @@ class OccurrenceTenurePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         occurrence_id = self.request.query_params.get("occurrence_id", None)
         if occurrence_id and occurrence_id.isnumeric():
             return OccurrenceTenure.objects.filter(
-                Q(occurrence_geometry__occurrence_id=occurrence_id)
-                | Q(historical_occurrence=occurrence_id)
+                Q(occurrence_geometry__occurrence_id=occurrence_id) | Q(historical_occurrence=occurrence_id)
             )
         return OccurrenceTenure.objects.all()
 
@@ -5719,10 +4998,7 @@ class OccurrenceTenurePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
                 .distinct()
                 .values("tenure_area_id", "feature_id")[:10]
             )
-            results = [
-                {"id": row["tenure_area_id"], "text": row["feature_id"]}
-                for row in queryset
-            ]
+            results = [{"id": row["tenure_area_id"], "text": row["feature_id"]} for row in queryset]
 
         return Response({"results": results})
 
@@ -5744,11 +5020,7 @@ class OccurrenceTenurePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         results = []
         if search_term:
             queryset = (
-                queryset.annotate(
-                    vesting_code_label=Concat(
-                        "vesting__code", Value(" - "), "vesting__label"
-                    )
-                )
+                queryset.annotate(vesting_code_label=Concat("vesting__code", Value(" - "), "vesting__label"))
                 .filter(vesting_code_label__icontains=search_term)
                 .values("vesting__id", "vesting__code", "vesting__label")
                 .distinct()[:10]
@@ -5780,11 +5052,7 @@ class OccurrenceTenurePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
 
         if search_term:
             queryset = (
-                queryset.annotate(
-                    purpose_code_label=Concat(
-                        "purpose__code", Value(" - "), "purpose__label"
-                    )
-                )
+                queryset.annotate(purpose_code_label=Concat("purpose__code", Value(" - "), "purpose__label"))
                 .filter(purpose_code_label__icontains=search_term)
                 .values("purpose__id", "purpose__code", "purpose__label")
                 .distinct()[:10]
@@ -5845,12 +5113,8 @@ class OccurrenceTenureViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin
         detail=False,
     )
     def occurrence_tenure_list_of_values(self, request, *args, **kwargs):
-        purposes = list(
-            OccurrenceTenurePurpose.objects.active().values("id", "code", "label")
-        )
-        vestings = list(
-            OccurrenceTenureVesting.objects.all().values("id", "code", "label")
-        )
+        purposes = list(OccurrenceTenurePurpose.objects.active().values("id", "code", "label"))
+        vestings = list(OccurrenceTenureVesting.objects.all().values("id", "code", "label"))
 
         res_json = {
             "purposes": purposes,
@@ -5871,9 +5135,7 @@ class ContactDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         if not instance.visible:
             raise serializers.ValidationError("Discarded contact cannot be updated.")
 
-        serializer = OCCContactDetailSerializer(
-            instance, data=json.loads(request.data.get("data"))
-        )
+        serializer = OCCContactDetailSerializer(instance, data=json.loads(request.data.get("data")))
         serializer.is_valid(raise_exception=True)
 
         occurrence = serializer.validated_data["occurrence"]
@@ -5881,25 +5143,17 @@ class ContactDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         if (
             OCCContactDetail.objects.exclude(id=instance.id)
-            .filter(
-                Q(contact_name=contact_name)
-                & Q(occurrence=occurrence)
-                & Q(visible=True)
-            )
+            .filter(Q(contact_name=contact_name) & Q(occurrence=occurrence) & Q(visible=True))
             .exists()
         ):
-            raise serializers.ValidationError(
-                "Contact with this name already exists for this occurrence"
-            )
+            raise serializers.ValidationError("Contact with this name already exists for this occurrence")
 
         serializer.save(version_user=request.user)
 
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        serializer = OCCContactDetailSerializer(
-            data=json.loads(request.data.get("data"))
-        )
+        serializer = OCCContactDetailSerializer(data=json.loads(request.data.get("data")))
         serializer.is_valid(raise_exception=True)
         occurrence = serializer.validated_data["occurrence"]
         contact_name = serializer.validated_data["contact_name"]
@@ -5907,9 +5161,7 @@ class ContactDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         if OCCContactDetail.objects.filter(
             Q(contact_name=contact_name) & Q(occurrence=occurrence) & Q(visible=True)
         ).exists():
-            raise serializers.ValidationError(
-                "Contact with this name already exists for this occurrence"
-            )
+            raise serializers.ValidationError("Contact with this name already exists for this occurrence")
 
         serializer.save(version_user=request.user)
 
@@ -5939,13 +5191,9 @@ class ContactDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance = self.get_object()
 
         if OCCContactDetail.objects.filter(
-            Q(contact_name=instance.contact_name)
-            & Q(occurrence=instance.occurrence)
-            & Q(visible=True)
+            Q(contact_name=instance.contact_name) & Q(occurrence=instance.occurrence) & Q(visible=True)
         ).exists():
-            raise serializers.ValidationError(
-                "Active contact with this name already exists for this occurrence"
-            )
+            raise serializers.ValidationError("Active contact with this name already exists for this occurrence")
 
         instance.visible = True
         instance.save(version_user=request.user)
@@ -6003,9 +5251,7 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             .filter(Q(site_name=site_name) & Q(occurrence=occurrence) & Q(visible=True))
             .exists()
         ):
-            raise serializers.ValidationError(
-                "Site with this name already exists for this occurrence"
-            )
+            raise serializers.ValidationError("Site with this name already exists for this occurrence")
 
         instance = serializer.save(version_user=request.user)
 
@@ -6014,12 +5260,9 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-
         data = json.loads(request.data.get("data"))
         try:
-            point_data = "POINT({} {})".format(
-                data["point_coord1"], data["point_coord2"]
-            )
+            point_data = "POINT({} {})".format(data["point_coord1"], data["point_coord2"])
         except KeyError:
             raise serializers.ValidationError("Please enter a point coordinate")
 
@@ -6047,12 +5290,8 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         occurrence = serializer.validated_data["occurrence"]
         site_name = serializer.validated_data["site_name"]
 
-        if OccurrenceSite.objects.filter(
-            Q(site_name=site_name) & Q(occurrence=occurrence) & Q(visible=True)
-        ).exists():
-            raise serializers.ValidationError(
-                "Site with this name already exists for this occurrence"
-            )
+        if OccurrenceSite.objects.filter(Q(site_name=site_name) & Q(occurrence=occurrence) & Q(visible=True)).exists():
+            raise serializers.ValidationError("Site with this name already exists for this occurrence")
 
         serializer.save(version_user=request.user)
 
@@ -6084,13 +5323,9 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance = self.get_object()
 
         if OccurrenceSite.objects.filter(
-            Q(site_name=instance.site_name)
-            & Q(occurrence=instance.occurrence)
-            & Q(visible=True)
+            Q(site_name=instance.site_name) & Q(occurrence=instance.occurrence) & Q(visible=True)
         ).exists():
-            raise serializers.ValidationError(
-                "Active site with this name already exists for this occurrence"
-            )
+            raise serializers.ValidationError("Active site with this name already exists for this occurrence")
 
         instance.visible = True
         instance.save(version_user=request.user)
@@ -6105,11 +5340,8 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         detail=False,
     )
     def site_list_of_values(self, request, *args, **kwargs):
-
         site_type_list = list(SiteType.objects.active().values("id", "name"))
-        datum_list = list(
-            {"srid": datum.srid, "name": datum.name} for datum in Datum.objects.active()
-        )
+        datum_list = list({"srid": datum.srid, "name": datum.name} for datum in Datum.objects.active())
 
         res_json = {
             "site_type_list": site_type_list,
@@ -6125,19 +5357,12 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         if not occurrence_id:
             raise serializers.ValidationError("No occurrence_id found in request")
 
-        qs = (
-            self.get_queryset()
-            .filter(occurrence_id=occurrence_id)
-            .exclude(geometry=None)
-            .exclude(visible=False)
-        )
+        qs = self.get_queryset().filter(occurrence_id=occurrence_id).exclude(geometry=None).exclude(visible=False)
         serializer = SiteGeometrySerializer(qs, many=True)
         return Response(serializer.data)
 
 
-class OCRExternalRefereeInviteViewSet(
-    viewsets.GenericViewSet, mixins.RetrieveModelMixin
-):
+class OCRExternalRefereeInviteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     queryset = OCRExternalRefereeInvite.objects.filter(archived=False)
     serializer_class = OCRExternalRefereeInviteSerializer
     permission_classes = [OccurrenceReportObjectPermission]
@@ -6151,9 +5376,7 @@ class OCRExternalRefereeInviteViewSet(
     @detail_route(methods=["post"], detail=True)
     def remind(self, request, *args, **kwargs):
         instance = self.get_object()
-        send_external_referee_invite_email(
-            instance.occurrence_report, request, instance, reminder=True
-        )
+        send_external_referee_invite_email(instance.occurrence_report, request, instance, reminder=True)
         return Response(
             status=status.HTTP_200_OK,
             data={"message": f"Reminder sent to {instance.email} successfully"},
@@ -6164,9 +5387,7 @@ class OCRExternalRefereeInviteViewSet(
         instance = self.get_object()
         instance.archived = True
         instance.save()
-        serializer = InternalOccurrenceReportSerializer(
-            instance.occurrence_report, context={"request": request}
-        )
+        serializer = InternalOccurrenceReportSerializer(instance.occurrence_report, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -6232,13 +5453,9 @@ class OccurrenceReportBulkImportSchemaViewSet(
         return qs
 
     def perform_create(self, serializer):
-        if OccurrenceReportBulkImportSchema.objects.filter(
-            group_type=serializer.validated_data["group_type"]
-        ).exists():
+        if OccurrenceReportBulkImportSchema.objects.filter(group_type=serializer.validated_data["group_type"]).exists():
             latest_version = (
-                OccurrenceReportBulkImportSchema.objects.filter(
-                    group_type=serializer.validated_data["group_type"]
-                )
+                OccurrenceReportBulkImportSchema.objects.filter(group_type=serializer.validated_data["group_type"])
                 .order_by("-version")
                 .first()
                 .version
@@ -6252,16 +5469,12 @@ class OccurrenceReportBulkImportSchemaViewSet(
     def get_schema_list_by_group_type(self, request, *args, **kwargs):
         group_type = request.GET.get("group_type", None)
         if not group_type:
-            raise serializers.ValidationError(
-                "Group Type is required to return correct list of values"
-            )
+            raise serializers.ValidationError("Group Type is required to return correct list of values")
 
         group_type = GroupType.objects.get(name=group_type)
 
         schema = OccurrenceReportBulkImportSchema.objects.filter(group_type=group_type)
-        serializer = OccurrenceReportBulkImportSchemaListSerializer(
-            schema, many=True, context={"request": request}
-        )
+        serializer = OccurrenceReportBulkImportSchemaListSerializer(schema, many=True, context={"request": request})
         return Response(serializer.data)
 
     @detail_route(methods=["get"], detail=True)
@@ -6293,16 +5506,12 @@ class OccurrenceReportBulkImportSchemaViewSet(
     def copy(self, request, *args, **kwargs):
         instance = self.get_object()
         new_instance = instance.copy(request)
-        serializer = OccurrenceReportBulkImportSchemaSerializer(
-            new_instance, context={"request": request}
-        )
+        serializer = OccurrenceReportBulkImportSchemaSerializer(new_instance, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @detail_route(methods=["get"], detail=False)
     def default_value_choices(self, request, *args, **kwargs):
-        default_value_field = OccurrenceReportBulkImportSchemaColumn._meta.get_field(
-            "default_value"
-        )
+        default_value_field = OccurrenceReportBulkImportSchemaColumn._meta.get_field("default_value")
         return Response(default_value_field.choices, status=status.HTTP_200_OK)
 
 
@@ -6363,9 +5572,7 @@ class AssociatedSpeciesTaxonomyViewSet(
     def get_queryset(self):
         qs = super().get_queryset()
         if is_contributor(self.request) and not is_internal(self.request):
-            return qs.filter(
-                ocrassociatedspecies__occurrence_report__submitter=self.request.user.id
-            )
+            return qs.filter(ocrassociatedspecies__occurrence_report__submitter=self.request.user.id)
         if not is_internal(self.request):
             return qs.none()
         return qs

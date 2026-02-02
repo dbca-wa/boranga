@@ -94,9 +94,7 @@ def send_species_create_email_notification(request, species_proposal):
         )
     )
     # add the extra query params as need to load the species detail page
-    url = url + "?group_type_name={}&action=view".format(
-        species_proposal.group_type.name
-    )
+    url = url + f"?group_type_name={species_proposal.group_type.name}&action=view"
     url = convert_external_url_to_internal_url(url)
 
     context = {"species_community_proposal": species_proposal, "url": url}
@@ -123,17 +121,13 @@ def send_user_species_create_email_notification(request, species_proposal):
         )
     )
     # add the extra query params as need to load the species detail page
-    url = url + "?group_type_name={}&action=view".format(
-        species_proposal.group_type.name
-    )
+    url = url + f"?group_type_name={species_proposal.group_type.name}&action=view"
 
     url = convert_external_url_to_internal_url(url)
 
     context = {
         "species_community_proposal": species_proposal,
-        "submitter": EmailUser.objects.get(
-            id=species_proposal.submitter
-        ).get_full_name(),
+        "submitter": EmailUser.objects.get(id=species_proposal.submitter).get_full_name(),
         "url": url,
     }
     all_ccs = []
@@ -159,9 +153,7 @@ def send_species_split_email_notification(
     occurrence_assignments_dict,
 ):
     email = SplitSpeciesSendNotificationEmail()
-    url = request.build_absolute_uri(
-        reverse("internal-conservation-status-dashboard", kwargs={})
-    )
+    url = request.build_absolute_uri(reverse("internal-conservation-status-dashboard", kwargs={}))
     url = convert_external_url_to_internal_url(url)
 
     notification_emails = SystemEmailGroup.emails_by_group_and_area(
@@ -233,14 +225,10 @@ def send_species_split_email_notification(
 
 
 #  here species_proposal is the new species created in combine species functionality
-def send_species_combine_email_notification(
-    request, combine_species_qs, resulting_species_instance, actions
-):
+def send_species_combine_email_notification(request, combine_species_qs, resulting_species_instance, actions):
     email = CombineSpeciesSendNotificationEmail()
 
-    url = request.build_absolute_uri(
-        reverse("internal-conservation-status-dashboard", kwargs={})
-    )
+    url = request.build_absolute_uri(reverse("internal-conservation-status-dashboard", kwargs={}))
     url = convert_external_url_to_internal_url(url)
     resulting_species_url = request.build_absolute_uri(
         reverse(
@@ -264,9 +252,7 @@ def send_species_combine_email_notification(
 
     all_ccs = list(set(all_ccs))
 
-    submitter_email = EmailUser.objects.get(
-        id=resulting_species_instance.submitter
-    ).email
+    submitter_email = EmailUser.objects.get(id=resulting_species_instance.submitter).email
 
     to = request.user.email if request else submitter_email
 
@@ -295,9 +281,7 @@ def send_species_rename_email_notification(request, species_proposal, new_specie
     species_url = convert_external_url_to_internal_url(species_url)
 
     new_species_url = request.build_absolute_uri(
-        reverse(
-            "internal-species-detail", kwargs={"species_proposal_pk": new_species.id}
-        )
+        reverse("internal-species-detail", kwargs={"species_proposal_pk": new_species.id})
     )
     new_species_url = convert_external_url_to_internal_url(new_species_url)
 
@@ -339,9 +323,7 @@ def send_community_create_email_notification(request, community_proposal):
         )
     )
     # add the extra query params as need to load the species detail page
-    url = url + "?group_type_name={}&action=view".format(
-        community_proposal.group_type.name
-    )
+    url = url + f"?group_type_name={community_proposal.group_type.name}&action=view"
     url = convert_external_url_to_internal_url(url)
 
     context = {"species_community_proposal": community_proposal, "url": url}
@@ -368,17 +350,13 @@ def send_user_community_create_email_notification(request, community_proposal):
         )
     )
     # add the extra query params as need to load the species detail page
-    url = url + "?group_type_name={}&action=view".format(
-        community_proposal.group_type.name
-    )
+    url = url + f"?group_type_name={community_proposal.group_type.name}&action=view"
 
     url = convert_external_url_to_internal_url(url)
 
     context = {
         "species_community_proposal": community_proposal,
-        "submitter": EmailUser.objects.get(
-            id=community_proposal.submitter
-        ).get_full_name(),
+        "submitter": EmailUser.objects.get(id=community_proposal.submitter).get_full_name(),
         "url": url,
     }
     all_ccs = []
@@ -409,9 +387,7 @@ def send_community_rename_email_notification(
             kwargs={"community_proposal_pk": original_community.id},
         )
     )
-    original_community_url = convert_external_url_to_internal_url(
-        original_community_url
-    )
+    original_community_url = convert_external_url_to_internal_url(original_community_url)
 
     resulting_community_url = request.build_absolute_uri(
         reverse(
@@ -419,9 +395,7 @@ def send_community_rename_email_notification(
             kwargs={"community_proposal_pk": resulting_community.id},
         )
     )
-    resulting_community_url = convert_external_url_to_internal_url(
-        resulting_community_url
-    )
+    resulting_community_url = convert_external_url_to_internal_url(resulting_community_url)
 
     notification_emails = SystemEmailGroup.emails_by_group_and_area(
         group_type=original_community.group_type,
@@ -469,17 +443,12 @@ def send_nomos_script_failed(errors):
         logger.error(f"{err_msg}\n{str(e)}")
 
 
-def _log_species_email(
-    email_message, species_proposal, sender=None, file_bytes=None, filename=None
-):
+def _log_species_email(email_message, species_proposal, sender=None, file_bytes=None, filename=None):
     from boranga.components.species_and_communities.models import SpeciesLogEntry
 
     if isinstance(
         email_message,
-        (
-            EmailMultiAlternatives,
-            EmailMessage,
-        ),
+        EmailMultiAlternatives | EmailMessage,
     ):
         # Note: this will log the plain text body, should we log the html instead
         text = email_message.body
@@ -524,26 +493,19 @@ def _log_species_email(
 
     if file_bytes and filename:
         # attach the file to the comms_log also
-        path_to_file = "{}/species/{}/communications/{}".format(
-            settings.MEDIA_APP_DIR, species_proposal.id, filename
-        )
+        path_to_file = f"{settings.MEDIA_APP_DIR}/species/{species_proposal.id}/communications/{filename}"
         private_storage.save(path_to_file, ContentFile(file_bytes))
         email_entry.documents.get_or_create(_file=path_to_file, name=filename)
 
     return email_entry
 
 
-def _log_community_email(
-    email_message, community_proposal, sender=None, file_bytes=None, filename=None
-):
+def _log_community_email(email_message, community_proposal, sender=None, file_bytes=None, filename=None):
     from boranga.components.species_and_communities.models import CommunityLogEntry
 
     if isinstance(
         email_message,
-        (
-            EmailMultiAlternatives,
-            EmailMessage,
-        ),
+        EmailMultiAlternatives | EmailMessage,
     ):
         # Note: this will log the plain text body, should we log the html instead
         text = email_message.body
@@ -588,9 +550,7 @@ def _log_community_email(
 
     if file_bytes and filename:
         # attach the file to the comms_log also
-        path_to_file = "{}/community/{}/communications/{}".format(
-            settings.MEDIA_APP_DIR, community_proposal.id, filename
-        )
+        path_to_file = f"{settings.MEDIA_APP_DIR}/community/{community_proposal.id}/communications/{filename}"
         private_storage.save(path_to_file, ContentFile(file_bytes))
         email_entry.documents.get_or_create(_file=path_to_file, name=filename)
 

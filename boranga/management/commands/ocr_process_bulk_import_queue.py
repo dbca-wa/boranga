@@ -57,35 +57,27 @@ class Command(BaseCommand):
             # Process the task
             errors = task.process()
             if errors:
-                task.processing_status = (
-                    OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-                )
+                task.processing_status = OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
                 task.datetime_error = timezone.now()
                 task.error_message = "Errors occurred during processing:\n"
                 for error in errors:
                     task.error_message += f"Row: {error['row_index'] + 1}. Error: {error['error_message']}\n"
             else:
                 # Set the task to completed
-                task.processing_status = (
-                    OccurrenceReportBulkImportTask.PROCESSING_STATUS_COMPLETED
-                )
+                task.processing_status = OccurrenceReportBulkImportTask.PROCESSING_STATUS_COMPLETED
                 task.datetime_completed = timezone.now()
             task.save()
 
         except KeyboardInterrupt:
             logger.info(f"OCR Bulk Import Task {task.id} was interrupted")
-            task.processing_status = (
-                OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-            )
+            task.processing_status = OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
             task.error_message = "KeyboardInterrupt"
             task.save()
             return
         except Exception as e:
             logger.error(f"Error processing OCR Bulk Import Task {task.id}: {e}")
             logger.error(traceback.format_exc())
-            task.processing_status = (
-                OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-            )
+            task.processing_status = OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
             task.error_message = str(e)
             task.save()
             return

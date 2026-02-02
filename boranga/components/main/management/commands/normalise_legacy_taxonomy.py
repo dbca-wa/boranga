@@ -8,9 +8,7 @@ from boranga.components.main.models import LegacyTaxonomyMapping
 
 
 class Command(BaseCommand):
-    help = (
-        "Normalise LegacyTaxonomyMapping. Dry-run by default; use --apply to persist."
-    )
+    help = "Normalise LegacyTaxonomyMapping. Dry-run by default; use --apply to persist."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -80,15 +78,11 @@ class Command(BaseCommand):
 
         # apply requested
         if conflicts and not force:
-            self.stdout.write(
-                "Normalization results in conflicting keys. Use --force to apply anyway. Aborting."
-            )
+            self.stdout.write("Normalization results in conflicting keys. Use --force to apply anyway. Aborting.")
             return
 
         # apply updates atomically
         with transaction.atomic():
             for pk, orig, norm in changes:
-                LegacyTaxonomyMapping.objects.filter(pk=pk).update(
-                    legacy_canonical_name=norm
-                )
+                LegacyTaxonomyMapping.objects.filter(pk=pk).update(legacy_canonical_name=norm)
         self.stdout.write(f"Applied {len(changes)} changes.")

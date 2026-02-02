@@ -32,9 +32,7 @@ class TileLayer(BaseModel):
         (SERVICE_WMS, "WMS"),
         (SERVICE_WMTS, "WMTS"),
     )
-    service = models.CharField(
-        max_length=10, choices=SERVICE_CHOICES, default=SERVICE_WMS
-    )
+    service = models.CharField(max_length=10, choices=SERVICE_CHOICES, default=SERVICE_WMS)
     geoserver_url = models.ForeignKey(
         GeoserverUrl,
         on_delete=models.CASCADE,
@@ -42,34 +40,22 @@ class TileLayer(BaseModel):
         blank=False,
         related_name="tile_layers",
     )
-    is_capabilities_url = models.BooleanField(
-        default=False
-    )  # Whether the layer is a capabilities URL
+    is_capabilities_url = models.BooleanField(default=False)  # Whether the layer is a capabilities URL
     layer_name = models.CharField(
         max_length=255, unique=True, null=False, blank=False
     )  # Name of the layer in Geoserver
     layer_title = models.CharField(max_length=255)  # Title of the layer
-    display_title = models.CharField(
-        max_length=255
-    )  # Title to display in the layer switcher
+    display_title = models.CharField(max_length=255)  # Title to display in the layer switcher
     is_satellite_background = models.BooleanField(
         default=False
     )  # Whether the layer is the satellite background layer (mutually exclusive with is_streets_background)
     is_streets_background = models.BooleanField(
         default=False
     )  # Whether the layer is the streets background layer (mutually exclusive with is_satellite_background)
-    is_external = models.BooleanField(
-        default=True
-    )  # Whether the layer is available for external use
-    is_internal = models.BooleanField(
-        default=True
-    )  # Whether the layer is available for internal use
-    visible = models.BooleanField(
-        default=False
-    )  # Whether the layer is visible by default
-    active = models.BooleanField(
-        default=True
-    )  # Whether the layer is disabled and won't be used by the map component
+    is_external = models.BooleanField(default=True)  # Whether the layer is available for external use
+    is_internal = models.BooleanField(default=True)  # Whether the layer is available for internal use
+    visible = models.BooleanField(default=False)  # Whether the layer is visible by default
+    active = models.BooleanField(default=True)  # Whether the layer is disabled and won't be used by the map component
     min_zoom = models.PositiveIntegerField(
         default=0,
         validators=[MinValueValidator(0), MaxValueValidator(21)],
@@ -85,12 +71,8 @@ class TileLayer(BaseModel):
     is_tenure_intersects_query_layer = models.BooleanField(
         default=False
     )  # Whether the layer is used for querying tenure intersects
-    invert_xy = models.BooleanField(
-        default=False
-    )  # Whether the x and y coordinates should be inverted
-    matrix_set = models.CharField(
-        max_length=255, blank=True
-    )  # Matrix set for WMTS layers
+    invert_xy = models.BooleanField(default=False)  # Whether the x and y coordinates should be inverted
+    matrix_set = models.CharField(max_length=255, blank=True)  # Matrix set for WMTS layers
     tile_pixel_size = models.PositiveIntegerField(
         default=256, null=False, blank=False
     )  # Tile pixel size for WMTS layers
@@ -117,9 +99,7 @@ class TileLayer(BaseModel):
 
     def save(self, *args, **kwargs):
         # Clear the cache for the proxy layer data
-        cache_key = settings.CACHE_KEY_PROXY_LAYER_DATA.format(
-            app_label="boranga", model_name="tilelayer"
-        )
+        cache_key = settings.CACHE_KEY_PROXY_LAYER_DATA.format(app_label="boranga", model_name="tilelayer")
         cache.delete(cache_key)
 
         super().save(*args, **kwargs)
@@ -145,9 +125,7 @@ class Proxy(BaseModel):
                 raise ValueError("Username and password are required for basic auth")
 
         # Clear the cache for the proxy data
-        cache_key = settings.CACHE_KEY_PROXY_NODE_DATA.format(
-            request_path=self.request_path
-        )
+        cache_key = settings.CACHE_KEY_PROXY_NODE_DATA.format(request_path=self.request_path)
         cache.delete(cache_key)
         super().save(*args, **kwargs)
 

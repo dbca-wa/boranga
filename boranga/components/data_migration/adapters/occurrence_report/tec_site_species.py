@@ -32,9 +32,7 @@ class OccurrenceReportTecSiteSpeciesAdapter(SourceAdapter):
             if raw.get("SSP_COLLECTOR_CODE"):
                 comments_parts.append(f"Collector Code: {raw['SSP_COLLECTOR_CODE']}")
             if raw.get("SSP_COLLECTION_NUMBER"):
-                comments_parts.append(
-                    f"Collector Number: {raw['SSP_COLLECTION_NUMBER']}"
-                )
+                comments_parts.append(f"Collector Number: {raw['SSP_COLLECTION_NUMBER']}")
 
             comments = "; ".join(comments_parts)
 

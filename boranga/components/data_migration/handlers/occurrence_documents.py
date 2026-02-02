@@ -27,13 +27,9 @@ SOURCE_ADAPTERS = {
 @register
 class OccurrenceDocumentImporter(BaseSheetImporter):
     slug = "occurrence_documents_legacy"
-    description = (
-        "Import occurrence child documents from legacy TPFL/TEC/TFAUNA sources"
-    )
+    description = "Import occurrence child documents from legacy TPFL/TEC/TFAUNA sources"
 
-    def clear_targets(
-        self, ctx: ImportContext, include_children: bool = False, **options
-    ):
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OccurrenceDocument target data. Respect `ctx.dry_run`."""
         if ctx.dry_run:
             return
@@ -62,9 +58,7 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
             )
             doc_filter = {"occurrence__group_type__name__in": target_group_types}
         else:
-            logger.warning(
-                "OccurrenceDocumentImporter: deleting OccurrenceDocument data..."
-            )
+            logger.warning("OccurrenceDocumentImporter: deleting OccurrenceDocument data...")
             doc_filter = {}
 
         from django.apps import apps
@@ -104,13 +98,9 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
                                 "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
                                 [table, "id", 1, False],
                             )
-                    logger.info(
-                        "Reset primary key sequence for table %s to %s", table, max_id
-                    )
+                    logger.info("Reset primary key sequence for table %s to %s", table, max_id)
             except Exception:
-                logger.exception(
-                    "Failed to reset OccurrenceDocument primary key sequence"
-                )
+                logger.exception("Failed to reset OccurrenceDocument primary key sequence")
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
@@ -206,9 +196,7 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
             has_error = False
             # Choose pipeline map based on row source (fallback to base)
             src = row.get("_source")
-            pipeline_map = pipelines_by_source.get(
-                src, pipelines_by_source.get(None, {})
-            )
+            pipeline_map = pipelines_by_source.get(src, pipelines_by_source.get(None, {}))
             for col, pipeline in pipeline_map.items():
                 raw_val = row.get(col)
                 res = run_pipeline(pipeline, raw_val, tcx)
@@ -351,9 +339,7 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
             try:
                 with transaction.atomic():
                     # Use batch_size to avoid huge SQL queries
-                    created_objs = OccurrenceDocument.objects.bulk_create(
-                        instances, batch_size=1000
-                    )
+                    created_objs = OccurrenceDocument.objects.bulk_create(instances, batch_size=1000)
                     created = len(created_objs)
 
                     # Post-process to set document_number and ensure uploaded_date is preserved
@@ -370,9 +356,7 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
                     )
 
             except Exception as e:
-                logger.error(
-                    f"Bulk create failed ({e}), falling back to individual saves..."
-                )
+                logger.error(f"Bulk create failed ({e}), falling back to individual saves...")
                 # Fallback: Try to save one by one to isolate errors
                 for instance, row in to_create:
                     try:
@@ -382,9 +366,7 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
 
                         # Patch the date if needed
                         if target_date:
-                            OccurrenceDocument.objects.filter(pk=instance.pk).update(
-                                uploaded_date=target_date
-                            )
+                            OccurrenceDocument.objects.filter(pk=instance.pk).update(uploaded_date=target_date)
 
                     except Exception as inner_e:
                         skipped += 1

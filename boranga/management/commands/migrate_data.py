@@ -127,26 +127,18 @@ class Command(BaseCommand):
                     # Be conservative: do not fail the whole CLI if creating the
                     # MigrationRun record fails; log to stdout and continue without it.
                     self.stdout.write(
-                        self.style.WARNING(
-                            "Warning: failed to create MigrationRun record; continuing without it."
-                        )
+                        self.style.WARNING("Warning: failed to create MigrationRun record; continuing without it.")
                     )
             self.stdout.write(f"== {imp_cls.slug} ==")
             # Optionally clear target data for this importer before running
             if opts.get("wipe_targets"):
                 if ctx.dry_run:
-                    self.stdout.write(
-                        self.style.WARNING("dry-run: would wipe targets (skipped).")
-                    )
+                    self.stdout.write(self.style.WARNING("dry-run: would wipe targets (skipped)."))
                 else:
                     importer = imp_cls()
                     clear_fn = getattr(importer, "clear_targets", None)
                     if callable(clear_fn):
-                        self.stdout.write(
-                            self.style.WARNING(
-                                "Wiping target data for importer %s" % imp_cls.slug
-                            )
-                        )
+                        self.stdout.write(self.style.WARNING(f"Wiping target data for importer {imp_cls.slug}"))
                         try:
                             clear_fn(
                                 ctx=ctx,
@@ -154,14 +146,10 @@ class Command(BaseCommand):
                                 **{k: v for k, v in opts.items() if k not in ("path",)},
                             )
                         except Exception as e:
-                            raise CommandError(
-                                f"Failed to wipe targets for {imp_cls.slug}: {e}"
-                            )
+                            raise CommandError(f"Failed to wipe targets for {imp_cls.slug}: {e}")
                     else:
                         self.stdout.write(
-                            self.style.WARNING(
-                                f"Importer {imp_cls.slug} has no clear_targets() method; skipping wipe."
-                            )
+                            self.style.WARNING(f"Importer {imp_cls.slug} has no clear_targets() method; skipping wipe.")
                         )
 
             opts_no_path = {k: v for k, v in opts.items() if k != "path"}
@@ -211,21 +199,13 @@ class Command(BaseCommand):
             # If requested, wipe targets for all importers first (deletes targets and children)
             if opts.get("wipe_targets"):
                 if ctx.dry_run:
-                    self.stdout.write(
-                        self.style.WARNING(
-                            "dry-run: would wipe all importer targets (skipped)."
-                        )
-                    )
+                    self.stdout.write(self.style.WARNING("dry-run: would wipe all importer targets (skipped)."))
                 else:
                     for imp_cls in importers:
                         importer = imp_cls()
                         clear_fn = getattr(importer, "clear_targets", None)
                         if callable(clear_fn):
-                            self.stdout.write(
-                                self.style.WARNING(
-                                    f"Wiping target data for importer {imp_cls.slug}"
-                                )
-                            )
+                            self.stdout.write(self.style.WARNING(f"Wiping target data for importer {imp_cls.slug}"))
                             try:
                                 clear_fn(
                                     ctx=ctx,
@@ -233,9 +213,7 @@ class Command(BaseCommand):
                                     **{k: v for k, v in opts.items() if k != "path"},
                                 )
                             except Exception as e:
-                                raise CommandError(
-                                    f"Failed to wipe targets for {imp_cls.slug}: {e}"
-                                )
+                                raise CommandError(f"Failed to wipe targets for {imp_cls.slug}: {e}")
                         else:
                             self.stdout.write(
                                 self.style.WARNING(
@@ -249,9 +227,7 @@ class Command(BaseCommand):
                 stats = imp_cls().run(opts["path"], ctx, **opts_no_path)
                 self.stdout.write(f"{imp_cls.slug} stats: {stats}")
             # Cleanup env var used for limiting rows across runmany
-            if multi_limit and os.environ.get("DATA_MIGRATION_LIMIT") == str(
-                multi_limit
-            ):
+            if multi_limit and os.environ.get("DATA_MIGRATION_LIMIT") == str(multi_limit):
                 try:
                     del os.environ["DATA_MIGRATION_LIMIT"]
                 except Exception:

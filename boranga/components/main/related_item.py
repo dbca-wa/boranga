@@ -65,9 +65,7 @@ class RelatedItemsSerializer(BaseSerializer):
         request = self.context.get("request")
         if not is_internal(request):
             if instance.model_name.lower() in ["species", "community"]:
-                instance.action_url = instance.action_url.replace(
-                    "/internal/", "/external/"
-                )
+                instance.action_url = instance.action_url.replace("/internal/", "/external/")
             else:
                 # If the request is not internal, remove the action_url field
                 instance.action_url = None

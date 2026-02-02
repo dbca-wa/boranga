@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentSerializer(BaseModelSerializer):
-
     class Meta:
         model = Document
         fields = ("id", "description", "file", "name", "uploaded_date")
@@ -129,16 +128,10 @@ class UserSerializer(BaseModelSerializer):
         return obj.get_full_name()
 
     def get_area_of_interest(self, obj):
-        user_system_settings, created = UserSystemSettings.objects.get_or_create(
-            user=obj.id
-        )
+        user_system_settings, created = UserSystemSettings.objects.get_or_create(user=obj.id)
         if created:
             logger.info(f"Created UserSystemSettings: {user_system_settings}")
-        group_type_name = (
-            user_system_settings.area_of_interest.name
-            if user_system_settings.area_of_interest
-            else None
-        )
+        group_type_name = user_system_settings.area_of_interest.name if user_system_settings.area_of_interest else None
         return group_type_name if group_type_name else None
 
     def get_groups(self, obj):
@@ -146,9 +139,7 @@ class UserSerializer(BaseModelSerializer):
         request = self.context["request"] if self.context else None
         if request.user.is_superuser:
             return groups
-        return groups.filter(
-            systemgrouppermission__emailuser=request.user.id
-        ).values_list("name", flat=True)
+        return groups.filter(systemgrouppermission__emailuser=request.user.id).values_list("name", flat=True)
 
     def get_is_internal(self, obj):
         request = self.context["request"]
@@ -194,9 +185,7 @@ class ContactSerializer(BaseModelSerializer):
             return obj
         else:
             if not obj.get("phone_number") and not obj.get("mobile_number"):
-                raise serializers.ValidationError(
-                    "You must provide a mobile/phone number"
-                )
+                raise serializers.ValidationError("You must provide a mobile/phone number")
         return obj
 
 
@@ -215,9 +204,7 @@ class EmailUserCommsSerializer(BaseModelSerializer):
 
 
 class CommunicationLogEntrySerializer(BaseModelSerializer):
-    customer = serializers.PrimaryKeyRelatedField(
-        queryset=EmailUser.objects.all(), required=False
-    )
+    customer = serializers.PrimaryKeyRelatedField(queryset=EmailUser.objects.all(), required=False)
     documents = serializers.SerializerMethodField()
 
     class Meta:
@@ -260,9 +247,7 @@ class SubmitterCategorySerializer(BaseModelSerializer):
 
 
 class SubmitterInformationSerializer(BaseModelSerializer):
-    submitter_category_name = serializers.CharField(
-        source="submitter_category.name", read_only=True, allow_null=True
-    )
+    submitter_category_name = serializers.CharField(source="submitter_category.name", read_only=True, allow_null=True)
 
     class Meta:
         model = SubmitterInformation
@@ -278,15 +263,9 @@ class SubmitterInformationSerializer(BaseModelSerializer):
 
         if (
             hasattr(instance, "occurrence_report")
-            and (
-                not is_occurrence_assessor(request)
-                and not is_occurrence_approver(request)
-            )
+            and (not is_occurrence_assessor(request) and not is_occurrence_approver(request))
             or hasattr(instance, "conservation_status")
-            and (
-                not is_conservation_status_assessor(request)
-                and not is_conservation_status_approver(request)
-            )
+            and (not is_conservation_status_assessor(request) and not is_conservation_status_approver(request))
         ):
             ret.pop("contact_details")
 
@@ -324,9 +303,7 @@ class OutstandingReferralSerializer(BaseSerializer):
                 if choice[0] == obj["processing_status"]:
                     return choice[1]
 
-        raise serializers.ValidationError(
-            "Processing status not found for this referral"
-        )
+        raise serializers.ValidationError("Processing status not found for this referral")
 
     def get_type(self, obj):
         group_type = obj["group_type"]
@@ -375,8 +352,6 @@ class OutstandingReferralSerializer(BaseSerializer):
         if link:
             return link
 
-        logger.warning(
-            f"Link not found for referral {obj['number']} with id {obj['id']}"
-        )
+        logger.warning(f"Link not found for referral {obj['number']} with id {obj['id']}")
 
         return None

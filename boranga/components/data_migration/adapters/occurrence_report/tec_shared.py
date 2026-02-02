@@ -28,9 +28,9 @@ def _ensure_caches_loaded():
     if _TEC_USER_MAPPING_CACHE is None:
         _TEC_USER_MAPPING_CACHE = {}
         # Bulk load all user mappings for TEC to avoid N+1
-        mappings = LegacyUsernameEmailuserMapping.objects.filter(
-            legacy_system__iexact="TEC"
-        ).values("legacy_username", "emailuser_id")
+        mappings = LegacyUsernameEmailuserMapping.objects.filter(legacy_system__iexact="TEC").values(
+            "legacy_username", "emailuser_id"
+        )
 
         for m in mappings:
             uname = m["legacy_username"].strip().lower() if m["legacy_username"] else ""

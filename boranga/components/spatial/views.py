@@ -1,5 +1,5 @@
 from django.forms import ValidationError
-from django.http import Http404, HttpResponse
+from django.http import Http404
 from django.views.decorators.csrf import csrf_exempt
 
 from boranga.components.spatial.models import Proxy

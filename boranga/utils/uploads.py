@@ -13,9 +13,7 @@ def _default_name_generator(instance=None, filename=None) -> str:
 
 @deconstructible
 class RandomizeUploadTo:
-    def __init__(
-        self, upload_to, name_generator: Callable | None = None, keep_ext: bool = True
-    ):
+    def __init__(self, upload_to, name_generator: Callable | None = None, keep_ext: bool = True):
         self.upload_to = upload_to
         self.name_generator = name_generator
         self.keep_ext = keep_ext
@@ -61,9 +59,7 @@ class RandomizeUploadTo:
         return new_name
 
 
-def randomize_upload_to(
-    upload_to, name_generator: Callable | None = None, keep_ext: bool = True
-):
+def randomize_upload_to(upload_to, name_generator: Callable | None = None, keep_ext: bool = True):
     """
     Wrap an existing upload_to (callable or string) and return a new callable suitable
     for Django FileField/ImageField `upload_to` that preserves the directory structure
@@ -102,9 +98,7 @@ def override_upload_to_in_module(
     if isinstance(orig, RandomizeUploadTo):
         wrapped = orig
     else:
-        wrapped = randomize_upload_to(
-            orig, name_generator=name_generator, keep_ext=keep_ext
-        )
+        wrapped = randomize_upload_to(orig, name_generator=name_generator, keep_ext=keep_ext)
         # replace the function on the module
         setattr(module, func_name, wrapped)
 
@@ -137,10 +131,6 @@ def override_upload_to_in_module(
 
 
 # British-spelling alias
-def randomise_upload_to(
-    upload_to, name_generator: Callable | None = None, keep_ext: bool = True
-):
+def randomise_upload_to(upload_to, name_generator: Callable | None = None, keep_ext: bool = True):
     """Alias for randomize_upload_to using British spelling."""
-    return randomize_upload_to(
-        upload_to, name_generator=name_generator, keep_ext=keep_ext
-    )
+    return randomize_upload_to(upload_to, name_generator=name_generator, keep_ext=keep_ext)

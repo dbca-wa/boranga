@@ -51,24 +51,12 @@ logger = logging.getLogger("boranga")
 
 # Serializer used for species and communities forms
 class BasicConservationStatusSerializer(BaseModelSerializer):
-    wa_legislative_list_code = serializers.CharField(
-        source="wa_legislative_list.code", allow_null=True
-    )
-    wa_legislative_list_label = serializers.CharField(
-        source="wa_legislative_list.label", allow_null=True
-    )
-    wa_legislative_category_code = serializers.CharField(
-        source="wa_legislative_category.code", allow_null=True
-    )
-    wa_legislative_category_label = serializers.CharField(
-        source="wa_legislative_category.label", allow_null=True
-    )
-    wa_priority_category_code = serializers.CharField(
-        source="wa_priority_category.code", allow_null=True
-    )
-    wa_priority_category_label = serializers.CharField(
-        source="wa_priority_category.label", allow_null=True
-    )
+    wa_legislative_list_code = serializers.CharField(source="wa_legislative_list.code", allow_null=True)
+    wa_legislative_list_label = serializers.CharField(source="wa_legislative_list.label", allow_null=True)
+    wa_legislative_category_code = serializers.CharField(source="wa_legislative_category.code", allow_null=True)
+    wa_legislative_category_label = serializers.CharField(source="wa_legislative_category.label", allow_null=True)
+    wa_priority_category_code = serializers.CharField(source="wa_priority_category.code", allow_null=True)
+    wa_priority_category_label = serializers.CharField(source="wa_priority_category.label", allow_null=True)
     commonwealth_conservation_category_code = serializers.CharField(
         source="commonwealth_conservation_category.code", allow_null=True
     )
@@ -108,15 +96,9 @@ class BasicConservationStatusSerializer(BaseModelSerializer):
             ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA,
         ]
         request = self.context["request"]
-        if is_conservation_status_assessor(request) or is_conservation_status_approver(
-            request
-        ):
-            under_review_statuses.append(
-                ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR
-            )
-            under_review_statuses.append(
-                ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
-            )
+        if is_conservation_status_assessor(request) or is_conservation_status_approver(request):
+            under_review_statuses.append(ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR)
+            under_review_statuses.append(ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL)
         if obj.community:
             return ConservationStatus.objects.filter(
                 community=obj.community,
@@ -130,9 +112,7 @@ class BasicConservationStatusSerializer(BaseModelSerializer):
 
 
 class ListConservationStatusSerializer(BaseModelSerializer):
-    scientific_name = serializers.CharField(
-        source="species_taxonomy.scientific_name", allow_null=True
-    )
+    scientific_name = serializers.CharField(source="species_taxonomy.scientific_name", allow_null=True)
     community_name = serializers.SerializerMethodField()
     customer_status = serializers.CharField(source="get_customer_status_display")
     is_new_contributor = serializers.SerializerMethodField()
@@ -186,49 +166,29 @@ class ListConservationStatusSerializer(BaseModelSerializer):
 class ListSpeciesConservationStatusSerializer(BaseModelSerializer):
     group_type = serializers.SerializerMethodField()
     species_number = serializers.SerializerMethodField()
-    scientific_name = serializers.CharField(
-        source="species_taxonomy.scientific_name", allow_null=True
-    )
+    scientific_name = serializers.CharField(source="species_taxonomy.scientific_name", allow_null=True)
     common_name = serializers.SerializerMethodField()
     family = serializers.SerializerMethodField()
     genus = serializers.SerializerMethodField()
     informal_group = serializers.SerializerMethodField()
-    wa_priority_list = serializers.CharField(
-        source="wa_priority_list.code", allow_null=True
-    )
-    wa_priority_category = serializers.CharField(
-        source="wa_priority_category.code", allow_null=True
-    )
-    wa_legislative_list = serializers.CharField(
-        source="wa_legislative_list.code", allow_null=True
-    )
-    wa_legislative_category = serializers.CharField(
-        source="wa_legislative_category.code", allow_null=True
-    )
+    wa_priority_list = serializers.CharField(source="wa_priority_list.code", allow_null=True)
+    wa_priority_category = serializers.CharField(source="wa_priority_category.code", allow_null=True)
+    wa_legislative_list = serializers.CharField(source="wa_legislative_list.code", allow_null=True)
+    wa_legislative_category = serializers.CharField(source="wa_legislative_category.code", allow_null=True)
     commonwealth_conservation_category = serializers.CharField(
         source="commonwealth_conservation_category.code", allow_null=True
     )
-    other_conservation_assessment = serializers.CharField(
-        source="other_conservation_assessment.code", allow_null=True
-    )
+    other_conservation_assessment = serializers.CharField(source="other_conservation_assessment.code", allow_null=True)
     processing_status = serializers.CharField(source="get_processing_status_display")
     assessor_process = serializers.SerializerMethodField(read_only=True)
     approver_process = serializers.SerializerMethodField(read_only=True)
     assessor_edit = serializers.SerializerMethodField(read_only=True)
     internal_user_edit = serializers.SerializerMethodField(read_only=True)
     is_new_contributor = serializers.SerializerMethodField()
-    change_code = serializers.CharField(
-        source="change_code.code", read_only=True, allow_null=True
-    )
-    submitter_name = serializers.CharField(
-        source="submitter_information.name", allow_null=True
-    )
-    submitter_category = serializers.CharField(
-        source="submitter_information.submitter_category.name", allow_null=True
-    )
-    submitter_organisation = serializers.CharField(
-        source="submitter_information.organisation", allow_null=True
-    )
+    change_code = serializers.CharField(source="change_code.code", read_only=True, allow_null=True)
+    submitter_name = serializers.CharField(source="submitter_information.name", allow_null=True)
+    submitter_category = serializers.CharField(source="submitter_information.submitter_category.name", allow_null=True)
+    submitter_organisation = serializers.CharField(source="submitter_information.organisation", allow_null=True)
     assessor_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -314,9 +274,7 @@ class ListSpeciesConservationStatusSerializer(BaseModelSerializer):
         if obj.species:
             return obj.species.group_type.name
         else:
-            return (
-                obj.application_type.name
-            )  # if user haven't filled up the form yet(ie. species not selected)
+            return obj.application_type.name  # if user haven't filled up the form yet(ie. species not selected)
 
     def get_species_number(self, obj):
         if obj.species:
@@ -326,9 +284,7 @@ class ListSpeciesConservationStatusSerializer(BaseModelSerializer):
     def get_common_name(self, obj):
         if obj.species:
             if obj.species.taxonomy.vernaculars:
-                names_list = obj.species.taxonomy.vernaculars.all().values_list(
-                    "vernacular_name", flat=True
-                )
+                names_list = obj.species.taxonomy.vernaculars.all().values_list("vernacular_name", flat=True)
                 return ",".join(names_list)
         return ""
 
@@ -372,10 +328,7 @@ class ListSpeciesConservationStatusSerializer(BaseModelSerializer):
     def get_internal_user_edit(self, obj):
         request = self.context["request"]
         return (
-            obj.can_user_edit
-            and obj.internal_application
-            and is_internal(request)
-            and obj.submitter == request.user.id
+            obj.can_user_edit and obj.internal_application and is_internal(request) and obj.submitter == request.user.id
         )
 
     def get_is_new_contributor(self, obj):
@@ -400,36 +353,18 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
     approver_process = serializers.SerializerMethodField(read_only=True)
     assessor_edit = serializers.SerializerMethodField(read_only=True)
     internal_user_edit = serializers.SerializerMethodField(read_only=True)
-    wa_priority_list = serializers.CharField(
-        source="wa_priority_list.code", allow_null=True
-    )
-    wa_priority_category = serializers.CharField(
-        source="wa_priority_category.code", allow_null=True
-    )
-    wa_legislative_list = serializers.CharField(
-        source="wa_legislative_list.code", allow_null=True
-    )
-    wa_legislative_category = serializers.CharField(
-        source="wa_legislative_category.code", allow_null=True
-    )
+    wa_priority_list = serializers.CharField(source="wa_priority_list.code", allow_null=True)
+    wa_priority_category = serializers.CharField(source="wa_priority_category.code", allow_null=True)
+    wa_legislative_list = serializers.CharField(source="wa_legislative_list.code", allow_null=True)
+    wa_legislative_category = serializers.CharField(source="wa_legislative_category.code", allow_null=True)
     commonwealth_conservation_category = serializers.CharField(
         source="commonwealth_conservation_category.code", allow_null=True
     )
-    other_conservation_assessment = serializers.CharField(
-        source="other_conservation_assessment.code", allow_null=True
-    )
-    change_code = serializers.CharField(
-        source="change_code.code", read_only=True, allow_null=True
-    )
-    submitter_name = serializers.CharField(
-        source="submitter_information.name", allow_null=True
-    )
-    submitter_category = serializers.CharField(
-        source="submitter_information.submitter_category.name", allow_null=True
-    )
-    submitter_organisation = serializers.CharField(
-        source="submitter_information.organisation", allow_null=True
-    )
+    other_conservation_assessment = serializers.CharField(source="other_conservation_assessment.code", allow_null=True)
+    change_code = serializers.CharField(source="change_code.code", read_only=True, allow_null=True)
+    submitter_name = serializers.CharField(source="submitter_information.name", allow_null=True)
+    submitter_category = serializers.CharField(source="submitter_information.submitter_category.name", allow_null=True)
+    submitter_organisation = serializers.CharField(source="submitter_information.organisation", allow_null=True)
     assessor_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -513,9 +448,7 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
         if obj.community:
             return obj.community.group_type.name
         else:
-            return (
-                obj.application_type.name
-            )  # if user haven't filled up the form yet(ie. species not selected)
+            return obj.application_type.name  # if user haven't filled up the form yet(ie. species not selected)
 
     def get_community_number(self, obj):
         if obj.community:
@@ -544,9 +477,7 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
         if obj.community:
             if obj.community.regions:
                 # return obj.community.region.name
-                regions_list = obj.community.regions.all().values_list(
-                    "name", flat=True
-                )
+                regions_list = obj.community.regions.all().values_list("name", flat=True)
             return ",".join(regions_list)
         return ""
 
@@ -554,9 +485,7 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
         if obj.community:
             if obj.community.districts:
                 # return obj.community.district.name
-                districts_list = obj.community.districts.all().values_list(
-                    "name", flat=True
-                )
+                districts_list = obj.community.districts.all().values_list("name", flat=True)
             return ",".join(districts_list)
         return ""
 
@@ -580,10 +509,7 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
     def get_internal_user_edit(self, obj):
         request = self.context["request"]
         return (
-            obj.can_user_edit
-            and obj.internal_application
-            and is_internal(request)
-            and obj.submitter == request.user.id
+            obj.can_user_edit and obj.internal_application and is_internal(request) and obj.submitter == request.user.id
         )
 
     def get_assessor_name(self, obj):
@@ -603,9 +529,7 @@ class BaseConservationStatusSerializer(BaseModelSerializer):
     wa_priority_list = serializers.SerializerMethodField(read_only=True)
     wa_priority_category = serializers.SerializerMethodField(read_only=True)
     iucn_version = serializers.SerializerMethodField(read_only=True)
-    commonwealth_conservation_category = serializers.SerializerMethodField(
-        read_only=True
-    )
+    commonwealth_conservation_category = serializers.SerializerMethodField(read_only=True)
     other_conservation_assessment = serializers.SerializerMethodField(read_only=True)
     common_names = serializers.SerializerMethodField(read_only=True)
     change_code_code = serializers.SerializerMethodField(read_only=True)
@@ -712,10 +636,7 @@ class BaseConservationStatusSerializer(BaseModelSerializer):
         if not obj.commonwealth_conservation_category:
             return None
 
-        if (
-            obj.commonwealth_conservation_category.code
-            and obj.commonwealth_conservation_category.label
-        ):
+        if obj.commonwealth_conservation_category.code and obj.commonwealth_conservation_category.label:
             return f"{obj.commonwealth_conservation_category.code} - {obj.commonwealth_conservation_category.label}"
 
         return obj.commonwealth_conservation_category.code
@@ -724,10 +645,7 @@ class BaseConservationStatusSerializer(BaseModelSerializer):
         if not obj.other_conservation_assessment:
             return None
 
-        if (
-            obj.other_conservation_assessment.code
-            and obj.other_conservation_assessment.label
-        ):
+        if obj.other_conservation_assessment.code and obj.other_conservation_assessment.label:
             return f"{obj.other_conservation_assessment.code} - {obj.other_conservation_assessment.label}"
 
         return obj.other_conservation_assessment.code
@@ -770,10 +688,7 @@ class BaseConservationStatusSerializer(BaseModelSerializer):
     def get_common_names(self, obj):
         if obj.species:
             return (
-                [
-                    vernacular.vernacular_name
-                    for vernacular in obj.species_taxonomy.vernaculars.all()
-                ]
+                [vernacular.vernacular_name for vernacular in obj.species_taxonomy.vernaculars.all()]
                 if obj.species_taxonomy
                 else []
             )
@@ -802,9 +717,7 @@ class ConservationStatusSerializer(BaseConservationStatusSerializer):
 
 
 class CreateConservationStatusSerializer(BaseConservationStatusSerializer):
-    application_type = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    application_type = serializers.IntegerField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = ConservationStatus
@@ -863,9 +776,7 @@ class ConservationStatusDeclinedDetailsSerializer(BaseModelSerializer):
 
 
 class ConservationStatusIssuanceApprovalDetailsSerializer(BaseModelSerializer):
-    effective_from_date = serializers.DateField(
-        format="%Y-%m-%d", required=False, allow_null=True
-    )
+    effective_from_date = serializers.DateField(format="%Y-%m-%d", required=False, allow_null=True)
 
     class Meta:
         model = ConservationStatusIssuanceApprovalDetails
@@ -907,9 +818,7 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
     allowed_assessors = serializers.SerializerMethodField()
     assessor_mode = serializers.SerializerMethodField()
     conservationstatusdeclineddetails = ConservationStatusDeclinedDetailsSerializer()
-    conservationstatusissuanceapprovaldetails = (
-        ConservationStatusIssuanceApprovalDetailsSerializer()
-    )
+    conservationstatusissuanceapprovaldetails = ConservationStatusIssuanceApprovalDetailsSerializer()
     conservation_status_approval_document = serializers.SerializerMethodField()
     internal_user_edit = serializers.SerializerMethodField(read_only=True)
     referrals = ConservationStatusProposalReferralSerializer(many=True)
@@ -918,21 +827,13 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
     current_conservation_status = CurrentConservationStatusSerializer(read_only=True)
     approver_process = serializers.SerializerMethodField(read_only=True)
     submitter_information = SubmitterInformationSerializer(read_only=True)
-    conservation_status_under_review = CurrentConservationStatusSerializer(
-        read_only=True, allow_null=True
-    )
+    conservation_status_under_review = CurrentConservationStatusSerializer(read_only=True, allow_null=True)
     external_referral_invites = CSExternalRefereeInviteSerializer(many=True)
-    change_code = serializers.CharField(
-        source="change_code.code", read_only=True, allow_null=True
-    )
+    change_code = serializers.CharField(source="change_code.code", read_only=True, allow_null=True)
     can_add_log = serializers.SerializerMethodField(read_only=True)
     can_user_assign_to_self = serializers.SerializerMethodField(read_only=True)
-    scientific_name = serializers.CharField(
-        source="species_taxonomy.scientific_name", allow_null=True
-    )
-    community_name = serializers.CharField(
-        source="community.taxonomy.community_name", allow_null=True
-    )
+    scientific_name = serializers.CharField(source="species_taxonomy.scientific_name", allow_null=True)
+    community_name = serializers.CharField(source="community.taxonomy.community_name", allow_null=True)
     most_recent_meeting = MeetingSerializer(read_only=True, allow_null=True)
 
     def get_allowed_assessors(self, obj):
@@ -1089,18 +990,12 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
         # Internal user here refers to an internal contributor
         request = self.context["request"]
         return (
-            obj.can_user_edit
-            and obj.internal_application
-            and is_internal(request)
-            and obj.submitter == request.user.id
+            obj.can_user_edit and obj.internal_application and is_internal(request) and obj.submitter == request.user.id
         )
 
     def get_conservation_status_approval_document(self, obj):
         try:
-            if (
-                obj.conservationstatusissuanceapprovaldetails.conservation_status_approval_document
-                is not None
-            ):
+            if obj.conservationstatusissuanceapprovaldetails.conservation_status_approval_document is not None:
                 return [
                     obj.conservationstatusissuanceapprovaldetails.conservation_status_approval_document.name,
                     get_relative_url(
@@ -1108,9 +1003,7 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
                     ),
                 ]
             else:
-                return (
-                    obj.conservationstatusissuanceapprovaldetails.conservation_status_approval_document
-                )
+                return obj.conservationstatusissuanceapprovaldetails.conservation_status_approval_document
         except ConservationStatusIssuanceApprovalDetails.DoesNotExist:
             return None
 
@@ -1267,17 +1160,10 @@ class SaveConservationStatusValidationMixin:
             and not self.instance.locked
             and not attrs.get("effective_from")
         ):
-            raise serializers.ValidationError(
-                {"Effective From": "An effective from date is required."}
-            )
+            raise serializers.ValidationError({"Effective From": "An effective from date is required."})
         # If the effective_from date is in the future raise a validation error
-        if (
-            attrs.get("effective_from")
-            and attrs.get("effective_from") > timezone.now().date()
-        ):
-            raise serializers.ValidationError(
-                {"Effective From": "The effective from date cannot be in the future."}
-            )
+        if attrs.get("effective_from") and attrs.get("effective_from") > timezone.now().date():
+            raise serializers.ValidationError({"Effective From": "The effective from date cannot be in the future."})
         if (
             self.instance.processing_status
             in [
@@ -1286,57 +1172,33 @@ class SaveConservationStatusValidationMixin:
                 ConservationStatus.PROCESSING_STATUS_CLOSED,
             ]
         ) and not attrs.get("effective_to"):
-            raise serializers.ValidationError(
-                {"Effective To": "An effective to date is required."}
-            )
+            raise serializers.ValidationError({"Effective To": "An effective to date is required."})
 
         return super().validate(attrs)
 
 
-class SaveSpeciesConservationStatusSerializer(
-    SaveConservationStatusValidationMixin, BaseConservationStatusSerializer
-):
+class SaveSpeciesConservationStatusSerializer(SaveConservationStatusValidationMixin, BaseConservationStatusSerializer):
     species_taxonomy_id = serializers.IntegerField(required=True, write_only=True)
-    species_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    species_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
 
     def validate(self, attrs):
         validated_data = super().validate(attrs)
         if "species_taxonomy_id" in validated_data:
             try:
-                species = Species.objects.get(
-                    taxonomy_id=validated_data["species_taxonomy_id"]
-                )
+                species = Species.objects.get(taxonomy_id=validated_data["species_taxonomy_id"])
                 validated_data["species_id"] = species.id
             except Species.DoesNotExist:
                 validated_data["species_id"] = None
         return validated_data
 
-    wa_legislative_list_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    wa_legislative_category_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    iucn_version_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    wa_priority_list_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    wa_priority_category_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    commonwealth_conservation_category_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    other_conservation_assessment_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    change_code_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    wa_legislative_list_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    wa_legislative_category_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    iucn_version_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    wa_priority_list_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    wa_priority_category_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    commonwealth_conservation_category_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    other_conservation_assessment_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    change_code_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = ConservationStatus
@@ -1393,9 +1255,7 @@ class InternalCommunityConservationStatusSerializer(BaseConservationStatusSerial
     latest_referrals = ConservationStatusProposalReferralSerializer(many=True)
     allowed_assessors = EmailUserSerializer(many=True)
     assessor_mode = serializers.SerializerMethodField()
-    conservationstatusdeclineddetails = ConservationStatusDeclinedDetailsSerializer(
-        many=True
-    )
+    conservationstatusdeclineddetails = ConservationStatusDeclinedDetailsSerializer(many=True)
     can_add_log = serializers.SerializerMethodField()
 
     class Meta:
@@ -1471,33 +1331,15 @@ class InternalCommunityConservationStatusSerializer(BaseConservationStatusSerial
 class SaveCommunityConservationStatusSerializer(
     SaveConservationStatusValidationMixin, BaseConservationStatusSerializer
 ):
-    community_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    wa_legislative_list_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    wa_legislative_category_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    iucn_version_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    wa_priority_list_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    wa_priority_category_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    commonwealth_conservation_category_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    other_conservation_assessment_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    change_code_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    community_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    wa_legislative_list_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    wa_legislative_category_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    iucn_version_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    wa_priority_list_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    wa_priority_category_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    commonwealth_conservation_category_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    other_conservation_assessment_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    change_code_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = ConservationStatus
@@ -1590,12 +1432,8 @@ class SendReferralSerializer(BaseSerializer):
 class DTConservationStatusReferralSerializer(BaseModelSerializer):
     processing_status = serializers.CharField(source="get_processing_status_display")
     conservation_status_id = serializers.IntegerField(source="conservation_status.id")
-    conservation_status_lodgement_date = serializers.CharField(
-        source="conservation_status.lodgement_date"
-    )
-    conservation_status_number = serializers.CharField(
-        source="conservation_status.conservation_status_number"
-    )
+    conservation_status_lodgement_date = serializers.CharField(source="conservation_status.lodgement_date")
+    conservation_status_number = serializers.CharField(source="conservation_status.conservation_status_number")
     referral = serializers.SerializerMethodField()
     referral_comment = serializers.SerializerMethodField()
     submitter = serializers.SerializerMethodField()
@@ -1701,40 +1539,29 @@ class DTConservationStatusReferralSerializer(BaseModelSerializer):
 
     def get_community_common_id(self, obj):
         try:
-            taxonomy = CommunityTaxonomy.objects.get(
-                community=obj.conservation_status.community
-            )
+            taxonomy = CommunityTaxonomy.objects.get(community=obj.conservation_status.community)
             return taxonomy.community_common_id
         except CommunityTaxonomy.DoesNotExist:
             return ""
 
     def get_community_name(self, obj):
         try:
-            taxonomy = CommunityTaxonomy.objects.get(
-                community=obj.conservation_status.community
-            )
+            taxonomy = CommunityTaxonomy.objects.get(community=obj.conservation_status.community)
             return taxonomy.community_name
         except CommunityTaxonomy.DoesNotExist:
             return ""
 
 
-class ConservationStatusReferralProposalSerializer(
-    InternalConservationStatusSerializer
-):
-
+class ConservationStatusReferralProposalSerializer(InternalConservationStatusSerializer):
     def get_assessor_mode(self, obj):
         request = self.context["request"]
         try:
-            referral = ConservationStatusReferral.objects.get(
-                conservation_status=obj, referral=request.user.id
-            )
+            referral = ConservationStatusReferral.objects.get(conservation_status=obj, referral=request.user.id)
         except ConservationStatusReferral.DoesNotExist:
             referral = None
         return {
             "assessor_mode": True,
-            "assessor_can_assess": (
-                referral.can_assess_referral() if referral else None
-            ),
+            "assessor_can_assess": (referral.can_assess_referral() if referral else None),
             "assessor_level": "referral",
             "assessor_box_view": obj.assessor_comments_view(request),
             "status_without_assessor": obj.status_without_assessor,
@@ -1752,10 +1579,8 @@ class ConservationStatusReferralSerializer(BaseModelSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["conservation_status"] = (
-            ConservationStatusReferralProposalSerializer(
-                context={"request": self.context["request"]}
-            )
+        self.fields["conservation_status"] = ConservationStatusReferralProposalSerializer(
+            context={"request": self.context["request"]}
         )
 
     def get_sent_by(self, obj):
@@ -1778,9 +1603,7 @@ class ConservationStatusAmendmentRequestDocumentSerializer(BaseModelSerializer):
 
 
 class ConservationStatusAmendmentRequestSerializer(BaseModelSerializer):
-    cs_amendment_request_documents = (
-        ConservationStatusAmendmentRequestDocumentSerializer(many=True, read_only=True)
-    )
+    cs_amendment_request_documents = ConservationStatusAmendmentRequestDocumentSerializer(many=True, read_only=True)
 
     class Meta:
         model = ConservationStatusAmendmentRequest
@@ -1788,9 +1611,7 @@ class ConservationStatusAmendmentRequestSerializer(BaseModelSerializer):
 
 
 class ConservationStatusAmendmentRequestDisplaySerializer(BaseModelSerializer):
-    cs_amendment_request_documents = (
-        ConservationStatusAmendmentRequestDocumentSerializer(many=True, read_only=True)
-    )
+    cs_amendment_request_documents = ConservationStatusAmendmentRequestDocumentSerializer(many=True, read_only=True)
     reason_text = serializers.CharField(source="reason.reason", read_only=True)
 
     class Meta:
@@ -1818,21 +1639,15 @@ class ProposedApprovalSerializer(BaseSerializer):
     cc_email = serializers.CharField(required=False, allow_null=True)
 
     def validate(self, data):
-        if data.get("effective_to_date", None) and data.get(
-            "effective_from_date", None
-        ):
+        if data.get("effective_to_date", None) and data.get("effective_from_date", None):
             if data["effective_to_date"] < data["effective_from_date"]:
                 raise serializers.ValidationError(
-                    {
-                        "Effective To Date": "Effective to date must be greater than effective from date."
-                    }
+                    {"Effective To Date": "Effective to date must be greater than effective from date."}
                 )
         if data.get("effective_from_date", None):
             if data["effective_from_date"] > timezone.now().date():
                 raise serializers.ValidationError(
-                    {
-                        "Effective From Date": "The effective from date cannot be in the future."
-                    }
+                    {"Effective From Date": "The effective from date cannot be in the future."}
                 )
         return data
 
@@ -1888,9 +1703,7 @@ class ConservationStatusDocumentSerializer(BaseModelSerializer):
                 ]
                 and is_conservation_status_referee(request)
                 and obj.conservation_status.referrals
-                and obj.conservation_status.referrals.filter(
-                    referral=request.user.id
-                ).exists()
+                and obj.conservation_status.referrals.filter(referral=request.user.id).exists()
                 and obj.uploaded_by == request.user.id
             )
         )
@@ -1920,23 +1733,14 @@ class SaveConservationStatusDocumentSerializer(BaseModelSerializer):
             instance = ConservationStatusDocument()
             validated_data = self.run_validation(self.initial_data)
             for field_name in self.Meta.fields:
-                if (
-                    field_name in validated_data
-                    and field_name not in self.Meta.read_only_fields
-                ):
+                if field_name in validated_data and field_name not in self.Meta.read_only_fields:
                     setattr(instance, field_name, validated_data[field_name])
             instance.save(*args, **kwargs)
             return instance
 
 
-class InternalSaveConservationStatusDocumentSerializer(
-    SaveConservationStatusDocumentSerializer
-):
+class InternalSaveConservationStatusDocumentSerializer(SaveConservationStatusDocumentSerializer):
     class Meta:
         model = ConservationStatusDocument
-        fields = SaveConservationStatusDocumentSerializer.Meta.fields + (
-            "can_submitter_access",
-        )
-        read_only_fields = (
-            SaveConservationStatusDocumentSerializer.Meta.read_only_fields
-        )
+        fields = SaveConservationStatusDocumentSerializer.Meta.fields + ("can_submitter_access",)
+        read_only_fields = SaveConservationStatusDocumentSerializer.Meta.read_only_fields

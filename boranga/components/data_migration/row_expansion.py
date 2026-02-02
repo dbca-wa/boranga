@@ -33,9 +33,7 @@ def expand_children(schema, row: dict):
                 raw = row.get(col)
                 if not raw:
                     continue
-                parts = [
-                    p.strip() for p in str(raw).split(cfg.get("sep", ";")) if p.strip()
-                ]
+                parts = [p.strip() for p in str(raw).split(cfg.get("sep", ";")) if p.strip()]
                 for p in parts:
                     coll.append({cfg.get("field", col): p})
                 parent.pop(col, None)

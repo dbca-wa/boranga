@@ -36,8 +36,7 @@ class ModelForm(forms.ModelForm):
         map(
             lambda m: (m, m),
             filter(
-                lambda m: Document
-                in apps.get_app_config("boranga").models[m].__bases__,
+                lambda m: Document in apps.get_app_config("boranga").models[m].__bases__,
                 apps.get_app_config("boranga").models,
             ),
         )
@@ -62,9 +61,7 @@ class FileExtensionWhitelistAdmin(DeleteProtectedModelAdmin):
     list_filter = ["compressed", "model"]
 
 
-class HelpTextEntryAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin
-):
+class HelpTextEntryAdmin(CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin):
     list_display = [
         "section_id",
         "text",
@@ -73,9 +70,7 @@ class HelpTextEntryAdmin(
         "internal_users_only",
     ]
 
-    def get_readonly_fields(
-        self, request: HttpRequest, obj: Any | None = ...
-    ) -> list[str] | tuple[Any, ...]:
+    def get_readonly_fields(self, request: HttpRequest, obj: Any | None = ...) -> list[str] | tuple[Any, ...]:
         fields = super().get_readonly_fields(request, obj)
         if not request.user.is_superuser:
             return list(fields) + ["section_id"]

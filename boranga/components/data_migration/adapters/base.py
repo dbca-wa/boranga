@@ -77,9 +77,7 @@ class SourceAdapter:
             if limit and limit > 0:
                 try:
                     # Use chunksize equal to the requested limit and read only first chunk
-                    it = pd.read_csv(
-                        path, dtype=str, encoding=encoding, chunksize=int(limit)
-                    )
+                    it = pd.read_csv(path, dtype=str, encoding=encoding, chunksize=int(limit))
                     try:
                         df = next(it)
                     except StopIteration:

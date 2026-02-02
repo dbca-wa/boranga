@@ -49,11 +49,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
             # Determine file path.
             src_path = path
-            if (
-                path
-                and not path.lower().endswith(".csv")
-                and not path.lower().endswith(".json")
-            ):
+            if path and not path.lower().endswith(".csv") and not path.lower().endswith(".json"):
                 # Assume directory
                 if src == Source.TEC_SITE_SPECIES.value:
                     src_path = f"{path}/SITE_SPECIES.csv"
@@ -85,12 +81,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
         # Batch fetch Occurrence Reports
         # Assuming migrated_from_id is populated from SITE_VISIT_ID in TEC source migration of sites.
-        ocrs = {
-            o.migrated_from_id: o
-            for o in OccurrenceReport.objects.filter(
-                migrated_from_id__in=site_visit_ids
-            )
-        }
+        ocrs = {o.migrated_from_id: o for o in OccurrenceReport.objects.filter(migrated_from_id__in=site_visit_ids)}
 
         logger.info(f"Found {len(ocrs)} matching Occurrence Reports.")
 
@@ -105,14 +96,9 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                 except ValueError:
                     logger.warning(f"Invalid taxon_name_id: {val}")
 
-        taxonomies = {
-            t.taxon_name_id: t
-            for t in Taxonomy.objects.filter(taxon_name_id__in=taxon_ids)
-        }
+        taxonomies = {t.taxon_name_id: t for t in Taxonomy.objects.filter(taxon_name_id__in=taxon_ids)}
 
-        logger.info(
-            f"Resolved {len(taxonomies)} Taxonomies out of {len(taxon_ids)} requested."
-        )
+        logger.info(f"Resolved {len(taxonomies)} Taxonomies out of {len(taxon_ids)} requested.")
 
         with transaction.atomic():
             created_count = 0
@@ -127,9 +113,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                 try:
                     ocr_assoc = ocr.associated_species
                 except OCRAssociatedSpecies.DoesNotExist:
-                    ocr_assoc = OCRAssociatedSpecies.objects.create(
-                        occurrence_report=ocr
-                    )
+                    ocr_assoc = OCRAssociatedSpecies.objects.create(occurrence_report=ocr)
 
                 for s_row in species_rows:
                     tid_raw = s_row.get("taxon_name_id")
@@ -143,9 +127,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
                     taxonomy = taxonomies.get(tid)
                     if not taxonomy:
-                        logger.debug(
-                            f"Taxonomy ID {tid} not found for Site Visit {vid}."
-                        )
+                        logger.debug(f"Taxonomy ID {tid} not found for Site Visit {vid}.")
                         # As per note: "not able to be matched to a taxon - these have
                         # been retained in the Excel file... but deleted from the CSV"
                         # So we might not see them, or if we do, skip them.
@@ -161,6 +143,4 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                     ocr_assoc.related_species.add(ast)
                     created_count += 1
 
-            logger.info(
-                f"Successfully created {created_count} AssociatedSpeciesTaxonomy records."
-            )
+            logger.info(f"Successfully created {created_count} AssociatedSpeciesTaxonomy records.")

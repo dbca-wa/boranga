@@ -47,16 +47,10 @@ class NH3SanitizeSerializerMixin:
             if hasattr(self, "child"):
                 return [self.child.to_internal_value(item) for item in data]
 
-            logger.warning(
-                f"Received list data for {self.__class__.__name__} which expects a dictionary: {data}"
-            )
+            logger.warning(f"Received list data for {self.__class__.__name__} which expects a dictionary: {data}")
 
             raise serializers.ValidationError(
-                {
-                    api_settings.NON_FIELD_ERRORS_KEY: [
-                        "Expected an object but received a list."
-                    ]
-                }
+                {api_settings.NON_FIELD_ERRORS_KEY: ["Expected an object but received a list."]}
             )
 
         if hasattr(data, "lists"):
@@ -65,19 +59,13 @@ class NH3SanitizeSerializerMixin:
             for key, value in data.lists():
                 field = self.fields.get(key)
                 if field:
-                    if isinstance(
-                        field, (serializers.ListField, serializers.MultipleChoiceField)
-                    ):
+                    if isinstance(field, serializers.ListField | serializers.MultipleChoiceField):
                         new_data[key] = value
                     elif isinstance(field, serializers.ManyRelatedField):
                         new_data[key] = value
                     else:
                         val = value[-1]
-                        if (
-                            val == ""
-                            and isinstance(field, serializers.ChoiceField)
-                            and not field.allow_blank
-                        ):
+                        if val == "" and isinstance(field, serializers.ChoiceField) and not field.allow_blank:
                             continue
                         new_data[key] = val
                 else:
@@ -117,7 +105,7 @@ class RelativeFileUrlSerializerMixin:
         request = self.context.get("request")
         if request:
             for field_name, field in self.fields.items():
-                if isinstance(field, (serializers.FileField, serializers.ImageField)):
+                if isinstance(field, serializers.FileField | serializers.ImageField):
                     url = data.get(field_name)
                     if url and url.startswith("http"):
                         data[field_name] = urlparse(url).path
@@ -151,9 +139,7 @@ class BaseSerializer(
 
 
 class CommunicationLogEntrySerializer(BaseModelSerializer):
-    customer = serializers.PrimaryKeyRelatedField(
-        queryset=EmailUser.objects.all(), required=False
-    )
+    customer = serializers.PrimaryKeyRelatedField(queryset=EmailUser.objects.all(), required=False)
     documents = serializers.SerializerMethodField()
 
     class Meta:
@@ -294,17 +280,11 @@ class ContentTypeSerializer(BaseModelSerializer):
         fields = list(filter(filter_fields, fields))
         model_fields = []
         for field in fields:
-            display_name = (
-                field.verbose_name.title()
-                if hasattr(field, "verbose_name")
-                else field.name
-            )
+            display_name = field.verbose_name.title() if hasattr(field, "verbose_name") else field.name
             field_type = str(type(field)).split(".")[-1].replace("'>", "")
             allow_null = field.null if hasattr(field, "null") else None
             max_length = field.max_length if hasattr(field, "max_length") else None
-            xlsx_validation_type = get_openpyxl_data_validation_type_for_django_field(
-                field
-            )
+            xlsx_validation_type = get_openpyxl_data_validation_type_for_django_field(field)
 
             # Detect whether the model field defines a default value
             field_has_default = False
@@ -366,10 +346,7 @@ class IntegerFieldEmptytoNullSerializerMixin:
     def to_internal_value(self, data):
         data = data.copy()
         for field_name, field in self.fields.items():
-            if (
-                isinstance(field, serializers.IntegerField)
-                and data.get(field_name) == ""
-            ):
+            if isinstance(field, serializers.IntegerField) and data.get(field_name) == "":
                 data[field_name] = None
         return super().to_internal_value(data)
 
@@ -419,10 +396,7 @@ class ListMultipleChoiceField(serializers.MultipleChoiceField):
             self.fail("not_a_list", input_type=type(data).__name__)
         if not self.allow_empty and len(data) == 0:
             self.fail("empty")
-        return [
-            super(serializers.MultipleChoiceField, self).to_internal_value(item)
-            for item in data
-        ]
+        return [super(serializers.MultipleChoiceField, self).to_internal_value(item) for item in data]
 
     def to_representation(self, value):
         return [self.choice_strings_to_values.get(str(item), item) for item in value]

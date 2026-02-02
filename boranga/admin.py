@@ -143,9 +143,7 @@ class CustomSystemGroupPermissionInlineForm(SystemGroupPermissionInline.form):
         if system_group.name != settings.GROUP_NAME_EXTERNAL_CONTRIBUTOR:
             return cleaned_data
 
-        if not ExternalContributorBlacklist.objects.filter(
-            email=emailuser.email
-        ).exists():
+        if not ExternalContributorBlacklist.objects.filter(email=emailuser.email).exists():
             return cleaned_data
 
         raise ValidationError(
@@ -190,9 +188,7 @@ def export_system_group_permissions(modeladmin, request, queryset):
         filename = f"system_group_permissions_{queryset.first().name}.csv"
 
     # Get the system group permissions
-    system_group_permissions = SystemGroupPermission.objects.filter(
-        system_group__in=queryset
-    )
+    system_group_permissions = SystemGroupPermission.objects.filter(system_group__in=queryset)
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'

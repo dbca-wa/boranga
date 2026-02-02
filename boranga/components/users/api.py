@@ -96,9 +96,7 @@ class SaveSubmitterInformation(views.APIView):
         if not instance.email_user == request.user.id:
             raise PermissionDenied("You do not have permission to perform this action.")
 
-        serializer = SubmitterInformationSerializer(
-            instance=instance, data=request.data, context={"request": request}
-        )
+        serializer = SubmitterInformationSerializer(instance=instance, data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
@@ -111,9 +109,7 @@ class SaveAreaOfInterest(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, format=None):
-        user_system_settings, created = UserSystemSettings.objects.get_or_create(
-            user=request.user.id
-        )
+        user_system_settings, created = UserSystemSettings.objects.get_or_create(user=request.user.id)
         if created:
             logger.info(f"Created UserSystemSettings: {user_system_settings}")
 
@@ -169,9 +165,7 @@ class UserViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         if kwargs.get("id_field", False):
             id_field = kwargs.get("id_field")
 
-        users = users.filter(search_term__icontains=search_term).values(
-            "id", "email", "first_name", "last_name"
-        )[:10]
+        users = users.filter(search_term__icontains=search_term).values("id", "email", "first_name", "last_name")[:10]
 
         data_transform = [
             {
@@ -233,22 +227,18 @@ class UserViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             )
         ).filter(is_staff=True)
 
-        department_users = department_users.filter(
-            search_term__icontains=search_term
-        ).values("id", "email", "first_name", "last_name")[:10]
-        external_cs_referrals = ConservationStatusReferral.objects.filter(
-            is_external=True
-        ).values_list("referral", flat=True)
-        external_ocr_referrals = OccurrenceReportReferral.objects.filter(
-            is_external=True
-        ).values_list("referral", flat=True)
-        external_referee_ids = list(
-            set(list(external_cs_referrals) + list(external_ocr_referrals))
+        department_users = department_users.filter(search_term__icontains=search_term).values(
+            "id", "email", "first_name", "last_name"
+        )[:10]
+        external_cs_referrals = ConservationStatusReferral.objects.filter(is_external=True).values_list(
+            "referral", flat=True
         )
+        external_ocr_referrals = OccurrenceReportReferral.objects.filter(is_external=True).values_list(
+            "referral", flat=True
+        )
+        external_referee_ids = list(set(list(external_cs_referrals) + list(external_ocr_referrals)))
 
-        external_referees = EmailUser.objects.filter(
-            id__in=external_referee_ids
-        ).annotate(
+        external_referees = EmailUser.objects.filter(id__in=external_referee_ids).annotate(
             search_term=Concat(
                 "first_name",
                 Value(" "),
@@ -258,9 +248,9 @@ class UserViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
                 output_field=CharField(),
             )
         )
-        external_referees = external_referees.filter(
-            search_term__icontains=search_term
-        ).values("id", "email", "first_name", "last_name")[:10]
+        external_referees = external_referees.filter(search_term__icontains=search_term).values(
+            "id", "email", "first_name", "last_name"
+        )[:10]
 
         internal = {
             "text": "Internal",
@@ -354,9 +344,9 @@ class UserViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     def get_contributors(self, request, *args, **kwargs):
         search_term = request.GET.get("term", "")
         contributor_ids = list(
-            SystemGroupPermission.objects.filter(
-                system_group__name__icontains="contributor"
-            ).values_list("emailuser", flat=True)
+            SystemGroupPermission.objects.filter(system_group__name__icontains="contributor").values_list(
+                "emailuser", flat=True
+            )
         )
 
         # Allow for search of first name, last name and concatenation of both
@@ -371,9 +361,7 @@ class UserViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             )
         )
 
-        users = users.filter(search_term__icontains=search_term).values(
-            "id", "email", "first_name", "last_name"
-        )[:10]
+        users = users.filter(search_term__icontains=search_term).values("id", "email", "first_name", "last_name")[:10]
 
         data_transform = [
             {
@@ -441,9 +429,7 @@ class OutstandingReferrals(views.APIView):
             )
         )
         outstanding_referrals_qs = outstanding_referrals_qs.union(ocr_referrals_qs)
-        ordered_outstanding_referrals_qs = outstanding_referrals_qs.order_by(
-            "lodged_on"
-        )
+        ordered_outstanding_referrals_qs = outstanding_referrals_qs.order_by("lodged_on")
 
         serializer = OutstandingReferralSerializer(
             ordered_outstanding_referrals_qs,

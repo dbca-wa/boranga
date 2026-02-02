@@ -32,9 +32,7 @@ def update_meeting_comms_log_filename(instance, filename):
     return f"{settings.MEDIA_APP_DIR}/meeting/{instance.log_entry.meeting.id}/communications/{filename}"
 
 
-private_storage = FileSystemStorage(
-    location=settings.BASE_DIR + "/private-media/", base_url="/private-media/"
-)
+private_storage = FileSystemStorage(location=settings.BASE_DIR + "/private-media/", base_url="/private-media/")
 
 
 def update_meeting_doc_filename(instance, filename):
@@ -74,9 +72,7 @@ class CommitteeMembers(OrderedModel, ArchivableModel):
     first_name = models.CharField(max_length=128, blank=True, null=True)
     last_name = models.CharField(max_length=128, blank=True, null=True)
     email = models.CharField(max_length=328, blank=True, null=True)
-    committee = models.ForeignKey(
-        "Committee", on_delete=models.CASCADE, null=True, blank=True
-    )
+    committee = models.ForeignKey("Committee", on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta(OrderedModel.Meta):
         app_label = "boranga"
@@ -238,18 +234,13 @@ class Meeting(BaseModel):
     @transaction.atomic
     def reinstate(self, request):
         if not self.processing_status == Meeting.PROCESSING_STATUS_DISCARDED:
-            raise ValidationError(
-                "You cannot reinstate a meeting that has not been discarded"
-            )
+            raise ValidationError("You cannot reinstate a meeting that has not been discarded")
 
         if not request.user.is_superuser and not request.user.id == self.submitter:
             raise ValidationError("You cannot reinstate a meeting that is not yours")
 
         if not is_conservation_status_approver(request):
-            raise ValidationError(
-                "You cannot reinstate a meeting unless you are in the "
-                "meeting approver group"
-            )
+            raise ValidationError("You cannot reinstate a meeting unless you are in the " "meeting approver group")
 
         self.processing_status = ConservationStatus.PROCESSING_STATUS_DRAFT
         self.save()
@@ -320,9 +311,7 @@ class Meeting(BaseModel):
 
 
 class MeetingLogDocument(Document):
-    log_entry = models.ForeignKey(
-        "MeetingLogEntry", related_name="documents", on_delete=models.CASCADE
-    )
+    log_entry = models.ForeignKey("MeetingLogEntry", related_name="documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=update_meeting_comms_log_filename,
         max_length=512,
@@ -337,9 +326,7 @@ class MeetingLogDocument(Document):
 
 
 class MeetingLogEntry(CommunicationsLogEntry):
-    meeting = models.ForeignKey(
-        Meeting, related_name="comms_logs", on_delete=models.CASCADE
-    )
+    meeting = models.ForeignKey(Meeting, related_name="comms_logs", on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.reference} - {self.subject}"
@@ -378,9 +365,7 @@ class MeetingUserAction(UserAction):
     def log_action(cls, meeting, action, user):
         return cls.objects.create(meeting=meeting, who=user, what=str(action))
 
-    meeting = models.ForeignKey(
-        Meeting, related_name="action_logs", on_delete=models.CASCADE
-    )
+    meeting = models.ForeignKey(Meeting, related_name="action_logs", on_delete=models.CASCADE)
 
 
 class Minutes(Document):
@@ -405,12 +390,8 @@ class Minutes(Document):
         storage=private_storage,
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)
-    document_category = models.ForeignKey(
-        DocumentCategory, null=True, blank=True, on_delete=models.SET_NULL
-    )
-    document_sub_category = models.ForeignKey(
-        DocumentSubCategory, null=True, blank=True, on_delete=models.SET_NULL
-    )
+    document_category = models.ForeignKey(DocumentCategory, null=True, blank=True, on_delete=models.SET_NULL)
+    document_sub_category = models.ForeignKey(DocumentSubCategory, null=True, blank=True, on_delete=models.SET_NULL)
     meeting = models.ForeignKey(
         Meeting,
         blank=False,
@@ -455,12 +436,8 @@ class Minutes(Document):
 
 
 class AgendaItem(OrderedModel):
-    meeting = models.ForeignKey(
-        Meeting, on_delete=models.CASCADE, related_name="agenda_items"
-    )
-    conservation_status = models.ForeignKey(
-        ConservationStatus, on_delete=models.CASCADE
-    )
+    meeting = models.ForeignKey(Meeting, on_delete=models.CASCADE, related_name="agenda_items")
+    conservation_status = models.ForeignKey(ConservationStatus, on_delete=models.CASCADE)
 
     class Meta:
         app_label = "boranga"

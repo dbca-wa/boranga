@@ -70,9 +70,7 @@ router.register(
     "communities_paginated",
 )
 router.register(r"species_documents", species_communities_api.SpeciesDocumentViewSet)
-router.register(
-    r"community_documents", species_communities_api.CommunityDocumentViewSet
-)
+router.register(r"community_documents", species_communities_api.CommunityDocumentViewSet)
 router.register(r"threat", species_communities_api.ConservationThreatViewSet)
 router.register(
     r"species_conservation_status_paginated",
@@ -93,9 +91,7 @@ router.register(
     r"conservation_status_documents",
     conservation_status_api.ConservationStatusDocumentViewSet,
 )
-router.register(
-    r"cs_referrals", conservation_status_api.ConservationStatusReferralViewSet
-)
+router.register(r"cs_referrals", conservation_status_api.ConservationStatusReferralViewSet)
 router.register(
     r"cs_amendment_request",
     conservation_status_api.ConservationStatusAmendmentRequestViewSet,
@@ -108,22 +104,16 @@ router.register(
 )
 router.register(r"ocr_referrals", occurrence_api.OccurrenceReportReferralViewSet)
 router.register(r"meeting", meeting_api.MeetingViewSet, "meeting")
-router.register(
-    r"meeting_paginated", meeting_api.MeetingPaginatedViewSet, "meeting_paginated"
-)
+router.register(r"meeting_paginated", meeting_api.MeetingPaginatedViewSet, "meeting_paginated")
 router.register(r"minutes", meeting_api.MinutesViewSet)
 router.register(r"meeting_agenda_items", meeting_api.AgendaItemViewSet)
 router.register(r"committee", meeting_api.CommitteeViewSet)
-router.register(
-    r"conservation_status", conservation_status_api.ConservationStatusViewSet
-)
+router.register(r"conservation_status", conservation_status_api.ConservationStatusViewSet)
 router.register(
     r"cs_external_referee_invites",
     conservation_status_api.CSExternalRefereeInviteViewSet,
 )
-router.register(
-    r"occurrence_report", occurrence_api.OccurrenceReportViewSet, "occurrence_report"
-)
+router.register(r"occurrence_report", occurrence_api.OccurrenceReportViewSet, "occurrence_report")
 router.register(
     r"ocr_external_referee_invites",
     occurrence_api.OCRExternalRefereeInviteViewSet,
@@ -167,9 +157,7 @@ router.register(
 router.register(r"observer_detail", occurrence_api.ObserverDetailViewSet)
 router.register(r"contact_detail", occurrence_api.ContactDetailViewSet)
 router.register(r"occurrence_sites", occurrence_api.OccurrenceSiteViewSet)
-router.register(
-    r"occurrence_report_documents", occurrence_api.OccurrenceReportDocumentViewSet
-)
+router.register(r"occurrence_report_documents", occurrence_api.OccurrenceReportDocumentViewSet)
 router.register(r"ocr_threat", occurrence_api.OCRConservationThreatViewSet)
 router.register(r"occ_threat", occurrence_api.OCCConservationThreatViewSet)
 
@@ -188,9 +176,7 @@ router.register(
     occurrence_api.OccurrenceTenurePaginatedViewSet,
     "occurrence-tenure-paginated",
 )
-router.register(
-    r"help_text_entries", main_api.HelpTextEntryViewSet, "help_text_entries"
-)
+router.register(r"help_text_entries", main_api.HelpTextEntryViewSet, "help_text_entries")
 router.register(r"content_types", main_api.ContentTypeViewSet, "content_types")
 router.register(
     "associated_species_taxonomy",
@@ -405,9 +391,7 @@ urlpatterns = [
     re_path(r"^external/", views.ExternalView.as_view(), name="external"),
     re_path(r"^account/$", views.ExternalView.as_view(), name="manage-account"),
     re_path(r"^profiles/", views.ExternalView.as_view(), name="manage-profiles"),
-    re_path(
-        r"^mgt-commands/$", views.ManagementCommandsView.as_view(), name="mgt-commands"
-    ),
+    re_path(r"^mgt-commands/$", views.ManagementCommandsView.as_view(), name="mgt-commands"),
     re_path(r"^private-media/", views.getPrivateFile, name="view_private_file"),
     # following url is defined so that to include url path when sending Proposal amendment request to user.
     re_path(
@@ -493,15 +477,9 @@ if settings.DEBUG:  # Serve media locally in development.
         ]
 
 # DBCA Template URLs
-urlpatterns.append(
-    urls.path(
-        "logout/", auth_views.LogoutView.as_view(), {"next_page": "/"}, name="logout"
-    )
-)
+urlpatterns.append(urls.path("logout/", auth_views.LogoutView.as_view(), {"next_page": "/"}, name="logout"))
 if conf.settings.ENABLE_DJANGO_LOGIN:
-    urlpatterns.append(
-        urls.re_path(r"^ssologin/", auth_views.LoginView.as_view(), name="ssologin")
-    )
+    urlpatterns.append(urls.re_path(r"^ssologin/", auth_views.LoginView.as_view(), name="ssologin"))
 
 if not are_migrations_running():
     DefaultDataManager()

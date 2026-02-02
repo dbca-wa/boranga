@@ -2,7 +2,6 @@ from django.core.exceptions import PermissionDenied
 
 
 class ReferralOwnerMixin:
-
     def check_owner(self, user):
         return self.get_object().referral == user.id
 

@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
     help = (
-        "Auto lock unlocked conservation status records that have "
-        "not been updated within a specified time window."
+        "Auto lock unlocked conservation status records that have " "not been updated within a specified time window."
     )
 
     def handle(self, *args, **options):

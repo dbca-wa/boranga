@@ -22,12 +22,8 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         group = parser.add_mutually_exclusive_group(required=True)
-        group.add_argument(
-            "--create", action="store_true", help="Create the index if missing"
-        )
-        group.add_argument(
-            "--drop", action="store_true", help="Drop the index if present"
-        )
+        group.add_argument("--create", action="store_true", help="Create the index if missing")
+        group.add_argument("--drop", action="store_true", help="Drop the index if present")
         group.add_argument(
             "--ensure",
             action="store_true",
@@ -100,22 +96,14 @@ class Command(BaseCommand):
         # short table name (no schema, no quotes) for pg_indexes lookup
         short_table = table.split(".")[-1].strip('"')
 
-        expr = (
-            "lower(unaccent(scientific_name))"
-            if use_unaccent
-            else "lower(scientific_name)"
-        )
+        expr = "lower(unaccent(scientific_name))" if use_unaccent else "lower(scientific_name)"
 
         if create or ensure:
             exists = self._index_exists(short_table, idx)
             if exists:
-                self.stdout.write(
-                    self.style.SUCCESS(f"Index {idx} already exists on {table}")
-                )
+                self.stdout.write(self.style.SUCCESS(f"Index {idx} already exists on {table}"))
             else:
-                self.stdout.write(
-                    f"About to create index {idx} on {table} using expression: {expr}"
-                )
+                self.stdout.write(f"About to create index {idx} on {table} using expression: {expr}")
                 if not yes:
                     ans = input("Proceed? [y/N]: ")
                     if ans.lower() not in ("y", "yes"):
@@ -124,9 +112,7 @@ class Command(BaseCommand):
                 sql = f"CREATE INDEX CONCURRENTLY {idx} ON {table} ({expr});"
                 try:
                     self._exec_sql_concurrently(sql)
-                    self.stdout.write(
-                        self.style.SUCCESS(f"Created index {idx} on {table}")
-                    )
+                    self.stdout.write(self.style.SUCCESS(f"Created index {idx} on {table}"))
                 except Exception as e:
                     self.stderr.write(f"Failed to create index: {e}\n")
                     raise
@@ -134,9 +120,7 @@ class Command(BaseCommand):
         if drop:
             exists = self._index_exists(short_table, idx)
             if not exists:
-                self.stdout.write(
-                    self.style.WARNING(f"Index {idx} does not exist on {table}")
-                )
+                self.stdout.write(self.style.WARNING(f"Index {idx} does not exist on {table}"))
                 return
             self.stdout.write(f"About to drop index {idx} on {table}")
             if not yes:
@@ -147,9 +131,7 @@ class Command(BaseCommand):
             sql = f"DROP INDEX CONCURRENTLY IF EXISTS {idx};"
             try:
                 self._exec_sql_concurrently(sql)
-                self.stdout.write(
-                    self.style.SUCCESS(f"Dropped index {idx} (if it existed)")
-                )
+                self.stdout.write(self.style.SUCCESS(f"Dropped index {idx} (if it existed)"))
             except Exception as e:
                 self.stderr.write(f"Failed to drop index: {e}\n")
                 raise
@@ -160,6 +142,4 @@ class Command(BaseCommand):
             if exists:
                 self.stdout.write(self.style.SUCCESS(f"Index {idx} exists on {table}"))
             else:
-                self.stdout.write(
-                    self.style.ERROR(f"Index {idx} does NOT exist on {table}")
-                )
+                self.stdout.write(self.style.ERROR(f"Index {idx} does NOT exist on {table}"))

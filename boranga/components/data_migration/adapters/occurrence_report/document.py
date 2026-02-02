@@ -93,9 +93,7 @@ def occurrence_report_lookup_transform(value, ctx):
         # We only really care about TPFL ones for this specific adapter/import run,
         # but loading all migrated ones is generally safe.
         mapping = dict(
-            OccurrenceReport.objects.filter(migrated_from_id__isnull=False).values_list(
-                "migrated_from_id", "pk"
-            )
+            OccurrenceReport.objects.filter(migrated_from_id__isnull=False).values_list("migrated_from_id", "pk")
         )
         occurrence_report_lookup_transform._cache = mapping
 
@@ -110,9 +108,7 @@ def occurrence_report_lookup_transform(value, ctx):
 
     return _result(
         value,
-        TransformIssue(
-            "error", f"OccurrenceReport with migrated_from_id='{value}' not found"
-        ),
+        TransformIssue("error", f"OccurrenceReport with migrated_from_id='{value}' not found"),
     )
 
 

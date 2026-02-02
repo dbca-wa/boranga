@@ -111,11 +111,7 @@ def load_species_to_district_links(
     # default import file path
     default_csv_path = BASE_DIR / "legacy_data/TPFL/DRF_TAXON_CONSV_LST_DISTRICTS.csv"
 
-    csv_path = (
-        path
-        or default_csv_path
-        or getattr(settings, "LEGACY_SPECIES_DISTRICTS_PATH", None)
-    )
+    csv_path = path or default_csv_path or getattr(settings, "LEGACY_SPECIES_DISTRICTS_PATH", None)
 
     if not csv_path:
         logger.warning(
@@ -127,11 +123,7 @@ def load_species_to_district_links(
     try:
         with open(csv_path, newline="", encoding="utf-8") as fh:
             reader = csv.DictReader(fh)
-            if (
-                not reader.fieldnames
-                or key_column not in reader.fieldnames
-                or district_column not in reader.fieldnames
-            ):
+            if not reader.fieldnames or key_column not in reader.fieldnames or district_column not in reader.fieldnames:
                 logger.warning(
                     "CSV %s missing expected columns (%s, %s); found: %s",
                     csv_path,
@@ -263,11 +255,7 @@ def load_csv_mapping(
     try:
         with open(resolved_str, newline="", encoding="utf-8") as fh:
             rdr = csv.DictReader(fh, delimiter=delimiter)
-            if (
-                not rdr.fieldnames
-                or key_column not in rdr.fieldnames
-                or value_column not in rdr.fieldnames
-            ):
+            if not rdr.fieldnames or key_column not in rdr.fieldnames or value_column not in rdr.fieldnames:
                 logger.warning(
                     "CSV %s missing expected columns (%s, %s); found: %s",
                     resolved_str,
@@ -324,9 +312,7 @@ _SHEET_POP_CACHE: dict[str, dict[str, str]] = {}
 _POP_SHEET_CACHE: dict[str, dict[str, str]] = {}
 
 
-def preload_sheetno_pop_map(
-    legacy_system: str = "TPFL", path: str | None = None
-) -> None:
+def preload_sheetno_pop_map(legacy_system: str = "TPFL", path: str | None = None) -> None:
     """
     Populate in-memory caches for SHEETNO -> POP_ID and reverse using the
     DRF_POP_SECTION_MAP.csv (under legacy_data/<legacy_system>/).
@@ -376,9 +362,7 @@ def preload_sheetno_pop_map(
     )
 
 
-def get_pop_id_for_sheetno(
-    sheetno: Any, legacy_system: str = "TPFL", path: str | None = None
-) -> str | None:
+def get_pop_id_for_sheetno(sheetno: Any, legacy_system: str = "TPFL", path: str | None = None) -> str | None:
     """
     Return POP_ID for the given SHEETNO (string-like). Uses in-memory cache.
     """
@@ -389,9 +373,7 @@ def get_pop_id_for_sheetno(
     return _SHEET_POP_CACHE.get(key, {}).get(str(sheetno).strip().casefold())
 
 
-def get_sheetno_for_pop_id(
-    pop_id: Any, legacy_system: str = "TPFL", path: str | None = None
-) -> str | None:
+def get_sheetno_for_pop_id(pop_id: Any, legacy_system: str = "TPFL", path: str | None = None) -> str | None:
     """
     Reverse lookup: return SHEETNO for a POP_ID (if present).
     """
