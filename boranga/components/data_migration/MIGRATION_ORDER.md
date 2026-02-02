@@ -105,6 +105,10 @@ python scripts/combine_csvs.py \
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITES.csv --sources TEC_SITES
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources TEC_SURVEYS
 
+## Associated Species (from structured SITE_SPECIES.csv)
+
+./manage.py migrate_data run associated_species private-media/legacy_data/TEC/SITE_SPECIES.csv --sources TEC_SITE_SPECIES
+
 # --- Cleanup
 
 # Drop the functional index now that migrations are complete

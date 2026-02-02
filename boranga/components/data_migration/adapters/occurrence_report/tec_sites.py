@@ -17,7 +17,7 @@ class OccurrenceReportTecSitesAdapter(SourceAdapter):
 
     PIPELINES = {
         "internal_application": [static_value_factory(True)],
-        "submitter": [TEC_USER_LOOKUP, "required"],
+        "submitter": [TEC_USER_LOOKUP],  # TEC_USER_LOOKUP has built-in fallback
         # Copy submitter to other user fields
         "assigned_approver_id": [
             dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
@@ -54,9 +54,19 @@ class OccurrenceReportTecSitesAdapter(SourceAdapter):
             canonical = schema.map_raw_row(raw)
             canonical["group_type_id"] = community_group_id
 
+            # Prefix Occurrence__migrated_from_id with 'tec-' to match imported occurrences
+            if canonical.get("Occurrence__migrated_from_id"):
+                canonical["Occurrence__migrated_from_id"] = (
+                    f"tec-{canonical['Occurrence__migrated_from_id']}"
+                )
+
             # Map site (S_ID) to Occurrence link so handler can copy details/relate records
             if canonical.get("site"):
-                canonical["Occurrence__migrated_from_id"] = canonical["site"]
+                # Only set Occurrence__migrated_from_id from site if not already set by OCC_UNIQUE_ID
+                if not canonical.get("Occurrence__migrated_from_id"):
+                    canonical["Occurrence__migrated_from_id"] = (
+                        f"tec-{canonical['site']}"
+                    )
                 # SITES.csv generally uses S_ID (mapped to 'site' in schema) as the primary key.
                 # Ensure migrated_from_id is set so it can be merged with other sources (like Boundaries).
                 if not canonical.get("migrated_from_id"):
