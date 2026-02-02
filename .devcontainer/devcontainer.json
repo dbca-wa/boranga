@@ -5,7 +5,7 @@
 	"workspaceFolder": "/data/data/projects/boranga",
 	"mounts": ["type=bind,source=/data/,target=/data/",
 	           "type=bind,source=/data/data/containerhome/,target=/home/container/"
-	          ],	
+	          ],
 	"appPort": [ "7002:8080","9001:9001","9002:9002","9003:9003","9004:9004","9005:9005","9006:9006","9007:9007","9008:9008","9009:9009" ],
 	"runArgs": ["--env-file","${localEnv:HOME}/vscode-env/boranga.env",
 		   "--hostname","boranga-dev"

@@ -4,7 +4,7 @@
     {% if reminder %}
         This is a reminder for a referral for Conservation Status Proposal <strong>{{cs_proposal.conservation_status_number}}</strong> that has been sent to you
     {% else %}
-        A referral for Conservation Status Proposal CS{{proposal.id}} has been sent to you: 
+        A referral for Conservation Status Proposal CS{{proposal.id}} has been sent to you:
         Comments: {{comments}}
     {% endif %}
 
