@@ -5,16 +5,8 @@ from django.db import transaction
 from django.utils.module_loading import import_string
 
 from boranga.components.data_migration.adapters.sources import Source
-from boranga.components.data_migration.registry import (
-    BaseSheetImporter,
-    ImportContext,
-    register,
-)
-from boranga.components.occurrence.models import (
-    AssociatedSpeciesTaxonomy,
-    OccurrenceReport,
-    OCRAssociatedSpecies,
-)
+from boranga.components.data_migration.registry import BaseSheetImporter, ImportContext, register
+from boranga.components.occurrence.models import AssociatedSpeciesTaxonomy, OccurrenceReport, OCRAssociatedSpecies
 from boranga.components.species_and_communities.models import Taxonomy
 
 logger = logging.getLogger(__name__)
@@ -26,10 +18,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
     description = "Import Associated Species from legacy sources"
 
     SOURCE_ADAPTERS = {
-        Source.TEC_SITE_SPECIES.value: (
-            "boranga.components.data_migration.adapters.occurrence_report"
-            ".tec_site_species.OccurrenceReportTecSiteSpeciesAdapter",
-        ),
+        Source.TEC_SITE_SPECIES.value: "boranga.components.data_migration.adapters.occurrence_report.tec_site_species.OccurrenceReportTecSiteSpeciesAdapter",
     }
 
     def run(self, path: str, ctx: ImportContext, sources=None, **options):
@@ -128,8 +117,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                     taxonomy = taxonomies.get(tid)
                     if not taxonomy:
                         logger.debug(f"Taxonomy ID {tid} not found for Site Visit {vid}.")
-                        # As per note: "not able to be matched to a taxon - these have
-                        # been retained in the Excel file... but deleted from the CSV"
+                        # As per note: "not able to be matched to a taxon - these have been retained in the Excel file... but deleted from the CSV"
                         # So we might not see them, or if we do, skip them.
                         continue
 
