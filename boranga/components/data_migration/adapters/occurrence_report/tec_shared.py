@@ -9,6 +9,7 @@ DUMMY_TEC_USER = "boranga.tec@dbca.wa.gov.au"
 _DUMMY_TEC_USER_ID = None
 _DUMMY_SEARCHED = False
 _TEC_USER_MAPPING_CACHE = None  # Dict[username.lower(), emailuser_id]
+_SITE_VISIT_TO_SID_CACHE = None  # Dict[site_visit_id, s_id]
 
 
 def _ensure_caches_loaded():
@@ -57,3 +58,47 @@ def tec_user_lookup(value, ctx):
 
 
 TEC_USER_LOOKUP = tec_user_lookup
+
+
+def load_site_visit_to_sid_mapping(site_visits_path: str) -> dict[str, str]:
+    """
+    Load SITE_VISIT_ID -> S_ID mapping from SITE_VISITS.csv with caching.
+
+    Args:
+        site_visits_path: Path to SITE_VISITS.csv file
+
+    Returns:
+        Dictionary mapping SITE_VISIT_ID (as string) to S_ID
+    """
+    global _SITE_VISIT_TO_SID_CACHE
+
+    if _SITE_VISIT_TO_SID_CACHE is not None:
+        return _SITE_VISIT_TO_SID_CACHE
+
+    import logging
+    import os
+
+    import pandas as pd
+
+    logger = logging.getLogger(__name__)
+    _SITE_VISIT_TO_SID_CACHE = {}
+
+    if not os.path.exists(site_visits_path):
+        logger.warning(f"SITE_VISITS.csv not found at {site_visits_path}")
+        return _SITE_VISIT_TO_SID_CACHE
+
+    try:
+        df = pd.read_csv(site_visits_path, dtype=str)
+        df = df.fillna("")
+
+        for _, row in df.iterrows():
+            sv_id = row.get("SITE_VISIT_ID", "").strip()
+            s_id = row.get("S_ID", "").strip()
+            if sv_id and s_id:
+                _SITE_VISIT_TO_SID_CACHE[sv_id] = s_id
+
+        logger.info(f"Loaded {len(_SITE_VISIT_TO_SID_CACHE)} SITE_VISIT_ID -> S_ID mappings from {site_visits_path}")
+    except Exception as e:
+        logger.error(f"Failed to load SITE_VISITS.csv: {e}")
+
+    return _SITE_VISIT_TO_SID_CACHE
