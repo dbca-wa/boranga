@@ -88,13 +88,32 @@ class ConservationStatusImporter(BaseSheetImporter):
             # Only delete migrated records
             ConservationStatus.objects.filter(**cs_filter).delete()
 
-            # Reset sequence? Only if not filtered.
-            if not is_filtered:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT setval(pg_get_serial_sequence('boranga_conservationstatus', 'id'), "
-                        "coalesce(max(id), 1), max(id) IS NOT null) FROM boranga_conservationstatus;"
+            # Reset the primary key sequence for ConservationStatus when using PostgreSQL.
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = ConservationStatus._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(f"SELECT MAX(id) FROM {table}")
+                        row = cur.fetchone()
+                        max_id = row[0] if row else None
+
+                        if max_id is not None:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", max_id, True],
+                            )
+                        else:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", 1, False],
+                            )
+                    logger.info(
+                        "Reset primary key sequence for table %s to %s", table, max_id
                     )
+            except Exception:
+                logger.exception(
+                    "Failed to reset ConservationStatus primary key sequence"
+                )
 
         finally:
             if not was_autocommit:

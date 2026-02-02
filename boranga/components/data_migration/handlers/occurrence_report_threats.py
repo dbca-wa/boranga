@@ -69,6 +69,7 @@ class OCRConservationThreatImporter(BaseSheetImporter):
             )
             threat_filter = {}
 
+        from django.db import connection as conn
         from django.db import transaction
 
         with transaction.atomic():
@@ -81,6 +82,35 @@ class OCRConservationThreatImporter(BaseSheetImporter):
                     OCRConservationThreat.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OCRConservationThreat")
+
+        # Reset the primary key sequence for OCRConservationThreat when using PostgreSQL.
+        try:
+            if getattr(conn, "vendor", None) == "postgresql":
+                from boranga.components.occurrence.models import OCRConservationThreat
+
+                table = OCRConservationThreat._meta.db_table
+                with conn.cursor() as cur:
+                    cur.execute(f"SELECT MAX(id) FROM {table}")
+                    row = cur.fetchone()
+                    max_id = row[0] if row else None
+
+                    if max_id is not None:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", max_id, True],
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                logger.info(
+                    "Reset primary key sequence for table %s to %s", table, max_id
+                )
+        except Exception:
+            logger.exception(
+                "Failed to reset OCRConservationThreat primary key sequence"
+            )
 
     def add_arguments(self, parser):
         parser.add_argument(

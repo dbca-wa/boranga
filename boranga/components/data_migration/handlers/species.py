@@ -164,22 +164,33 @@ class SpeciesImporter(BaseSheetImporter):
                     )
 
             # Reset the primary key sequence for Species, Occurrence, OccurrenceReport
-            if not is_filtered:
-                try:
-                    if getattr(conn, "vendor", None) == "postgresql":
-                        models_to_reset = [Species, Occurrence, OccurrenceReport]
-                        for model in models_to_reset:
-                            table = model._meta.db_table
-                            with conn.cursor() as cur:
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    models_to_reset = [Species, Occurrence, OccurrenceReport]
+                    for model in models_to_reset:
+                        table = model._meta.db_table
+                        with conn.cursor() as cur:
+                            cur.execute(f"SELECT MAX(id) FROM {table}")
+                            row = cur.fetchone()
+                            max_id = row[0] if row else None
+
+                            if max_id is not None:
+                                cur.execute(
+                                    "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                    [table, "id", max_id, True],
+                                )
+                            else:
                                 cur.execute(
                                     "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
                                     [table, "id", 1, False],
                                 )
-                            logger.info(
-                                "Reset primary key sequence for table %s", table
-                            )
-                except Exception:
-                    logger.exception("Failed to reset primary key sequences")
+                        logger.info(
+                            "Reset primary key sequence for table %s to %s",
+                            table,
+                            max_id,
+                        )
+            except Exception:
+                logger.exception("Failed to reset primary key sequences")
 
         finally:
             if not was_autocommit:

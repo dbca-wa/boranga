@@ -115,6 +115,15 @@ class OccurrenceImporter(BaseSheetImporter):
                 )
                 return
 
+            if len(sources) == 1 and sources[0] == Source.TEC_BOUNDARIES.value:
+                logger.warning(
+                    "OccurrenceImporter: wiping targets for TEC_BOUNDARIES (OccurrenceGeometry only)..."
+                )
+                OccurrenceGeometry.objects.filter(
+                    occurrence__group_type__name__in=target_group_types
+                ).delete()
+                return
+
             logger.warning(
                 "OccurrenceImporter: deleting Occurrence and related data for group_types: %s ...",
                 target_group_types,
@@ -170,25 +179,35 @@ class OccurrenceImporter(BaseSheetImporter):
             except Exception:
                 logger.exception("Failed to delete Occurrence")
 
-            # Reset the primary key sequence for Occurrence and OccurrenceReport when using PostgreSQL.
-            if not is_filtered:
-                try:
-                    if getattr(conn, "vendor", None) == "postgresql":
-                        for model in [Occurrence, OccurrenceReport]:
-                            table = model._meta.db_table
-                            with conn.cursor() as cur:
-                                cur.execute(
-                                    "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                                    [table, "id", 1, False],
-                                )
-                            logger.info(
-                                "Reset primary key sequence for table %s", table
-                            )
-                except Exception:
-                    logger.exception("Failed to reset primary key sequences")
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
+
+        # Reset the primary key sequence for Occurrence and OccurrenceReport when using PostgreSQL.
+        try:
+            if getattr(conn, "vendor", None) == "postgresql":
+                for model in [Occurrence, OccurrenceReport]:
+                    table = model._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(f"SELECT MAX(id) FROM {table}")
+                        row = cur.fetchone()
+                        max_id = row[0] if row else None
+
+                        if max_id is not None:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", max_id, True],
+                            )
+                        else:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", 1, False],
+                            )
+                    logger.info(
+                        "Reset primary key sequence for table %s to %s", table, max_id
+                    )
+        except Exception:
+            logger.exception("Failed to reset primary key sequences")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -361,7 +380,12 @@ class OccurrenceImporter(BaseSheetImporter):
             _src = row.get("_source")
             _mid = transformed.get("migrated_from_id")
             if _src and _mid:
-                prefix = _src.lower().replace("_", "-")
+                if _src == "TEC_BOUNDARIES":
+                    # Special case: TEC_BOUNDARIES links to TEC records, so use 'tec-' prefix
+                    prefix = "tec"
+                else:
+                    prefix = _src.lower().replace("_", "-")
+
                 if not str(_mid).startswith(f"{prefix}-"):
                     transformed["migrated_from_id"] = f"{prefix}-{_mid}"
 
@@ -553,6 +577,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         "row": merged,
                     }
                 )
+                skipped += 1
+                errors += 1
                 continue
 
             create_kwargs = dict(defaults)
@@ -1337,6 +1363,7 @@ class OccurrenceImporter(BaseSheetImporter):
                                 "reason": "missing_taxonomy",
                             }
                         )
+                        errors += 1
                         continue
                     role = role_map.get(role_name)
                     role_id = role.id if role else None

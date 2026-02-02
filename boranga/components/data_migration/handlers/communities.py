@@ -233,29 +233,44 @@ class CommunityImporter(BaseSheetImporter):
                         combined_occurrence=None
                     )
                     Occurrence.objects.filter(**occ_filter).delete()
+
+                    # Break self-referential protected FKs to allow deletion
+                    Community.objects.filter(**comm_filter).update(renamed_from=None)
+
                     Community.objects.filter(**comm_filter).delete()
                 except Exception:
                     logger.exception(
                         "CommunityImporter: Failed to delete filtered target data"
                     )
 
-            # Reset PK sequence
-            if not is_filtered:
-                try:
-                    if getattr(conn, "vendor", None) == "postgresql":
-                        table = Community._meta.db_table
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                                [table, "id", 1, False],
-                            )
-                        logger.info("Reset primary key sequence for table %s", table)
-                except Exception:
-                    logger.exception("Failed to reset Community primary key sequence")
-
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
+
+        # Reset PK sequence
+        try:
+            if getattr(conn, "vendor", None) == "postgresql":
+                table = Community._meta.db_table
+                with conn.cursor() as cur:
+                    cur.execute(f"SELECT MAX(id) FROM {table}")
+                    row = cur.fetchone()
+                    max_id = row[0] if row else None
+
+                    if max_id is not None:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", max_id, True],
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                logger.info(
+                    "Reset primary key sequence for table %s to %s", table, max_id
+                )
+        except Exception:
+            logger.exception("Failed to reset Community primary key sequence")
 
     def add_arguments(self, parser):
         parser.add_argument(
