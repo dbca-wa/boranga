@@ -21,6 +21,72 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
         Source.TEC_SITE_SPECIES.value: "boranga.components.data_migration.adapters.occurrence_report.tec_site_species.OccurrenceReportTecSiteSpeciesAdapter",
     }
 
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
+        """Delete AssociatedSpeciesTaxonomy target data. Respect `ctx.dry_run`."""
+        if ctx.dry_run:
+            return
+
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
+        )
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        if is_filtered:
+            if not target_group_types:
+                return
+            logger.warning(
+                "AssociatedSpeciesImporter: deleting AssociatedSpeciesTaxonomy data for group_types: %s ...",
+                target_group_types,
+            )
+        else:
+            logger.warning("AssociatedSpeciesImporter: deleting all AssociatedSpeciesTaxonomy data...")
+
+        with transaction.atomic():
+            try:
+                # Delete AssociatedSpeciesTaxonomy records linked to OCRs of specific group types
+                if is_filtered:
+                    # Find all OCRs with the target group types
+                    ocr_ids = OccurrenceReport.objects.filter(group_type__name__in=target_group_types).values_list(
+                        "id", flat=True
+                    )
+
+                    # Find all OCRAssociatedSpecies for those OCRs
+                    ocr_assoc_ids = OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=ocr_ids).values_list(
+                        "id", flat=True
+                    )
+
+                    # Delete AST records linked to those OCRAssociatedSpecies
+                    deleted_count = AssociatedSpeciesTaxonomy.objects.filter(
+                        ocrrelatedspecies__id__in=ocr_assoc_ids
+                    ).delete()[0]
+                else:
+                    # Delete all
+                    deleted_count = AssociatedSpeciesTaxonomy.objects.all().delete()[0]
+
+                logger.info(f"Deleted {deleted_count} AssociatedSpeciesTaxonomy records.")
+
+                # Reset PK sequence
+                from django.db import connection as conn
+
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT setval(pg_get_serial_sequence('occurrence_associatedspeciestaxonomy', 'id'), "
+                        "COALESCE((SELECT MAX(id) FROM occurrence_associatedspeciestaxonomy), 1), false);"
+                    )
+                    logger.info("Reset AssociatedSpeciesTaxonomy PK sequence.")
+
+            except Exception as e:
+                logger.error(f"Error clearing AssociatedSpeciesTaxonomy: {e}")
+                raise
+
     def run(self, path: str, ctx: ImportContext, sources=None, **options):
         # Allow filtering sources
         if not sources:
