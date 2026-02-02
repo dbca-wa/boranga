@@ -1044,7 +1044,6 @@ class SpeciesImporter(BaseSheetImporter):
         target_species = list(
             Species.objects.filter(migrated_from_id__in=target_mig_ids)
         )
-        target_map = {s.migrated_from_id: s for s in target_species}
 
         existing_actions = set(
             SpeciesUserAction.objects.filter(species__in=target_species).values_list(
@@ -1073,12 +1072,7 @@ class SpeciesImporter(BaseSheetImporter):
                 )
 
         # Process updated species action logs (ops where species existed)
-        for op in ops:
-            mig = op["migrated_from_id"]
-            merged = op.get("merged") or {}
-            species = target_map.get(mig)
-            if not species:
-                continue
+        for species, merged, _ in to_update:
             if species.pk in existing_actions:
                 continue
             modified_by = merged.get("modified_by")
