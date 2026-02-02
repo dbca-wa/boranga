@@ -2977,6 +2977,13 @@ def t_community_id_from_legacy(value, ctx):
     mapping = dm_mappings.get_community_id_map()
     pk = mapping.get(val_str)
 
+    if pk is None and ctx and getattr(ctx, "row", None):
+        source = ctx.row.get("_source")
+        if source:
+            prefix = source.lower().replace("_", "-")
+            prefixed = f"{prefix}-{val_str}"
+            pk = mapping.get(prefixed)
+
     if pk is None:
         return _result(
             None,
