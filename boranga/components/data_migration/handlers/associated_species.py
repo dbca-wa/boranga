@@ -1,7 +1,10 @@
+import csv
+import json
 import logging
 from collections import defaultdict
 
 from django.db import transaction
+from django.utils import timezone
 from django.utils.module_loading import import_string
 
 from boranga.components.data_migration.adapters.sources import Source
@@ -65,7 +68,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
                     # Delete AST records linked to those OCRAssociatedSpecies
                     deleted_count = AssociatedSpeciesTaxonomy.objects.filter(
-                        ocrrelatedspecies__id__in=ocr_assoc_ids
+                        ocrassociatedspecies__id__in=ocr_assoc_ids
                     ).delete()[0]
                 else:
                     # Delete all
@@ -78,8 +81,8 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
                 with conn.cursor() as cursor:
                     cursor.execute(
-                        "SELECT setval(pg_get_serial_sequence('occurrence_associatedspeciestaxonomy', 'id'), "
-                        "COALESCE((SELECT MAX(id) FROM occurrence_associatedspeciestaxonomy), 1), false);"
+                        "SELECT setval(pg_get_serial_sequence('boranga_associatedspeciestaxonomy', 'id'), "
+                        "COALESCE((SELECT MAX(id) FROM boranga_associatedspeciestaxonomy), 1), false);"
                     )
                     logger.info("Reset AssociatedSpeciesTaxonomy PK sequence.")
 
@@ -88,6 +91,9 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                 raise
 
     def run(self, path: str, ctx: ImportContext, sources=None, **options):
+        # Initialize stats
+        stats = ctx.stats.setdefault(self.slug, self.new_stats())
+
         # Allow filtering sources
         if not sources:
             sources = self.SOURCE_ADAPTERS.keys()
@@ -114,18 +120,20 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                 result = adapter.extract(src_path)
                 logger.info(f"Extracted {len(result.rows)} rows from {src_path}")
                 all_rows.extend(result.rows)
+                stats["extracted"] = stats.get("extracted", 0) + len(result.rows)
             except FileNotFoundError:
                 logger.warning(f"File not found: {src_path}. Skipping.")
                 continue
 
         if not all_rows:
             logger.info("No rows extracted.")
-            return
+            return stats
 
-        self.process_rows(all_rows)
+        self.process_rows(all_rows, stats)
+        return stats
 
-    def process_rows(self, rows):
-        # Group by migrated_from_id (SITE_VISIT_ID)
+    def process_rows(self, rows, stats):
+        # Group by migrated_from_id (S_ID from SITE_VISITS mapping)
         grouped = defaultdict(list)
         for row in rows:
             grouped[row["migrated_from_id"]].append(row)
@@ -134,67 +142,255 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
         site_visit_ids = list(grouped.keys())
 
-        # Batch fetch Occurrence Reports
-        # Assuming migrated_from_id is populated from SITE_VISIT_ID in TEC source migration of sites.
+        # Batch fetch Occurrence Reports by migrated_from_id
         ocrs = {o.migrated_from_id: o for o in OccurrenceReport.objects.filter(migrated_from_id__in=site_visit_ids)}
 
         logger.info(f"Found {len(ocrs)} matching Occurrence Reports.")
+        stats["ocrs_matched"] = len(ocrs)
+        stats["site_visits_without_ocr"] = len(grouped) - len(ocrs)
 
-        # Resolve Taxonomies
-        taxon_ids = set()
+        # Collect all taxon_name_id values from rows
+        taxon_name_ids = set()
         for row in rows:
-            # taxon_name_id might be string in CSV, ensure int?
             val = row.get("taxon_name_id")
             if val:
                 try:
-                    taxon_ids.add(int(val))
+                    taxon_name_ids.add(int(val))
                 except ValueError:
                     logger.warning(f"Invalid taxon_name_id: {val}")
 
-        taxonomies = {t.taxon_name_id: t for t in Taxonomy.objects.filter(taxon_name_id__in=taxon_ids)}
+        # Resolve Taxonomy objects by taxon_name_id
+        taxonomies = {t.taxon_name_id: t for t in Taxonomy.objects.filter(taxon_name_id__in=taxon_name_ids)}
 
-        logger.info(f"Resolved {len(taxonomies)} Taxonomies out of {len(taxon_ids)} requested.")
+        logger.info(f"Resolved {len(taxonomies)} Taxonomies out of {len(taxon_name_ids)} requested.")
+        stats["taxonomies_resolved"] = len(taxonomies)
+        stats["taxonomies_not_found"] = len(taxon_name_ids) - len(taxonomies)
+
+        errors_details = []  # Track skipped records for CSV output
 
         with transaction.atomic():
-            created_count = 0
+            # Step 1: Ensure all OCRs have an OCRAssociatedSpecies record
+            ocr_ids = [ocr.id for ocr in ocrs.values()]
+            existing_ocr_assoc = {
+                oa.occurrence_report_id: oa
+                for oa in OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=ocr_ids)
+            }
+
+            to_create_ocr_assoc = []
+            for ocr in ocrs.values():
+                if ocr.id not in existing_ocr_assoc:
+                    to_create_ocr_assoc.append(OCRAssociatedSpecies(occurrence_report=ocr))
+
+            if to_create_ocr_assoc:
+                created_ocr_assoc = OCRAssociatedSpecies.objects.bulk_create(to_create_ocr_assoc)
+                logger.info(f"Bulk created {len(created_ocr_assoc)} OCRAssociatedSpecies records.")
+                stats["ocr_assoc_created"] = len(created_ocr_assoc)
+                for oa in created_ocr_assoc:
+                    existing_ocr_assoc[oa.occurrence_report_id] = oa
+
+            # Step 2: Collect unique taxonomy_ids (not taxon_name_id!) needed for AssociatedSpeciesTaxonomy
+            # Following occurrence_reports.py pattern: use taxonomy.pk (id), not taxon_name_id
+            taxonomy_ids_needed = set()
+            for row in rows:
+                tid_raw = row.get("taxon_name_id")
+                if not tid_raw:
+                    continue
+                try:
+                    taxon_name_id = int(tid_raw)
+                except ValueError:
+                    continue
+
+                taxonomy = taxonomies.get(taxon_name_id)
+                if taxonomy:
+                    taxonomy_ids_needed.add(taxonomy.pk)  # Use taxonomy.pk (the id field)
+
+            # Step 3: Load existing AssociatedSpeciesTaxonomy rows (following occurrence_reports.py pattern)
+            # Only care about taxonomy_id matching; comments and species_role are not unique constraints
+            ast_qs = AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=list(taxonomy_ids_needed))
+            taxid_to_ast = {}
+            for ast in ast_qs:
+                # Per occurrence_reports.py: take first if multiple exist for same taxonomy
+                if ast.taxonomy_id not in taxid_to_ast:
+                    taxid_to_ast[ast.taxonomy_id] = ast
+
+            # Step 4: Create missing AssociatedSpeciesTaxonomy rows
+            # Use ignore_conflicts to handle any race conditions or existing records
+            missing_tax_ids = taxonomy_ids_needed - set(taxid_to_ast.keys())
+            if missing_tax_ids:
+                create_objs = [AssociatedSpeciesTaxonomy(taxonomy_id=tid) for tid in missing_tax_ids]
+                created = AssociatedSpeciesTaxonomy.objects.bulk_create(
+                    create_objs, batch_size=500, ignore_conflicts=True
+                )
+                logger.info(f"Bulk created {len(created)} new AssociatedSpeciesTaxonomy records.")
+                stats["ast_created"] = len(created)
+
+                # Refresh to get PKs for all records (both created and existing)
+                for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=list(missing_tax_ids)):
+                    if ast.taxonomy_id not in taxid_to_ast:
+                        taxid_to_ast[ast.taxonomy_id] = ast
+
+            # Step 5: Build many-to-many relationships
+            # Group ASTs by OCRAssociatedSpecies to minimize queries
+            m2m_by_ocr_assoc = defaultdict(set)
+
+            skip_reasons = defaultdict(int)
+
             for vid, species_rows in grouped.items():
                 ocr = ocrs.get(vid)
                 if not ocr:
-                    # Only warn if it's expected to be there?
-                    # logger.warning(f"Associated Species: No Occurrence Report found for Site Visit ID {vid}")
+                    for s_row in species_rows:
+                        skip_reasons["no_matching_ocr"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": vid,
+                                "taxon_name_id": s_row.get("taxon_name_id"),
+                                "level": "warning",
+                                "reason": "no_matching_ocr",
+                                "message": f"No OccurrenceReport found for site visit {vid}",
+                                "row": s_row,
+                            }
+                        )
                     continue
 
-                # Get or Create OCRAssociatedSpecies
-                try:
-                    ocr_assoc = ocr.associated_species
-                except OCRAssociatedSpecies.DoesNotExist:
-                    ocr_assoc = OCRAssociatedSpecies.objects.create(occurrence_report=ocr)
+                ocr_assoc = existing_ocr_assoc.get(ocr.id)
+                if not ocr_assoc:
+                    for s_row in species_rows:
+                        skip_reasons["no_ocr_assoc"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": vid,
+                                "taxon_name_id": s_row.get("taxon_name_id"),
+                                "level": "error",
+                                "reason": "no_ocr_assoc",
+                                "message": f"No OCRAssociatedSpecies for OCR {ocr.id}",
+                                "row": s_row,
+                            }
+                        )
+                    continue
 
                 for s_row in species_rows:
                     tid_raw = s_row.get("taxon_name_id")
                     if not tid_raw:
+                        skip_reasons["missing_taxon_name_id"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": vid,
+                                "taxon_name_id": None,
+                                "level": "warning",
+                                "reason": "missing_taxon_name_id",
+                                "message": "taxon_name_id field is empty",
+                                "row": s_row,
+                            }
+                        )
                         continue
 
                     try:
-                        tid = int(tid_raw)
+                        taxon_name_id = int(tid_raw)
                     except ValueError:
+                        skip_reasons["invalid_taxon_name_id"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": vid,
+                                "taxon_name_id": tid_raw,
+                                "level": "warning",
+                                "reason": "invalid_taxon_name_id",
+                                "message": f"Invalid taxon_name_id: {tid_raw}",
+                                "row": s_row,
+                            }
+                        )
                         continue
 
-                    taxonomy = taxonomies.get(tid)
+                    taxonomy = taxonomies.get(taxon_name_id)
                     if not taxonomy:
-                        logger.debug(f"Taxonomy ID {tid} not found for Site Visit {vid}.")
-                        # As per note: "not able to be matched to a taxon - these have been retained in the Excel file... but deleted from the CSV"
-                        # So we might not see them, or if we do, skip them.
+                        skip_reasons["taxonomy_not_resolved"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": vid,
+                                "taxon_name_id": taxon_name_id,
+                                "level": "warning",
+                                "reason": "taxonomy_not_resolved",
+                                "message": f"Taxonomy with taxon_name_id {taxon_name_id} not found",
+                                "row": s_row,
+                            }
+                        )
                         continue
 
-                    comments = s_row.get("comments", "")
+                    ast = taxid_to_ast.get(taxonomy.pk)
+                    if ast:
+                        m2m_by_ocr_assoc[ocr_assoc].add(ast)
+                    else:
+                        skip_reasons["ast_not_found"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": vid,
+                                "taxon_name_id": taxon_name_id,
+                                "level": "error",
+                                "reason": "ast_not_found",
+                                "message": f"AssociatedSpeciesTaxonomy not found for taxonomy.pk {taxonomy.pk}",
+                                "row": s_row,
+                            }
+                        )
 
-                    # Create AST
-                    ast = AssociatedSpeciesTaxonomy.objects.create(
-                        taxonomy=taxonomy, comments=comments, species_role=None
-                    )
+            # Bulk add M2M relationships
+            total_links = sum(len(asts) for asts in m2m_by_ocr_assoc.values())
+            logger.info(
+                f"Adding {total_links} AssociatedSpeciesTaxonomy links to {len(m2m_by_ocr_assoc)} OCRAssociatedSpecies..."
+            )
+            stats["m2m_links_created"] = total_links
 
-                    ocr_assoc.related_species.add(ast)
-                    created_count += 1
+            for ocr_assoc, ast_set in m2m_by_ocr_assoc.items():
+                ocr_assoc.related_species.add(*ast_set)
 
-            logger.info(f"Successfully created {created_count} AssociatedSpeciesTaxonomy records.")
+            logger.info(f"Successfully linked {total_links} AssociatedSpeciesTaxonomy relationships.")
+
+            # Log skip reasons
+            if skip_reasons:
+                logger.warning("Records skipped by reason:")
+                for reason, count in sorted(skip_reasons.items(), key=lambda x: -x[1]):
+                    logger.warning(f"  {reason}: {count}")
+                    stats[f"skip_reason_{reason}"] = count
+
+            # Update standard stats fields
+            stats["processed"] = len(rows)
+            stats["created"] = total_links  # M2M links are the actual "records" created
+            # Calculate how many input rows were skipped
+            rows_linked = sum(len(species_rows) for vid, species_rows in grouped.items() if vid in ocrs)
+            stats["skipped"] = len(rows) - rows_linked
+
+            # Write errors/warnings CSV
+            if errors_details:
+                import os
+
+                csv_path = "private-media/handler_output/associated_species_errors.csv"
+                os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+                try:
+                    with open(csv_path, "w", newline="") as f:
+                        writer = csv.DictWriter(
+                            f,
+                            fieldnames=[
+                                "migrated_from_id",
+                                "taxon_name_id",
+                                "level",
+                                "reason",
+                                "message",
+                                "row_json",
+                                "timestamp",
+                            ],
+                        )
+                        writer.writeheader()
+                        for rec in errors_details:
+                            writer.writerow(
+                                {
+                                    "migrated_from_id": rec.get("migrated_from_id"),
+                                    "taxon_name_id": rec.get("taxon_name_id"),
+                                    "level": rec.get("level"),
+                                    "reason": rec.get("reason"),
+                                    "message": rec.get("message"),
+                                    "row_json": json.dumps(rec.get("row", {}), default=str),
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+                    stats["error_details_csv"] = csv_path
+                    logger.info(f"Wrote {len(errors_details)} skipped records to {csv_path}")
+                except Exception as e:
+                    logger.exception(f"Failed to write error CSV: {e}")
