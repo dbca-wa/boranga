@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.adapters.species import schema
+from boranga.components.data_migration.adapters.species.tfauna import SpeciesTfaunaAdapter
 from boranga.components.data_migration.adapters.species.tpfl import SpeciesTpflAdapter
 from boranga.components.data_migration.mappings import (
     load_legacy_to_pk_map,
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: SpeciesTpflAdapter(),
+    Source.TFAUNA.value: SpeciesTfaunaAdapter(),
 }
 
 
