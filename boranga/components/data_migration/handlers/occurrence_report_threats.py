@@ -9,6 +9,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.occurrence_report import schema
+from boranga.components.data_migration.adapters.occurrence_report.tec_survey_threats import (
+    OccurrenceReportTecSurveyThreatsAdapter,
+)
 from boranga.components.data_migration.adapters.occurrence_report.threats import (
     OCRConservationThreatAdapter,
 )
@@ -23,6 +26,7 @@ from boranga.components.data_migration.registry import (
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OCRConservationThreatAdapter(),
+    Source.TEC_SURVEY_THREATS.value: OccurrenceReportTecSurveyThreatsAdapter(),
 }
 
 
