@@ -72,11 +72,11 @@ SOURCE_ADAPTERS = {
     # time. We'll import the class lazily inside `run()` after emitting
     # initial logs to avoid long silent startup delays.
     Source.TPFL.value: "boranga.components.data_migration.adapters.occurrence_report.tpfl.OccurrenceReportTpflAdapter",
-    Source.TEC_SITES.value: (
-        "boranga.components.data_migration.adapters." "occurrence_report.tec_sites.OccurrenceReportTecSitesAdapter"
+    Source.TEC_SITE_VISITS.value: (
+        "boranga.components.data_migration.adapters.occurrence_report.tec_site_visits.OccurrenceReportTecSitesAdapter"
     ),
     Source.TEC_SURVEYS.value: (
-        "boranga.components.data_migration.adapters." "occurrence_report.tec_surveys.OccurrenceReportTecSurveysAdapter"
+        "boranga.components.data_migration.adapters.occurrence_report.tec_surveys.OccurrenceReportTecSurveysAdapter"
     ),
     # add other adapters when available
 }
@@ -1193,7 +1193,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     "column": "associated_species",
                                     "level": "warning",
                                     "message": (
-                                        f"Best-guess taxonomy match for '{raw_name}': " f"using '{tax.scientific_name}'"
+                                        f"Best-guess taxonomy match for '{raw_name}': using '{tax.scientific_name}'"
                                     ),
                                     "raw_value": raw_name,
                                     "reason": "associated_species_best_guess",
