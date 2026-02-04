@@ -102,7 +102,7 @@ python scripts/combine_csvs.py \
 
 ## Occurrence Reports
 
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITES.csv --sources TEC_SITES
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITE_VISITS.csv --sources TEC_SITE_VISITS
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources
 
 ## Occurrence Report Threats
