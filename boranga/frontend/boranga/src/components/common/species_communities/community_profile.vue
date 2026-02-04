@@ -1302,15 +1302,15 @@ export default {
         if (vm.species_community.distribution) {
             if (vm.species_community.distribution.noo_auto == true) {
                 vm.species_community.distribution.number_of_occurrences =
-                    vm.species_community.distribution.cal_number_of_occurrences;
+                    vm.species_community.occurrence_count;
             }
             if (vm.species_community.distribution.eoo_auto == true) {
                 vm.species_community.distribution.extent_of_occurrences =
-                    vm.species_community.distribution.cal_extent_of_occurrences;
+                    vm.species_community.area_occurrence_convex_hull_km2;
             }
             if (vm.species_community.distribution.aoo_actual_auto == true) {
                 vm.species_community.distribution.area_of_occupancy_actual =
-                    vm.species_community.distribution.cal_area_of_occupancy_actual;
+                    vm.species_community.area_of_occupancy_km2;
             }
         }
         if (vm.species_community.conservation_attributes) {
