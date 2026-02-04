@@ -751,7 +751,12 @@ class CommunityImporter(BaseSheetImporter):
 
                         # Construct description
                         parts = [p for p in [pub_title, pub_author, pub_date, pub_place] if p]
-                        description = " ".join(parts) if parts else pub_no
+                        publication_desc = " ".join(parts)
+
+                        if publication_desc:
+                            description = f"{publication_desc}. CP_PUB_NO: {pub_no}"
+                        else:
+                            description = f"CP_PUB_NO: {pub_no}"
 
                         doc = CommunityDocument(
                             community=community,
