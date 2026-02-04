@@ -54,7 +54,7 @@ class OccurrenceReportTecSiteSpeciesAdapter(SourceAdapter):
             comments = "; ".join(comments_parts)
 
             row = {
-                "migrated_from_id": s_id,  # Link to OCR via S_ID (not SITE_VISIT_ID)
+                "migrated_from_id": f"tec-{site_visit_id}",  # Link to OCR via SITE_VISIT_ID
                 "taxon_name_id": taxon_name_id,
                 "comments": comments,
                 # Preserve source info for debugging
