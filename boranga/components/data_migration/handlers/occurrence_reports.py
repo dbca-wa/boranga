@@ -73,7 +73,7 @@ SOURCE_ADAPTERS = {
     # initial logs to avoid long silent startup delays.
     Source.TPFL.value: "boranga.components.data_migration.adapters.occurrence_report.tpfl.OccurrenceReportTpflAdapter",
     Source.TEC_SITE_VISITS.value: (
-        "boranga.components.data_migration.adapters.occurrence_report.tec_site_visits.OccurrenceReportTecSitesAdapter"
+        "boranga.components.data_migration.adapters.occurrence_report.tec_site_visits.OccurrenceReportTecSiteVisitsAdapter"
     ),
     Source.TEC_SURVEYS.value: (
         "boranga.components.data_migration.adapters.occurrence_report.tec_surveys.OccurrenceReportTecSurveysAdapter"
