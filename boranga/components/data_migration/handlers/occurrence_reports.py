@@ -284,8 +284,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
         path_map = self._parse_path_map(options.get("path_map"))
 
         # Load pop_section_map early so we can use it for associated species filtering
-        pop_section_map = self.preload_pop_section_map(path)
-        sheet_vws_map = self.preload_sheet_vws_map(path)
+        # CONDITIONAL LOADING: Only load TPFL specific maps if TPFL is in the sources
+        # (This avoids loading large unnecessary files when running TEC migrations)
+        pop_section_map = {}
+        sheet_vws_map = {}
+        if Source.TPFL.value in sources:
+            pop_section_map = self.preload_pop_section_map(path)
+            sheet_vws_map = self.preload_sheet_vws_map(path)
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
@@ -762,6 +767,25 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if occ.community_id and not defaults.get("community_id"):
                         defaults["community_id"] = occ.community_id
 
+            # Cleanup: If we failed to link an occurrence, ensure we don't pass the raw string ID
+            # (e.g. "1993") as a PK to Django, which causes ForeignKey Violations.
+            # We log a warning if we are dropping a real value so the data gap is visible.
+            if "occurrence" in defaults:
+                removed_val = defaults.pop("occurrence")
+                if removed_val and not defaults.get("occurrence_id"):
+                    # Only log provided we haven't already linked it (occurrence_id)
+                    errors_details.append(
+                        {
+                            "migrated_from_id": op["migrated_from_id"],
+                            "column": "occurrence",
+                            "level": "warning",
+                            "message": f"Link broken. Report refers to Occurrence '{removed_val}' which was not found in DB. Creating unlinked.",
+                            "raw_value": removed_val,
+                            "reason": "broken_link",
+                            "row": {"occurrence_link": removed_val},
+                        }
+                    )
+
         # Build op_map for O(1) access to per-migrated-id data (avoid O(n) scans)
         op_map = {o["migrated_from_id"]: o for o in ops}
 
@@ -849,9 +873,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Refresh created objects to get PKs
         if create_meta:
             created_keys = [m[0] for m in create_meta]
-            logger.info(f"created_keys for lookup: {created_keys[:5]}")
+            # logger.info(f"created_keys for lookup: {created_keys[:5]}")
             for s in OccurrenceReport.objects.filter(migrated_from_id__in=created_keys).select_related("occurrence"):
-                logger.info(f"Adding to created_map: {s.migrated_from_id}={s.pk}")
+                # logger.info(f"Adding to created_map: {s.migrated_from_id}={s.pk}")
                 created_map[s.migrated_from_id] = s
 
         # Populate occurrence_report_number for newly-created objects (bulk_update)
@@ -2427,7 +2451,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             if original_point:
                                 geom_create_kwargs["original_geometry_ewkb"] = original_point.ewkb
                     except Exception:
-                        logger.debug("Could not extract original point geometry")
+                        pass
+                        # logger.debug("Could not extract original point geometry")
 
                     try:
                         new_geom = OccurrenceReportGeometry.objects.create(
@@ -2736,7 +2761,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             if original_point:
                                 geom_create_kwargs["original_geometry_ewkb"] = original_point.ewkb
                     except Exception:
-                        logger.debug("Could not extract original point geometry")
+                        pass
+                        # logger.debug("Could not extract original point geometry")
 
                     try:
                         new_geom = OccurrenceReportGeometry.objects.create(
