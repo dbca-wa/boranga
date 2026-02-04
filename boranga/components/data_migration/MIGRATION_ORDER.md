@@ -103,7 +103,11 @@ python scripts/combine_csvs.py \
 ## Occurrence Reports
 
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITES.csv --sources TEC_SITES
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources TEC_SURVEYS
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources
+
+## Occurrence Report Threats
+
+./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TEC/SURVEY_THREATS.csv --sources TEC_SURVEY_THREATS
 
 ## Associated Species (from structured SITE_SPECIES.csv)
 
