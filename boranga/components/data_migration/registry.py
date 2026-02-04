@@ -292,15 +292,18 @@ def t_date_iso(value, ctx):
     return _result(value, TransformIssue("error", f"Unrecognized date format: {value!r}"))
 
 
-@registry.register("datetime_iso")
-def t_datetime_iso(value, ctx):
+def _parse_datetime_iso(value: Any, default_tz: Any = None) -> TransformResult:
     """
     Parse datetimes (including ISO strings) and return a timezone-aware datetime
     in UTC suitable for Django (USE_TZ=True).
 
     If the incoming string contains an explicit UTC offset token (+0000 / +00:00 / Z)
-    we strip that token and treat the remainder as naive UTC (useful when source
-    emits +0000 style offsets that some parsers don't accept).
+    we strip that token and treat the remainder as naive. This remainder will be
+    made aware using `default_tz` (if provided) or UTC.
+
+    This behaviour is useful when source systems emit +0000 style offsets for
+    local times (mojibake-like timezone handling) or when some parsers don't
+    accept +0000.
     """
     if not value:
         return _result(None)
@@ -312,8 +315,9 @@ def t_datetime_iso(value, ctx):
     m = re.search(r"([+-]\d{2}:?\d{2}|Z)$", s)
     if m:
         tz_token = m.group(1)
-        # Treat explicit UTC tokens as no-offset (strip them and parse as UTC)
-        if tz_token in ("Z", "+0000", "+00:00", "+0000", "+00:00"):
+        # Treat explicit UTC tokens as no-offset (strip them and parse as naive,
+        # then we'll apply default_tz or UTC later)
+        if tz_token in ("Z", "+0000", "+00:00"):
             # remove trailing offset (handles both +0000 and +00:00)
             s = s[: m.start(1)].rstrip()
         # else: leave non-UTC offsets intact so parser can handle/convert them
@@ -347,15 +351,72 @@ def t_datetime_iso(value, ctx):
     if dt is None:
         return _result(value, TransformIssue("error", f"Unrecognized datetime format: {value!r}"))
 
-    # Make timezone-aware in UTC for Django:
+    # Make timezone-aware
     if dt.tzinfo is None:
-        # treat naive datetimes as UTC and make them aware
-        dt = timezone.make_aware(dt, stdlib_timezone.utc)
-    else:
-        # convert any aware datetime to UTC
-        dt = dt.astimezone(stdlib_timezone.utc)
+        # Resolve default_tz to a timezone object
+        tz_obj = default_tz
+        if isinstance(tz_obj, str):
+            try:
+                from zoneinfo import ZoneInfo
+
+                tz_obj = ZoneInfo(tz_obj)
+            except ImportError:
+                # fall back to pytz if on older python/django or if preferred
+                import pytz
+
+                tz_obj = pytz.timezone(tz_obj)
+
+        if tz_obj is None:
+            tz_obj = stdlib_timezone.utc
+
+        # treat naive datetimes as being in tz_obj and make them aware
+        dt = timezone.make_aware(dt, tz_obj)
+
+    # convert any aware datetime (including those just made aware) to UTC for storage
+    dt = dt.astimezone(stdlib_timezone.utc)
 
     return _result(dt)
+
+
+@registry.register("datetime_iso")
+def t_datetime_iso(value, ctx):
+    """
+    Parse datetimes (including ISO strings) and return a timezone-aware datetime
+    in UTC suitable for Django (USE_TZ=True).
+
+    If the incoming string contains an explicit UTC offset token (+0000 / +00:00 / Z)
+    we strip that token and treat the remainder as naive UTC (useful when source
+    emits +0000 style offsets that some parsers don't accept).
+    """
+    return _parse_datetime_iso(value)
+
+
+def datetime_iso_factory(default_tz: str | None = None) -> str:
+    """
+    Return a registered transform name that parses datetimes (ISO or legacy)
+    and returns a UTC-aware datetime.
+
+    If the source has +0000/+00:00/Z but is actually local time, or if the
+    source is naive, `default_tz` can be used to correctly localise before
+    conversion to UTC.
+
+    Parameters:
+      - default_tz: optional timezone name (e.g. 'Australia/Perth') or tzinfo
+
+    Usage:
+      PERTH_DT = datetime_iso_factory('Australia/Perth')
+      PIPELINES['created_at'] = [PERTH_DT]
+    """
+    key = f"datetime_iso_{default_tz or 'UTC'}"
+    name = "datetime_iso_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    @registry.register(name)
+    def inner(value, ctx):
+        return _parse_datetime_iso(value, default_tz=default_tz)
+
+    return name
 
 
 @registry.register("date_from_datetime_iso")
@@ -370,54 +431,40 @@ def t_date_from_datetime_iso(value, ctx):
     - parses naive datetimes as UTC and returns the date.
     - on parse failure returns the original value with a TransformIssue.
     """
-    if not value:
-        return _result(None)
+    res = _parse_datetime_iso(value)
+    if res.errors:
+        return res
+    if res.value:
+        res.value = res.value.date()
+    return res
 
-    s = str(value).strip()
-    dt = None
 
-    # strip explicit UTC tokens (keep non-UTC offsets intact)
-    m = re.search(r"([+-]\d{2}:?\d{2}|Z)$", s)
-    if m:
-        tz_token = m.group(1)
-        if tz_token in ("Z", "+0000", "+00:00"):
-            s = s[: m.start(1)].rstrip()
+def date_from_datetime_iso_factory(default_tz: str | None = None) -> str:
+    """
+    Return a registered transform name that parses datetimes (ISO or legacy)
+    and returns a UTC date.
 
-    # try stdlib ISO parsing
-    try:
-        iso = s[:-1] + "+00:00" if s.endswith("Z") else s
-        dt = datetime.fromisoformat(iso)
-    except Exception:
-        dt = None
+    See datetime_iso_factory for details on default_tz.
 
-    # try dateutil if available
-    if dt is None:
-        try:
-            from dateutil import parser
+    Usage:
+      PERTH_DATE = date_from_datetime_iso_factory('Australia/Perth')
+      PIPELINES['observed_at'] = [PERTH_DATE]
+    """
+    key = f"date_from_datetime_iso_{default_tz or 'UTC'}"
+    name = "date_from_datetime_iso_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
 
-            dt = parser.parse(s)
-        except Exception:
-            dt = None
+    @registry.register(name)
+    def inner(value, ctx):
+        res = _parse_datetime_iso(value, default_tz=default_tz)
+        if res.errors:
+            return res
+        if res.value:
+            res.value = res.value.date()
+        return res
 
-    # fallback legacy formats
-    if dt is None:
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
-            try:
-                dt = datetime.strptime(s, fmt)
-                break
-            except ValueError:
-                dt = None
-
-    if dt is None:
-        return _result(value, TransformIssue("error", f"Unrecognized datetime format: {value!r}"))
-
-    # normalise to UTC date
-    if dt.tzinfo is None:
-        dt = timezone.make_aware(dt, stdlib_timezone.utc)
-    else:
-        dt = dt.astimezone(stdlib_timezone.utc)
-
-    return _result(dt.date())
+    return name
 
 
 @registry.register("ocr_comments_transform")
