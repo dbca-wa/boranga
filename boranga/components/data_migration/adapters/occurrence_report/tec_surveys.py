@@ -50,7 +50,7 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
 
             # Construct migrated_from_id for Surveys
             if sur_no and occ_id:
-                canonical["migrated_from_id"] = f"Survey {sur_no} of OCC {occ_id}"
+                canonical["migrated_from_id"] = f"tec-survey-{sur_no}-occ-{occ_id}"
 
             # Ensure SUR_NO is in canonical row so tec_user_lookup can find it in context
             if sur_no:
