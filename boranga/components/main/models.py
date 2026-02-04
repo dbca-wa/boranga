@@ -354,8 +354,7 @@ class SystemMaintenance(BaseModel):
 
     def __str__(self):
         return (
-            f"System Maintenance: {self.name} ({self.description}) "
-            f"- starting {self.start_date}, ending {self.end_date}"
+            f"System Maintenance: {self.name} ({self.description}) - starting {self.start_date}, ending {self.end_date}"
         )
 
 
@@ -673,7 +672,7 @@ class LegacyUsernameEmailuserMapping(models.Model):
     """
 
     legacy_system = models.CharField(max_length=50, db_index=True)
-    legacy_username = models.CharField(max_length=255, unique=True)
+    legacy_username = models.CharField(max_length=255)
     email = models.EmailField(max_length=255)
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
@@ -681,6 +680,7 @@ class LegacyUsernameEmailuserMapping(models.Model):
 
     class Meta:
         app_label = "boranga"
+        unique_together = (("legacy_system", "legacy_username"),)
 
     def __str__(self):
         return f"{self.legacy_username} -> {self.emailuser_id}"
