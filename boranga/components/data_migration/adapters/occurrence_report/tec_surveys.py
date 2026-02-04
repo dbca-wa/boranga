@@ -52,6 +52,10 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
             if sur_no and occ_id:
                 canonical["migrated_from_id"] = f"tec-survey-{sur_no}-occ-{occ_id}"
 
+            # Map OCC_UNIQUE_ID to Occurrence__migrated_from_id with prefix so Handler can find it
+            if occ_id:
+                canonical["Occurrence__migrated_from_id"] = f"tec-{occ_id}"
+
             # Ensure SUR_NO is in canonical row so tec_user_lookup can find it in context
             if sur_no:
                 canonical["SUR_NO"] = sur_no
