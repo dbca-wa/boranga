@@ -696,6 +696,79 @@ def fk_lookup_static(model: type[models.Model], lookup_field: str, static_value:
     return key
 
 
+def lookup_model_value_factory(model_name: str, field_name: str, static_value: Any = None) -> str:
+    """
+    Return a registered transform name that looks up a model instance ID using a string reference.
+
+    Parameters:
+      - model_name: 'app_label.Model' name string (e.g. 'boranga.Species')
+      - field_name: field to filter by (e.g. 'scientific_name')
+      - static_value: if not None, use this value for lookup (ignoring row value).
+                      If None, use the row value for lookup.
+    """
+    key_parts = ["lookup_model", model_name, field_name]
+    if static_value is not None:
+        key_parts.append(str(static_value))
+
+    key_repr = ":".join(key_parts)
+    name = "lookup_model_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Cache lookup results to avoid repeated DB queries for the same input value
+    # Key: input value, Value: (result_value, list[TransformIssue])
+    _lookup_cache = {}
+
+    @registry.register(name)
+    def inner(value, ctx):
+        from django.apps import apps
+        from django.core.exceptions import FieldDoesNotExist
+
+        # Determine value to search: either the static config or the row value
+        search_value = static_value if static_value is not None else value
+
+        # Return cached result if available
+        if search_value in _lookup_cache:
+            res_val, res_issues = _lookup_cache[search_value]
+            return _result(res_val, *res_issues)
+
+        # Resolve Model
+        try:
+            Model = apps.get_model("boranga", model_name)
+        except LookupError:
+            r = (None, [TransformIssue("error", f"Model '{model_name}' not found")])
+            _lookup_cache[search_value] = r
+            return _result(r[0], *r[1])
+
+        # Validate Field
+        try:
+            Model._meta.get_field(field_name)
+        except FieldDoesNotExist:
+            r = (None, [TransformIssue("error", f"Field '{field_name}' not found on model '{model_name}'")])
+            _lookup_cache[search_value] = r
+            return _result(r[0], *r[1])
+
+        # If value is empty/None, return None (skip lookup)
+        if search_value in (None, ""):
+            _lookup_cache[search_value] = (None, [])
+            return _result(None)
+
+        # Perform Lookup
+        try:
+            obj = Model.objects.get(**{field_name: search_value})
+            r = (obj.pk, [])
+        except Model.DoesNotExist:
+            r = (None, [TransformIssue("error", f"{model_name} with {field_name}='{search_value}' not found")])
+        except Model.MultipleObjectsReturned:
+            r = (None, [TransformIssue("error", f"Multiple {model_name} found with {field_name}='{search_value}'")])
+
+        _lookup_cache[search_value] = r
+        return _result(r[0], *r[1])
+
+    return name
+
+
 def static_value_factory(static_value: Any) -> str:
     """
     Return a registered transform name that always returns the same static value,
