@@ -111,9 +111,13 @@ python scripts/combine_csvs.py \
 
 ## Associated Species (from structured SITE_SPECIES.csv)
 
-# Note: Adapter will map SITE_VISIT_ID -> S_ID using SITE_VISITS.csv to match OCRs
-
 ./manage.py migrate_data run associated_species private-media/legacy_data/TEC/SITE_SPECIES.csv --sources TEC_SITE_SPECIES
+
+# -- TFAUNA
+
+## Species
+
+./manage.py migrate_data run species_legacy private-media/legacy_data/TFAUNA/Species List.csv --sources TFAUNA
 
 # --- Cleanup
 
