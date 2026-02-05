@@ -157,7 +157,7 @@ class RevisionedMixin(BaseModel):
 
 class UserAction(BaseModel):
     who = models.IntegerField()  # EmailUserRO
-    when = models.DateTimeField(null=False, blank=False, auto_now_add=True)
+    when = models.DateTimeField(null=False, blank=False, default=timezone.now)
     what = models.TextField(blank=False)
 
     def __str__(self):
