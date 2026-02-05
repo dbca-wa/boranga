@@ -335,13 +335,13 @@ def _parse_datetime_iso(value: Any, default_tz: Any = None) -> TransformResult:
         try:
             from dateutil import parser
 
-            dt = parser.parse(s)
+            dt = parser.parse(s, dayfirst=True)
         except Exception:
             dt = None
 
     # fallback to explicit legacy formats
     if dt is None:
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d"):
             try:
                 dt = datetime.strptime(s, fmt)
                 break
