@@ -1,6 +1,7 @@
 from boranga.components.data_migration.registry import (
     TransformIssue,
     _result,
+    datetime_iso_factory,
     emailuser_by_legacy_username_factory,
 )
 from boranga.components.main.models import LegacyValueMap
@@ -42,10 +43,12 @@ OCCURRENCE_ID_TRANSFORM = occurrence_lookup_transform
 
 UPLOADED_BY_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
+DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
+
 PIPELINES = {
     "occurrence_id": ["strip", "required", OCCURRENCE_ID_TRANSFORM],
     "uploaded_by": ["strip", "required", UPLOADED_BY_TRANSFORM],
-    "uploaded_date": ["strip", "required", "datetime_iso"],
+    "uploaded_date": ["strip", "required", DATETIME_ISO_PERTH],
     "description": ["strip", "blank_to_none"],
     "document_category_id": ["identity"],
     "document_sub_category_id": ["identity"],

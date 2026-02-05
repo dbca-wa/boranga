@@ -6,6 +6,8 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
     choices_transform,
+    date_from_datetime_iso_factory,
+    datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     fk_lookup,
     taxonomy_lookup_legacy_mapping,
@@ -22,6 +24,9 @@ from ..sources import Source
 
 # TPFL-specific transform bindings
 TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
+DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
+
 COORD_SOURCE_TRANSFORM = build_legacy_map_transform(
     legacy_system="TPFL",
     list_name="CO_ORD_SOURCE_CODE (DRF_LOV_CORDINATE_SOURCE_VWS)",
@@ -78,8 +83,9 @@ PIPELINES = {
         WILD_STATUS_TRANSFORM,
     ],
     "comment": ["strip", "blank_to_none"],
-    "datetime_created": ["strip", "blank_to_none", "datetime_iso"],
-    "datetime_updated": ["strip", "blank_to_none", "datetime_iso"],
+    "datetime_created": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
+    "datetime_updated": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
+    "lodgment_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     "processing_status": [
         "strip",
         "required",

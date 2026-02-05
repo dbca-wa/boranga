@@ -12,6 +12,7 @@ from boranga.components.data_migration.registry import (
     TransformIssue,
     _result,
     build_legacy_map_transform,
+    datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     fk_lookup_static,
     static_value_factory,
@@ -129,6 +130,8 @@ ATTACHED_DOC_TRANSFORM = build_legacy_map_transform(
     required=False,
 )
 
+DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
+
 STATIC_NONE = static_value_factory(None)
 STATIC_EMPTY_STRING = static_value_factory("")
 
@@ -211,7 +214,7 @@ PIPELINES.update(
             "blank_to_none",
             EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM,
         ],
-        "uploaded_date": ["strip", "blank_to_none", "datetime_iso"],
+        "uploaded_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
         "description": [description_concatenate_transform],
         "name": [STATIC_EMPTY_STRING],
     }
