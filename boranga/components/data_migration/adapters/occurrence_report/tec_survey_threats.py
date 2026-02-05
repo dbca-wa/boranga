@@ -10,6 +10,7 @@ from boranga.components.data_migration.adapters.base import (
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
+    lookup_model_value_factory,
     static_value_factory,
 )
 
@@ -18,20 +19,29 @@ from .threats import occurrence_report_lookup_transform
 logger = logging.getLogger(__name__)
 
 
+CURRENT_IMPACT_FALLBACK = lookup_model_value_factory("CurrentImpact", "name", "Unknown")
+
+POTENTIAL_IMPACT_FALLBACK = lookup_model_value_factory("PotentialImpact", "name", "Unknown")
+
+
 class OccurrenceReportTecSurveyThreatsAdapter(SourceAdapter):
     source_key = Source.TEC_SURVEY_THREATS.value
     domain = "occurrence_report_threats"
 
     PIPELINES = {
         "visible": [static_value_factory(True)],
-        "threat_category": [build_legacy_map_transform("TEC", "THREATS", required=False)],
+        "threat_category": [build_legacy_map_transform("TEC", "THR_THREAT_CODE (THREATS)", required=False)],
         "current_impact": [
-            # If value is empty, treat as "Unknown". Relies on "Unknown" being mapped in LegacyValueMapping.
-            lambda val, ctx: "Unknown" if not val else val,
-            build_legacy_map_transform("TEC", "THREAT_IMPACTS", required=True),
+            build_legacy_map_transform("TEC", "THR_HIST_IMP_CODE (THREAT_IMPACTS)", required=False),
+            CURRENT_IMPACT_FALLBACK,
         ],
-        "potential_impact": [build_legacy_map_transform("TEC", "THREAT_IMPACTS", required=False)],
-        "occurrence_report": [occurrence_report_lookup_transform],
+        "potential_impact": [
+            build_legacy_map_transform("TEC", "THR_POT_IMP_CODE (THREAT_IMPACTS)", required=False),
+            POTENTIAL_IMPACT_FALLBACK,
+        ],
+        "occurrence_report_id": [occurrence_report_lookup_transform],
+        "comment": [],
+        "date_observed": ["strip", "blank_to_none", "date_from_datetime_iso"],
     }
 
     def extract(self, path: str, **options) -> ExtractionResult:
@@ -65,8 +75,8 @@ class OccurrenceReportTecSurveyThreatsAdapter(SourceAdapter):
                 continue
 
             # migrated_from_id MUST match what tec_surveys.py generates:
-            # f"Survey {sur_no} of OCC {occ_id}"
-            migrated_from_id_val = f"Survey {sur_no} of OCC {occ_id}"
+            # f"tec-survey-{sur_no}-occ-{occ_id}"
+            migrated_from_id_val = f"tec-survey-{sur_no}-occ-{occ_id}"
 
             # Comments
             comments_parts = []
@@ -84,8 +94,8 @@ class OccurrenceReportTecSurveyThreatsAdapter(SourceAdapter):
 
             row = {
                 # Canonical fields
-                # handler expects 'occurrence_report' to be transformed into FK
-                "occurrence_report": migrated_from_id_val,
+                # handler expects 'occurrence_report_id' to be transformed into FK
+                "occurrence_report_id": migrated_from_id_val,
                 "current_impact": raw.get("THR_HIST_IMP_CODE"),
                 "potential_impact": raw.get("THR_POT_IMP_CODE"),
                 "threat_category": raw.get("THR_THREAT_CODE"),
