@@ -33,6 +33,33 @@ def lookup_species_list_relates_to(val):
     return _SPECIES_LIST_RELATES_TO_CACHE.get(val.lower())
 
 
+_OCC_LOCATION_CACHE = {}
+
+
+def get_parent_occ_location_value(occ_mig_id, field_name):
+    if not occ_mig_id:
+        return None
+
+    global _OCC_LOCATION_CACHE
+    if occ_mig_id not in _OCC_LOCATION_CACHE:
+        try:
+            from boranga.components.occurrence.models import Occurrence
+
+            occ = Occurrence.objects.filter(migrated_from_id=occ_mig_id).first()
+            if occ and hasattr(occ, "location"):
+                _OCC_LOCATION_CACHE[occ_mig_id] = occ.location
+            else:
+                _OCC_LOCATION_CACHE[occ_mig_id] = None
+        except Exception:
+            _OCC_LOCATION_CACHE[occ_mig_id] = None
+
+    loc = _OCC_LOCATION_CACHE.get(occ_mig_id)
+    if not loc:
+        return None
+
+    return getattr(loc, field_name, None)
+
+
 def make_geometry(lat, lon):
     if not lat or not lon:
         return None
@@ -89,6 +116,22 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         # SubmitterInformation defaults
         "SubmitterInformation__submitter_category": [static_value_factory(15)],  # DBCA
         "SubmitterInformation__organisation": [static_value_factory("DBCA")],
+        # OCRLocation defaults from Parent Occurrence
+        "OCRLocation__district": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "district_id")
+            )
+        ],
+        "OCRLocation__region": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "region_id")
+            )
+        ],
+        "OCRLocation__location_description": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "location_description")
+            )
+        ],
         # Geometry defaults
         "OccurrenceReportGeometry__locked": [static_value_factory(True)],
         "OccurrenceReportGeometry__show_on_map": [static_value_factory(True)],
