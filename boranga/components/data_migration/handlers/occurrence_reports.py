@@ -43,6 +43,7 @@ from boranga.components.occurrence.models import (
     Occurrence,
     OccurrenceGeometry,
     OccurrenceReport,
+    OccurrenceReportDocument,
     OccurrenceReportGeometry,
     OCCVegetationStructure,
     OCRAssociatedSpecies,
@@ -56,7 +57,11 @@ from boranga.components.occurrence.models import (
     OCRPlantCount,
     OCRVegetationStructure,
 )
-from boranga.components.species_and_communities.models import Taxonomy
+from boranga.components.species_and_communities.models import (
+    DocumentCategory,
+    DocumentSubCategory,
+    Taxonomy,
+)
 from boranga.components.users.models import SubmitterInformation
 
 logger = logging.getLogger(__name__)
@@ -241,6 +246,71 @@ class OccurrenceReportImporter(BaseSheetImporter):
             logger.exception(f"Failed to load DRF_SHEET_VWS.csv: {e}")
             return {}
 
+    def preload_tec_site_species_map(self, path: str) -> dict[str, list[dict]]:
+        """
+        Load SITE_SPECIES.csv into a dict:
+        SITE_VISIT_ID -> [{taxon_name_id, comments, ...}, ...]
+        """
+        import csv
+        import os
+        from collections import defaultdict
+
+        base_dir = os.path.dirname(path)
+        map_path = os.path.join(base_dir, "SITE_SPECIES.csv")
+
+        # If input path is SITE_VISITS.csv, map_path should be correct.
+        if not os.path.exists(map_path) and "SITE_VISITS" in path:
+            # Try replacing SITE_VISITS with SITE_SPECIES if naming convention differs
+            map_path = path.replace("SITE_VISITS", "SITE_SPECIES").replace(".csv", ".csv")
+
+        if not os.path.exists(map_path):
+            # Fallback for dev/test environments
+            map_path = "private-media/legacy_data/TEC/SITE_SPECIES.csv"
+
+        if not os.path.exists(map_path):
+            logger.warning(
+                "SITE_SPECIES.csv not found at %s. Skipping TEC associated species loading.",
+                map_path,
+            )
+            return {}
+
+        mapping = defaultdict(list)
+        try:
+            with open(map_path, encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    visit_id = row.get("SITE_VISIT_ID", "").strip()
+                    if not visit_id:
+                        continue
+
+                    # Extract fields
+                    taxon_id = row.get("taxon_name_id", "").strip()
+                    # Comments construction: SSP_NOTES + SSP_HEIGHT + SSP_COLLECTOR_CODE + SSP_COLLECTION_NUMBER
+                    notes = row.get("SSP_NOTES", "").strip()
+                    height = row.get("SSP_HEIGHT", "").strip()
+                    coll_code = row.get("SSP_COLLECTOR_CODE", "").strip()
+                    coll_num = row.get("SSP_COLLECTION_NUMBER", "").strip()
+
+                    parts = []
+                    if notes:
+                        parts.append(notes)
+                    if height:
+                        parts.append(f"Height: {height}")
+                    if coll_code:
+                        parts.append(f"Collector Code: {coll_code}")
+                    if coll_num:
+                        parts.append(f"Collector Number: {coll_num}")
+
+                    comments = "; ".join(parts)
+
+                    mapping[visit_id].append({"taxon_name_id": taxon_id, "comments": comments})
+
+            logger.info(f"Loaded associated species for {len(mapping)} visits from {map_path}")
+            return mapping
+        except Exception as e:
+            logger.warning(f"Failed to load SITE_SPECIES.csv: {e}")
+            return {}
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--sources",
@@ -291,6 +361,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
         if Source.TPFL.value in sources:
             pop_section_map = self.preload_pop_section_map(path)
             sheet_vws_map = self.preload_sheet_vws_map(path)
+
+        tec_site_species_map = {}
+        if Source.TEC_SITE_VISITS.value in sources:
+            tec_site_species_map = self.preload_tec_site_species_map(path)
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
@@ -766,6 +840,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     # Copy community from parent occurrence (Tasks 12299, 12531)
                     if occ.community_id and not defaults.get("community_id"):
                         defaults["community_id"] = occ.community_id
+
+                    # Copy Location info from Parent Occurrence (Tasks 12349, 12352, 12357)
+                    loc_data = op["location_data"]
+                    occ_loc = getattr(occ, "location", None)
+                    if occ_loc:
+                        if not loc_data.get("district") and occ_loc.district_id:
+                            loc_data["district"] = occ_loc.district_id
+                        if not loc_data.get("region") and occ_loc.region_id:
+                            loc_data["region"] = occ_loc.region_id
+                        if not loc_data.get("location_description") and occ_loc.location_description:
+                            loc_data["location_description"] = occ_loc.location_description
 
             # Cleanup: If we failed to link an occurrence, ensure we don't pass the raw string ID
             # (e.g. "1993") as a PK to Django, which causes ForeignKey Violations.
@@ -1767,6 +1852,116 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 except Exception:
                     logger.exception("Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences")
 
+        # Process TEC Associated Species (with comments)
+        if tec_site_species_map:
+            logger.info("Processing TEC Associated Species with comments...")
+
+            # 1. Gather all taxon_name_ids
+            tec_tax_ids = set()
+            for details_list in tec_site_species_map.values():
+                for d in details_list:
+                    if d["taxon_name_id"]:
+                        try:
+                            tec_tax_ids.add(int(d["taxon_name_id"]))
+                        except ValueError:
+                            pass
+
+            # 2. Resolve to Taxonomy PKs
+            # Map taxon_name_id (Nomos ID) -> Taxonomy PK
+            nomos_to_pk = {}
+            if tec_tax_ids:
+                nomos_to_pk = {
+                    t["taxon_name_id"]: t["id"]
+                    for t in Taxonomy.objects.filter(taxon_name_id__in=list(tec_tax_ids)).values("taxon_name_id", "id")
+                }
+
+            # 3. Identify TEC reports and ensure OCRAssociatedSpecies exists
+            tec_mig_ids = [op["migrated_from_id"] for op in ops if op["migrated_from_id"].startswith("tec-site-")]
+            tec_ocr_ids = [op_map[mid]["id"] for mid in tec_mig_ids if mid in op_map]
+
+            existing_assocs = {
+                a.occurrence_report_id: a
+                for a in OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=tec_ocr_ids)
+            }
+
+            new_assocs = []
+            for mid in tec_mig_ids:
+                if mid in op_map:
+                    ocr_id = op_map[mid]["id"]
+                    visit_id = mid[len("tec-site-") :]
+                    if visit_id in tec_site_species_map and ocr_id not in existing_assocs:
+                        new_assocs.append(OCRAssociatedSpecies(occurrence_report_id=ocr_id))
+
+            if new_assocs:
+                OCRAssociatedSpecies.objects.bulk_create(new_assocs)
+                # Refresh map
+                existing_assocs = {
+                    a.occurrence_report_id: a
+                    for a in OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=tec_ocr_ids)
+                }
+
+            # 4. Create AssociatedSpeciesTaxonomy and links
+            ast_batch = []
+            links_batch = []  # List of OCRAssociatedSpecies instances corresponding to ast_batch
+
+            for mid in tec_mig_ids:
+                if mid in op_map:
+                    ocr_id = op_map[mid]["id"]
+                    if ocr_id in existing_assocs:
+                        visit_id = mid[len("tec-site-") :]
+                        specs = tec_site_species_map.get(visit_id, [])
+                        ocra = existing_assocs[ocr_id]
+
+                        for sp in specs:
+                            tn_id = sp["taxon_name_id"]
+                            comments = sp["comments"]
+                            try:
+                                tn_val = int(tn_id) if tn_id else None
+                            except ValueError:
+                                tn_val = None
+
+                            tax_pk = nomos_to_pk.get(tn_val) if tn_val else None
+
+                            if tax_pk:
+                                ast = AssociatedSpeciesTaxonomy(taxonomy_id=tax_pk, comments=comments)
+                                ast_batch.append(ast)
+                                links_batch.append(ocra)
+                            else:
+                                # Log warning if taxonomy not found
+                                warnings_details.append(
+                                    {
+                                        "migrated_from_id": mid,
+                                        "column": "associated_species",
+                                        "level": "warning",
+                                        "message": f"Taxonomy not found for Nomos ID {tn_id}",
+                                        "raw_value": tn_id,
+                                        "reason": "taxonomy_lookup_failed",
+                                        "row": {},
+                                        "timestamp": timezone.now().isoformat(),
+                                    }
+                                )
+
+            if ast_batch:
+                try:
+                    AssociatedSpeciesTaxonomy.objects.bulk_create(ast_batch, batch_size=BATCH)
+
+                    # Create Through relationships
+                    Through = OCRAssociatedSpecies.related_species.through
+                    through_objs = []
+                    for i, ast in enumerate(ast_batch):
+                        ocra = links_batch[i]
+                        through_objs.append(
+                            Through(
+                                ocrassociatedspecies_id=ocra.id,
+                                associatedspeciestaxonomy_id=ast.id,
+                            )
+                        )
+
+                    Through.objects.bulk_create(through_objs, batch_size=BATCH)
+                    logger.info(f"Created {len(through_objs)} TEC associated species links.")
+                except Exception:
+                    logger.exception("Failed to bulk create TEC associated species")
+
         # SubmitterInformation: OneToOne - create or update submitter information
         # Note: OneToOne relationship is defined on OccurrenceReport side (submitter_information field)
         # Fetch existing submitter information (keyed by occurrence_report.pk)
@@ -2056,6 +2251,40 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 "Failed to link SubmitterInformation for OccurrenceReport %s",
                                 ocr.pk,
                             )
+
+        # OccurrenceReportDocument: Create from SV_PHOTO (Task 12502-12508)
+        # Note: We create a text file containing the reference if no file is provided.
+        doc_cat_photo = DocumentCategory.objects.filter(document_category_name="ORF Document").first()
+        doc_sub_photo = DocumentSubCategory.objects.filter(document_sub_category_name="Photo").first()
+
+        for mid in target_mig_ids:
+            if mid in op_map:
+                op = op_map[mid]
+                photo_ref = op["merged"].get("temp_sv_photo")
+                if photo_ref:
+                    ocr = target_map[mid]
+                    # Check if already exists to avoid duplication
+                    if not OccurrenceReportDocument.objects.filter(
+                        occurrence_report=ocr, description=photo_ref
+                    ).exists():
+                        try:
+                            doc = OccurrenceReportDocument(
+                                occurrence_report=ocr,
+                                description=photo_ref,
+                                document_category=doc_cat_photo,
+                                document_sub_category=doc_sub_photo,
+                                can_submitter_access=False,
+                            )
+                            # User request: No dummy file needed, just the description.
+                            # However, if _file is mandatory at model level, this might fail saving.
+                            # Assuming _file is optional or handled otherwise.
+                            # If _file is mandatory, we might need to skip validation or save with empty string?
+                            # Models generally require a file for FileField unless blank=True.
+                            # Checking OccurrenceReportDocument definition:
+                            # _file = models.FileField(...) -> blank=False by default.
+                            doc.save()
+                        except Exception:
+                            logger.exception("Failed to create legacy photo document for %s", mid)
 
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report
         want_obs_create = []

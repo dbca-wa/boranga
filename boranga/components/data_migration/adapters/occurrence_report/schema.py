@@ -130,6 +130,10 @@ COLUMN_MAP = {
     "FIRE_SEASON": "OCRFireHistory__comment",
     "FIRE_YEAR": "FIRE_YEAR",
     "FIRE_INTENSITY": "OCRFireHistory__intensity",
+    # Text ref to photo (Task 12508)
+    "SV_PHOTO": "temp_sv_photo",
+    # Task 12499
+    "SV_OBSERVATION_TYPE": "OCRAssociatedSpecies__species_list_relates_to",
 }
 
 REQUIRED_COLUMNS = [
