@@ -1214,14 +1214,14 @@
                         >Conservation Plan Reference:</label
                     >
                     <div class="col-sm-8">
-                        <input
+                        <textarea
                             id="combine-conservation-plan-reference"
                             ref="conservation_plan_reference"
                             v-model="
                                 species_community.conservation_plan_reference
                             "
-                            type="text"
                             class="form-control"
+                            maxlength="500"
                             placeholder=""
                         />
                     </div>

@@ -1093,12 +1093,12 @@
                     >Conservation Plan Reference:
                 </label>
                 <div class="col-sm-8">
-                    <input
+                    <textarea
                         ref="conservation_plan_reference"
                         v-model="species_community.conservation_plan_reference"
-                        type="text"
                         :disabled="!species_community.conservation_plan_exists"
                         class="form-control"
+                        maxlength="500"
                         name="conservation_plan_reference"
                     />
                 </div>
