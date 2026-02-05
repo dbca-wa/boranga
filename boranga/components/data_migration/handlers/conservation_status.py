@@ -163,6 +163,19 @@ class ConservationStatusImporter(BaseSheetImporter):
         if not value_str:
             return None
 
+        # Correction for legacy data with incorrect UTC offsets (e.g. +0000)
+        # If the string assumes +0000 but the time is actually local Perth time,
+        # we strip the offset so we can parse as naive (Perth) and extract the date.
+        if value_str.endswith("+0000") or value_str.endswith("Z"):
+            s_clean = value_str[:-5] if value_str.endswith("+0000") else value_str[:-1]
+            try:
+                # parse as naive (Perth/Local)
+                # This works for '2008-08-12T00:00:00'
+                dt = datetime.fromisoformat(s_clean)
+                return dt.date()
+            except ValueError:
+                pass
+
         # Try ISO 8601 format with timezone (TEC format)
         # e.g., '2008-08-12T00:00:00+0000' or '2008-08-12T00:00:00Z'
         for fmt in (
