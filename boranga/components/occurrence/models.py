@@ -6108,7 +6108,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
     @classmethod
     def validate_headers(self, _file, schema):
-        logger.info(f"Validating headers for bulk import task {self.id}")
+        logger.info(f"Validating headers for bulk import file {_file}")
 
         try:
             workbook = openpyxl.load_workbook(_file, read_only=True)
