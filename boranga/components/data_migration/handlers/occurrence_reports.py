@@ -1877,7 +1877,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # 3. Identify TEC reports and ensure OCRAssociatedSpecies exists
             tec_mig_ids = [op["migrated_from_id"] for op in ops if op["migrated_from_id"].startswith("tec-site-")]
-            tec_ocr_ids = [op_map[mid]["id"] for mid in tec_mig_ids if mid in op_map]
+            tec_ocr_ids = [target_map[mid].pk for mid in tec_mig_ids if mid in target_map]
 
             existing_assocs = {
                 a.occurrence_report_id: a
@@ -1886,8 +1886,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             new_assocs = []
             for mid in tec_mig_ids:
-                if mid in op_map:
-                    ocr_id = op_map[mid]["id"]
+                if mid in target_map:
+                    ocr_id = target_map[mid].pk
                     visit_id = mid[len("tec-site-") :]
                     if visit_id in tec_site_species_map and ocr_id not in existing_assocs:
                         new_assocs.append(OCRAssociatedSpecies(occurrence_report_id=ocr_id))
@@ -1905,8 +1905,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
             links_batch = []  # List of OCRAssociatedSpecies instances corresponding to ast_batch
 
             for mid in tec_mig_ids:
-                if mid in op_map:
-                    ocr_id = op_map[mid]["id"]
+                if mid in target_map:
+                    ocr_id = target_map[mid].pk
                     if ocr_id in existing_assocs:
                         visit_id = mid[len("tec-site-") :]
                         specs = tec_site_species_map.get(visit_id, [])

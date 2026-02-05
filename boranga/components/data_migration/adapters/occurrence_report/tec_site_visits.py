@@ -39,7 +39,9 @@ def make_geometry(lat, lon):
     try:
         from django.contrib.gis.geos import Point
 
-        return Point(float(lon), float(lat), srid=4283)  # GDA94 is 4283 usually. But standard lat/long might be 4326.
+        p = Point(float(lon), float(lat), srid=4283)  # GDA94
+        p.transform(4326)  # Convert to WGS84
+        return p
     except Exception:
         return None
 
