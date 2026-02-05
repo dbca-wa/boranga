@@ -82,7 +82,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                 with conn.cursor() as cursor:
                     cursor.execute(
                         "SELECT setval(pg_get_serial_sequence('boranga_associatedspeciestaxonomy', 'id'), "
-                        "COALESCE((SELECT MAX(id) FROM boranga_associatedspeciestaxonomy), 1), false);"
+                        "COALESCE((SELECT MAX(id) FROM boranga_associatedspeciestaxonomy), 0) + 1, false);"
                     )
                     logger.info("Reset AssociatedSpeciesTaxonomy PK sequence.")
 
@@ -214,20 +214,47 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                     taxid_to_ast[ast.taxonomy_id] = ast
 
             # Step 4: Create missing AssociatedSpeciesTaxonomy rows
-            # Use ignore_conflicts to handle any race conditions or existing records
             missing_tax_ids = taxonomy_ids_needed - set(taxid_to_ast.keys())
+
             if missing_tax_ids:
                 create_objs = [AssociatedSpeciesTaxonomy(taxonomy_id=tid) for tid in missing_tax_ids]
-                created = AssociatedSpeciesTaxonomy.objects.bulk_create(
-                    create_objs, batch_size=500, ignore_conflicts=True
-                )
-                logger.info(f"Bulk created {len(created)} new AssociatedSpeciesTaxonomy records.")
-                stats["ast_created"] = len(created)
+
+                try:
+                    with transaction.atomic():
+                        # We have pre-filtered existing IDs, so collisions shouldn't happen unless race condition.
+                        # Try normal bulk_create first to catch errors.
+                        created = AssociatedSpeciesTaxonomy.objects.bulk_create(create_objs, batch_size=500)
+                        logger.info(f"Bulk created {len(created)} new AssociatedSpeciesTaxonomy records.")
+                        stats["ast_created"] = len(created)
+                except Exception as e:
+                    logger.error(f"Bulk create failed: {e}. Falling back to safe individual creation.")
+                    created_count = 0
+                    for tid in missing_tax_ids:
+                        # Use get_or_create to handle potential races/duplicates gracefully
+                        try:
+                            AssociatedSpeciesTaxonomy.objects.get_or_create(taxonomy_id=tid)
+                            created_count += 1
+                        except Exception as inner_e:
+                            logger.error(
+                                f"Failed to get_or_create AssociatedSpeciesTaxonomy for taxonomy_id={tid}: {inner_e}"
+                            )
+                    stats["ast_created"] = created_count
 
                 # Refresh to get PKs for all records (both created and existing)
                 for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=list(missing_tax_ids)):
                     if ast.taxonomy_id not in taxid_to_ast:
                         taxid_to_ast[ast.taxonomy_id] = ast
+
+                # Validation check
+                still_missing = missing_tax_ids - set(taxid_to_ast.keys())
+                if still_missing:
+                    logger.error(
+                        f"Critical: The following taxonomy_ids are still missing from AssociatedSpeciesTaxonomy after creation: {still_missing}"
+                    )
+                    # Force check specific problem ID
+                    if 147457 in still_missing:
+                        exists = AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id=147457).exists()
+                        logger.error(f"DEBUG: Explicit check for 147457.exists() -> {exists}")
 
             # Step 5: Build many-to-many relationships
             # Group ASTs by OCRAssociatedSpecies to minimize queries
@@ -317,6 +344,18 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
                     ast = taxid_to_ast.get(taxonomy.pk)
                     if ast:
+                        if ast in m2m_by_ocr_assoc[ocr_assoc]:
+                            skip_reasons["duplicate_merged"] += 1
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": vid,
+                                    "taxon_name_id": taxon_name_id,
+                                    "level": "warning",
+                                    "reason": "duplicate_merged",
+                                    "message": f"Duplicate species entry merged for taxonomy_id {taxonomy.pk}",
+                                    "row": s_row,
+                                }
+                            )
                         m2m_by_ocr_assoc[ocr_assoc].add(ast)
                     else:
                         skip_reasons["ast_not_found"] += 1
