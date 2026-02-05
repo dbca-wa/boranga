@@ -1,6 +1,7 @@
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     choices_transform,
+    date_from_datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     registry,
     taxonomy_lookup_legacy_id_mapping,
@@ -20,6 +21,8 @@ TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_id_mapping("TPFL")
 
 EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
+
 PROCESSING_STATUS = choices_transform([c[0] for c in Species.PROCESSING_STATUS_CHOICES])
 
 PIPELINES = {
@@ -30,13 +33,13 @@ PIPELINES = {
     "RP_EXP_DATE": [
         "strip",
         "blank_to_none",
-        "date_from_datetime_iso",
+        DATE_FROM_DATETIME_ISO_PERTH,
         "format_date_dmy",
     ],
     "RP_COMMENTS": ["strip", "blank_to_none"],
     "conservation_plan_exists": ["strip", "blank_to_none", "is_present"],
     "department_file_numbers": ["strip", "blank_to_none"],
-    "last_data_curation_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
+    "last_data_curation_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
     "processing_status": [
         "strip",
@@ -75,7 +78,7 @@ class SpeciesTpflAdapter(SourceAdapter):
                 parts.append(rp_comments)
             if rp_exp_date_raw:
                 # Parse and format the date using the same transforms as the pipeline
-                date_from_iso = registry._fns.get("date_from_datetime_iso")
+                date_from_iso = registry._fns.get(DATE_FROM_DATETIME_ISO_PERTH)
                 format_dmy = registry._fns.get("format_date_dmy")
                 if date_from_iso and format_dmy:
                     # Apply date_from_datetime_iso to parse the raw date string

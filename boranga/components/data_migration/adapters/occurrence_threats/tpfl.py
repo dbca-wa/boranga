@@ -3,6 +3,7 @@ from boranga.components.data_migration.registry import (
     TransformResult,
     _result,
     build_legacy_map_transform,
+    date_from_datetime_iso_factory,
     registry,
     static_value_factory,
 )
@@ -12,6 +13,8 @@ from boranga.components.species_and_communities.models import CurrentImpact
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 from . import schema
+
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
 
 
 @registry.register("current_impact_fallback")
@@ -87,7 +90,7 @@ PIPELINES = {
         build_legacy_map_transform("TPFL", "ONSET (DRF_LOV_ONSET_VWS)", required=False, return_type="id"),
     ],
     "comment": ["strip"],
-    "date_observed": ["date_from_datetime_iso"],
+    "date_observed": [DATE_FROM_DATETIME_ISO_PERTH],
     "visible": [static_value_factory(True)],
 }
 

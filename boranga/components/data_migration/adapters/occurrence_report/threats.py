@@ -10,11 +10,14 @@ from boranga.components.data_migration.registry import (
     TransformIssue,
     _result,
     build_legacy_map_transform,
+    date_from_datetime_iso_factory,
     static_value_factory,
 )
 from boranga.components.occurrence.models import OccurrenceReport, OCRConservationThreat
 
 from ..sources import Source
+
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
 
 
 def preload_observation_dates(path: str) -> dict[str, str]:
@@ -102,7 +105,7 @@ class OCRConservationThreatAdapter(SourceAdapter):
             build_legacy_map_transform("TPFL", "ONSET (DRF_LOV_ONSET_VWS)", required=False, return_type="id"),
         ],
         "comment": [],
-        "date_observed": ["date_from_datetime_iso"],
+        "date_observed": [DATE_FROM_DATETIME_ISO_PERTH],
         "visible": [static_value_factory(True)],
     }
 

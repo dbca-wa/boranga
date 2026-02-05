@@ -10,6 +10,7 @@ from boranga.components.data_migration.adapters.base import (
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
+    date_from_datetime_iso_factory,
     lookup_model_value_factory,
     static_value_factory,
 )
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 CURRENT_IMPACT_FALLBACK = lookup_model_value_factory("CurrentImpact", "name", "Unknown")
 
 POTENTIAL_IMPACT_FALLBACK = lookup_model_value_factory("PotentialImpact", "name", "Unknown")
+
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
 
 
 class OccurrenceReportTecSurveyThreatsAdapter(SourceAdapter):
@@ -41,7 +44,7 @@ class OccurrenceReportTecSurveyThreatsAdapter(SourceAdapter):
         ],
         "occurrence_report_id": [occurrence_report_lookup_transform],
         "comment": [],
-        "date_observed": ["strip", "blank_to_none", "date_from_datetime_iso"],
+        "date_observed": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     }
 
     def extract(self, path: str, **options) -> ExtractionResult:
