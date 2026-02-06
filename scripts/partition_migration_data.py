@@ -282,8 +282,14 @@ def partition_data(
                 targets.append(parse_target(canonical))
             targets_str = ", ".join(targets)
 
+            # Get row identity from first few columns (usually ID/Ref)
+            original_row = df.loc[idx]
+            identity_parts = [f"{h}={original_row[h]}" for h in headers[:3]]
+            identity_str = "; ".join(identity_parts)
+
             row_data = {
                 "original_row_index": idx,
+                "row_identity": identity_str,
                 "new_features_count": len(features),
                 "contributing_columns": columns_str,
                 "targets": targets_str,
