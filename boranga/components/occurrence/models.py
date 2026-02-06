@@ -1033,15 +1033,37 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         details = validated_data.get("details", "")
         new_occurrence_name = validated_data.get("new_occurrence_name", None)
 
-        if new_occurrence_name and (
-            Occurrence.objects.filter(occurrence_name=new_occurrence_name).exists()
-            or OccurrenceReportApprovalDetails.objects.filter(new_occurrence_name=new_occurrence_name)
-            .exclude(occurrence_report=self)
-            .exists()
-        ):
-            raise ValidationError(
-                f'Occurrence with name "{new_occurrence_name}" already exists or has been proposed for approval'
-            )
+        if new_occurrence_name:
+            # Check for existing Occurrences with the same name for the same Species/Community
+            qs_occurrence = Occurrence.objects.filter(occurrence_name=new_occurrence_name)
+            if self.species:
+                qs_occurrence = qs_occurrence.filter(species=self.species)
+            elif self.community:
+                qs_occurrence = qs_occurrence.filter(community=self.community)
+
+            if qs_occurrence.exists():
+                raise ValidationError(
+                    f'Occurrence with name "{new_occurrence_name}" already exists for this Species/Community'
+                )
+
+            # Check for pending proposals (with approver) with the same name for the same Species/Community
+            qs_approval = OccurrenceReportApprovalDetails.objects.filter(
+                new_occurrence_name=new_occurrence_name,
+                occurrence_report__processing_status=OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
+            ).exclude(occurrence_report=self)
+
+            if self.species:
+                qs_approval = qs_approval.filter(occurrence_report__species=self.species)
+            elif self.community:
+                qs_approval = qs_approval.filter(occurrence_report__community=self.community)
+
+            if qs_approval.exists():
+                existing_proposed_approval = qs_approval.first()
+                raise ValidationError(
+                    f'Occurrence with name "{new_occurrence_name}" has been proposed '
+                    f"for approval from Occurrence Report Form "
+                    f"{existing_proposed_approval.occurrence_report.occurrence_report_number}"
+                )
 
         OccurrenceReportApprovalDetails.objects.update_or_create(
             occurrence_report=self,
