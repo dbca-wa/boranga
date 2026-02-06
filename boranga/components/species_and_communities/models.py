@@ -1547,7 +1547,12 @@ class Community(RevisionedMixin):
         (PROCESSING_STATUS_ACTIVE, "Active"),
         (PROCESSING_STATUS_HISTORICAL, "Historical"),
     )
-    RELATED_ITEM_CHOICES = [("conservation_status", "Conservation Status")]
+    RELATED_ITEM_CHOICES = [
+        ("community", "Community"),
+        ("conservation_status", "Conservation Status"),
+        ("occurrences", "Occurrence"),
+        ("occurrence_report", "Occurrence Report"),
+    ]
 
     community_number = models.CharField(max_length=9, blank=True, default="")
     renamed_from = models.ForeignKey(
@@ -1776,6 +1781,11 @@ class Community(RevisionedMixin):
                 "renamed_to",
                 "conservation_status",
                 "occurrences",
+            ]
+        elif filter_type == "community":
+            related_field_names = [
+                "renamed_from",
+                "renamed_to",
             ]
         else:
             related_field_names = [
