@@ -110,7 +110,7 @@ def update_related_occurrence_reports(original_species, new_species, request, ac
 
     for orf in related_orfs:
         orf.species = new_species
-        orf.save()
+        orf.save(version_user=request.user)
 
         # Log action
         action_msg = f"Species name was automatically changed because the old name {original_species.species_number} was {action_type} to {new_species.species_number}."
