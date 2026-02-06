@@ -2953,12 +2953,20 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         length = request.GET.get("length")
         search_value = request.GET.get("search[value]")
 
+        order_column_index = request.GET.get("order[0][column]")
+        order_column = None
+        order_direction = request.GET.get("order[0][dir]")  # asc or desc
+        if order_column_index:
+            order_column = request.GET.get(f"columns[{order_column_index}][data]")
+
         if draw and start and length:
             related_items, total_count = instance.get_related_items(
                 related_filter_type,
                 offset=start,
                 limit=length,
                 search_value=search_value,
+                ordering_column=order_column,
+                ordering_direction=order_direction,
             )
             serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
             return Response(
@@ -2970,7 +2978,12 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
                 }
             )
 
-        related_items = instance.get_related_items(related_filter_type)
+        related_items = instance.get_related_items(
+            related_filter_type,
+            search_value=search_value,
+            ordering_column=order_column,
+            ordering_direction=order_direction,
+        )
         serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -3729,8 +3742,7 @@ class OccurrenceViewSet(
 
         if instance.associated_species.related_species.filter(taxonomy=taxon).exists():
             raise serializers.ValidationError(
-                f"Related Species: {taxon.scientific_name} already added to "
-                f"Occurrence: {instance.occurrence_number}"
+                f"Related Species: {taxon.scientific_name} already added to Occurrence: {instance.occurrence_number}"
             )
 
         associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.create(taxonomy=taxon)
@@ -3826,12 +3838,20 @@ class OccurrenceViewSet(
         length = request.GET.get("length")
         search_value = request.GET.get("search[value]")
 
+        order_column_index = request.GET.get("order[0][column]")
+        order_column = None
+        order_direction = request.GET.get("order[0][dir]")  # asc or desc
+        if order_column_index:
+            order_column = request.GET.get(f"columns[{order_column_index}][data]")
+
         if draw and start and length:
             related_items, total_count = instance.get_related_items(
                 related_filter_type,
                 offset=start,
                 limit=length,
                 search_value=search_value,
+                ordering_column=order_column,
+                ordering_direction=order_direction,
             )
             serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
             return Response(
@@ -3843,7 +3863,12 @@ class OccurrenceViewSet(
                 }
             )
 
-        related_items = instance.get_related_items(related_filter_type)
+        related_items = instance.get_related_items(
+            related_filter_type,
+            search_value=search_value,
+            ordering_column=order_column,
+            ordering_direction=order_direction,
+        )
         serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
         return Response(serializer.data)
 

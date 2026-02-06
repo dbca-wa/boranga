@@ -1822,7 +1822,16 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
 
         send_approver_defer_email_notification(request, self, reason)
 
-    def get_related_items(self, filter_type, offset=None, limit=None, search_value=None, **kwargs):
+    def get_related_items(
+        self,
+        filter_type,
+        offset=None,
+        limit=None,
+        search_value=None,
+        ordering_column=None,
+        ordering_direction=None,
+        **kwargs,
+    ):
         return_list = []
         if filter_type == "all":
             related_field_names = [
@@ -1836,24 +1845,6 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
             related_field_names = [
                 filter_type,
             ]
-
-        total_count = 0
-
-        def get_slice_range(count):
-            if offset is None:
-                return 0, count
-
-            global_start = total_count
-            global_end = total_count + count
-            req_start = int(offset)
-            req_end = int(offset) + int(limit)
-
-            if global_end <= req_start or global_start >= req_end:
-                return 0, 0
-
-            start = max(0, req_start - global_start)
-            end = min(count, req_end - global_start)
-            return start, end
 
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
@@ -1870,37 +1861,30 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
                         else:
                             field_objects = []
                     elif a_field.one_to_many:  # reverse foreign key
-                        qs = a_field.related_model.objects.filter(**{a_field.remote_field.name: self})
-                        field_objects = qs
+                        field_objects = a_field.related_model.objects.filter(**{a_field.remote_field.name: self})
                         is_queryset = True
                     elif a_field.one_to_one:
                         if hasattr(self, a_field.name):
                             field_objects = [getattr(self, a_field.name)]
 
-                count = 0
                 if is_queryset:
                     if "exclude_ids" in kwargs:
                         field_objects = field_objects.exclude(id__in=kwargs["exclude_ids"])
-                    count = field_objects.count()
+                    subset = field_objects
                 else:
-                    count = len(field_objects)
+                    subset = field_objects
 
-                start, end = get_slice_range(count)
-
-                if start < end:
-                    subset = field_objects[start:end]
-                    for field_object in subset:
-                        if field_object:
-                            related_item = field_object.as_related_item
-                            if search_value:
-                                if (
-                                    search_value.lower() not in related_item.identifier.lower()
-                                    and search_value.lower() not in related_item.descriptor.lower()
-                                ):
-                                    continue
-                            return_list.append(related_item)
-
-                total_count += count
+                for field_object in subset:
+                    if field_object:
+                        related_item = field_object.as_related_item
+                        if search_value:
+                            if (
+                                search_value.lower() not in related_item.identifier.lower()
+                                and search_value.lower() not in related_item.descriptor.lower()
+                                and search_value.lower() not in related_item.related_sc_id.lower()
+                            ):
+                                continue
+                        return_list.append(related_item)
 
         # Handle nested related items for species/community
         species_filter = []
@@ -1910,26 +1894,33 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
             species_filter.append("occurrence_report")
         for occ_filter_type in species_filter:
             if self.species:
-                items = self.species.get_related_items(occ_filter_type)
-                count = len(items)
-                start, end = get_slice_range(count)
-                if start < end:
-                    return_list.extend(items[start:end])
-                total_count += count
+                items = self.species.get_related_items(occ_filter_type, search_value=search_value)
+                return_list.extend(items)
             if self.community:
-                items = self.community.get_related_items(occ_filter_type)
-                count = len(items)
-                start, end = get_slice_range(count)
-                if start < end:
-                    return_list.extend(items[start:end])
-                total_count += count
+                items = self.community.get_related_items(occ_filter_type, search_value=search_value)
+                return_list.extend(items)
 
-        # Remove duplicates
-        if offset is None:
-            return_list = list(set(return_list))
-            return return_list
+        # Sort
+        if ordering_column:
+            reverse = ordering_direction == "desc"
 
-        return return_list, total_count
+            def sort_key(x):
+                val = getattr(x, ordering_column, "")
+                if val is None:
+                    return ""
+                return str(val).lower()
+
+            return_list.sort(key=sort_key, reverse=reverse)
+
+        total_count = len(return_list)
+
+        if offset is not None and limit is not None:
+            start = int(offset)
+            end = start + int(limit)
+            return_list = return_list[start:end]
+            return return_list, total_count
+
+        return return_list
 
     @property
     def as_related_item(self):
@@ -2104,8 +2095,8 @@ class ConservationStatusUserAction(UserAction):
     ACTION_CLOSE_CONSERVATION_STATUS_DUE_TO_COMBINE = "Conservation status {} has been closed due to a combine"
     ACTION_DISCARD_PROPOSAL = "Discard conservation status proposal {}"
     ACTION_PROPOSE_DELIST_PROPOSAL = "Propose Delist conservation status proposal {}. Reason: {}"
-    ACTION_PROPOSED_FOR_AGENDA = "Conservation status proposal {} " "has been proposed for agenda. Assessor Comment: {}"
-    ACTION_READY_FOR_AGENDA = "Conservation status proposal {} " "is ready for agenda. Assessor Comment: {}"
+    ACTION_PROPOSED_FOR_AGENDA = "Conservation status proposal {} has been proposed for agenda. Assessor Comment: {}"
+    ACTION_READY_FOR_AGENDA = "Conservation status proposal {} is ready for agenda. Assessor Comment: {}"
     ACTION_DELIST_PROPOSAL = "Delist conservation status proposal {}"
     ACTION_DEFER_PROPOSAL = "Defer conservation status proposal {}. Reason: {}"
     ACTION_DISCARD_PROPOSAL_INTERNALLY = "Discard conservation status proposal internally {}"

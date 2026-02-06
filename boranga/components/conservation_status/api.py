@@ -1449,16 +1449,41 @@ class ConservationStatusViewSet(CheckUpdatedActionMixin, viewsets.GenericViewSet
         start = request.GET.get("start")
         length = request.GET.get("length")
 
-        related_items, total_count = instance.get_related_items(related_filter_type, offset=start, limit=length)
-        serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
-        return Response(
-            {
-                "draw": int(draw),
-                "recordsTotal": total_count,
-                "recordsFiltered": total_count,
-                "data": serializer.data,
-            }
+        order_column_index = request.GET.get("order[0][column]")
+        order_column = None
+        order_direction = request.GET.get("order[0][dir]")  # asc or desc
+        if order_column_index:
+            order_column = request.GET.get(f"columns[{order_column_index}][data]")
+
+        search_value = request.GET.get("search[value]")
+
+        if draw and start and length:
+            related_items, total_count = instance.get_related_items(
+                related_filter_type,
+                offset=start,
+                limit=length,
+                search_value=search_value,
+                ordering_column=order_column,
+                ordering_direction=order_direction,
+            )
+            serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
+            return Response(
+                {
+                    "draw": int(draw),
+                    "recordsTotal": total_count,
+                    "recordsFiltered": total_count,
+                    "data": serializer.data,
+                }
+            )
+
+        related_items = instance.get_related_items(
+            related_filter_type,
+            search_value=search_value,
+            ordering_column=order_column,
+            ordering_direction=order_direction,
         )
+        serializer = RelatedItemsSerializer(related_items, many=True, context={"request": request})
+        return Response(serializer.data)
 
     @detail_route(
         methods=[

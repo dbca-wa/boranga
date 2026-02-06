@@ -845,7 +845,16 @@ class Species(RevisionedMixin):
 
         return is_species_communities_approver(request) or request.user.is_superuser
 
-    def get_related_items(self, filter_type, offset=None, limit=None, search_value=None, **kwargs):
+    def get_related_items(
+        self,
+        filter_type,
+        offset=None,
+        limit=None,
+        search_value=None,
+        ordering_column=None,
+        ordering_direction=None,
+        **kwargs,
+    ):
         return_list = []
         if filter_type == "all":
             related_field_names = [
@@ -876,24 +885,6 @@ class Species(RevisionedMixin):
                 filter_type,
             ]
 
-        total_count = 0
-
-        def get_slice_range(count):
-            if offset is None:
-                return 0, count
-
-            global_start = total_count
-            global_end = total_count + count
-            req_start = int(offset)
-            req_end = int(offset) + int(limit)
-
-            if global_end <= req_start or global_start >= req_end:
-                return 0, 0
-
-            start = max(0, req_start - global_start)
-            end = min(count, req_end - global_start)
-            return start, end
-
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
             if a_field.name in related_field_names:
@@ -919,30 +910,24 @@ class Species(RevisionedMixin):
                                 getattr(self, a_field.name),
                             ]
 
-                count = 0
                 if is_queryset:
                     if "exclude_ids" in kwargs:
                         field_objects = field_objects.exclude(id__in=kwargs["exclude_ids"])
-                    count = field_objects.count()
+                    subset = field_objects
                 else:
-                    count = len(field_objects)
+                    subset = field_objects
 
-                start, end = get_slice_range(count)
-
-                if start < end:
-                    subset = field_objects[start:end]
-                    for field_object in subset:
-                        if field_object:
-                            related_item = field_object.as_related_item
-                            if search_value:
-                                if (
-                                    search_value.lower() not in related_item.identifier.lower()
-                                    and search_value.lower() not in related_item.descriptor.lower()
-                                ):
-                                    continue
-                            return_list.append(related_item)
-
-                total_count += count
+                for field_object in subset:
+                    if field_object:
+                        related_item = field_object.as_related_item
+                        if search_value:
+                            if (
+                                search_value.lower() not in related_item.identifier.lower()
+                                and search_value.lower() not in related_item.descriptor.lower()
+                                and search_value.lower() not in related_item.related_sc_id.lower()
+                            ):
+                                continue
+                        return_list.append(related_item)
 
         # Use kwargs.get("check_parents", True) to check if we should look for related items in parent species
         # This prevents infinite recursion and allows control over whether to show inherited items
@@ -970,20 +955,32 @@ class Species(RevisionedMixin):
 
             if parent_filter:
                 for parent_species in self.parent_species.all():
-                    items = parent_species.get_related_items(parent_filter, check_parents=False)
+                    items = parent_species.get_related_items(
+                        parent_filter, check_parents=False, search_value=search_value
+                    )
+                    return_list.extend(items)
 
-                    count = len(items)
-                    start, end = get_slice_range(count)
-                    if start < end:
-                        return_list.extend(items[start:end])
-                    total_count += count
+        # Sort
+        if ordering_column:
+            reverse = ordering_direction == "desc"
 
-        # Remove duplicates
-        if offset is None:
-            return_list = list(set(return_list))
-            return return_list
+            def sort_key(x):
+                val = getattr(x, ordering_column, "")
+                if val is None:
+                    return ""
+                return str(val).lower()
 
-        return return_list, total_count
+            return_list.sort(key=sort_key, reverse=reverse)
+
+        total_count = len(return_list)
+
+        if offset is not None and limit is not None:
+            start = int(offset)
+            end = start + int(limit)
+            return_list = return_list[start:end]
+            return return_list, total_count
+
+        return return_list
 
     @property
     def as_related_item(self):
@@ -1413,22 +1410,20 @@ class SpeciesUserAction(UserAction):
     ACTION_SPLIT_RETAIN_ORIGINAL = "Species {} retained as part of a split."
 
     ACTION_COMBINE_ACTIVE_SPECIES_TO_NEW = (
-        "Active species {} made historical as a " "result of being combined into new species {}"
+        "Active species {} made historical as a result of being combined into new species {}"
     )
     ACTION_COMBINE_ACTIVE_SPECIES_TO_EXISTING = (
-        "Active species {} made historical as a " "result of being combined into existing species {}"
+        "Active species {} made historical as a result of being combined into existing species {}"
     )
     ACTION_COMBINE_DRAFT_SPECIES_TO_EXISTING = (
-        "Draft species {} discarded as a result of " "being combined into existing species {}"
+        "Draft species {} discarded as a result of being combined into existing species {}"
     )
-    ACTION_COMBINE_DRAFT_SPECIES_TO_NEW = (
-        "Draft species {} discarded as a result of " "being combined into new species {}"
-    )
+    ACTION_COMBINE_DRAFT_SPECIES_TO_NEW = "Draft species {} discarded as a result of being combined into new species {}"
     ACTION_COMBINE_HISTORICAL_SPECIES_TO_NEW = (
-        "Historical species {} was combined into " "new species {} and remains historical"
+        "Historical species {} was combined into new species {} and remains historical"
     )
     ACTION_COMBINE_HISTORICAL_SPECIES_TO_EXISTING = (
-        "Historical species {} was combined into " "existing species {} and remains historical"
+        "Historical species {} was combined into existing species {} and remains historical"
     )
 
     ACTION_COMBINE_SPECIES_FROM_NEW = "Species {} created from a combination of species {}"

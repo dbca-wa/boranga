@@ -4376,7 +4376,16 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     def log_user_action(self, action, request):
         return OccurrenceUserAction.log_action(self, action, request.user.id)
 
-    def get_related_items(self, filter_type, offset=None, limit=None, search_value=None, **kwargs):
+    def get_related_items(
+        self,
+        filter_type,
+        offset=None,
+        limit=None,
+        search_value=None,
+        ordering_column=None,
+        ordering_direction=None,
+        **kwargs,
+    ):
         return_list = []
         if filter_type == "all":
             related_field_names = [
@@ -4397,21 +4406,6 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             related_field_names = [
                 filter_type,
             ]
-
-        total_count = 0
-
-        def get_slice_range(count):
-            if offset is None:
-                return 0, count
-            global_start = total_count
-            global_end = total_count + count
-            req_start = int(offset)
-            req_end = int(offset) + int(limit)
-            if global_end <= req_start or global_start >= req_end:
-                return 0, 0
-            start = max(0, req_start - global_start)
-            end = min(count, req_end - global_start)
-            return start, end
 
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
@@ -4437,34 +4431,26 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                                 getattr(self, a_field.name),
                             ]
 
-                count = 0
-                if is_queryset:
-                    count = field_objects.count()
-                else:
-                    count = len(field_objects)
-
-                # If we are filtering for occurrences, we don't want the parent (Species/Community) itself in the list
+                # Special exclusion
                 if filter_type == "occurrences" and (a_field.name == "species" or a_field.name == "community"):
-                    count = 0
+                    field_objects = []
 
-                start, end = get_slice_range(count)
-                if start < end:
-                    subset = field_objects[start:end]
-                    for field_object in subset:
-                        if field_object:
-                            related_item = field_object.as_related_item
-                            if search_value:
-                                if (
-                                    search_value.lower() not in related_item.identifier.lower()
-                                    and search_value.lower() not in related_item.descriptor.lower()
-                                ):
-                                    continue
-                            return_list.append(related_item)
+                if is_queryset:
+                    subset = field_objects
+                else:
+                    subset = field_objects
 
-                total_count += count
-
-        # Add parent species / community related items to the list
-        # We do this OUTSIDE the loop so it happens even if the parent field itself wasn't requested
+                for field_object in subset:
+                    if field_object:
+                        related_item = field_object.as_related_item
+                        if search_value:
+                            if (
+                                search_value.lower() not in related_item.identifier.lower()
+                                and search_value.lower() not in related_item.descriptor.lower()
+                                and search_value.lower() not in related_item.related_sc_id.lower()
+                            ):
+                                continue
+                        return_list.append(related_item)
 
         target_filter = None
         if filter_type == "all":
@@ -4486,43 +4472,39 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 delegates.append(self.community)
 
             for delegate in delegates:
-                local_offset = None
-                if offset is not None:
-                    req_start = int(offset)
-                    local_offset = max(0, req_start - total_count)
-
                 exclude_ids = [self.id]
-
-                if local_offset is not None:
-                    items, count = delegate.get_related_items(
-                        target_filter,
-                        offset=local_offset,
-                        limit=limit,
-                        exclude_ids=exclude_ids,
-                        search_value=search_value,
-                    )
-                    return_list.extend(items)
-                    total_count += count
-                else:
-                    items = delegate.get_related_items(
-                        target_filter,
-                        exclude_ids=exclude_ids,
-                        search_value=search_value,
-                    )
-                    count = len(items)
-                    start, end = get_slice_range(count)
-                    if start < end:
-                        return_list.extend(items[start:end])
-                    total_count += count
+                items = delegate.get_related_items(target_filter, exclude_ids=exclude_ids, search_value=search_value)
+                return_list.extend(items)
 
         # Remove the occurrence itself from the list if it ended up there
-        if offset is None:
-            for item in return_list:
-                if item.model_name == "Occurrence" and item.identifier == self.occurrence_number:
-                    return_list.remove(item)
-            return return_list
+        if self.occurrence_number:
+            return_list = [
+                item
+                for item in return_list
+                if not (item.model_name == "Occurrence" and item.identifier == self.occurrence_number)
+            ]
 
-        return return_list, total_count
+        # Sort
+        if ordering_column:
+            reverse = ordering_direction == "desc"
+
+            def sort_key(x):
+                val = getattr(x, ordering_column, "")
+                if val is None:
+                    return ""
+                return str(val).lower()
+
+            return_list.sort(key=sort_key, reverse=reverse)
+
+        total_count = len(return_list)
+
+        if offset is not None and limit is not None:
+            start = int(offset)
+            end = start + int(limit)
+            return_list = return_list[start:end]
+            return return_list, total_count
+
+        return return_list
 
     @classmethod
     @transaction.atomic
@@ -6132,7 +6114,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         error_string = f"The headers of the uploaded file do not match schema: {schema}."
         if missing_headers:
             error_string += (
-                " The file is missing the following headers that are part of the schema: " f"{missing_headers}."
+                f" The file is missing the following headers that are part of the schema: {missing_headers}."
             )
         if extra_headers:
             error_string += f" The file has the following headers that are not part of the schema: {extra_headers}"
@@ -6600,7 +6582,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                                 current_model_instance.community = ocr_instance.community
                         if not current_model_instance.group_type == self.schema.group_type:
                             error_message = (
-                                "The group type of the occurrence does not " "match the group type of the schema"
+                                "The group type of the occurrence does not match the group type of the schema"
                             )
                             errors.append(
                                 {
@@ -6618,7 +6600,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             and not current_model_instance.species == occurrence_report.species
                         ):
                             error_message = (
-                                "The species of the occurrence does not match " "the species of the occurrence report"
+                                "The species of the occurrence does not match the species of the occurrence report"
                             )
                             errors.append(
                                 {
@@ -6635,8 +6617,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             and not current_model_instance.community == occurrence_report.community
                         ):
                             error_message = (
-                                "The community of the occurrence does not match "
-                                "the community of the occurrence report"
+                                "The community of the occurrence does not match the community of the occurrence report"
                             )
                             errors.append(
                                 {
@@ -7965,8 +7946,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         species_or_community_identifier if species_or_community_identifier else "Unknown"
                     )
                     error_message = (
-                        f"No occurrences found where species or community identifier = "
-                        f"{species_or_community_display}"
+                        f"No occurrences found where species or community identifier = {species_or_community_display}"
                     )
                     errors.append(
                         {
@@ -8319,7 +8299,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             for display_value in [display_value.strip() for display_value in display_values]:
                 if display_value not in [choice[1] for choice in choices]:
                     error_message = (
-                        f"Value '{display_value}' in column {self.xlsx_column_header_name} " "is not in the list"
+                        f"Value '{display_value}' in column {self.xlsx_column_header_name} is not in the list"
                     )
                     errors.append(
                         {
@@ -8678,7 +8658,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             if cell_value is None or cell_value == "":
                 if not field.null:
                     error_message = (
-                        f"Value {cell_value} in column {self.xlsx_column_header_name} " "is required to be a boolean"
+                        f"Value {cell_value} in column {self.xlsx_column_header_name} is required to be a boolean"
                     )
                     errors.append(
                         {
@@ -8719,7 +8699,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     errors_added += 1
 
             if cell_value not in [True, False]:
-                error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} " "is not a valid boolean"
+                error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} is not a valid boolean"
                 errors.append(
                     {
                         "row_index": index,
@@ -8790,7 +8770,7 @@ class SchemaColumnLookupFilter(BaseModel):
                 fields=["schema_column", "filter_field_name", "filter_type"],
                 name="unique_schema_column_lookup_field",
                 violation_error_message=(
-                    "A lookup filter with the same name and type " "already exists for this schema column"
+                    "A lookup filter with the same name and type already exists for this schema column"
                 ),
             )
         ]
