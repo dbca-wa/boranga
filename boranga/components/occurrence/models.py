@@ -1540,6 +1540,9 @@ class OccurrenceReportUserAction(UserAction):
     ACTION_REASSIGN_DRAFT_TO_USER = "Occurrence Report {} (draft) reassigned from {} to {}"
     ACTION_UPDATE_COMMUNITY_FROM_OCCURRENCE = "Community changed from {} to {} due to change in related occurrence {}"
     ACTION_UPDATE_SPECIES_FROM_OCCURRENCE = "Species changed from {} to {} due to change in related occurrence {}"
+    ACTION_SPECIES_AUTOMATICALLY_CHANGED = (
+        "Species name was automatically changed because the old name {} was {} to {}."
+    )
 
     # Amendment
     ACTION_ID_REQUEST_AMENDMENTS = "Request amendments"

@@ -102,7 +102,10 @@ def update_related_occurrence_reports(original_species, new_species, request, ac
     from boranga.components.occurrence.email import (
         send_occurrence_report_species_renamed_email,
     )
-    from boranga.components.occurrence.models import OccurrenceReport
+    from boranga.components.occurrence.models import (
+        OccurrenceReport,
+        OccurrenceReportUserAction,
+    )
 
     related_orfs = OccurrenceReport.objects.filter(species=original_species).exclude(
         processing_status=OccurrenceReport.PROCESSING_STATUS_APPROVED
@@ -113,8 +116,12 @@ def update_related_occurrence_reports(original_species, new_species, request, ac
         orf.save(version_user=request.user)
 
         # Log action
-        action_msg = f"Species name was automatically changed because the old name {original_species.species_number} was {action_type} to {new_species.species_number}."
-        orf.log_user_action(action_msg, request)
+        orf.log_user_action(
+            OccurrenceReportUserAction.ACTION_SPECIES_AUTOMATICALLY_CHANGED.format(
+                original_species.species_number, action_type, new_species.species_number
+            ),
+            request,
+        )
 
         # Send email
         send_occurrence_report_species_renamed_email(request, orf, original_species, new_species)
