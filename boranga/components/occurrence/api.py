@@ -397,9 +397,9 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         if is_internal(self.request) or self.request.user.is_superuser:
             return qs
         elif is_occurrence_report_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id))
+            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id)).distinct()
         elif is_occurrence_report_referee(self.request):
-            qs = qs.filter(referrals__referral=self.request.user.id)
+            qs = qs.filter(referrals__referral=self.request.user.id).distinct()
         elif is_contributor(self.request):
             qs = qs.filter(submitter=self.request.user.id)
 
@@ -473,11 +473,13 @@ class OccurrenceReportViewSet(
         if is_internal(self.request) or self.request.user.is_superuser:
             return qs
         elif is_contributor(request) and is_occurrence_report_referee(request):
-            qs = OccurrenceReport.objects.filter(Q(submitter=request.user.id) | Q(referrals__referral=request.user.id))
+            qs = OccurrenceReport.objects.filter(
+                Q(submitter=request.user.id) | Q(referrals__referral=request.user.id)
+            ).distinct()
         elif is_contributor(request):
             qs = OccurrenceReport.objects.filter(submitter=request.user.id)
         elif is_occurrence_report_referee(request):
-            qs = OccurrenceReport.objects.filter(referrals__referral=request.user.id)
+            qs = OccurrenceReport.objects.filter(referrals__referral=request.user.id).distinct()
 
         return qs
 

@@ -825,22 +825,30 @@ class SpeciesFilterBackend(DatatablesFilterBackend):
 
         filter_commonwealth_relevance = request.POST.get("filter_commonwealth_relevance")
         if filter_commonwealth_relevance == "true":
-            queryset = queryset.filter(
-                conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
-            ).exclude(conservation_status__commonwealth_conservation_category__isnull=True)
+            queryset = (
+                queryset.filter(
+                    conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+                )
+                .exclude(conservation_status__commonwealth_conservation_category__isnull=True)
+                .distinct()
+            )
 
         filter_international_relevance = request.POST.get("filter_international_relevance")
         if filter_international_relevance == "true":
-            queryset = queryset.filter(
-                conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
-            ).exclude(conservation_status__other_conservation_assessment__isnull=True)
+            queryset = (
+                queryset.filter(
+                    conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+                )
+                .exclude(conservation_status__other_conservation_assessment__isnull=True)
+                .distinct()
+            )
 
         filter_conservation_criteria = request.POST.get("filter_conservation_criteria")
         if filter_conservation_criteria:
             queryset = queryset.filter(
                 conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
                 conservation_status__conservation_criteria__icontains=filter_conservation_criteria,
-            )
+            ).distinct()
 
         fields = self.get_fields(request)
         ordering = self.get_ordering(request, view, fields)
@@ -1005,22 +1013,30 @@ class CommunitiesFilterBackend(DatatablesFilterBackend):
 
         filter_commonwealth_relevance = request.GET.get("filter_commonwealth_relevance")
         if filter_commonwealth_relevance == "true":
-            queryset = queryset.filter(
-                conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
-            ).exclude(conservation_status__commonwealth_conservation_category__isnull=True)
+            queryset = (
+                queryset.filter(
+                    conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+                )
+                .exclude(conservation_status__commonwealth_conservation_category__isnull=True)
+                .distinct()
+            )
 
         filter_international_relevance = request.GET.get("filter_international_relevance")
         if filter_international_relevance == "true":
-            queryset = queryset.filter(
-                conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
-            ).exclude(conservation_status__other_conservation_assessment__isnull=True)
+            queryset = (
+                queryset.filter(
+                    conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
+                )
+                .exclude(conservation_status__other_conservation_assessment__isnull=True)
+                .distinct()
+            )
 
         filter_conservation_criteria = request.GET.get("filter_conservation_criteria")
         if filter_conservation_criteria:
             queryset = queryset.filter(
                 conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
                 conservation_status__conservation_criteria__icontains=filter_conservation_criteria,
-            )
+            ).distinct()
 
         fields = self.get_fields(request)
         ordering = self.get_ordering(request, view, fields)
