@@ -5,6 +5,7 @@ from boranga.components.data_migration.registry import (
     conditional_transform_factory,
     csv_lookup_factory,
     date_from_datetime_iso_factory,
+    datetime_iso_factory,
     dependent_from_column_factory,
     emailuser_by_legacy_username_factory,
     emailuser_object_by_legacy_username_factory,
@@ -57,6 +58,8 @@ GEOMETRY_LOCKED_DEFAULT = static_value_factory(True)
 SPECIES_TRANSFORM = taxonomy_lookup_legacy_mapping_species("TPFL")
 
 COMMUNITY_TRANSFORM = fk_lookup(model=Community, lookup_field="community_name")
+
+DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 
 
 def map_form_status_code_to_processing_status(value: str, ctx=None) -> str | None:
@@ -523,7 +526,7 @@ PIPELINES = {
     "Occurrence__migrated_from_id": [OCCURRENCE_FROM_POP_ID_TRANSFORM],
     "species_id": ["strip", "blank_to_none", SPECIES_TRANSFORM],
     "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
-    "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
+    "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
     "observation_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     "record_source": ["strip", "blank_to_none", RECORD_SOURCE_FROM_CSV],
     "customer_status": [CUSTOMER_STATUS_FROM_FORM_STATUS_CODE],

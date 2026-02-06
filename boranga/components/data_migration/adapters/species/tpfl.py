@@ -2,6 +2,7 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     choices_transform,
     date_from_datetime_iso_factory,
+    datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     registry,
     taxonomy_lookup_legacy_id_mapping,
@@ -23,6 +24,8 @@ EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM = emailuser_by_legacy_username_factory("T
 
 DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
 
+DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
+
 PROCESSING_STATUS = choices_transform([c[0] for c in Species.PROCESSING_STATUS_CHOICES])
 
 PIPELINES = {
@@ -40,7 +43,7 @@ PIPELINES = {
     "conservation_plan_exists": ["strip", "blank_to_none", "is_present"],
     "department_file_numbers": ["strip", "blank_to_none"],
     "last_data_curation_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
-    "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
+    "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
     "processing_status": [
         "strip",
         "blank_to_none",
@@ -51,7 +54,7 @@ PIPELINES = {
     "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
     "distribution": ["strip", "blank_to_none"],
     "modified_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
-    "datetime_updated": ["strip", "blank_to_none", "datetime_iso"],
+    "datetime_updated": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
 }
 
 

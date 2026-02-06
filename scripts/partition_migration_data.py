@@ -116,6 +116,7 @@ def partition_data(
     ignore_fields: list[str],
     max_cardinality: int = 50,
     heaviest_first: bool = False,
+    heaviest_last: bool = False,
     report_path: str = None,
 ):
     logger.info(f"Loading adapter: {adapter_path}")
@@ -255,7 +256,10 @@ def partition_data(
 
     logger.info(f"Selected {len(selected_indices)} rows out of {len(df)}.")
 
-    if not heaviest_first:
+    if heaviest_last:
+        selected_rows_info.reverse()
+        selected_indices = [x[0] for x in selected_rows_info]
+    elif not heaviest_first:
         # Sort by index to preserve relative order roughly
         selected_rows_info.sort(key=lambda x: x[0])
         selected_indices = [x[0] for x in selected_rows_info]
@@ -317,6 +321,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Sort output by number of new features covered (descending)",
     )
+    parser.add_argument(
+        "--heaviest-last",
+        action="store_true",
+        help="Sort output by number of new features covered (ascending)",
+    )
 
     parser.add_argument(
         "--report",
@@ -334,5 +343,6 @@ if __name__ == "__main__":
         ignore_list,
         args.max_cardinality,
         args.heaviest_first,
+        args.heaviest_last,
         args.report,
     )
