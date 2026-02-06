@@ -129,9 +129,7 @@ from boranga.settings import (
 
 logger = logging.getLogger(__name__)
 
-private_storage = FileSystemStorage(
-    location=settings.BASE_DIR + "/private-media/", base_url="/private-media/"
-)
+private_storage = FileSystemStorage(location=settings.BASE_DIR + "/private-media/", base_url="/private-media/")
 
 
 def update_occurrence_report_comms_log_filename(instance, filename):
@@ -163,9 +161,7 @@ def update_occurrence_report_shapefile_doc_filename(instance, filename):
 
     # Generate a consistent UUID based on the occurrence_report ID
     # This ensures all files for the same report get the same prefix
-    uuid_prefix = uuid5(
-        NAMESPACE_DNS, f"occurrence_report_{instance.occurrence_report.id}"
-    ).hex[:12]
+    uuid_prefix = uuid5(NAMESPACE_DNS, f"occurrence_report_{instance.occurrence_report.id}").hex[:12]
 
     # Preserve the original filename with UUID prefix
     safe_filename = f"{uuid_prefix}_{filename}"
@@ -201,11 +197,7 @@ class OccurrenceReportManager(models.Manager):
             super()
             .get_queryset()
             .select_related("group_type", "species", "community")
-            .annotate(
-                observer_count=Count(
-                    "observer_detail", filter=Q(observer_detail__visible=True)
-                )
-            )
+            .annotate(observer_count=Count("observer_detail", filter=Q(observer_detail__visible=True)))
         )
 
 
@@ -335,9 +327,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     ]
 
     # group_type of report
-    group_type = models.ForeignKey(
-        GroupType, on_delete=models.SET_NULL, blank=True, null=True
-    )
+    group_type = models.ForeignKey(GroupType, on_delete=models.SET_NULL, blank=True, null=True)
     #
     proposal_type = models.CharField(
         "Application Status Type",
@@ -375,9 +365,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     occurrence_report_number = models.CharField(max_length=9, blank=True, default="")
 
     # Field to use when importing data from the legacy system
-    migrated_from_id = models.CharField(
-        max_length=50, blank=True, null=True, unique=True
-    )
+    migrated_from_id = models.CharField(max_length=50, blank=True, null=True, unique=True)
 
     observation_date = models.DateField(null=True, blank=True)
     observation_time = models.ForeignKey(
@@ -681,9 +669,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         descriptor = "Descriptor not available"
         if self.species:
             if self.species.taxonomy and self.species.taxonomy.scientific_name:
-                descriptor = abbreviate_species_name(
-                    self.species.taxonomy.scientific_name
-                )
+                descriptor = abbreviate_species_name(self.species.taxonomy.scientific_name)
         if self.community:
             if self.community.taxonomy and self.community.taxonomy.community_common_id:
                 descriptor = self.community.taxonomy.community_common_id
@@ -752,17 +738,13 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceReportUserAction.ACTION_DISCARD_PROPOSAL.format(
-                self.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_DISCARD_PROPOSAL.format(self.occurrence_report_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceReportUserAction.ACTION_DISCARD_PROPOSAL.format(
-                self.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_DISCARD_PROPOSAL.format(self.occurrence_report_number),
             request,
         )
 
@@ -777,17 +759,13 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceReportUserAction.ACTION_REINSTATE_PROPOSAL.format(
-                self.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_REINSTATE_PROPOSAL.format(self.occurrence_report_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceReportUserAction.ACTION_REINSTATE_PROPOSAL.format(
-                self.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_REINSTATE_PROPOSAL.format(self.occurrence_report_number),
             request,
         )
 
@@ -799,9 +777,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         try:
             new_submitter = EmailUser.objects.get(id=user_id)
         except EmailUser.DoesNotExist:
-            raise serializers.ValidationError(
-                f"EmailUserRO with id {user_id} does not exist"
-            )
+            raise serializers.ValidationError(f"EmailUserRO with id {user_id} does not exist")
 
         previous_submitter = EmailUser.objects.get(id=self.submitter)
 
@@ -812,13 +788,9 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         self.internal_application = new_is_internal
 
         self.submitter = new_submitter.id
-        old_submitter_information = SubmitterInformation.objects.filter(
-            id=self.submitter_information_id
-        )
+        old_submitter_information = SubmitterInformation.objects.filter(id=self.submitter_information_id)
         self.submitter_information = None
-        self.save(
-            version_user=request.user
-        )  # A new submitter information object will be created automatically
+        self.save(version_user=request.user)  # A new submitter information object will be created automatically
         old_submitter_information.delete()
 
         self.log_user_action(
@@ -898,17 +870,13 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
                 # Create a log entry for the proposal
                 self.log_user_action(
-                    OccurrenceReportUserAction.ACTION_UNASSIGN_APPROVER.format(
-                        self.occurrence_report_number
-                    ),
+                    OccurrenceReportUserAction.ACTION_UNASSIGN_APPROVER.format(self.occurrence_report_number),
                     request,
                 )
 
                 # Create a log entry for the user
                 request.user.log_user_action(
-                    OccurrenceReportUserAction.ACTION_UNASSIGN_APPROVER.format(
-                        self.occurrence_report_number
-                    ),
+                    OccurrenceReportUserAction.ACTION_UNASSIGN_APPROVER.format(self.occurrence_report_number),
                     request,
                 )
         else:
@@ -918,17 +886,13 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
                 # Create a log entry for the proposal
                 self.log_user_action(
-                    OccurrenceReportUserAction.ACTION_UNASSIGN_ASSESSOR.format(
-                        self.occurrence_report_number
-                    ),
+                    OccurrenceReportUserAction.ACTION_UNASSIGN_ASSESSOR.format(self.occurrence_report_number),
                     request,
                 )
 
                 # Create a log entry for the user
                 request.user.log_user_action(
-                    OccurrenceReportUserAction.ACTION_UNASSIGN_ASSESSOR.format(
-                        self.occurrence_report_number
-                    ),
+                    OccurrenceReportUserAction.ACTION_UNASSIGN_ASSESSOR.format(self.occurrence_report_number),
                     request,
                 )
 
@@ -964,16 +928,12 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceReportUserAction.ACTION_PROPOSED_DECLINE.format(
-                self.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_PROPOSED_DECLINE.format(self.occurrence_report_number),
             request,
         )
 
         request.user.log_user_action(
-            OccurrenceReportUserAction.ACTION_PROPOSED_DECLINE.format(
-                self.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_PROPOSED_DECLINE.format(self.occurrence_report_number),
             request,
         )
 
@@ -1033,10 +993,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             missing_values.append("Location")
 
         if missing_values:
-            raise ValidationError(
-                "Cannot submit this report due to missing values: "
-                + ", ".join(missing_values)
-            )
+            raise ValidationError("Cannot submit this report due to missing values: " + ", ".join(missing_values))
 
     def validate_propose_approve(self):
         self.validate_submit()
@@ -1050,14 +1007,10 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             missing_values.append("Location Accuracy")
 
         if missing_values:
-            raise ValidationError(
-                "Cannot submit this report due to missing values: "
-                + ", ".join(missing_values)
-            )
+            raise ValidationError("Cannot submit this report due to missing values: " + ", ".join(missing_values))
 
     @transaction.atomic
     def propose_approve(self, request, validated_data):
-
         self.validate_propose_approve()
 
         if not self.can_assess(request):
@@ -1075,18 +1028,14 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             try:
                 occurrence = Occurrence.objects.get(id=occurrence_id)
             except Occurrence.DoesNotExist:
-                raise ValidationError(
-                    f"Occurrence with id {occurrence_id} does not exist"
-                )
+                raise ValidationError(f"Occurrence with id {occurrence_id} does not exist")
 
         details = validated_data.get("details", "")
         new_occurrence_name = validated_data.get("new_occurrence_name", None)
 
         if new_occurrence_name and (
             Occurrence.objects.filter(occurrence_name=new_occurrence_name).exists()
-            or OccurrenceReportApprovalDetails.objects.filter(
-                new_occurrence_name=new_occurrence_name
-            )
+            or OccurrenceReportApprovalDetails.objects.filter(new_occurrence_name=new_occurrence_name)
             .exclude(occurrence_report=self)
             .exists()
         ):
@@ -1100,9 +1049,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
                 "officer": request.user.id,
                 "occurrence": occurrence,
                 "new_occurrence_name": new_occurrence_name,
-                "copy_ocr_comments_to_occ_comments": validated_data.get(
-                    "copy_ocr_comments_to_occ_comments", True
-                ),
+                "copy_ocr_comments_to_occ_comments": validated_data.get("copy_ocr_comments_to_occ_comments", True),
                 "details": details,
                 "cc_email": validated_data.get("cc_email", None),
             },
@@ -1115,17 +1062,13 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceReportUserAction.ACTION_PROPOSED_APPROVAL.format(
-                self.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_PROPOSED_APPROVAL.format(self.occurrence_report_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceReportUserAction.ACTION_PROPOSED_APPROVAL.format(
-                self.occurrence_report_number
-            ),
+            OccurrenceReportUserAction.ACTION_PROPOSED_APPROVAL.format(self.occurrence_report_number),
             request,
         )
 
@@ -1143,9 +1086,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             )
 
         if not self.approval_details:
-            raise ValidationError(
-                f"Approval details are required to approve Occurrence Report {self}"
-            )
+            raise ValidationError(f"Approval details are required to approve Occurrence Report {self}")
 
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_APPROVED
         self.customer_status = OccurrenceReport.CUSTOMER_STATUS_APPROVED
@@ -1154,10 +1095,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         if self.approval_details.occurrence:
             occurrence = self.approval_details.occurrence
 
-            if (
-                self.approval_details.copy_ocr_comments_to_occ_comments
-                and self.comments
-            ):
+            if self.approval_details.copy_ocr_comments_to_occ_comments and self.comments:
                 if not occurrence.comment:
                     occurrence.comment = self.comments
                 else:
@@ -1166,9 +1104,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         else:
             if not self.approval_details.new_occurrence_name:
-                raise ValidationError(
-                    "New occurrence name is required to approve Occurrence Report"
-                )
+                raise ValidationError("New occurrence name is required to approve Occurrence Report")
             occurrence = Occurrence.clone_from_occurrence_report(self)
             occurrence.occurrence_name = self.approval_details.new_occurrence_name
             occurrence.occurrence_source = Occurrence.OCCURRENCE_CHOICE_OCR
@@ -1176,15 +1112,11 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
             # Log the creation of the new occurrence
             occurrence.log_user_action(
-                OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
-                    occurrence.occurrence_number
-                ),
+                OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(occurrence.occurrence_number),
                 request,
             )
             request.user.log_user_action(
-                OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(
-                    occurrence.occurrence_number
-                ),
+                OccurrenceUserAction.ACTION_CREATE_OCCURRENCE.format(occurrence.occurrence_number),
                 request,
             )
 
@@ -1244,48 +1176,34 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         send_approver_back_to_assessor_email_notification(request, self, reason)
 
     def lock(self, request):
-        if (
-            self.can_change_lock(request)
-            and self.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-        ):
+        if self.can_change_lock(request) and self.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
             self.processing_status = OccurrenceReport.PROCESSING_STATUS_APPROVED
             self.save(version_user=request.user)
 
             self.log_user_action(
-                OccurrenceReportUserAction.ACTION_LOCK.format(
-                    self.occurrence_report_number
-                ),
+                OccurrenceReportUserAction.ACTION_LOCK.format(self.occurrence_report_number),
                 request,
             )
 
             request.user.log_user_action(
-                OccurrenceReportUserAction.ACTION_LOCK.format(
-                    self.occurrence_report_number
-                ),
+                OccurrenceReportUserAction.ACTION_LOCK.format(self.occurrence_report_number),
                 request,
             )
 
     def unlock(self, request):
-        if (
-            self.can_change_lock(request)
-            and self.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED
-        ):
+        if self.can_change_lock(request) and self.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED:
             self.processing_status = OccurrenceReport.PROCESSING_STATUS_UNLOCKED
             if self.assigned_officer != request.user.id:
                 self.assigned_officer = request.user.id
             self.save(version_user=request.user)
 
             self.log_user_action(
-                OccurrenceReportUserAction.ACTION_UNLOCK.format(
-                    self.occurrence_report_number
-                ),
+                OccurrenceReportUserAction.ACTION_UNLOCK.format(self.occurrence_report_number),
                 request,
             )
 
             request.user.log_user_action(
-                OccurrenceReportUserAction.ACTION_UNLOCK.format(
-                    self.occurrence_report_number
-                ),
+                OccurrenceReportUserAction.ACTION_UNLOCK.format(self.occurrence_report_number),
                 request,
             )
 
@@ -1303,9 +1221,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
             OccurrenceReport.PROCESSING_STATUS_CLOSED,
         ]:
-            if OccurrenceReportReferral.objects.filter(
-                occurrence_report=self, referral=request.user.id
-            ).exists():
+            if OccurrenceReportReferral.objects.filter(occurrence_report=self, referral=request.user.id).exists():
                 return True
 
             return is_occurrence_assessor(request) or is_occurrence_approver(request)
@@ -1320,10 +1236,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         ]:
             raise exceptions.OccurrenceReportReferralCannotBeSent()
 
-        if (
-            not self.processing_status
-            == OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL
-        ):
+        if not self.processing_status == OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL:
             self.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL
             self.save(version_user=request.user)
 
@@ -1333,9 +1246,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         try:
             referee = EmailUser.objects.get(email__iexact=referral_email.strip())
         except EmailUser.DoesNotExist:
-            raise ValidationError(
-                "The user you want to send the referral to does not exist in the ledger database"
-            )
+            raise ValidationError("The user you want to send the referral to does not exist in the ledger database")
 
         # Don't allow the user to refer to themselves
         if referee.id == request.user.id:
@@ -1346,9 +1257,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             raise ValidationError("You cannot refer to the submitter")
 
         # Check if the referral has already been sent to this user
-        if OccurrenceReportReferral.objects.filter(
-            referral=referee.id, occurrence_report=self
-        ).exists():
+        if OccurrenceReportReferral.objects.filter(referral=referee.id, occurrence_report=self).exists():
             raise ValidationError("A referral has already been sent to this user")
 
         # Create Referral
@@ -1385,9 +1294,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
     @property
     def external_referral_invites(self):
-        return self.external_referee_invites.filter(
-            archived=False, datetime_first_logged_in__isnull=True
-        )
+        return self.external_referee_invites.filter(archived=False, datetime_first_logged_in__isnull=True)
 
     @transaction.atomic
     def copy(self, request_user_id):
@@ -1411,9 +1318,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         if request_user_id == self.submitter:
             # Use the same submitter category as the previous proposal when the user copying is the submitter
-            ocr_copy.submitter_information.submitter_category_id = (
-                self.submitter_information.submitter_category_id
-            )
+            ocr_copy.submitter_information.submitter_category_id = self.submitter_information.submitter_category_id
             ocr_copy.submitter_information.save()
 
         # Clone all the associated models
@@ -1458,9 +1363,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
                 vegetation_structure.save()
 
         if hasattr(self, "fire_history") and self.fire_history:
-            fire_history = clone_model(
-                OCRFireHistory, OCRFireHistory, self.fire_history
-            )
+            fire_history = clone_model(OCRFireHistory, OCRFireHistory, self.fire_history)
             if fire_history:
                 fire_history.occurrence_report = ocr_copy
                 fire_history.save()
@@ -1480,9 +1383,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         # Clone the threats
         for threat in self.ocr_threats.all():
-            ocr_threat = clone_model(
-                OCRConservationThreat, OCRConservationThreat, threat
-            )
+            ocr_threat = clone_model(OCRConservationThreat, OCRConservationThreat, threat)
             if ocr_threat:
                 ocr_threat.occurrence_report = ocr_copy
                 ocr_threat.occurrence_report_threat = threat
@@ -1490,9 +1391,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         # Clone the documents
         for doc in self.documents.all():
-            ocr_doc = clone_model(
-                OccurrenceReportDocument, OccurrenceReportDocument, doc
-            )
+            ocr_doc = clone_model(OccurrenceReportDocument, OccurrenceReportDocument, doc)
             if ocr_doc:
                 ocr_doc.occurrence_report = ocr_copy
                 ocr_doc.save()
@@ -1510,9 +1409,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         # Clone any occurrence geometries
         for geom in self.ocr_geometry.all():
-            ocr_geom = clone_model(
-                OccurrenceReportGeometry, OccurrenceReportGeometry, geom
-            )
+            ocr_geom = clone_model(OccurrenceReportGeometry, OccurrenceReportGeometry, geom)
             if ocr_geom:
                 ocr_geom.occurrence_report = ocr_copy
                 ocr_geom.save()
@@ -1574,13 +1471,9 @@ class OccurrenceReportApprovalDetails(BaseModel):
 
     def save(self, *args, **kwargs):
         if self.occurrence and self.new_occurrence_name:
-            raise ValidationError(
-                "You can't have both an existing occurrence and a new occurrence name"
-            )
+            raise ValidationError("You can't have both an existing occurrence and a new occurrence name")
         if not self.occurrence and not self.new_occurrence_name:
-            raise ValidationError(
-                "You must have either an existing occurrence or a new occurrence name"
-            )
+            raise ValidationError("You must have either an existing occurrence or a new occurrence name")
         super().save(*args, **kwargs)
 
     @property
@@ -1592,9 +1485,7 @@ class OccurrenceReportApprovalDetails(BaseModel):
 
 
 class OccurrenceReportLogEntry(CommunicationsLogEntry):
-    occurrence_report = models.ForeignKey(
-        OccurrenceReport, related_name="comms_logs", on_delete=models.CASCADE
-    )
+    occurrence_report = models.ForeignKey(OccurrenceReport, related_name="comms_logs", on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.reference} - {self.subject}"
@@ -1610,9 +1501,7 @@ class OccurrenceReportLogEntry(CommunicationsLogEntry):
 
 
 class OccurrenceReportLogDocument(Document):
-    log_entry = models.ForeignKey(
-        "OccurrenceReportLogEntry", related_name="documents", on_delete=models.CASCADE
-    )
+    log_entry = models.ForeignKey("OccurrenceReportLogEntry", related_name="documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=update_occurrence_report_comms_log_filename,
         max_length=512,
@@ -1648,15 +1537,9 @@ class OccurrenceReportUserAction(UserAction):
     ACTION_UPDATE_OBSERVER_DETAIL = "Update Observer {} on occurrence report {}"
     ACTION_COPY = "Created occurrence report {} from a copy of occurrence report {}"
     ACTION_COPY_TO = "Copy occurrence report to {}"
-    ACTION_REASSIGN_DRAFT_TO_USER = (
-        "Occurrence Report {} (draft) reassigned from {} to {}"
-    )
-    ACTION_UPDATE_COMMUNITY_FROM_OCCURRENCE = (
-        "Community changed from {} to {} due to change in related occurrence {}"
-    )
-    ACTION_UPDATE_SPECIES_FROM_OCCURRENCE = (
-        "Species changed from {} to {} due to change in related occurrence {}"
-    )
+    ACTION_REASSIGN_DRAFT_TO_USER = "Occurrence Report {} (draft) reassigned from {} to {}"
+    ACTION_UPDATE_COMMUNITY_FROM_OCCURRENCE = "Community changed from {} to {} due to change in related occurrence {}"
+    ACTION_UPDATE_SPECIES_FROM_OCCURRENCE = "Species changed from {} to {} due to change in related occurrence {}"
 
     # Amendment
     ACTION_ID_REQUEST_AMENDMENTS = "Request amendments"
@@ -1664,20 +1547,14 @@ class OccurrenceReportUserAction(UserAction):
     # Assessors
     ACTION_SAVE_ASSESSMENT_ = "Save assessment {}"
     ACTION_CONCLUDE_ASSESSMENT_ = "Conclude assessment {}"
-    ACTION_PROPOSED_READY_FOR_AGENDA = (
-        "Occurrence report {} has been proposed as 'ready for agenda'"
-    )
-    ACTION_PROPOSED_APPROVAL = (
-        "Occurrence report {} has been proposed as 'for approval'"
-    )
+    ACTION_PROPOSED_READY_FOR_AGENDA = "Occurrence report {} has been proposed as 'ready for agenda'"
+    ACTION_PROPOSED_APPROVAL = "Occurrence report {} has been proposed as 'for approval'"
     ACTION_PROPOSED_DECLINE = "Occurrence report {} has been proposed as 'for decline'"
 
     # Referrals
     ACTION_SEND_REFERRAL_TO = "Send referral {} for occurrence report {} to {}"
     ACTION_RESEND_REFERRAL_TO = "Resend referral {} for occurrence report {} to {}"
-    ACTION_REMIND_REFERRAL = (
-        "Send reminder for referral {} for occurrence report {} to {}"
-    )
+    ACTION_REMIND_REFERRAL = "Send reminder for referral {} for occurrence report {} to {}"
     ACTION_BACK_TO_ASSESSOR = "{} sent back to assessor. Reason: {}"
     RECALL_REFERRAL = "Referral {} for occurrence report {} has been recalled by {}"
     SAVE_REFERRAL = "Referral {} for occurrence report {} has been saved by {}"
@@ -1701,19 +1578,13 @@ class OccurrenceReportUserAction(UserAction):
 
     @classmethod
     def log_action(cls, occurrence_report, action, user):
-        return cls.objects.create(
-            occurrence_report=occurrence_report, who=user, what=str(action)
-        )
+        return cls.objects.create(occurrence_report=occurrence_report, who=user, what=str(action))
 
-    occurrence_report = models.ForeignKey(
-        OccurrenceReport, related_name="action_logs", on_delete=models.CASCADE
-    )
+    occurrence_report = models.ForeignKey(OccurrenceReport, related_name="action_logs", on_delete=models.CASCADE)
 
 
 def update_occurrence_report_referral_doc_filename(instance, filename):
-    return "{}/occurrence_report/{}/referral/{}".format(
-        settings.MEDIA_APP_DIR, instance.referral.occurrence_report.id, filename
-    )
+    return f"{settings.MEDIA_APP_DIR}/occurrence_report/{instance.referral.occurrence_report.id}/referral/{filename}"
 
 
 class OccurrenceReportProposalRequest(BaseModel):
@@ -1734,12 +1605,8 @@ class OccurrenceReportAmendmentRequest(OccurrenceReportProposalRequest):
         (STATUS_CHOICE_AMENDED, "Amended"),
     )
 
-    status = models.CharField(
-        "Status", max_length=30, choices=STATUS_CHOICES, default=STATUS_CHOICES[0][0]
-    )
-    reason = models.ForeignKey(
-        ProposalAmendmentReason, blank=True, null=True, on_delete=models.SET_NULL
-    )
+    status = models.CharField("Status", max_length=30, choices=STATUS_CHOICES, default=STATUS_CHOICES[0][0])
+    reason = models.ForeignKey(ProposalAmendmentReason, blank=True, null=True, on_delete=models.SET_NULL)
 
     class Meta:
         app_label = "boranga"
@@ -1758,19 +1625,13 @@ class OccurrenceReportAmendmentRequest(OccurrenceReportProposalRequest):
                 occurrence_report.save(version_user=request.user)
 
             # Create a log entry for the occurrence report
-            occurrence_report.log_user_action(
-                OccurrenceReportUserAction.ACTION_ID_REQUEST_AMENDMENTS, request
-            )
+            occurrence_report.log_user_action(OccurrenceReportUserAction.ACTION_ID_REQUEST_AMENDMENTS, request)
 
             # Create a log entry for the user
-            request.user.log_user_action(
-                OccurrenceReportUserAction.ACTION_ID_REQUEST_AMENDMENTS, request
-            )
+            request.user.log_user_action(OccurrenceReportUserAction.ACTION_ID_REQUEST_AMENDMENTS, request)
 
             # send email
-            send_occurrence_report_amendment_email_notification(
-                self, request, occurrence_report
-            )
+            send_occurrence_report_amendment_email_notification(self, request, occurrence_report)
 
         self.save()
 
@@ -1780,16 +1641,12 @@ class OccurrenceReportAmendmentRequest(OccurrenceReportProposalRequest):
         data = json.loads(request.data.get("data"))
 
         if not data.get("update"):
-            documents_qs = self.amendment_request_documents.filter(
-                input_name="amendment_request_doc", visible=True
-            )
+            documents_qs = self.amendment_request_documents.filter(input_name="amendment_request_doc", visible=True)
             documents_qs.delete()
 
         for idx in range(data["num_files"]):
             _file = request.data.get("file-" + str(idx))
-            document = self.amendment_request_documents.create(
-                _file=_file, name=_file.name
-            )
+            document = self.amendment_request_documents.create(_file=_file, name=_file.name)
             document.check_file(request.data.get("file-" + str(idx)))
             document.input_name = data["input_name"]
             document.save()
@@ -1799,9 +1656,7 @@ class OccurrenceReportAmendmentRequest(OccurrenceReportProposalRequest):
 
 
 def update_occurrence_report_amendment_request_doc_filename(instance, filename):
-    return "occurrence_report/{}/amendment_request_documents/{}".format(
-        instance.occurrence_report_amendment_request.occurrence_report.id, filename
-    )
+    return f"occurrence_report/{instance.occurrence_report_amendment_request.occurrence_report.id}/amendment_request_documents/{filename}"
 
 
 class OccurrenceReportAmendmentRequestDocument(Document):
@@ -1838,9 +1693,7 @@ class OccurrenceReportReferral(BaseModel):
         (PROCESSING_STATUS_COMPLETED, "Completed"),
     )
     lodged_on = models.DateTimeField(auto_now_add=True)
-    occurrence_report = models.ForeignKey(
-        OccurrenceReport, related_name="referrals", on_delete=models.CASCADE
-    )
+    occurrence_report = models.ForeignKey(OccurrenceReport, related_name="referrals", on_delete=models.CASCADE)
     sent_by = models.IntegerField()  # EmailUserRO
     referral = models.IntegerField()  # EmailUserRO
     linked = models.BooleanField(default=False)
@@ -1860,9 +1713,7 @@ class OccurrenceReportReferral(BaseModel):
         ordering = ("-lodged_on",)
 
     def __str__(self):
-        return "Occurrence Report {} - Referral {}".format(
-            self.occurrence_report.id, self.id
-        )
+        return f"Occurrence Report {self.occurrence_report.id} - Referral {self.id}"
 
     @property
     def can_be_completed(self):
@@ -1919,13 +1770,9 @@ class OccurrenceReportReferral(BaseModel):
 
         send_occurrence_report_referral_recall_email_notification(self, request)
 
-        outstanding = self.occurrence_report.referrals.filter(
-            processing_status=self.PROCESSING_STATUS_WITH_REFERRAL
-        )
+        outstanding = self.occurrence_report.referrals.filter(processing_status=self.PROCESSING_STATUS_WITH_REFERRAL)
         if len(outstanding) == 0:
-            self.occurrence_report.processing_status = (
-                OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
-            )
+            self.occurrence_report.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
             self.occurrence_report.save(version_user=request.user)
 
         # Create a log entry for the occurrence report
@@ -1964,10 +1811,7 @@ class OccurrenceReportReferral(BaseModel):
             OccurrenceReportUserAction.ACTION_RESEND_REFERRAL_TO.format(
                 self.id,
                 self.occurrence_report.occurrence_report_number,
-                "{}({})".format(
-                    self.referral_as_email_user.get_full_name(),
-                    self.referral_as_email_user.email,
-                ),
+                f"{self.referral_as_email_user.get_full_name()}({self.referral_as_email_user.email})",
             ),
             request,
         )
@@ -1977,10 +1821,7 @@ class OccurrenceReportReferral(BaseModel):
             OccurrenceReportUserAction.ACTION_RESEND_REFERRAL_TO.format(
                 self.id,
                 self.occurrence_report.occurrence_report_number,
-                "{}({})".format(
-                    self.referral_as_email_user.get_full_name(),
-                    self.referral_as_email_user.email,
-                ),
+                f"{self.referral_as_email_user.get_full_name()}({self.referral_as_email_user.email})",
             ),
             request,
         )
@@ -1996,13 +1837,9 @@ class OccurrenceReportReferral(BaseModel):
         self.processing_status = self.PROCESSING_STATUS_COMPLETED
         self.save()
 
-        outstanding = self.occurrence_report.referrals.filter(
-            processing_status=self.PROCESSING_STATUS_WITH_REFERRAL
-        )
+        outstanding = self.occurrence_report.referrals.filter(processing_status=self.PROCESSING_STATUS_WITH_REFERRAL)
         if len(outstanding) == 0:
-            self.occurrence_report.processing_status = (
-                OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
-            )
+            self.occurrence_report.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
             self.occurrence_report.save(version_user=request.user)
 
         # Create a log entry for the occurrence report
@@ -2010,10 +1847,7 @@ class OccurrenceReportReferral(BaseModel):
             OccurrenceReportUserAction.CONCLUDE_REFERRAL.format(
                 self.id,
                 self.occurrence_report.occurrence_report_number,
-                "{}({})".format(
-                    self.referral_as_email_user.get_full_name(),
-                    self.referral_as_email_user.email,
-                ),
+                f"{self.referral_as_email_user.get_full_name()}({self.referral_as_email_user.email})",
             ),
             request,
         )
@@ -2023,10 +1857,7 @@ class OccurrenceReportReferral(BaseModel):
             OccurrenceReportUserAction.CONCLUDE_REFERRAL.format(
                 self.id,
                 self.occurrence_report.occurrence_report_number,
-                "{}({})".format(
-                    self.referral_as_email_user.get_full_name(),
-                    self.referral_as_email_user.email,
-                ),
+                f"{self.referral_as_email_user.get_full_name()}({self.referral_as_email_user.email})",
             ),
             request,
         )
@@ -2074,9 +1905,7 @@ class Datum(OrderedModel, ArchivableModel):
         except pyproj.exceptions.CRSError:
             raise ValidationError(f"Invalid SRID: {self.srid}")
         else:
-            cache_key = settings.CACHE_KEY_EPSG_CODES.format(
-                **{"auth_name": "EPSG", "pj_type": "CRS"}
-            )
+            cache_key = settings.CACHE_KEY_EPSG_CODES.format(**{"auth_name": "EPSG", "pj_type": "CRS"})
             cache.delete(cache_key)
 
         super().save(*args, **kwargs)
@@ -2160,19 +1989,11 @@ class OCRLocation(BaseModel):
     buffer_radius = models.IntegerField(null=True, blank=True, default=0)
     datum = models.ForeignKey(Datum, on_delete=models.SET_NULL, null=True, blank=True)
     epsg_code = models.IntegerField(null=False, blank=False, default=4326)
-    coordinate_source = models.ForeignKey(
-        CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    location_accuracy = models.ForeignKey(
-        LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    coordinate_source = models.ForeignKey(CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True)
+    location_accuracy = models.ForeignKey(LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
 
-    region = models.ForeignKey(
-        Region, default=None, on_delete=models.CASCADE, null=True, blank=True
-    )
-    district = models.ForeignKey(
-        District, default=None, on_delete=models.CASCADE, null=True, blank=True
-    )
+    region = models.ForeignKey(Region, default=None, on_delete=models.CASCADE, null=True, blank=True)
+    district = models.ForeignKey(District, default=None, on_delete=models.CASCADE, null=True, blank=True)
     locality = models.TextField(blank=True, default="")
 
     class Meta:
@@ -2186,16 +2007,12 @@ class OCRLocation(BaseModel):
 class GeometryManager(models.Manager):
     def get_queryset(self):
         qs = super().get_queryset()
-        polygon_ids = qs.extra(
-            where=["geometrytype(geometry) LIKE 'POLYGON'"]
-        ).values_list("id", flat=True)
+        polygon_ids = qs.extra(where=["geometrytype(geometry) LIKE 'POLYGON'"]).values_list("id", flat=True)
         return qs.annotate(
             area=models.Case(
                 models.When(
                     models.Q(geometry__isnull=False) & models.Q(id__in=polygon_ids),
-                    then=Area(
-                        Cast("geometry", gis_models.PolygonField(geography=True))
-                    ),
+                    then=Area(Cast("geometry", gis_models.PolygonField(geography=True))),
                 ),
                 default=None,
             )
@@ -2209,9 +2026,7 @@ class GeometryBase(BaseModel):
 
     objects = GeometryManager()
 
-    geometry = gis_models.GeometryField(
-        extent=settings.GIS_EXTENT, blank=True, null=True
-    )
+    geometry = gis_models.GeometryField(extent=settings.GIS_EXTENT, blank=True, null=True)
     original_geometry_ewkb = models.BinaryField(
         blank=True, null=True, editable=True
     )  # original geometry as uploaded by the user in EWKB format (keeps the srid)
@@ -2252,13 +2067,9 @@ class GeometryBase(BaseModel):
                 f"Cannot save a geometry with SRID {self.geometry.srid} into a WGS-84 (SRID 4326) geometry field."
             )
 
-        if not self.geometry.within(
-            GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=4326)
-        ):
+        if not self.geometry.within(GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=4326)):
             raise ValidationError(
-                "Geometry is not within the extent defined for the Boranga application ({})".format(
-                    settings.GIS_EXTENT
-                )
+                f"Geometry is not within the extent defined for the Boranga application ({settings.GIS_EXTENT})"
             )
 
         super().save(*args, **kwargs)
@@ -2276,11 +2087,7 @@ class GeometryBase(BaseModel):
     def __str__(self):
         wkt_ellipsis = ""
         if self.geometry:
-            wkt_ellipsis = (
-                (self.geometry.wkt[:85] + "..")
-                if len(self.geometry.wkt) > 75
-                else self.geometry.wkt
-            )
+            wkt_ellipsis = (self.geometry.wkt[:85] + "..") if len(self.geometry.wkt) > 75 else self.geometry.wkt
         return f"{self.__class__.__name__} of <{self.related_model_field()}>: {wkt_ellipsis}"
 
     @property
@@ -2333,15 +2140,10 @@ class GeometryBase(BaseModel):
 
         parent_subclasses = self.__class__.__base__.__subclasses__()
         # Get a list of content types for the parent classes of this geometry model
-        subclasses_content_types = [
-            ct_models.ContentType.objects.get_for_model(psc)
-            for psc in parent_subclasses
-        ]
+        subclasses_content_types = [ct_models.ContentType.objects.get_for_model(psc) for psc in parent_subclasses]
         # Get a list of filtered objects (the objects that have been created from self) for each subclass content type
         source_of_objects = [
-            sc_ct.get_all_objects_for_this_type().filter(
-                content_type=content_type, object_id=self.id
-            )
+            sc_ct.get_all_objects_for_this_type().filter(content_type=content_type, object_id=self.id)
             for sc_ct in subclasses_content_types
         ]
         return [soo for soo in source_of_objects if soo.exists()]
@@ -2385,10 +2187,10 @@ class OccurrenceReportGeometry(GeometryBase, DrawnByGeometry):
         return self.occurrence_report
 
     def save(self, *args, **kwargs):
-        if (
-            self.occurrence_report.group_type.name == GroupType.GROUP_TYPE_FAUNA
-            and type(self.geometry).__name__ in ["Polygon", "MultiPolygon"]
-        ):
+        if self.occurrence_report.group_type.name == GroupType.GROUP_TYPE_FAUNA and type(self.geometry).__name__ in [
+            "Polygon",
+            "MultiPolygon",
+        ]:
             raise ValidationError("Fauna occurrence reports cannot have polygons")
 
         super().save(*args, **kwargs)
@@ -2426,12 +2228,8 @@ class OCRObserverDetail(RevisionedMixin):
         related_name="observer_detail",
     )
     observer_name = models.CharField(max_length=250, blank=True, null=True)
-    role = models.ForeignKey(
-        ObserverRole, on_delete=models.PROTECT, null=True, blank=True
-    )
-    category = models.ForeignKey(
-        ObserverCategory, on_delete=models.PROTECT, null=True, blank=True
-    )
+    role = models.ForeignKey(ObserverRole, on_delete=models.PROTECT, null=True, blank=True)
+    category = models.ForeignKey(ObserverCategory, on_delete=models.PROTECT, null=True, blank=True)
     contact = models.TextField(max_length=250, blank=True, null=True)
     organisation = models.CharField(max_length=250, blank=True, null=True)
     main_observer = models.BooleanField(null=True, blank=True)
@@ -2627,22 +2425,14 @@ class OCRHabitatComposition(BaseModel):
     # TODO: Consider fixing these to use a function that returns the choices
     # as setting them in the __init__ method creates issues in other parts of the application
     land_form = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
-    rock_type = models.ForeignKey(
-        RockType, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    rock_type = models.ForeignKey(RockType, on_delete=models.SET_NULL, null=True, blank=True)
     loose_rock_percent = models.IntegerField(
         null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(100)]
     )
     soil_type = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
-    soil_colour = models.ForeignKey(
-        SoilColour, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    soil_condition = models.ForeignKey(
-        SoilCondition, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    drainage = models.ForeignKey(
-        Drainage, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    soil_colour = models.ForeignKey(SoilColour, on_delete=models.SET_NULL, null=True, blank=True)
+    soil_condition = models.ForeignKey(SoilCondition, on_delete=models.SET_NULL, null=True, blank=True)
+    drainage = models.ForeignKey(Drainage, on_delete=models.SET_NULL, null=True, blank=True)
     water_quality = models.CharField(max_length=500, blank=True, default="")
     habitat_notes = models.CharField(max_length=1000, blank=True, default="")
 
@@ -2836,9 +2626,7 @@ class OCRFireHistory(BaseModel):
         related_name="fire_history",
     )
     last_fire_estimate = models.DateField(null=True, blank=True)
-    intensity = models.ForeignKey(
-        Intensity, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    intensity = models.ForeignKey(Intensity, on_delete=models.SET_NULL, null=True, blank=True)
     comment = models.CharField(max_length=1000, blank=True, default="")
 
     class Meta:
@@ -3041,12 +2829,8 @@ class OCRObservationDetail(BaseModel):
         null=True,
         related_name="observation_detail",
     )
-    observation_method = models.ForeignKey(
-        ObservationMethod, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    area_assessment = models.ForeignKey(
-        AreaAssessment, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    observation_method = models.ForeignKey(ObservationMethod, on_delete=models.SET_NULL, null=True, blank=True)
+    area_assessment = models.ForeignKey(AreaAssessment, on_delete=models.SET_NULL, null=True, blank=True)
     area_surveyed = models.DecimalField(
         null=True,
         blank=True,
@@ -3193,18 +2977,10 @@ class OCRPlantCount(BaseModel):
         null=True,
         related_name="plant_count",
     )
-    plant_count_method = models.ForeignKey(
-        PlantCountMethod, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    plant_count_accuracy = models.ForeignKey(
-        PlantCountAccuracy, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    counted_subject = models.ForeignKey(
-        CountedSubject, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    plant_condition = models.ForeignKey(
-        PlantCondition, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    plant_count_method = models.ForeignKey(PlantCountMethod, on_delete=models.SET_NULL, null=True, blank=True)
+    plant_count_accuracy = models.ForeignKey(PlantCountAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
+    counted_subject = models.ForeignKey(CountedSubject, on_delete=models.SET_NULL, null=True, blank=True)
+    plant_condition = models.ForeignKey(PlantCondition, on_delete=models.SET_NULL, null=True, blank=True)
     estimated_population_area = models.DecimalField(
         null=True,
         blank=True,
@@ -3477,29 +3253,17 @@ class OCRAnimalObservation(BaseModel):
         null=True,
         related_name="animal_observation",
     )
-    primary_detection_method = MultiSelectField(
-        max_length=250, blank=True, choices=[], null=True
-    )
+    primary_detection_method = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
     secondary_sign = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
-    animal_behaviour = models.ForeignKey(
-        AnimalBehaviour, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    reproductive_state = MultiSelectField(
-        max_length=250, blank=True, choices=[], null=True
-    )
-    animal_health = models.ForeignKey(
-        AnimalHealth, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    death_injury_reason = models.ForeignKey(
-        DeathReason, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    animal_behaviour = models.ForeignKey(AnimalBehaviour, on_delete=models.SET_NULL, null=True, blank=True)
+    reproductive_state = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
+    animal_health = models.ForeignKey(AnimalHealth, on_delete=models.SET_NULL, null=True, blank=True)
+    death_injury_reason = models.ForeignKey(DeathReason, on_delete=models.SET_NULL, null=True, blank=True)
 
     distinctive_feature = models.CharField(max_length=1000, blank=True, default="")
     action_taken = models.CharField(max_length=1000, blank=True, default="")
     action_required = models.CharField(max_length=1000, blank=True, default="")
-    animal_observation_detail_comment = models.CharField(
-        max_length=1000, blank=True, default=""
-    )
+    animal_observation_detail_comment = models.CharField(max_length=1000, blank=True, default="")
 
     count_status = models.CharField(
         choices=settings.COUNT_STATUS_CHOICES,
@@ -3657,12 +3421,8 @@ class SampleType(OrderedModel, ArchivableModel):
 
     """
 
-    name = models.CharField(
-        max_length=250, blank=False, null=False, validators=[no_commas_validator]
-    )
-    group_type = models.ForeignKey(
-        GroupType, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    name = models.CharField(max_length=250, blank=False, null=False, validators=[no_commas_validator])
+    group_type = models.ForeignKey(GroupType, on_delete=models.SET_NULL, null=True, blank=True)
     order_with_respect_to = "group_type"
 
     class Meta(OrderedModel.Meta):
@@ -3683,9 +3443,7 @@ class SampleDestination(OrderedModel, ArchivableModel):
 
     """
 
-    name = models.CharField(
-        max_length=250, blank=False, null=False, validators=[no_commas_validator]
-    )
+    name = models.CharField(max_length=250, blank=False, null=False, validators=[no_commas_validator])
 
     class Meta(OrderedModel.Meta):
         app_label = "boranga"
@@ -3704,12 +3462,8 @@ class PermitType(OrderedModel, ArchivableModel):
 
     """
 
-    name = models.CharField(
-        max_length=250, blank=False, null=False, validators=[no_commas_validator]
-    )
-    group_type = models.ForeignKey(
-        GroupType, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    name = models.CharField(max_length=250, blank=False, null=False, validators=[no_commas_validator])
+    group_type = models.ForeignKey(GroupType, on_delete=models.SET_NULL, null=True, blank=True)
     order_with_respect_to = "group_type"
 
     class Meta(OrderedModel.Meta):
@@ -3742,15 +3496,9 @@ class OCRIdentification(BaseModel):
     identification_certainty = models.ForeignKey(
         IdentificationCertainty, on_delete=models.SET_NULL, null=True, blank=True
     )
-    sample_type = models.ForeignKey(
-        SampleType, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    sample_destination = models.ForeignKey(
-        SampleDestination, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    permit_type = models.ForeignKey(
-        PermitType, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    sample_type = models.ForeignKey(SampleType, on_delete=models.SET_NULL, null=True, blank=True)
+    sample_destination = models.ForeignKey(SampleDestination, on_delete=models.SET_NULL, null=True, blank=True)
+    permit_type = models.ForeignKey(PermitType, on_delete=models.SET_NULL, null=True, blank=True)
     permit_id = models.CharField(max_length=500, blank=True, default="")
     collector_number = models.CharField(max_length=500, blank=True, default="")
     barcode_number = models.CharField(max_length=500, blank=True, default="")
@@ -3768,9 +3516,7 @@ class OccurrenceReportDocument(Document):
     BULK_IMPORT_ABBREVIATION = "orfdoc"
 
     document_number = models.CharField(max_length=9, blank=True, default="")
-    occurrence_report = models.ForeignKey(
-        "OccurrenceReport", related_name="documents", on_delete=models.CASCADE
-    )
+    occurrence_report = models.ForeignKey("OccurrenceReport", related_name="documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=update_occurrence_report_doc_filename,
         max_length=512,
@@ -3778,12 +3524,8 @@ class OccurrenceReportDocument(Document):
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)
     can_submitter_access = models.BooleanField(default=False)
-    document_category = models.ForeignKey(
-        DocumentCategory, null=True, blank=True, on_delete=models.SET_NULL
-    )
-    document_sub_category = models.ForeignKey(
-        DocumentSubCategory, null=True, blank=True, on_delete=models.SET_NULL
-    )
+    document_category = models.ForeignKey(DocumentCategory, null=True, blank=True, on_delete=models.SET_NULL)
+    document_sub_category = models.ForeignKey(DocumentSubCategory, null=True, blank=True, on_delete=models.SET_NULL)
 
     class Meta:
         app_label = "boranga"
@@ -3878,15 +3620,9 @@ class OCRConservationThreat(RevisionedMixin):
         related_name="ocr_threats",
     )
     threat_number = models.CharField(max_length=9, blank=True, default="")
-    threat_category = models.ForeignKey(
-        ThreatCategory, on_delete=models.CASCADE, default=None, null=True, blank=True
-    )
-    threat_agent = models.ForeignKey(
-        ThreatAgent, on_delete=models.SET_NULL, default=None, null=True, blank=True
-    )
-    current_impact = models.ForeignKey(
-        CurrentImpact, on_delete=models.SET_NULL, default=None, null=True, blank=True
-    )
+    threat_category = models.ForeignKey(ThreatCategory, on_delete=models.CASCADE, default=None, null=True, blank=True)
+    threat_agent = models.ForeignKey(ThreatAgent, on_delete=models.SET_NULL, default=None, null=True, blank=True)
+    current_impact = models.ForeignKey(CurrentImpact, on_delete=models.SET_NULL, default=None, null=True, blank=True)
     potential_impact = models.ForeignKey(
         PotentialImpact, on_delete=models.SET_NULL, default=None, null=True, blank=True
     )
@@ -3899,9 +3635,7 @@ class OCRConservationThreat(RevisionedMixin):
     )
     comment = models.TextField(blank=True, default="")
     date_observed = models.DateField(blank=True, null=True)
-    visible = models.BooleanField(
-        default=True
-    )  # to prevent deletion, hidden and still be available in history
+    visible = models.BooleanField(default=True)  # to prevent deletion, hidden and still be available in history
 
     class Meta:
         app_label = "boranga"
@@ -3982,9 +3716,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     occurrence_number = models.CharField(max_length=9, blank=True, default="")
 
     # Field to use when importing data from the legacy system
-    migrated_from_id = models.CharField(
-        max_length=50, blank=True, null=True, unique=True
-    )
+    migrated_from_id = models.CharField(max_length=50, blank=True, null=True, unique=True)
 
     # Track which data-migration run created/modified this record (nullable)
     migration_run = models.ForeignKey(
@@ -3997,9 +3729,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     )
 
     occurrence_name = models.CharField(max_length=250, blank=True, null=True)
-    group_type = models.ForeignKey(
-        GroupType, on_delete=models.PROTECT, null=True, blank=True
-    )
+    group_type = models.ForeignKey(GroupType, on_delete=models.PROTECT, null=True, blank=True)
 
     species = models.ForeignKey(
         Species,
@@ -4017,16 +3747,10 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     )
 
     submitter = models.IntegerField(null=True)  # EmailUserRO
-    lodgement_date = models.DateTimeField(
-        blank=True, null=True
-    )  # DateTime when the occurrence was activated
+    lodgement_date = models.DateTimeField(blank=True, null=True)  # DateTime when the occurrence was activated
 
-    wild_status = models.ForeignKey(
-        WildStatus, on_delete=models.PROTECT, null=True, blank=True
-    )
-    occurrence_source = MultiSelectField(
-        max_length=250, blank=True, choices=OCCURRENCE_SOURCE_CHOICES, null=True
-    )
+    wild_status = models.ForeignKey(WildStatus, on_delete=models.PROTECT, null=True, blank=True)
+    occurrence_source = MultiSelectField(max_length=250, blank=True, choices=OCCURRENCE_SOURCE_CHOICES, null=True)
 
     comment = models.TextField(null=True, blank=True)
 
@@ -4099,19 +3823,13 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             if "species" in dirty_fields:
                 old_val = dirty_fields.get("species")
                 try:
-                    old_species = (
-                        Species.objects.get(pk=old_val) if old_val is not None else None
-                    )
+                    old_species = Species.objects.get(pk=old_val) if old_val is not None else None
                 except Exception:
                     old_species = old_val
             if "community" in dirty_fields:
                 old_val = dirty_fields.get("community")
                 try:
-                    old_community = (
-                        Community.objects.get(pk=old_val)
-                        if old_val is not None
-                        else None
-                    )
+                    old_community = Community.objects.get(pk=old_val) if old_val is not None else None
                 except Exception:
                     old_community = old_val
 
@@ -4126,32 +3844,22 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 if old_species is not None:
                     old_desc_str = (
                         old_species.taxonomy.scientific_name
-                        if old_species
-                        and hasattr(old_species, "taxonomy")
-                        and old_species.taxonomy
+                        if old_species and hasattr(old_species, "taxonomy") and old_species.taxonomy
                         else str(old_species)
                     )
                 else:
                     old_desc_str = (
                         old_community.taxonomy.community_name
-                        if old_community
-                        and hasattr(old_community, "taxonomy")
-                        and old_community.taxonomy
+                        if old_community and hasattr(old_community, "taxonomy") and old_community.taxonomy
                         else str(old_community)
                     )
 
                 if self.species:
-                    new_desc_str = (
-                        self.species.taxonomy.scientific_name
-                        if self.species.taxonomy
-                        else str(self.species)
-                    )
+                    new_desc_str = self.species.taxonomy.scientific_name if self.species.taxonomy else str(self.species)
                     object_type = "species"
                 elif self.community:
                     new_desc_str = (
-                        self.community.taxonomy.community_name
-                        if self.community.taxonomy
-                        else str(self.community)
+                        self.community.taxonomy.community_name if self.community.taxonomy else str(self.community)
                     )
                     object_type = "community"
                 else:
@@ -4182,21 +3890,15 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             return
 
         if not self.species and not self.community:
-            logger.warning(
-                f"Occurrence {self.id} does not have a species or community set, cannot update child OCRs."
-            )
+            logger.warning(f"Occurrence {self.id} does not have a species or community set, cannot update child OCRs.")
             return
 
         if not self.group_type:
-            logger.warning(
-                f"Occurrence {self.id} does not have a group type set, cannot update child OCRs."
-            )
+            logger.warning(f"Occurrence {self.id} does not have a group type set, cannot update child OCRs.")
             return
 
         if self.group_type and self.group_type.name == GroupType.GROUP_TYPE_COMMUNITY:
-            community_occurrence_reports = self.occurrence_reports.exclude(
-                community=self.community
-            )
+            community_occurrence_reports = self.occurrence_reports.exclude(community=self.community)
             for ocr in community_occurrence_reports:
                 old_community_name = (
                     ocr.community.taxonomy.community_name
@@ -4222,14 +3924,10 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                     version_user.id,
                 )
         else:
-            species_occurrence_reports = self.occurrence_reports.exclude(
-                species=self.species
-            )
+            species_occurrence_reports = self.occurrence_reports.exclude(species=self.species)
             for ocr in species_occurrence_reports:
                 old_species_name = (
-                    ocr.species.taxonomy.scientific_name
-                    if ocr.species and ocr.species.taxonomy
-                    else str(ocr.species)
+                    ocr.species.taxonomy.scientific_name if ocr.species and ocr.species.taxonomy else str(ocr.species)
                 )
                 new_species_name = (
                     self.species.taxonomy.scientific_name
@@ -4264,15 +3962,10 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         if self.group_type.name in ["flora", "fauna"]:
             if self.species:
                 if self.species.taxonomy and self.species.taxonomy.scientific_name:
-                    descriptor = abbreviate_species_name(
-                        self.species.taxonomy.scientific_name
-                    )
+                    descriptor = abbreviate_species_name(self.species.taxonomy.scientific_name)
         elif self.group_type.name == "community":
             if self.community:
-                if (
-                    self.community.taxonomy
-                    and self.community.taxonomy.community_common_id
-                ):
+                if self.community.taxonomy and self.community.taxonomy.community_common_id:
                     descriptor = self.community.taxonomy.community_common_id
 
         if self.occurrence_name:
@@ -4317,9 +4010,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         occ_combine_data = json.loads(request.POST.get("data"))
 
         # OCCs being combined must not be discarded or historical
-        combine_occurrences = Occurrence.objects.exclude(id=self.id).filter(
-            id__in=occ_combine_data["combine_ids"]
-        )
+        combine_occurrences = Occurrence.objects.exclude(id=self.id).filter(id__in=occ_combine_data["combine_ids"])
 
         if not combine_occurrences.exists():
             raise ValidationError("No Occurrences selected to be combined")
@@ -4384,11 +4075,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                     section = getattr(self, SECTION_KEYS[key])
                     section_fields = type(section)._meta.get_fields()
                     for i in section_fields:
-                        if (
-                            i.name != "id"
-                            and i.name != "occurrence"
-                            and hasattr(section, i.name)
-                        ):
+                        if i.name != "id" and i.name != "occurrence" and hasattr(section, i.name):
                             if isinstance(i, models.ManyToManyField):
                                 src_value = getattr(src_section, i.name)
                                 value = getattr(section, i.name)
@@ -4406,9 +4093,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         for key in COPY_TABLE_KEYS:
             if key in occ_combine_data:
                 for record in (
-                    COPY_TABLE_KEYS[key]
-                    .objects.filter(id__in=occ_combine_data[key])
-                    .exclude(occurrence=self)
+                    COPY_TABLE_KEYS[key].objects.filter(id__in=occ_combine_data[key]).exclude(occurrence=self)
                 ):
                     copy = clone_model(
                         COPY_TABLE_KEYS[key],
@@ -4423,9 +4108,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         for key in MOVE_TABLE_KEYS:
             if key in occ_combine_data:
                 for record in (
-                    MOVE_TABLE_KEYS[key]
-                    .objects.filter(id__in=occ_combine_data[key])
-                    .exclude(occurrence=self)
+                    MOVE_TABLE_KEYS[key].objects.filter(id__in=occ_combine_data[key]).exclude(occurrence=self)
                 ):
                     record.occurrence = self
                     record.save()
@@ -4433,9 +4116,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         # special handling is required for tenure records
         # current
         for record in (
-            OccurrenceTenure.objects.filter(
-                id__in=occ_combine_data["combine_tenure_ids"]
-            )
+            OccurrenceTenure.objects.filter(id__in=occ_combine_data["combine_tenure_ids"])
             .filter(status=OccurrenceTenure.STATUS_CURRENT)
             .exclude(occurrence_geometry__occurrence=self)
         ):
@@ -4447,9 +4128,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
         # historical
         for record in (
-            OccurrenceTenure.objects.filter(
-                id__in=occ_combine_data["combine_tenure_ids"]
-            )
+            OccurrenceTenure.objects.filter(id__in=occ_combine_data["combine_tenure_ids"])
             .filter(status=OccurrenceTenure.STATUS_HISTORICAL)
             .exclude(historical_occurrence=self.id)
         ):
@@ -4474,11 +4153,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         # action log
         self.log_user_action(
             OccurrenceUserAction.ACTION_COMBINE_OCCURRENCE.format(
-                ", ".join(
-                    list(
-                        combine_occurrences.values_list("occurrence_number", flat=True)
-                    )
-                ),
+                ", ".join(list(combine_occurrences.values_list("occurrence_number", flat=True))),
                 self.occurrence_number,
             ),
             request,
@@ -4487,11 +4162,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         # Create a log entry for the user
         request.user.log_user_action(
             OccurrenceUserAction.ACTION_COMBINE_OCCURRENCE.format(
-                ", ".join(
-                    list(
-                        combine_occurrences.values_list("occurrence_number", flat=True)
-                    )
-                ),
+                ", ".join(list(combine_occurrences.values_list("occurrence_number", flat=True))),
                 self.occurrence_number,
             ),
             request,
@@ -4500,31 +4171,22 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     def validate_activate(self):
         missing_values = []
 
-        occ_points = self.occ_geometry.annotate(
-            geom_type=GeometryType("geometry")
-        ).filter(geom_type="POINT")
-        occ_boundaries = self.occ_geometry.annotate(
-            geom_type=GeometryType("geometry")
-        ).filter(geom_type="POLYGON")
+        occ_points = self.occ_geometry.annotate(geom_type=GeometryType("geometry")).filter(geom_type="POINT")
+        occ_boundaries = self.occ_geometry.annotate(geom_type=GeometryType("geometry")).filter(geom_type="POLYGON")
 
         if (
-            self.group_type.name
-            in [GroupType.GROUP_TYPE_FLORA, GroupType.GROUP_TYPE_COMMUNITY]
+            self.group_type.name in [GroupType.GROUP_TYPE_FLORA, GroupType.GROUP_TYPE_COMMUNITY]
             and not self.occurrence_name
         ):
             missing_values.append("Occurrence Name")
 
         if (
-            self.group_type.name
-            in [GroupType.GROUP_TYPE_FLORA, GroupType.GROUP_TYPE_COMMUNITY]
+            self.group_type.name in [GroupType.GROUP_TYPE_FLORA, GroupType.GROUP_TYPE_COMMUNITY]
             and not occ_boundaries.exists()
         ):
             missing_values.append("Boundary on Map")
 
-        if (
-            self.group_type.name == GroupType.GROUP_TYPE_FAUNA
-            and not occ_points.exists()
-        ):
+        if self.group_type.name == GroupType.GROUP_TYPE_FAUNA and not occ_points.exists():
             missing_values.append("Point on Map")
 
         if not self.identification or not self.identification.identification_certainty:
@@ -4534,10 +4196,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             missing_values.append("Location Accuracy")
 
         if missing_values:
-            raise ValidationError(
-                "Cannot activate this occurrence due to missing values: "
-                + ", ".join(missing_values)
-            )
+            raise ValidationError("Cannot activate this occurrence due to missing values: " + ", ".join(missing_values))
 
     @transaction.atomic
     def discard(self, request):
@@ -4549,17 +4208,13 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceUserAction.ACTION_DISCARD_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_DISCARD_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceUserAction.ACTION_DISCARD_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_DISCARD_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
@@ -4573,30 +4228,22 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceUserAction.ACTION_REINSTATE_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_REINSTATE_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceUserAction.ACTION_REINSTATE_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_REINSTATE_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
     def activate(self, request):
         self.validate_activate()
         if not is_occurrence_approver(request):
-            raise exceptions.OccurrenceNotAuthorized(
-                "You do not have permission to activate this occurrence."
-            )
+            raise exceptions.OccurrenceNotAuthorized("You do not have permission to activate this occurrence.")
         if not self.processing_status == Occurrence.PROCESSING_STATUS_DRAFT:
-            raise exceptions.OccurrenceNotAuthorized(
-                "Occurrence is not in draft state, cannot be activated."
-            )
+            raise exceptions.OccurrenceNotAuthorized("Occurrence is not in draft state, cannot be activated.")
 
         self.processing_status = Occurrence.PROCESSING_STATUS_ACTIVE
         self.locked = True
@@ -4606,17 +4253,13 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceUserAction.ACTION_ACTIVATE_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_ACTIVATE_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceUserAction.ACTION_ACTIVATE_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_ACTIVATE_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
@@ -4625,9 +4268,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             return
 
         if not is_occurrence_approver(request):
-            raise exceptions.OccurrenceNotAuthorized(
-                "You do not have permission to lock this occurrence."
-            )
+            raise exceptions.OccurrenceNotAuthorized("You do not have permission to lock this occurrence.")
 
         self.locked = True
         self.save(version_user=request.user)
@@ -4647,74 +4288,54 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             return
 
         if not is_occurrence_approver(request):
-            raise exceptions.OccurrenceNotAuthorized(
-                "You do not have permission to unlock this occurrence."
-            )
+            raise exceptions.OccurrenceNotAuthorized("You do not have permission to unlock this occurrence.")
 
         self.locked = False
         self.save(version_user=request.user)
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceUserAction.ACTION_UNLOCK_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_UNLOCK_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceUserAction.ACTION_UNLOCK_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_UNLOCK_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
     def deactivate(self, request):
-        if (
-            is_occurrence_approver(request)
-            and self.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE
-        ):
+        if is_occurrence_approver(request) and self.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE:
             self.processing_status = Occurrence.PROCESSING_STATUS_HISTORICAL
             self.save(version_user=request.user)
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceUserAction.ACTION_DEACTIVATE_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_DEACTIVATE_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceUserAction.ACTION_DEACTIVATE_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_DEACTIVATE_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
     def reopen(self, request):
-        if (
-            is_occurrence_approver(request)
-            and self.processing_status == Occurrence.PROCESSING_STATUS_HISTORICAL
-        ):
+        if is_occurrence_approver(request) and self.processing_status == Occurrence.PROCESSING_STATUS_HISTORICAL:
             self.processing_status = Occurrence.PROCESSING_STATUS_ACTIVE
             self.save(version_user=request.user)
 
         # Log proposal action
         self.log_user_action(
-            OccurrenceUserAction.ACTION_REOPEN_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_REOPEN_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            OccurrenceUserAction.ACTION_REOPEN_OCCURRENCE.format(
-                self.occurrence_number
-            ),
+            OccurrenceUserAction.ACTION_REOPEN_OCCURRENCE.format(self.occurrence_number),
             request,
         )
 
@@ -4756,7 +4377,14 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         return OccurrenceUserAction.log_action(self, action, request.user.id)
 
     def get_related_items(
-        self, filter_type, offset=None, limit=None, search_value=None, **kwargs
+        self,
+        filter_type,
+        offset=None,
+        limit=None,
+        search_value=None,
+        ordering_column=None,
+        ordering_direction=None,
+        **kwargs,
     ):
         return_list = []
         if filter_type == "all":
@@ -4779,21 +4407,6 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 filter_type,
             ]
 
-        total_count = 0
-
-        def get_slice_range(count):
-            if offset is None:
-                return 0, count
-            global_start = total_count
-            global_end = total_count + count
-            req_start = int(offset)
-            req_end = int(offset) + int(limit)
-            if global_end <= req_start or global_start >= req_end:
-                return 0, 0
-            start = max(0, req_start - global_start)
-            end = min(count, req_end - global_start)
-            return start, end
-
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
             if a_field.name in related_field_names:
@@ -4801,9 +4414,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 is_queryset = False
                 if a_field.is_relation:
                     if a_field.many_to_many:
-                        field_objects = a_field.related_model.objects.filter(
-                            **{a_field.remote_field.name: self}
-                        )
+                        field_objects = a_field.related_model.objects.filter(**{a_field.remote_field.name: self})
                         is_queryset = True
                     elif a_field.many_to_one:  # foreign key
                         val = getattr(self, a_field.name)
@@ -4812,9 +4423,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                         else:
                             field_objects = []
                     elif a_field.one_to_many:  # reverse foreign key
-                        field_objects = a_field.related_model.objects.filter(
-                            **{a_field.remote_field.name: self}
-                        )
+                        field_objects = a_field.related_model.objects.filter(**{a_field.remote_field.name: self})
                         is_queryset = True
                     elif a_field.one_to_one:
                         if hasattr(self, a_field.name):
@@ -4822,38 +4431,26 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                                 getattr(self, a_field.name),
                             ]
 
-                count = 0
+                # Special exclusion
+                if filter_type == "occurrences" and (a_field.name == "species" or a_field.name == "community"):
+                    field_objects = []
+
                 if is_queryset:
-                    count = field_objects.count()
+                    subset = field_objects
                 else:
-                    count = len(field_objects)
+                    subset = field_objects
 
-                # If we are filtering for occurrences, we don't want the parent (Species/Community) itself in the list
-                if filter_type == "occurrences" and (
-                    a_field.name == "species" or a_field.name == "community"
-                ):
-                    count = 0
-
-                start, end = get_slice_range(count)
-                if start < end:
-                    subset = field_objects[start:end]
-                    for field_object in subset:
-                        if field_object:
-                            related_item = field_object.as_related_item
-                            if search_value:
-                                if (
-                                    search_value.lower()
-                                    not in related_item.identifier.lower()
-                                    and search_value.lower()
-                                    not in related_item.descriptor.lower()
-                                ):
-                                    continue
-                            return_list.append(related_item)
-
-                total_count += count
-
-        # Add parent species / community related items to the list
-        # We do this OUTSIDE the loop so it happens even if the parent field itself wasn't requested
+                for field_object in subset:
+                    if field_object:
+                        related_item = field_object.as_related_item
+                        if search_value:
+                            if (
+                                search_value.lower() not in related_item.identifier.lower()
+                                and search_value.lower() not in related_item.descriptor.lower()
+                                and search_value.lower() not in related_item.related_sc_id.lower()
+                            ):
+                                continue
+                        return_list.append(related_item)
 
         target_filter = None
         if filter_type == "all":
@@ -4875,46 +4472,39 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 delegates.append(self.community)
 
             for delegate in delegates:
-                local_offset = None
-                if offset is not None:
-                    req_start = int(offset)
-                    local_offset = max(0, req_start - total_count)
-
                 exclude_ids = [self.id]
-
-                if local_offset is not None:
-                    items, count = delegate.get_related_items(
-                        target_filter,
-                        offset=local_offset,
-                        limit=limit,
-                        exclude_ids=exclude_ids,
-                        search_value=search_value,
-                    )
-                    return_list.extend(items)
-                    total_count += count
-                else:
-                    items = delegate.get_related_items(
-                        target_filter,
-                        exclude_ids=exclude_ids,
-                        search_value=search_value,
-                    )
-                    count = len(items)
-                    start, end = get_slice_range(count)
-                    if start < end:
-                        return_list.extend(items[start:end])
-                    total_count += count
+                items = delegate.get_related_items(target_filter, exclude_ids=exclude_ids, search_value=search_value)
+                return_list.extend(items)
 
         # Remove the occurrence itself from the list if it ended up there
-        if offset is None:
-            for item in return_list:
-                if (
-                    item.model_name == "Occurrence"
-                    and item.identifier == self.occurrence_number
-                ):
-                    return_list.remove(item)
-            return return_list
+        if self.occurrence_number:
+            return_list = [
+                item
+                for item in return_list
+                if not (item.model_name == "Occurrence" and item.identifier == self.occurrence_number)
+            ]
 
-        return return_list, total_count
+        # Sort
+        if ordering_column:
+            reverse = ordering_direction == "desc"
+
+            def sort_key(x):
+                val = getattr(x, ordering_column, "")
+                if val is None:
+                    return ""
+                return str(val).lower()
+
+            return_list.sort(key=sort_key, reverse=reverse)
+
+        total_count = len(return_list)
+
+        if offset is not None and limit is not None:
+            start = int(offset)
+            end = start + int(limit)
+            return_list = return_list[start:end]
+            return return_list, total_count
+
+        return return_list
 
     @classmethod
     @transaction.atomic
@@ -4948,9 +4538,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         )
         if habitat_composition:
             habitat_composition.occurrence = occurrence
-            habitat_composition.copied_ocr_habitat_composition = (
-                occurrence_report.habitat_composition
-            )
+            habitat_composition.copied_ocr_habitat_composition = occurrence_report.habitat_composition
             habitat_composition.save()
 
         habitat_condition = clone_model(
@@ -4960,9 +4548,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         )
         if habitat_condition:
             habitat_condition.occurrence = occurrence
-            habitat_condition.copied_ocr_habitat_condition = (
-                occurrence_report.habitat_condition
-            )
+            habitat_condition.copied_ocr_habitat_condition = occurrence_report.habitat_condition
             habitat_condition.save()
 
         vegetation_structure = clone_model(
@@ -4972,14 +4558,10 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         )
         if vegetation_structure:
             vegetation_structure.occurrence = occurrence
-            vegetation_structure.copied_ocr_vegetation_structure = (
-                occurrence_report.vegetation_structure
-            )
+            vegetation_structure.copied_ocr_vegetation_structure = occurrence_report.vegetation_structure
             vegetation_structure.save()
 
-        fire_history = clone_model(
-            OCRFireHistory, OCCFireHistory, occurrence_report.fire_history
-        )
+        fire_history = clone_model(OCRFireHistory, OCCFireHistory, occurrence_report.fire_history)
         if fire_history:
             fire_history.occurrence = occurrence
             fire_history.copied_ocr_fire_history = occurrence_report.fire_history
@@ -4992,9 +4574,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         )
         if associated_species:
             associated_species.occurrence = occurrence
-            associated_species.copied_ocr_associated_species = (
-                occurrence_report.associated_species
-            )
+            associated_species.copied_ocr_associated_species = occurrence_report.associated_species
             associated_species.save()
             # copy over related species separately
             # Duplicate each AssociatedSpeciesTaxonomy so the OCC has its own
@@ -5014,9 +4594,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         )
         if observation_detail:
             observation_detail.occurrence = occurrence
-            observation_detail.copied_ocr_observation_detail = (
-                occurrence_report.observation_detail
-            )
+            observation_detail.copied_ocr_observation_detail = occurrence_report.observation_detail
             observation_detail.save()
 
         # Only attempt to access `plant_count` for flora reports. Many reports
@@ -5025,10 +4603,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         # group_type avoids unnecessary exceptions and makes intent clear.
         source_plant_count = None
         try:
-            if (
-                occurrence_report.group_type
-                and occurrence_report.group_type.name == GroupType.GROUP_TYPE_FLORA
-            ):
+            if occurrence_report.group_type and occurrence_report.group_type.name == GroupType.GROUP_TYPE_FLORA:
                 source_plant_count = occurrence_report.plant_count
         except Exception:
             source_plant_count = None
@@ -5042,10 +4617,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
         try:
             source_animal_observation = None
-            if (
-                occurrence_report.group_type
-                and occurrence_report.group_type.name == GroupType.GROUP_TYPE_FAUNA
-            ):
+            if occurrence_report.group_type and occurrence_report.group_type.name == GroupType.GROUP_TYPE_FAUNA:
                 source_animal_observation = occurrence_report.animal_observation
         except Exception:
             source_animal_observation = None
@@ -5060,9 +4632,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             animal_observation.copied_ocr_animal_observation = source_animal_observation
             animal_observation.save()
 
-        identification = clone_model(
-            OCRIdentification, OCCIdentification, occurrence_report.identification
-        )
+        identification = clone_model(OCRIdentification, OCCIdentification, occurrence_report.identification)
         if identification:
             identification.occurrence = occurrence
             identification.copied_ocr_identification = occurrence_report.identification
@@ -5070,9 +4640,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
         # Clone the threats
         for threat in occurrence_report.ocr_threats.all():
-            occ_threat = clone_model(
-                OCRConservationThreat, OCCConservationThreat, threat
-            )
+            occ_threat = clone_model(OCRConservationThreat, OCCConservationThreat, threat)
             if occ_threat:
                 occ_threat.occurrence = occurrence
                 occ_threat.occurrence_report_threat = threat
@@ -5097,9 +4665,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
 
 class OccurrenceLogEntry(CommunicationsLogEntry):
-    occurrence = models.ForeignKey(
-        Occurrence, related_name="comms_logs", on_delete=models.CASCADE
-    )
+    occurrence = models.ForeignKey(Occurrence, related_name="comms_logs", on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.reference} - {self.subject}"
@@ -5115,15 +4681,11 @@ class OccurrenceLogEntry(CommunicationsLogEntry):
 
 
 def update_occurrence_comms_log_filename(instance, filename):
-    return "{}/occurrence/{}/communications/{}".format(
-        settings.MEDIA_APP_DIR, instance.log_entry.occurrence.id, filename
-    )
+    return f"{settings.MEDIA_APP_DIR}/occurrence/{instance.log_entry.occurrence.id}/communications/{filename}"
 
 
 class OccurrenceLogDocument(Document):
-    log_entry = models.ForeignKey(
-        OccurrenceLogEntry, related_name="documents", on_delete=models.CASCADE
-    )
+    log_entry = models.ForeignKey(OccurrenceLogEntry, related_name="documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=update_occurrence_comms_log_filename,
         max_length=512,
@@ -5151,12 +4713,8 @@ class OccurrenceUserAction(UserAction):
     ACTION_DEACTIVATE_OCCURRENCE = "Deactivate occurrence {}"
     ACTION_REOPEN_OCCURRENCE = "Reopen occurrence {}"
     ACTION_CHANGE_SPECIES_COMMUNITY = "Change occurrence {} {} from {} to {}"
-    ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_SPLIT = (
-        "Change occurrence {} species from {} to {} due to split"
-    )
-    ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_COMBINE = (
-        "Change occurrence {} species from {} to {} due to combine"
-    )
+    ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_SPLIT = "Change occurrence {} species from {} to {} due to split"
+    ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_COMBINE = "Change occurrence {} species from {} to {} due to combine"
 
     # Document
     ACTION_ADD_DOCUMENT = "Document {} added for occurrence {}"
@@ -5178,28 +4736,20 @@ class OccurrenceUserAction(UserAction):
     def log_action(cls, occurrence, action, user):
         return cls.objects.create(occurrence=occurrence, who=user, what=str(action))
 
-    occurrence = models.ForeignKey(
-        Occurrence, related_name="action_logs", on_delete=models.CASCADE
-    )
+    occurrence = models.ForeignKey(Occurrence, related_name="action_logs", on_delete=models.CASCADE)
 
 
 class OccurrenceDocument(Document):
     document_number = models.CharField(max_length=9, blank=True, default="")
-    occurrence = models.ForeignKey(
-        "Occurrence", related_name="documents", on_delete=models.CASCADE
-    )
+    occurrence = models.ForeignKey("Occurrence", related_name="documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=update_occurrence_doc_filename,
         max_length=512,
         storage=private_storage,
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)
-    document_category = models.ForeignKey(
-        DocumentCategory, null=True, blank=True, on_delete=models.SET_NULL
-    )
-    document_sub_category = models.ForeignKey(
-        DocumentSubCategory, null=True, blank=True, on_delete=models.SET_NULL
-    )
+    document_category = models.ForeignKey(DocumentCategory, null=True, blank=True, on_delete=models.SET_NULL)
+    document_sub_category = models.ForeignKey(DocumentSubCategory, null=True, blank=True, on_delete=models.SET_NULL)
 
     class Meta:
         app_label = "boranga"
@@ -5247,31 +4797,19 @@ class OCCLocation(BaseModel):
     - Table
     """
 
-    occurrence = models.OneToOneField(
-        Occurrence, on_delete=models.CASCADE, null=True, related_name="location"
-    )
-    copied_ocr_location = models.ForeignKey(
-        OCRLocation, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    occurrence = models.OneToOneField(Occurrence, on_delete=models.CASCADE, null=True, related_name="location")
+    copied_ocr_location = models.ForeignKey(OCRLocation, on_delete=models.SET_NULL, null=True, blank=True)
     location_description = models.TextField(blank=True, default="")
     boundary_description = models.TextField(blank=True, default="")
     mapped_boundary = models.BooleanField(null=True, blank=True)
     buffer_radius = models.IntegerField(null=True, blank=True, default=0)
     datum = models.ForeignKey(Datum, on_delete=models.SET_NULL, null=True, blank=True)
     epsg_code = models.IntegerField(null=False, blank=False, default=4326)
-    coordinate_source = models.ForeignKey(
-        CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    location_accuracy = models.ForeignKey(
-        LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    coordinate_source = models.ForeignKey(CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True)
+    location_accuracy = models.ForeignKey(LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
 
-    region = models.ForeignKey(
-        Region, default=None, on_delete=models.CASCADE, null=True, blank=True
-    )
-    district = models.ForeignKey(
-        District, default=None, on_delete=models.CASCADE, null=True, blank=True
-    )
+    region = models.ForeignKey(Region, default=None, on_delete=models.CASCADE, null=True, blank=True)
+    district = models.ForeignKey(District, default=None, on_delete=models.CASCADE, null=True, blank=True)
     locality = models.TextField(blank=True, default="")
 
     class Meta:
@@ -5309,9 +4847,10 @@ class OccurrenceGeometry(GeometryBase, DrawnByGeometry):
         return self.occurrence
 
     def save(self, *args, **kwargs):
-        if self.occurrence.group_type.name == GroupType.GROUP_TYPE_FAUNA and type(
-            self.geometry
-        ).__name__ in ["Polygon", "MultiPolygon"]:
+        if self.occurrence.group_type.name == GroupType.GROUP_TYPE_FAUNA and type(self.geometry).__name__ in [
+            "Polygon",
+            "MultiPolygon",
+        ]:
             raise ValidationError("Fauna occurrences cannot have polygons")
 
         super().save(*args, **kwargs)
@@ -5379,15 +4918,9 @@ class OCCConservationThreat(RevisionedMixin):
     )
 
     threat_number = models.CharField(max_length=9, blank=True, default="")
-    threat_category = models.ForeignKey(
-        ThreatCategory, on_delete=models.CASCADE, default=None, null=True, blank=True
-    )
-    threat_agent = models.ForeignKey(
-        ThreatAgent, on_delete=models.SET_NULL, default=None, null=True, blank=True
-    )
-    current_impact = models.ForeignKey(
-        CurrentImpact, on_delete=models.SET_NULL, default=None, null=True, blank=True
-    )
+    threat_category = models.ForeignKey(ThreatCategory, on_delete=models.CASCADE, default=None, null=True, blank=True)
+    threat_agent = models.ForeignKey(ThreatAgent, on_delete=models.SET_NULL, default=None, null=True, blank=True)
+    current_impact = models.ForeignKey(CurrentImpact, on_delete=models.SET_NULL, default=None, null=True, blank=True)
     potential_impact = models.ForeignKey(
         PotentialImpact, on_delete=models.SET_NULL, default=None, null=True, blank=True
     )
@@ -5400,9 +4933,7 @@ class OCCConservationThreat(RevisionedMixin):
     )
     comment = models.TextField(blank=True, default="")
     date_observed = models.DateField(blank=True, null=True)
-    visible = models.BooleanField(
-        default=True
-    )  # to prevent deletion, hidden and still be available in history
+    visible = models.BooleanField(default=True)  # to prevent deletion, hidden and still be available in history
 
     class Meta:
         app_label = "boranga"
@@ -5427,9 +4958,7 @@ class OCCConservationThreat(RevisionedMixin):
     @property
     def source(self):
         if self.occurrence_report_threat:
-            return (
-                self.occurrence_report_threat.occurrence_report.occurrence_report_number
-            )
+            return self.occurrence_report_threat.occurrence_report.occurrence_report_number
         return self.occurrence.occurrence_number
 
 
@@ -5453,22 +4982,14 @@ class OCCHabitatComposition(BaseModel):
         OCRHabitatComposition, on_delete=models.SET_NULL, null=True, blank=True
     )
     land_form = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
-    rock_type = models.ForeignKey(
-        RockType, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    rock_type = models.ForeignKey(RockType, on_delete=models.SET_NULL, null=True, blank=True)
     loose_rock_percent = models.IntegerField(
         null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(100)]
     )
     soil_type = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
-    soil_colour = models.ForeignKey(
-        SoilColour, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    soil_condition = models.ForeignKey(
-        SoilCondition, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    drainage = models.ForeignKey(
-        Drainage, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    soil_colour = models.ForeignKey(SoilColour, on_delete=models.SET_NULL, null=True, blank=True)
+    soil_condition = models.ForeignKey(SoilCondition, on_delete=models.SET_NULL, null=True, blank=True)
+    drainage = models.ForeignKey(Drainage, on_delete=models.SET_NULL, null=True, blank=True)
     water_quality = models.CharField(max_length=500, blank=True, default="")
     habitat_notes = models.CharField(max_length=1000, blank=True, default="")
 
@@ -5633,13 +5154,9 @@ class OCCFireHistory(BaseModel):
         null=True,
         related_name="fire_history",
     )
-    copied_ocr_fire_history = models.ForeignKey(
-        OCRFireHistory, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    copied_ocr_fire_history = models.ForeignKey(OCRFireHistory, on_delete=models.SET_NULL, null=True, blank=True)
     last_fire_estimate = models.DateField(null=True, blank=True)
-    intensity = models.ForeignKey(
-        Intensity, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    intensity = models.ForeignKey(Intensity, on_delete=models.SET_NULL, null=True, blank=True)
     comment = models.CharField(max_length=1000, blank=True, default="")
 
     class Meta:
@@ -5698,12 +5215,8 @@ class OCCObservationDetail(BaseModel):
     copied_ocr_observation_detail = models.ForeignKey(
         OCRObservationDetail, on_delete=models.SET_NULL, null=True, blank=True
     )
-    observation_method = models.ForeignKey(
-        ObservationMethod, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    area_assessment = models.ForeignKey(
-        AreaAssessment, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    observation_method = models.ForeignKey(ObservationMethod, on_delete=models.SET_NULL, null=True, blank=True)
+    area_assessment = models.ForeignKey(AreaAssessment, on_delete=models.SET_NULL, null=True, blank=True)
     area_surveyed = models.DecimalField(
         null=True,
         blank=True,
@@ -5738,21 +5251,11 @@ class OCCPlantCount(BaseModel):
         null=True,
         related_name="plant_count",
     )
-    copied_ocr_plant_count = models.ForeignKey(
-        OCRPlantCount, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    plant_count_method = models.ForeignKey(
-        PlantCountMethod, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    plant_count_accuracy = models.ForeignKey(
-        PlantCountAccuracy, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    counted_subject = models.ForeignKey(
-        CountedSubject, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    plant_condition = models.ForeignKey(
-        PlantCondition, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    copied_ocr_plant_count = models.ForeignKey(OCRPlantCount, on_delete=models.SET_NULL, null=True, blank=True)
+    plant_count_method = models.ForeignKey(PlantCountMethod, on_delete=models.SET_NULL, null=True, blank=True)
+    plant_count_accuracy = models.ForeignKey(PlantCountAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
+    counted_subject = models.ForeignKey(CountedSubject, on_delete=models.SET_NULL, null=True, blank=True)
+    plant_condition = models.ForeignKey(PlantCondition, on_delete=models.SET_NULL, null=True, blank=True)
     estimated_population_area = models.DecimalField(
         null=True,
         blank=True,
@@ -5881,29 +5384,17 @@ class OCCAnimalObservation(BaseModel):
     copied_ocr_animal_observation = models.ForeignKey(
         OCRAnimalObservation, on_delete=models.SET_NULL, null=True, blank=True
     )
-    primary_detection_method = MultiSelectField(
-        max_length=250, blank=True, choices=[], null=True
-    )
+    primary_detection_method = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
     secondary_sign = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
-    animal_behaviour = models.ForeignKey(
-        AnimalBehaviour, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    reproductive_state = MultiSelectField(
-        max_length=250, blank=True, choices=[], null=True
-    )
-    animal_health = models.ForeignKey(
-        AnimalHealth, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    death_injury_reason = models.ForeignKey(
-        DeathReason, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    animal_behaviour = models.ForeignKey(AnimalBehaviour, on_delete=models.SET_NULL, null=True, blank=True)
+    reproductive_state = MultiSelectField(max_length=250, blank=True, choices=[], null=True)
+    animal_health = models.ForeignKey(AnimalHealth, on_delete=models.SET_NULL, null=True, blank=True)
+    death_injury_reason = models.ForeignKey(DeathReason, on_delete=models.SET_NULL, null=True, blank=True)
 
     distinctive_feature = models.CharField(max_length=1000, blank=True, default="")
     action_taken = models.CharField(max_length=1000, blank=True, default="")
     action_required = models.CharField(max_length=1000, blank=True, default="")
-    animal_observation_detail_comment = models.CharField(
-        max_length=1000, blank=True, default=""
-    )
+    animal_observation_detail_comment = models.CharField(max_length=1000, blank=True, default="")
 
     count_status = models.CharField(
         choices=settings.COUNT_STATUS_CHOICES,
@@ -6045,22 +5536,14 @@ class OCCIdentification(BaseModel):
         null=True,
         related_name="identification",
     )
-    copied_ocr_identification = models.ForeignKey(
-        OCRIdentification, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    copied_ocr_identification = models.ForeignKey(OCRIdentification, on_delete=models.SET_NULL, null=True, blank=True)
     id_confirmed_by = models.CharField(max_length=1000, blank=True, default="")
     identification_certainty = models.ForeignKey(
         IdentificationCertainty, on_delete=models.SET_NULL, null=True, blank=True
     )
-    sample_type = models.ForeignKey(
-        SampleType, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    sample_destination = models.ForeignKey(
-        SampleDestination, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    permit_type = models.ForeignKey(
-        PermitType, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    sample_type = models.ForeignKey(SampleType, on_delete=models.SET_NULL, null=True, blank=True)
+    sample_destination = models.ForeignKey(SampleDestination, on_delete=models.SET_NULL, null=True, blank=True)
+    permit_type = models.ForeignKey(PermitType, on_delete=models.SET_NULL, null=True, blank=True)
     permit_id = models.CharField(max_length=500, blank=True, default="")
     collector_number = models.CharField(max_length=500, blank=True, default="")
     barcode_number = models.CharField(max_length=500, blank=True, default="")
@@ -6106,12 +5589,8 @@ class OCRExternalRefereeInvite(BaseModel):
 class OccurrenceTenurePurpose(OrderedModel, ArchivableModel):
     objects = OrderedArchivableManager()
 
-    label = models.CharField(
-        max_length=100, blank=True, null=True, validators=[no_commas_validator]
-    )
-    code = models.CharField(
-        max_length=20, blank=True, null=True, validators=[no_commas_validator]
-    )
+    label = models.CharField(max_length=100, blank=True, null=True, validators=[no_commas_validator])
+    code = models.CharField(max_length=20, blank=True, null=True, validators=[no_commas_validator])
 
     class Meta(OrderedModel.Meta):
         app_label = "boranga"
@@ -6125,12 +5604,8 @@ class OccurrenceTenurePurpose(OrderedModel, ArchivableModel):
 class OccurrenceTenureVesting(OrderedModel, ArchivableModel):
     objects = OrderedArchivableManager()
 
-    label = models.CharField(
-        max_length=100, blank=True, null=True, validators=[no_commas_validator]
-    )
-    code = models.CharField(
-        max_length=20, blank=True, null=True, validators=[no_commas_validator]
-    )
+    label = models.CharField(max_length=100, blank=True, null=True, validators=[no_commas_validator])
+    code = models.CharField(max_length=20, blank=True, null=True, validators=[no_commas_validator])
 
     class Meta(OrderedModel.Meta):
         app_label = "boranga"
@@ -6151,9 +5626,7 @@ def SET_NULL_AND_HISTORICAL(collector, field, sub_objs, using):
         occurrence_geometry.geometry.ewkt
         # Populate historical_occurrence_geometry_ewkb and historical_occurrence id
         sub_objs.update(historical_occurrence=occurrence_geometry.occurrence.id)
-        sub_objs.update(
-            historical_occurrence_geometry_ewkb=occurrence_geometry.geometry.ewkb
-        )
+        sub_objs.update(historical_occurrence_geometry_ewkb=occurrence_geometry.geometry.ewkb)
     collector.add_field_update(field, None, sub_objs)
 
 
@@ -6162,9 +5635,7 @@ class OccurrenceTenure(RevisionedMixin):
     STATUS_HISTORICAL = "historical"
     STATUS_CHOICES = ((STATUS_CURRENT, "Current"), (STATUS_HISTORICAL, "Historical"))
 
-    status = models.CharField(
-        max_length=100, choices=STATUS_CHOICES, default=STATUS_CHOICES[0][0]
-    )
+    status = models.CharField(max_length=100, choices=STATUS_CHOICES, default=STATUS_CHOICES[0][0])
     occurrence_geometry = models.ForeignKey(
         OccurrenceGeometry,
         related_name="occurrence_tenures",
@@ -6177,9 +5648,7 @@ class OccurrenceTenure(RevisionedMixin):
     )  # the geometry after setting the occurrence_geometry to None
     historical_occurrence = models.IntegerField(blank=True, null=True)
 
-    tenure_area_id = models.CharField(
-        max_length=100, blank=True, null=True
-    )  # E.g. CPT_CADASTRE_SCDB.314159265
+    tenure_area_id = models.CharField(max_length=100, blank=True, null=True)  # E.g. CPT_CADASTRE_SCDB.314159265
     tenure_area_ewkb = models.BinaryField(blank=True, null=True, editable=True)
     owner_name = models.CharField(max_length=255, blank=True, null=True)
     owner_count = models.IntegerField(blank=True, null=True)
@@ -6206,7 +5675,6 @@ class OccurrenceTenure(RevisionedMixin):
     significant_to_occurrence = models.BooleanField(null=True, blank=True, default=None)
 
     def save(self, *args, **kwargs):
-
         force_insert = kwargs.pop("force_insert", False)
         if force_insert:
             super().save(no_revision=True, force_insert=force_insert)
@@ -6336,15 +5804,11 @@ class SiteType(OrderedModel, ArchivableModel):
 
 class OccurrenceSite(GeometryBase, DrawnByGeometry, RevisionedMixin):
     site_number = models.CharField(max_length=9, blank=True, default="")
-    occurrence = models.ForeignKey(
-        "Occurrence", related_name="sites", on_delete=models.CASCADE
-    )
+    occurrence = models.ForeignKey("Occurrence", related_name="sites", on_delete=models.CASCADE)
 
     site_name = models.CharField(max_length=255, null=True, blank=True)
 
-    site_type = models.ForeignKey(
-        SiteType, on_delete=models.SET_NULL, null=True, blank=True
-    )
+    site_type = models.ForeignKey(SiteType, on_delete=models.SET_NULL, null=True, blank=True)
 
     related_occurrence_reports = models.ManyToManyField(OccurrenceReport, blank=True)
 
@@ -6400,9 +5864,7 @@ def get_occurrence_report_bulk_import_associated_files_path(instance, filename):
 
 class OccurrenceShapefileDocument(Document):
     objects = ShapefileDocumentQueryset.as_manager()
-    occurrence = models.ForeignKey(
-        "Occurrence", related_name="shapefile_documents", on_delete=models.CASCADE
-    )
+    occurrence = models.ForeignKey("Occurrence", related_name="shapefile_documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=update_occurrence_shapefile_doc_filename,
         max_length=512,
@@ -6559,25 +6021,19 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
     @classmethod
     def average_time_taken_per_row(cls):
-        task_count = cls.objects.filter(
-            datetime_completed__isnull=False, rows_processed__gt=0
-        ).count()
+        task_count = cls.objects.filter(datetime_completed__isnull=False, rows_processed__gt=0).count()
         if task_count == 0:
             return None
 
         total_time_taken = 0
-        for task in cls.objects.filter(
-            datetime_completed__isnull=False, rows_processed__gt=0
-        ):
+        for task in cls.objects.filter(datetime_completed__isnull=False, rows_processed__gt=0):
             total_time_taken += task.time_taken_per_row
 
         return total_time_taken / task_count
 
     @property
     def estimated_processing_time_seconds(self):
-        average_time_taken_per_row = (
-            OccurrenceReportBulkImportTask.average_time_taken_per_row()
-        )
+        average_time_taken_per_row = OccurrenceReportBulkImportTask.average_time_taken_per_row()
 
         if self.rows and self.datetime_queued and average_time_taken_per_row:
             precisely = (self.rows - self.rows_processed) * average_time_taken_per_row
@@ -6611,9 +6067,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         return f"~{minutes} minutes"
 
     def count_rows(self):
-        logger.info(
-            f"Beginning row count for {OccurrenceReport.MODEL_PREFIX} Bulk Import Task {self.id}"
-        )
+        logger.info(f"Beginning row count for {OccurrenceReport.MODEL_PREFIX} Bulk Import Task {self.id}")
 
         try:
             workbook = openpyxl.load_workbook(self._file)
@@ -6625,22 +6079,18 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         sheet = workbook.active
 
         # Count the rows that have data in them
-        all_rows = len(
-            [row for row in sheet if not all([cell.value is None for cell in row])]
-        )
+        all_rows = len([row for row in sheet if not all([cell.value is None for cell in row])])
 
         # Remove the header row
         self.rows = all_rows - 1
 
         prefix = OccurrenceReport.MODEL_PREFIX
-        logger.info(
-            f"Found {self.rows} rows in {prefix} Bulk Import Task {self._file.name}"
-        )
+        logger.info(f"Found {self.rows} rows in {prefix} Bulk Import Task {self._file.name}")
         self.save()
 
     @classmethod
     def validate_headers(self, _file, schema):
-        logger.info(f"Validating headers for bulk import task {self.id}")
+        logger.info(f"Validating headers for bulk import file {_file}")
 
         try:
             workbook = openpyxl.load_workbook(_file, read_only=True)
@@ -6655,21 +6105,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             raise ValidationError("No headers found in the file")
 
         # Check that the headers match the schema (group type and version headings)
-        schema_headers = list(
-            schema.columns.all().values_list("xlsx_column_header_name", flat=True)
-        )
+        schema_headers = list(schema.columns.all().values_list("xlsx_column_header_name", flat=True))
         if headers == schema_headers:
             return
 
         extra_headers = ",".join(map(repr, set(headers) - set(schema_headers)))
         missing_headers = ",".join(map(repr, set(schema_headers) - set(headers)))
-        error_string = (
-            f"The headers of the uploaded file do not match schema: {schema}."
-        )
+        error_string = f"The headers of the uploaded file do not match schema: {schema}."
         if missing_headers:
             error_string += (
-                " The file is missing the following headers that are part of the schema: "
-                f"{missing_headers}."
+                f" The file is missing the following headers that are part of the schema: {missing_headers}."
             )
         if extra_headers:
             error_string += f" The file has the following headers that are not part of the schema: {extra_headers}"
@@ -6692,16 +6137,12 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 continue
 
             # CharField / TextField should be empty string when null is False
-            if isinstance(field, (models.CharField, models.TextField)) and not getattr(
-                field, "null", False
-            ):
+            if isinstance(field, models.CharField | models.TextField) and not getattr(field, "null", False):
                 model_data[field_name] = ""
                 continue
 
             # multiselect field stores choices as text; coerce None -> "" when null is False
-            if isinstance(field, MultiSelectField) and not getattr(
-                field, "null", False
-            ):
+            if isinstance(field, MultiSelectField) and not getattr(field, "null", False):
                 model_data[field_name] = ""
                 continue
 
@@ -6720,9 +6161,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             logger.info(f"Bulk import task {self.id} has already been processed")
             return []
         if self.processing_status == self.PROCESSING_STATUS_FAILED:
-            logger.info(
-                f"Bulk import task {self.id} failed. Please correct the issues and try again"
-            )
+            logger.info(f"Bulk import task {self.id} failed. Please correct the issues and try again")
             return []
         if self.processing_status == self.PROCESSING_STATUS_STARTED:
             logger.info(f"Bulk import task {self.id} is already in progress")
@@ -6738,15 +6177,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 datetime_started=timezone.now(),
             )
             if updated != 1:
-                logger.info(
-                    f"Bulk import task {self.id} could not be claimed, aborting process()"
-                )
+                logger.info(f"Bulk import task {self.id} could not be claimed, aborting process()")
                 return []
             self.refresh_from_db()
         elif self.processing_status != self.PROCESSING_STATUS_STARTED:
-            logger.info(
-                f"Bulk import task {self.id} is in status {self.processing_status}, not processing"
-            )
+            logger.info(f"Bulk import task {self.id} is in status {self.processing_status}, not processing")
             return []
 
         errors = []
@@ -6762,9 +6197,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             try:
                 workbook = openpyxl.load_workbook(self._file, read_only=True)
             except Exception as e:
-                logger.exception(
-                    f"Error opening bulk import file {self._file.name}: {e}"
-                )
+                logger.exception(f"Error opening bulk import file {self._file.name}: {e}")
                 errors.append(
                     {
                         "row_index": None,
@@ -6806,13 +6239,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         with transaction.atomic():
                             self.rows_processed = index + 1
                             self.save()
-                            self.process_row(
-                                ocr_migrated_from_ids, index, headers, row, errors
-                            )
+                            self.process_row(ocr_migrated_from_ids, index, headers, row, errors)
                     except IntegrityError as e:
-                        logger.exception(
-                            f"IntegrityError on row {index} for import {self.id}: {e}"
-                        )
+                        logger.exception(f"IntegrityError on row {index} for import {self.id}: {e}")
                         errors.append(
                             {
                                 "row_index": index,
@@ -6823,9 +6252,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         )
                         continue
                     except Exception as e:
-                        logger.exception(
-                            f"Unhandled error on row {index} for import {self.id}: {e}"
-                        )
+                        logger.exception(f"Unhandled error on row {index} for import {self.id}: {e}")
                         errors.append(
                             {
                                 "row_index": index,
@@ -6854,9 +6281,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             if errors:
                 self.processing_status = self.PROCESSING_STATUS_FAILED
                 self.datetime_error = (
-                    failure_summary.get("datetime_error", timezone.now())
-                    if failure_summary
-                    else timezone.now()
+                    failure_summary.get("datetime_error", timezone.now()) if failure_summary else timezone.now()
                 )
 
                 # Persist full errors list (human readable string) so the API/UI can display detailed errors.
@@ -6867,33 +6292,20 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         for e in failure_summary.get("errors"):
                             if isinstance(e, dict):
                                 row_idx = e.get("row_index")
-                                msg = (
-                                    e.get("error_message")
-                                    or e.get("error_type")
-                                    or str(e)
-                                )
-                                prefix = (
-                                    f"Row: {row_idx}. " if row_idx is not None else ""
-                                )
+                                msg = e.get("error_message") or e.get("error_type") or str(e)
+                                prefix = f"Row: {row_idx}. " if row_idx is not None else ""
                                 error_lines.append(f"{prefix}Error: {msg}")
                             else:
                                 error_lines.append(str(e))
-                        self.error_message = (
-                            "Errors occurred during processing:\n"
-                            + "\n".join(error_lines)
-                        )
+                        self.error_message = "Errors occurred during processing:\n" + "\n".join(error_lines)
                     except Exception:
                         # Fallback to concise message if building the string fails
                         self.error_message = (
-                            failure_summary.get("error_message")
-                            if failure_summary
-                            else f"{len(errors)} rows failed"
+                            failure_summary.get("error_message") if failure_summary else f"{len(errors)} rows failed"
                         )
                 else:
                     self.error_message = (
-                        failure_summary.get("error_message")
-                        if failure_summary
-                        else f"{len(errors)} rows failed"
+                        failure_summary.get("error_message") if failure_summary else f"{len(errors)} rows failed"
                     )
 
                 self.error_row = errors[0].get("row_index") if errors else None
@@ -6906,9 +6318,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         .first()
                     )
                     self.rows_processed = (
-                        db_rows_processed
-                        if db_rows_processed is not None
-                        else getattr(self, "rows_processed", 0)
+                        db_rows_processed if db_rows_processed is not None else getattr(self, "rows_processed", 0)
                     )
                 except Exception:
                     self.rows_processed = getattr(self, "rows_processed", 0)
@@ -6960,9 +6370,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         mode = "create"
         if (
             ocr_migrated_from_id in ocr_migrated_from_ids
-            or OccurrenceReport.objects.filter(
-                migrated_from_id=ocr_migrated_from_id
-            ).exists()
+            or OccurrenceReport.objects.filter(migrated_from_id=ocr_migrated_from_id).exists()
         ):
             mode = "update"
 
@@ -6983,10 +6391,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         required_content_types = []
         for column_index, column in enumerate(self.schema.columns.all()):
             cell_value = row[column_index]
-            if (
-                cell_value is not None
-                and column.django_import_content_type not in required_content_types
-            ):
+            if cell_value is not None and column.django_import_content_type not in required_content_types:
                 required_content_types.append(column.django_import_content_type)
 
         indexes_to_remove = []
@@ -6999,31 +6404,21 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
         # Validate each cell
         for column_index, column in enumerate(
-            self.schema.columns.filter(
-                django_import_content_type__in=required_content_types
-            )
+            self.schema.columns.filter(django_import_content_type__in=required_content_types)
         ):
             column_error_count = 0
 
             cell_value = row[column_index]
 
-            cell_value, errors_added = column.validate(
-                self, cell_value, mode, row_index, headers, row, errors
-            )
+            cell_value, errors_added = column.validate(self, cell_value, mode, row_index, headers, row, errors)
 
-            model_class = apps.get_model(
-                "boranga", column.django_import_content_type.model
-            )
+            model_class = apps.get_model("boranga", column.django_import_content_type.model)
             field = model_class._meta.get_field(column.django_import_field_name)
 
             # Special case: geojson feature collection
             # TODO: Consider modifying this so that it can support multiple geometry fields
             # in the same model like the m2m one does below
-            if (
-                type(field) is gis_models.GeometryField
-                and type(cell_value) is list
-                and len(cell_value) > 0
-            ):
+            if type(field) is gis_models.GeometryField and type(cell_value) is list and len(cell_value) > 0:
                 # Store every feature / geometry in the geometries dict
                 geometries[model_class._meta.model_name] = cell_value
 
@@ -7083,9 +6478,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             )
 
             # Coerce None -> "" for non-nullable string fields so Django won't error when saving
-            model_data = self._coerce_non_nullable_string_fields(
-                model_class, model_data
-            )
+            model_data = self._coerce_non_nullable_string_fields(model_class, model_data)
 
             if mode == "update":
                 # Remove empty values from the model data
@@ -7106,9 +6499,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     current_model_instance.submitter = self.email_user
                     current_model_instance.lodgement_date = timezone.now()
                 else:
-                    current_model_instance = OccurrenceReport.objects.get(
-                        migrated_from_id=row[0]
-                    )
+                    current_model_instance = OccurrenceReport.objects.get(migrated_from_id=row[0])
                     for field, value in model_data.items():
                         setattr(current_model_instance, field, value)
             elif current_model_name == Occurrence._meta.model_name:
@@ -7132,9 +6523,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
                 if occurrence_number:
                     try:
-                        current_model_instance = Occurrence.objects.get(
-                            occurrence_number=occurrence_number
-                        )
+                        current_model_instance = Occurrence.objects.get(occurrence_number=occurrence_number)
                     except Occurrence.DoesNotExist:
                         error_message = "The occurrence number provided does not exist in the database"
                         errors.append(
@@ -7149,9 +6538,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 else:
                     if (
                         model_data.get("occurrence_name", None)
-                        and Occurrence.objects.filter(
-                            occurrence_name=model_data["occurrence_name"]
-                        ).exists()
+                        and Occurrence.objects.filter(occurrence_name=model_data["occurrence_name"]).exists()
                     ):
                         error_message = (
                             f"An occurrence with the name '{model_data['occurrence_name']}' "
@@ -7173,45 +6560,29 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             model_data["group_type"] = self.schema.group_type
 
                         current_model_instance = Occurrence(**model_data)
-                        current_model_instance.occurrence_source = (
-                            Occurrence.OCCURRENCE_CHOICE_OCR
-                        )
-                        ocr_instance = model_instances[
-                            OccurrenceReport._meta.model_name
-                        ]
+                        current_model_instance.occurrence_source = Occurrence.OCCURRENCE_CHOICE_OCR
+                        ocr_instance = model_instances[OccurrenceReport._meta.model_name]
                         if ocr_instance.species:
                             current_model_instance.species = ocr_instance.species
                         else:
                             current_model_instance.community = ocr_instance.community
                     else:
-                        if Occurrence.objects.filter(
-                            migrated_from_id=occ_migrated_from_id
-                        ).exists():
-                            current_model_instance = Occurrence.objects.get(
-                                migrated_from_id=occ_migrated_from_id
-                            )
+                        if Occurrence.objects.filter(migrated_from_id=occ_migrated_from_id).exists():
+                            current_model_instance = Occurrence.objects.get(migrated_from_id=occ_migrated_from_id)
                         else:
                             current_model_instance = Occurrence.objects.create(
                                 migrated_from_id=occ_migrated_from_id,
                                 group_type=self.schema.group_type,
                                 occurrence_source=Occurrence.OCCURRENCE_CHOICE_OCR,
                             )
-                            ocr_instance = model_instances[
-                                OccurrenceReport._meta.model_name
-                            ]
+                            ocr_instance = model_instances[OccurrenceReport._meta.model_name]
                             if ocr_instance.species:
                                 current_model_instance.species = ocr_instance.species
                             else:
-                                current_model_instance.community = (
-                                    ocr_instance.community
-                                )
-                        if (
-                            not current_model_instance.group_type
-                            == self.schema.group_type
-                        ):
+                                current_model_instance.community = ocr_instance.community
+                        if not current_model_instance.group_type == self.schema.group_type:
                             error_message = (
-                                "The group type of the occurrence does not "
-                                "match the group type of the schema"
+                                "The group type of the occurrence does not match the group type of the schema"
                             )
                             errors.append(
                                 {
@@ -7223,17 +6594,13 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             return
 
-                        occurrence_report = model_instances[
-                            OccurrenceReport._meta.model_name
-                        ]
+                        occurrence_report = model_instances[OccurrenceReport._meta.model_name]
                         if (
                             current_model_instance.species
-                            and not current_model_instance.species
-                            == occurrence_report.species
+                            and not current_model_instance.species == occurrence_report.species
                         ):
                             error_message = (
-                                "The species of the occurrence does not match "
-                                "the species of the occurrence report"
+                                "The species of the occurrence does not match the species of the occurrence report"
                             )
                             errors.append(
                                 {
@@ -7247,12 +6614,10 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
                         if (
                             current_model_instance.community
-                            and not current_model_instance.community
-                            == occurrence_report.community
+                            and not current_model_instance.community == occurrence_report.community
                         ):
                             error_message = (
-                                "The community of the occurrence does not match "
-                                "the community of the occurrence report"
+                                "The community of the occurrence does not match the community of the occurrence report"
                             )
                             errors.append(
                                 {
@@ -7290,11 +6655,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 related_to_parent = False
                 # Look through all the model instances that have already been saved
                 for potential_parent_model_key in [m for m in model_instances]:
-
                     # Check if this model has a relationship with the current model
-                    potential_parent_instance = model_instances[
-                        potential_parent_model_key
-                    ]
+                    potential_parent_instance = model_instances[potential_parent_model_key]
 
                     # First search the current model instance for the relationship
                     # This is often faster as the child model often has the foreign key
@@ -7343,41 +6705,26 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
                 self.ocr_bulk_import_generate_action_logs(mode, current_model_instance)
 
-                model_instances[current_model_instance._meta.model_name] = (
-                    current_model_instance
-                )
+                model_instances[current_model_instance._meta.model_name] = current_model_instance
                 logger.info(f"Model instance saved: {current_model_instance}")
 
                 # Deal with special case of relating Occurrence to OccurrenceReport
-                if (
-                    current_model_instance._meta.model_name
-                    == Occurrence._meta.model_name
-                ):
-                    current_model_instance.occurrence_reports.add(
-                        model_instances[OccurrenceReport._meta.model_name]
-                    )
+                if current_model_instance._meta.model_name == Occurrence._meta.model_name:
+                    current_model_instance.occurrence_reports.add(model_instances[OccurrenceReport._meta.model_name])
 
                 # Deal with special case of creating mutliple geometries based on the
                 # geojson text from the column
                 if current_model_instance._meta.model_name in geometries:
-                    logger.info(
-                        f"Creating multiple geometries for {current_model_instance}"
-                    )
-                    for geometry in geometries[current_model_instance._meta.model_name][
-                        1:
-                    ]:
+                    logger.info(f"Creating multiple geometries for {current_model_instance}")
+                    for geometry in geometries[current_model_instance._meta.model_name][1:]:
                         current_model_instance.pk = None
                         current_model_instance.geometry = geometry
                         current_model_instance.save()
 
                 # Deal with special case of many to many fields
                 if current_model_instance._meta.model_name in many_to_many_fields:
-                    logger.info(
-                        f"Adding many to many fields for {current_model_instance}"
-                    )
-                    for m2m_field in many_to_many_fields[
-                        current_model_instance._meta.model_name
-                    ]:
+                    logger.info(f"Adding many to many fields for {current_model_instance}")
+                    for m2m_field in many_to_many_fields[current_model_instance._meta.model_name]:
                         field = getattr(current_model_instance, m2m_field["field"])
                         field.set(m2m_field["value"])
 
@@ -7403,9 +6750,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         request = get_mock_request(bulk_importer)
         if mode == "create":
             model_instance.log_user_action(
-                OccurrenceReportUserAction.ACTION_LODGE_PROPOSAL.format(
-                    model_instance.occurrence_report_number
-                )
+                OccurrenceReportUserAction.ACTION_LODGE_PROPOSAL.format(model_instance.occurrence_report_number)
                 + log_suffix,
                 request,
             )
@@ -7416,16 +6761,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 assessor = EmailUser.objects.get(id=model_instance.assigned_officer)
                 request = get_mock_request(assessor)
                 model_instance.log_user_action(
-                    OccurrenceReportUserAction.ACTION_PROPOSED_APPROVAL.format(
-                        model_instance.occurrence_report_number
-                    )
+                    OccurrenceReportUserAction.ACTION_PROPOSED_APPROVAL.format(model_instance.occurrence_report_number)
                     + log_suffix,
                     request,
                 )
-            if (
-                model_instance.processing_status
-                == OccurrenceReport.PROCESSING_STATUS_APPROVED
-            ):
+            if model_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED:
                 approver = EmailUser.objects.get(id=model_instance.assigned_approver)
                 request = get_mock_request(approver)
                 model_instance.log_user_action(
@@ -7438,9 +6778,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 )
         elif mode == "update":
             model_instance.log_user_action(
-                OccurrenceReportUserAction.ACTION_EDIT_APPLICATION.format(
-                    model_instance.occurrence_report_number
-                )
+                OccurrenceReportUserAction.ACTION_EDIT_APPLICATION.format(model_instance.occurrence_report_number)
                 + log_suffix,
                 request,
             )
@@ -7464,9 +6802,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
 
 class OccurrenceReportBulkImportSchema(BaseModel):
-    group_type = models.ForeignKey(
-        GroupType, on_delete=models.PROTECT, null=False, blank=False
-    )
+    group_type = models.ForeignKey(GroupType, on_delete=models.PROTECT, null=False, blank=False)
     version = models.IntegerField(default=1)
     name = models.CharField(max_length=255, blank=True, null=True)
     tags = TaggableManager(blank=True)
@@ -7566,18 +6902,14 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         worksheet = workbook.active
         columns = self.columns.all()
         if not columns.exists() or columns.count() == 0:
-            logger.warning(
-                f"No columns found for bulk import schema {self}. Returning empty preview file"
-            )
+            logger.warning(f"No columns found for bulk import schema {self}. Returning empty preview file")
             return workbook
 
         headers = [column.xlsx_column_header_name for column in columns]
         worksheet.append(headers)
 
         dv_types = dict(zip(DataValidation.type.values, DataValidation.type.values))
-        dv_operators = dict(
-            zip(DataValidation.operator.values, DataValidation.operator.values)
-        )
+        dv_operators = dict(zip(DataValidation.operator.values, DataValidation.operator.values))
 
         # Create a hidden lookup sheet to store picklist values. Using a
         # sheet-range for validations avoids locale/separator and formula
@@ -7596,9 +6928,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
 
             model_class = column.django_import_content_type.model_class()
             if not hasattr(model_class, column.django_import_field_name):
-                raise ValidationError(
-                    f"Model {model_class} does not have field {column.django_import_field_name}"
-                )
+                raise ValidationError(f"Model {model_class} does not have field {column.django_import_field_name}")
             model_field = model_class._meta.get_field(column.django_import_field_name)
 
             # Determine whether blanks should be allowed for this column.
@@ -7607,11 +6937,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
             field_default = getattr(model_field, "default", NOT_PROVIDED)
             has_default = field_default is not NOT_PROVIDED
 
-            allow_blank = (
-                getattr(model_field, "null", False)
-                or column.xlsx_data_validation_allow_blank
-                or has_default
-            )
+            allow_blank = getattr(model_field, "null", False) or column.xlsx_data_validation_allow_blank or has_default
 
             dv = None
             if column.default_value is not None:
@@ -7626,15 +6952,11 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 values = [str(column.default_value)]
                 col_letter = get_column_letter(lookup_next_col)
                 # header in row 1, values from row 2
-                lookup_sheet.cell(
-                    row=1, column=lookup_next_col, value=column.xlsx_column_header_name
-                )
+                lookup_sheet.cell(row=1, column=lookup_next_col, value=column.xlsx_column_header_name)
                 for i, v in enumerate(values, start=2):
                     lookup_sheet.cell(row=i, column=lookup_next_col, value=v)
                 last_row = 1 + len(values)
-                range_ref = (
-                    f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
-                )
+                range_ref = f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
@@ -7652,18 +6974,10 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 # for a comma separated list of values so this will be validated
                 # during the import process
                 continue
-            elif (
-                isinstance(model_field, models.fields.CharField) and model_field.choices
-            ):
+            elif isinstance(model_field, models.fields.CharField) and model_field.choices:
                 choices = [c[0] for c in model_field.choices]
-                if (
-                    model_class is OccurrenceReport
-                    and model_field.name == "processing_status"
-                ):
-                    choices = [
-                        c[0]
-                        for c in OccurrenceReport.VALID_BULK_IMPORT_PROCESSING_STATUSES
-                    ]
+                if model_class is OccurrenceReport and model_field.name == "processing_status":
+                    choices = [c[0] for c in OccurrenceReport.VALID_BULK_IMPORT_PROCESSING_STATUSES]
                 # If there are too many choices, defer validation to import
                 # time (preserve existing behaviour). Otherwise store the
                 # choices on the lookup sheet and reference that sheet-range
@@ -7672,15 +6986,11 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     continue
                 values = [str(c) for c in choices]
                 col_letter = get_column_letter(lookup_next_col)
-                lookup_sheet.cell(
-                    row=1, column=lookup_next_col, value=column.xlsx_column_header_name
-                )
+                lookup_sheet.cell(row=1, column=lookup_next_col, value=column.xlsx_column_header_name)
                 for i, v in enumerate(values, start=2):
                     lookup_sheet.cell(row=i, column=lookup_next_col, value=v)
                 last_row = 1 + len(values)
-                range_ref = (
-                    f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
-                )
+                range_ref = f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
@@ -7702,9 +7012,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     prompt=f"Maximum {model_field.max_length} characters",
                     promptTitle="Text length",
                 )
-            elif isinstance(
-                model_field, (models.fields.DateTimeField, models.fields.DateField)
-            ):
+            elif isinstance(model_field, models.fields.DateTimeField | models.fields.DateField):
                 dv = DataValidation(
                     type=dv_types["date"],
                     operator=dv_operators["greaterThanOrEqual"],
@@ -7716,15 +7024,10 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     promptTitle="Date",
                 )
                 if isinstance(model_field, models.fields.DateTimeField):
-                    date_style = NamedStyle(
-                        name="datetime", number_format="DD/MM/YYYY HH:MM:MM"
-                    )
+                    date_style = NamedStyle(name="datetime", number_format="DD/MM/YYYY HH:MM:MM")
                     for cell in worksheet[column_letter]:
                         cell.style = date_style
-            elif (
-                isinstance(model_field, models.fields.IntegerField)
-                and column.is_emailuser_column is False
-            ):
+            elif isinstance(model_field, models.fields.IntegerField) and column.is_emailuser_column is False:
                 dv = DataValidation(
                     type=dv_types["whole"],
                     operator=dv_operators["greaterThanOrEqual"],
@@ -7748,15 +7051,11 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 # Put True/False on the lookup sheet and reference it
                 values = ["True", "False"]
                 col_letter = get_column_letter(lookup_next_col)
-                lookup_sheet.cell(
-                    row=1, column=lookup_next_col, value=column.xlsx_column_header_name
-                )
+                lookup_sheet.cell(row=1, column=lookup_next_col, value=column.xlsx_column_header_name)
                 for i, v in enumerate(values, start=2):
                     lookup_sheet.cell(row=i, column=lookup_next_col, value=v)
                 last_row = 1 + len(values)
-                range_ref = (
-                    f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
-                )
+                range_ref = f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
@@ -7767,10 +7066,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     promptTitle="Boolean selection",
                 )
                 lookup_next_col += 1
-            elif (
-                isinstance(model_field, models.fields.related.ForeignKey)
-                and model_field.related_model
-            ):
+            elif isinstance(model_field, models.fields.related.ForeignKey) and model_field.related_model:
                 related_model = model_field.related_model
                 related_model_qs = related_model.objects.all()
 
@@ -7782,8 +7078,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     not related_model_qs.exists()
                     or related_model_qs.count() == 0
                     or related_model._meta.model_name in ["species", "community"]
-                    or related_model_qs.count()
-                    > settings.OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT
+                    or related_model_qs.count() > settings.OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT
                 ):
                     # If there are no records or too many records, we don't embed a data validation
                     # Instead, the field will be validated during the import process
@@ -7803,15 +7098,11 @@ class OccurrenceReportBulkImportSchema(BaseModel):
 
                 # Write values to lookup sheet and reference by sheet-range
                 col_letter = get_column_letter(lookup_next_col)
-                lookup_sheet.cell(
-                    row=1, column=lookup_next_col, value=column.xlsx_column_header_name
-                )
+                lookup_sheet.cell(row=1, column=lookup_next_col, value=column.xlsx_column_header_name)
                 for i, v in enumerate(values, start=2):
                     lookup_sheet.cell(row=i, column=lookup_next_col, value=v)
                 last_row = 1 + len(values)
-                range_ref = (
-                    f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
-                )
+                range_ref = f"'{lookup_sheet.title}'!${col_letter}$2:${col_letter}${last_row}"
                 dv = DataValidation(
                     type=dv_types["list"],
                     allow_blank=allow_blank,
@@ -7841,9 +7132,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         for row in worksheet.rows:
             for cell in row:
                 if cell.value:
-                    dims[cell.column] = (
-                        max((dims.get(cell.column, 0), len(str(cell.value)))) + 2
-                    ) + 2
+                    dims[cell.column] = (max((dims.get(cell.column, 0), len(str(cell.value)))) + 2) + 2
         for col, value in dims.items():
             worksheet.column_dimensions[get_column_letter(col)].width = value
 
@@ -7851,11 +7140,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         try:
             # If only header row exists but no data, consider it empty
             has_data = any(
-                cell.value
-                for row in lookup_sheet.iter_rows(
-                    min_row=2, max_row=lookup_sheet.max_row
-                )
-                for cell in row
+                cell.value for row in lookup_sheet.iter_rows(min_row=2, max_row=lookup_sheet.max_row) for cell in row
             )
         except Exception:
             has_data = False
@@ -7888,9 +7173,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
 
         for field in self.mandatory_fields:
             if not columns.filter(
-                django_import_content_type=ct_models.ContentType.objects.get_for_model(
-                    OccurrenceReport
-                ),
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReport),
                 django_import_field_name=field,
             ).exists():
                 errors.append(
@@ -7908,15 +7191,11 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         # Should be provided when both columns are present otherwise validation will fail
         row_contains_occ_migrated_from_id = (
             columns.filter(
-                django_import_content_type=ct_models.ContentType.objects.get_for_model(
-                    Occurrence
-                ),
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(Occurrence),
                 django_import_field_name="migrated_from_id",
             ).exists()
             and columns.filter(
-                django_import_content_type=ct_models.ContentType.objects.get_for_model(
-                    Occurrence
-                ),
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(Occurrence),
                 django_import_field_name="occurrence_number",
             ).exists()
         )
@@ -7925,38 +7204,28 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         # Should be provided when both columns are present otherwise validation will fail
         row_contains_ocr_approval_occurrence_and_new_name = (
             columns.filter(
-                django_import_content_type=ct_models.ContentType.objects.get_for_model(
-                    OccurrenceReportApprovalDetails
-                ),
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReportApprovalDetails),
                 django_import_field_name="occurrence",
             ).exists()
             and columns.filter(
-                django_import_content_type=ct_models.ContentType.objects.get_for_model(
-                    OccurrenceReportApprovalDetails
-                ),
+                django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReportApprovalDetails),
                 django_import_field_name="new_occurrence_name",
             ).exists()
         )
         species_or_community_identifier = None
         for column in columns:
-            sample_value = column.get_sample_value(
-                errors, species_or_community_identifier
-            )
+            sample_value = column.get_sample_value(errors, species_or_community_identifier)
             if (
                 column.django_import_content_type.model == Occurrence._meta.model_name
                 and column.django_import_field_name == "species"
             ):
-                species_or_community_identifier = Species.objects.get(
-                    taxonomy__scientific_name=sample_value
-                )
+                species_or_community_identifier = Species.objects.get(taxonomy__scientific_name=sample_value)
 
             if (
                 column.django_import_content_type.model == Occurrence._meta.model_name
                 and column.django_import_field_name == "community"
             ):
-                species_or_community_identifier = Community.objects.get(
-                    taxonomy__community_common_id=sample_value
-                )
+                species_or_community_identifier = Community.objects.get(taxonomy__community_common_id=sample_value)
 
             if (
                 column.django_import_content_type.model == Occurrence._meta.model_name
@@ -7966,8 +7235,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 sample_value = ""
 
             if (
-                column.django_import_content_type.model
-                == OccurrenceReportApprovalDetails._meta.model_name
+                column.django_import_content_type.model == OccurrenceReportApprovalDetails._meta.model_name
                 and column.django_import_field_name == "new_occurrence_name"
                 and row_contains_ocr_approval_occurrence_and_new_name
             ):
@@ -8004,9 +7272,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         # Create a .zip file to house the sample associated file
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-            zip_file.writestr(
-                sample_associated_file.name, sample_associated_file.read()
-            )
+            zip_file.writestr(sample_associated_file.name, sample_associated_file.read())
         zip_file_name = f"sample_{self.group_type.name}_{self.version}.zip"
         zip_file = InMemoryUploadedFile(
             zip_buffer,
@@ -8080,12 +7346,10 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         if not self.pk:
             raise ValueError("Schema must be saved before it can be copied")
 
-        if OccurrenceReportBulkImportSchema.objects.filter(
-            group_type=self.group_type
-        ).exists():
-            highest_version = OccurrenceReportBulkImportSchema.objects.filter(
-                group_type=self.group_type
-            ).aggregate(Max("version"))["version__max"]
+        if OccurrenceReportBulkImportSchema.objects.filter(group_type=self.group_type).exists():
+            highest_version = OccurrenceReportBulkImportSchema.objects.filter(group_type=self.group_type).aggregate(
+                Max("version")
+            )["version__max"]
         else:
             highest_version = 0
 
@@ -8103,9 +7367,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         else:
             new_schema.name = f"Copy of Version {self.version}"
         new_schema.save()
-        django_import_content_type = ct_models.ContentType.objects.get_for_model(
-            OccurrenceReport
-        )
+        django_import_content_type = ct_models.ContentType.objects.get_for_model(OccurrenceReport)
         # Copy all columns except those that were automatically created
         for column in self.columns.exclude(
             django_import_content_type=django_import_content_type,
@@ -8184,13 +7446,9 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
     order_with_respect_to = "schema"
 
     DEFAULT_VALUE_BULK_IMPORT_SUBMITTER = "bulk_import_submitter"
-    DEFAULT_VALUE_CHOICES = (
-        (DEFAULT_VALUE_BULK_IMPORT_SUBMITTER, "Bulk Import Submitter"),
-    )
+    DEFAULT_VALUE_CHOICES = ((DEFAULT_VALUE_BULK_IMPORT_SUBMITTER, "Bulk Import Submitter"),)
 
-    default_value = models.CharField(
-        max_length=255, choices=DEFAULT_VALUE_CHOICES, blank=True, null=True
-    )
+    default_value = models.CharField(max_length=255, choices=DEFAULT_VALUE_CHOICES, blank=True, null=True)
     is_emailuser_column = models.BooleanField(default=False)
 
     class Meta(OrderedModel.Meta):
@@ -8252,7 +7510,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     # Helper: try filtering with provided values, then with nh3.clean()ed values
     def _filter_related_instances(self, related_model_qs, lookup_field, values):
-        if not isinstance(values, (list, tuple)):
+        if not isinstance(values, list | tuple):
             values = [values]
 
         qs = related_model_qs.filter(**{lookup_field: values})
@@ -8296,9 +7554,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
     @property
     def field_exists(self):
         try:
-            self.django_import_content_type.model_class()._meta.get_field(
-                self.django_import_field_name
-            )
+            self.django_import_content_type.model_class()._meta.get_field(self.django_import_field_name)
         except FieldDoesNotExist:
             return False
 
@@ -8327,9 +7583,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if not self.field_exists:
             return None
 
-        return self.django_import_content_type.model_class()._meta.get_field(
-            self.django_import_field_name
-        )
+        return self.django_import_content_type.model_class()._meta.get_field(self.django_import_field_name)
 
     @property
     def field_type(self):
@@ -8346,9 +7600,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if not self.field:
             return None
 
-        return get_openpyxl_data_validation_type_for_django_field(
-            self.field, column=self
-        )
+        return get_openpyxl_data_validation_type_for_django_field(self.field, column=self)
 
     @property
     def text_length(self):
@@ -8377,10 +7629,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if not self.model_exists or not self.field_exists:
             return None
 
-        field = self.django_import_content_type.model_class()._meta.get_field(
-            self.django_import_field_name
-        )
-        if not isinstance(field, (models.ForeignKey, models.ManyToManyField)):
+        field = self.django_import_content_type.model_class()._meta.get_field(self.django_import_field_name)
+        if not isinstance(field, models.ForeignKey | models.ManyToManyField):
             return None
 
         return field.related_model
@@ -8412,9 +7662,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         # If the related model has a group_type field, filter by the schema's group type
         # (i.e. flora, fauna or community)
         if hasattr(self.related_model, "group_type"):
-            related_model_qs = related_model_qs.filter(
-                group_type=self.schema.group_type
-            )
+            related_model_qs = related_model_qs.filter(group_type=self.schema.group_type)
 
         return related_model_qs.order_by(display_field)
 
@@ -8437,29 +7685,19 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         # If the related model has a group_type field, filter by the schema's group type
         # (i.e. flora, fauna or community)
         if hasattr(related_model, "group_type"):
-            related_model_qs = related_model_qs.filter(
-                group_type=self.schema.group_type
-            )
+            related_model_qs = related_model_qs.filter(group_type=self.schema.group_type)
 
         # Apply any lookup filters if they exist
         for lookup_filter in self.lookup_filters.all():
             lookup_filter.filter_field_name + "__" + lookup_filter.filter_type
             lookup_filter_value = lookup_filter.values.first().filter_value
             if lookup_filter.values.count() > 1:
-                lookup_filter_value = lookup_filter.values.values_list(
-                    "filter_value", flat=True
-                )
-            if lookup_filter.filter_type == "in" and not isinstance(
-                lookup_filter_value, list
-            ):
+                lookup_filter_value = lookup_filter.values.values_list("filter_value", flat=True)
+            if lookup_filter.filter_type == "in" and not isinstance(lookup_filter_value, list):
                 lookup_filter_value = [lookup_filter_value]
 
             related_model_qs = related_model_qs.filter(
-                **{
-                    lookup_filter.filter_field_name
-                    + "__"
-                    + lookup_filter.filter_type: lookup_filter_value
-                }
+                **{lookup_filter.filter_field_name + "__" + lookup_filter.filter_type: lookup_filter_value}
             )
 
         return related_model_qs
@@ -8479,23 +7717,18 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if not self.django_import_content_type or not self.django_import_field_name:
             return False
 
-        if (
-            self.django_import_content_type
-            == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
-            and self.django_import_field_name in ["species", "community"]
-        ):
+        if self.django_import_content_type == ct_models.ContentType.objects.get_for_model(
+            OccurrenceReport
+        ) and self.django_import_field_name in ["species", "community"]:
             return True
 
         if (
-            self.django_import_content_type
-            == ct_models.ContentType.objects.get_for_model(OCRAssociatedSpecies)
+            self.django_import_content_type == ct_models.ContentType.objects.get_for_model(OCRAssociatedSpecies)
             and self.django_import_field_name == "related_species"
         ):
             return True
 
-        return (
-            self.foreign_key_count > settings.OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT
-        )
+        return self.foreign_key_count > settings.OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT
 
     @cached_property
     def filtered_foreign_key_count(self):
@@ -8524,9 +7757,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return None
 
         try:
-            field = self.django_import_content_type.model_class()._meta.get_field(
-                self.django_import_field_name
-            )
+            field = self.django_import_content_type.model_class()._meta.get_field(self.django_import_field_name)
         except FieldDoesNotExist:
             error_message = (
                 f"Field {self.django_import_field_name} not found in model "
@@ -8541,8 +7772,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return None
 
         if (
-            self.django_import_content_type
-            == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
+            self.django_import_content_type == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
             and self.django_import_field_name == "processing_status"
         ):
             # Special case as there are only 3 processing statuses allow for OCR
@@ -8590,11 +7820,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
             display_field = self.display_field
 
-            random_value = (
-                related_model_qs.order_by("?")
-                .values_list(display_field, flat=True)
-                .first()
-            )
+            random_value = related_model_qs.order_by("?").values_list(display_field, flat=True).first()
 
             return random_value
 
@@ -8613,9 +7839,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             display_field = self.display_field
 
             random_values = list(
-                related_model_qs.order_by("?")
-                .values_list(display_field, flat=True)
-                .distinct()[: random.randint(1, 3)]
+                related_model_qs.order_by("?").values_list(display_field, flat=True).distinct()[: random.randint(1, 3)]
             )
 
             random_values = [str(value) for value in random_values]
@@ -8627,9 +7851,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             # Unfortunatly have to have an actual model instance to get the choices
             # as they are defined in __init__
             model_instance = model_class()
-            choices = model_instance._meta.get_field(
-                self.django_import_field_name
-            ).choices
+            choices = model_instance._meta.get_field(self.django_import_field_name).choices
             if not choices or len(choices) == 0:
                 errors.append(
                     {
@@ -8651,10 +7873,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
         if isinstance(field, models.IntegerField):
             if (
-                self.django_import_content_type
-                == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
-                and self.django_import_field_name
-                in OccurrenceReport.BULK_IMPORT_EMAIL_USER_FIELDS
+                self.django_import_content_type == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
+                and self.django_import_field_name in OccurrenceReport.BULK_IMPORT_EMAIL_USER_FIELDS
                 and not self.is_emailuser_column
             ):
                 error_message = (
@@ -8673,14 +7893,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             if self.is_emailuser_column:
                 user_qs = EmailUser.objects.filter(is_active=True)
                 if field.name == "assigned_officer":
-                    ocr_officer_ids = member_ids(
-                        settings.GROUP_NAME_OCCURRENCE_ASSESSOR
-                    )
+                    ocr_officer_ids = member_ids(settings.GROUP_NAME_OCCURRENCE_ASSESSOR)
                     user_qs = user_qs.filter(id__in=ocr_officer_ids)
                 if field.name == "assigned_approver":
-                    ocr_approver_ids = member_ids(
-                        settings.GROUP_NAME_OCCURRENCE_APPROVER
-                    )
+                    ocr_approver_ids = member_ids(settings.GROUP_NAME_OCCURRENCE_APPROVER)
                     user_qs = user_qs.filter(id__in=ocr_approver_ids)
                 user = user_qs.order_by("?").first()
                 if user:
@@ -8713,7 +7929,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             random_datetime = start + (end - start) * random.random()
             return random_datetime.strftime("%d/%m/%Y %H:%M:%S")
 
-        if isinstance(field, (models.CharField, models.TextField)):
+        if isinstance(field, models.CharField | models.TextField):
             if (
                 self.django_import_content_type.model_class() == Occurrence
                 and self.django_import_field_name == "occurrence_number"
@@ -8722,22 +7938,15 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 # group type as the schema and same species or community name as the sample data)
                 group_type = self.schema.group_type
                 random_occurrence = Occurrence.objects.filter(group_type=group_type)
-                filter_field = {
-                    "species__taxonomy__scientific_name": species_or_community_identifier
-                }
+                filter_field = {"species__taxonomy__scientific_name": species_or_community_identifier}
                 if group_type.name == "community":
-                    filter_field = {
-                        "community__taxonomy__community_common_id": species_or_community_identifier
-                    }
+                    filter_field = {"community__taxonomy__community_common_id": species_or_community_identifier}
                 if not random_occurrence.filter(**filter_field).exists():
                     species_or_community_display = (
-                        species_or_community_identifier
-                        if species_or_community_identifier
-                        else "Unknown"
+                        species_or_community_identifier if species_or_community_identifier else "Unknown"
                     )
                     error_message = (
-                        f"No occurrences found where species or community identifier = "
-                        f"{species_or_community_display}"
+                        f"No occurrences found where species or community identifier = {species_or_community_display}"
                     )
                     errors.append(
                         {
@@ -8746,22 +7955,13 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         }
                     )
                     return None
-                return (
-                    random_occurrence.filter(**filter_field)
-                    .order_by("?")
-                    .first()
-                    .occurrence_number
-                )
+                return random_occurrence.filter(**filter_field).order_by("?").first().occurrence_number
 
             if hasattr(field, "max_length") and field.max_length:
                 random_length = random.randint(1, field.max_length)
             else:
                 random_length = random.randint(1, 1000)
-            return "".join(
-                random.choices(
-                    string.ascii_letters + string.digits + " ", k=random_length
-                )
-            )
+            return "".join(random.choices(string.ascii_letters + string.digits + " ", k=random_length))
 
         if isinstance(field, gis_models.GeometryField):
             # Generate a random point and polygon that falls within Western Australia
@@ -8806,9 +8006,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if isinstance(field, models.FileField):
             return "sample_file.txt"
 
-        raise ValueError(
-            f"Not able to generate sample data for field {field} of type {type(field)}"
-        )
+        raise ValueError(f"Not able to generate sample data for field {field} of type {type(field)}")
 
     @property
     def preview_foreign_key_values_xlsx(self):
@@ -8823,18 +8021,16 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         display_field = self.display_field
 
         # Query the max character length of the display field
-        max_length = related_model_qs.aggregate(
-            max_length=Max(Length(Cast(display_field, output_field=CharField())))
-        )["max_length"]
+        max_length = related_model_qs.aggregate(max_length=Max(Length(Cast(display_field, output_field=CharField()))))[
+            "max_length"
+        ]
 
         if len(self.xlsx_column_header_name) > max_length:
             max_length = len(self.xlsx_column_header_name)
 
         headers = [self.xlsx_column_header_name]
         worksheet.append(headers)
-        for cell_value in related_model_qs.order_by(display_field).values_list(
-            display_field, flat=True
-        ):
+        for cell_value in related_model_qs.order_by(display_field).values_list(display_field, flat=True):
             worksheet.append([cell_value])
 
         # Make the headers bold
@@ -8856,9 +8052,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return cell_value, errors_added
 
         try:
-            model_class = apps.get_model(
-                "boranga", self.django_import_content_type.model
-            )
+            model_class = apps.get_model("boranga", self.django_import_content_type.model)
         except LookupError:
             errors.append(
                 {
@@ -8891,13 +8085,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return cell_value, errors_added
 
         if (
-            self.django_import_content_type
-            == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
+            self.django_import_content_type == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
             and self.django_import_field_name == "processing_status"
         ):
-            if cell_value not in [
-                c[0] for c in OccurrenceReport.VALID_BULK_IMPORT_PROCESSING_STATUSES
-            ]:
+            if cell_value not in [c[0] for c in OccurrenceReport.VALID_BULK_IMPORT_PROCESSING_STATUSES]:
                 error_message = (
                     f"Value {cell_value} in column {self.xlsx_column_header_name} "
                     f"is not a valid processing status (must be one of "
@@ -8919,24 +8110,16 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 OccurrenceReport.PROCESSING_STATUS_APPROVED,
             ]:
                 assigned_officer_column = self.schema.columns.filter(
-                    django_import_content_type=ct_models.ContentType.objects.get_for_model(
-                        OccurrenceReport
-                    ),
+                    django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReport),
                     django_import_field_name="assigned_officer",
                 ).first()
-                assigned_officer_email = row[
-                    headers.index(assigned_officer_column.xlsx_column_header_name)
-                ]
+                assigned_officer_email = row[headers.index(assigned_officer_column.xlsx_column_header_name)]
                 assigned_officer_id = None
                 try:
-                    assigned_officer_id = EmailUser.objects.get(
-                        email=assigned_officer_email
-                    ).id
+                    assigned_officer_id = EmailUser.objects.get(email=assigned_officer_email).id
                 except EmailUser.DoesNotExist:
                     try:
-                        assigned_officer_id = EmailUser.objects.get(
-                            id=int(assigned_officer_email)
-                        ).id
+                        assigned_officer_id = EmailUser.objects.get(id=int(assigned_officer_email)).id
                     except (ValueError, EmailUser.DoesNotExist):
                         error_message = (
                             "No ledger user found for assigned_officer with "
@@ -8953,9 +8136,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         errors_added += 1
                         return cell_value, errors_added
 
-                if not belongs_to_by_user_id(
-                    assigned_officer_id, settings.GROUP_NAME_OCCURRENCE_ASSESSOR
-                ):
+                if not belongs_to_by_user_id(assigned_officer_id, settings.GROUP_NAME_OCCURRENCE_ASSESSOR):
                     error_message = (
                         f"User with email {assigned_officer_email} "
                         f"(Ledger Emailuser ID: {assigned_officer_id}) is not a member"
@@ -8978,24 +8159,16 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     errors_added += 1
             if cell_value == OccurrenceReport.PROCESSING_STATUS_APPROVED:
                 assigned_approver_column = self.schema.columns.filter(
-                    django_import_content_type=ct_models.ContentType.objects.get_for_model(
-                        OccurrenceReport
-                    ),
+                    django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReport),
                     django_import_field_name="assigned_approver",
                 ).first()
-                assigned_approver_email = row[
-                    headers.index(assigned_approver_column.xlsx_column_header_name)
-                ]
+                assigned_approver_email = row[headers.index(assigned_approver_column.xlsx_column_header_name)]
                 assigned_approver_id = None
                 try:
-                    assigned_approver_id = EmailUser.objects.get(
-                        email=assigned_approver_email
-                    ).id
+                    assigned_approver_id = EmailUser.objects.get(email=assigned_approver_email).id
                 except EmailUser.DoesNotExist:
                     try:
-                        assigned_approver_id = EmailUser.objects.get(
-                            id=int(assigned_approver_email)
-                        ).id
+                        assigned_approver_id = EmailUser.objects.get(id=int(assigned_approver_email)).id
                     except (ValueError, EmailUser.DoesNotExist):
                         error_message = (
                             "No ledger user found for assigned_approver with "
@@ -9018,9 +8191,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         errors_added += 1
                         return cell_value, errors_added
 
-                if not belongs_to_by_user_id(
-                    assigned_approver_id, settings.GROUP_NAME_OCCURRENCE_APPROVER
-                ):
+                if not belongs_to_by_user_id(assigned_approver_id, settings.GROUP_NAME_OCCURRENCE_APPROVER):
                     error_message = (
                         f"User with email {assigned_approver_email} "
                         f"(Ledger Emailuser ID: {assigned_approver_id}) is not a member"
@@ -9048,11 +8219,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         # the underlying model field allows nulls, or the model field has a default.
         field_default = getattr(field, "default", NOT_PROVIDED)
         has_default = field_default is not NOT_PROVIDED
-        allow_blank = (
-            self.xlsx_data_validation_allow_blank
-            or getattr(field, "null", False)
-            or has_default
-        )
+        allow_blank = self.xlsx_data_validation_allow_blank or getattr(field, "null", False) or has_default
 
         if cell_value is None or cell_value == "":
             if not allow_blank:
@@ -9094,9 +8261,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 try:
                     cell_value = EmailUser.objects.get(id=int(cell_value)).id
                 except (ValueError, EmailUser.DoesNotExist):
-                    error_message = (
-                        f"No ledger user found with email address or ID: {cell_value}"
-                    )
+                    error_message = f"No ledger user found with email address or ID: {cell_value}"
                     errors.append(
                         {
                             "row_index": index,
@@ -9127,19 +8292,14 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             # Unfortunatly have to have an actual model instance to get the choices
             # as they are defined in __init__
             model_instance = model_class()
-            choices = model_instance._meta.get_field(
-                self.django_import_field_name
-            ).choices
+            choices = model_instance._meta.get_field(self.django_import_field_name).choices
 
             display_values = cell_value.split(",")
             cell_value = []
-            for display_value in [
-                display_value.strip() for display_value in display_values
-            ]:
+            for display_value in [display_value.strip() for display_value in display_values]:
                 if display_value not in [choice[1] for choice in choices]:
                     error_message = (
-                        f"Value '{display_value}' in column {self.xlsx_column_header_name} "
-                        "is not in the list"
+                        f"Value '{display_value}' in column {self.xlsx_column_header_name} is not in the list"
                     )
                     errors.append(
                         {
@@ -9151,13 +8311,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     )
                     errors_added += 1
                 else:
-                    cell_value.append(
-                        [
-                            choice[0]
-                            for choice in field.choices
-                            if choice[1] == display_value
-                        ][0]
-                    )
+                    cell_value.append([choice[0] for choice in field.choices if choice[1] == display_value][0])
             return cell_value, errors_added
 
         if isinstance(field, models.FileField):
@@ -9210,9 +8364,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors_added += 1
                 return cell_value, errors_added
 
-            cell_value = InMemoryUploadedFile(
-                file_in_memory, field.name, cell_value, content_type, None, None
-            )
+            cell_value = InMemoryUploadedFile(file_in_memory, field.name, cell_value, content_type, None, None)
 
             return cell_value, errors_added
 
@@ -9331,9 +8483,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     return cell_value, errors_added
 
             # Make the datetime object timezone aware
-            cell_value = cell_value.replace(
-                tzinfo=zoneinfo.ZoneInfo(settings.TIME_ZONE)
-            )
+            cell_value = cell_value.replace(tzinfo=zoneinfo.ZoneInfo(settings.TIME_ZONE))
 
             return cell_value, errors_added
 
@@ -9364,9 +8514,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 lookup_field = get_display_field_for_model(related_model)
 
             try:
-                related_model_instance = self._get_related_instance(
-                    related_model_qs, lookup_field, cell_value
-                )
+                related_model_instance = self._get_related_instance(related_model_qs, lookup_field, cell_value)
 
             except FieldError:
                 error_message = (
@@ -9403,7 +8551,6 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors_added += 1
                 return cell_value, errors_added
             except related_model.MultipleObjectsReturned:
-
                 error_message = (
                     f"Multiple {self.django_import_field_name} records found by looking up "
                     f"{lookup_field} with value {cell_value} "
@@ -9443,15 +8590,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
             lookup_field += "__in"
 
-            cell_value = [
-                c.strip()
-                for c in cell_value.split(settings.OCR_BULK_IMPORT_M2M_DELIMITER)
-            ]
+            cell_value = [c.strip() for c in cell_value.split(settings.OCR_BULK_IMPORT_M2M_DELIMITER)]
 
             try:
-                related_model_instances = self._filter_related_instances(
-                    related_model_qs, lookup_field, cell_value
-                )
+                related_model_instances = self._filter_related_instances(related_model_qs, lookup_field, cell_value)
             except FieldError:
                 error_message = (
                     f"Can't find {self.django_import_field_name} record by looking up "
@@ -9516,8 +8658,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             if cell_value is None or cell_value == "":
                 if not field.null:
                     error_message = (
-                        f"Value {cell_value} in column {self.xlsx_column_header_name} "
-                        "is required to be a boolean"
+                        f"Value {cell_value} in column {self.xlsx_column_header_name} is required to be a boolean"
                     )
                     errors.append(
                         {
@@ -9558,10 +8699,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     errors_added += 1
 
             if cell_value not in [True, False]:
-                error_message = (
-                    f"Value {cell_value} in column {self.xlsx_column_header_name} "
-                    "is not a valid boolean"
-                )
+                error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} is not a valid boolean"
                 errors.append(
                     {
                         "row_index": index,
@@ -9632,8 +8770,7 @@ class SchemaColumnLookupFilter(BaseModel):
                 fields=["schema_column", "filter_field_name", "filter_type"],
                 name="unique_schema_column_lookup_field",
                 violation_error_message=(
-                    "A lookup filter with the same name and type "
-                    "already exists for this schema column"
+                    "A lookup filter with the same name and type already exists for this schema column"
                 ),
             )
         ]

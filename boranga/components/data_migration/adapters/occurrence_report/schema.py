@@ -40,6 +40,7 @@ COLUMN_MAP = {
     "OBS_ROLE_CODE": "OCRObserverDetail__role",
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
     "OBS_NAME": "OCRObserverDetail__observer_name",
+    "SV_DESCRIBED_BY": "OCRObserverDetail__observer_name",
     "OBSERVER_CODE": "OBSERVER_CODE",
     "OBS_ORG_NAME": "OCRObserverDetail__organisation",
     # SHEET_* fields for ocr_for_occ_name composition in tpfl adapter
@@ -130,6 +131,10 @@ COLUMN_MAP = {
     "FIRE_SEASON": "OCRFireHistory__comment",
     "FIRE_YEAR": "FIRE_YEAR",
     "FIRE_INTENSITY": "OCRFireHistory__intensity",
+    # Text ref to photo (Task 12508)
+    "SV_PHOTO": "temp_sv_photo",
+    # Task 12499
+    "SV_OBSERVATION_TYPE": "OCRAssociatedSpecies__species_list_relates_to",
 }
 
 REQUIRED_COLUMNS = [
@@ -191,9 +196,7 @@ class OccurrenceReportRow:
     OCRObserverDetail__role: str | None = None
 
     # SubmitterInformation fields
-    SubmitterInformation__submitter_category: int | None = (
-        None  # FK id (SubmitterCategory)
-    )
+    SubmitterInformation__submitter_category: int | None = None  # FK id (SubmitterCategory)
     SubmitterInformation__email_user: int | None = None  # EmailUser id
     SubmitterInformation__name: str | None = None
     SubmitterInformation__organisation: str | None = None
@@ -229,9 +232,7 @@ class OccurrenceReportRow:
 
     # OCRObservationDetail fields
     OCRObservationDetail__area_assessment: int | None = None  # FK id (AreaAssessment)
-    OCRObservationDetail__area_surveyed: str | None = (
-        None  # Decimal with 4 decimal places
-    )
+    OCRObservationDetail__area_surveyed: str | None = None  # Decimal with 4 decimal places
     OCRObservationDetail__survey_duration: int | None = None  # Integer hours
 
     # OCRAssociatedSpecies fields
@@ -319,153 +320,69 @@ class OccurrenceReportRow:
             SubmitterInformation__submitter_category=utils.to_int_maybe(
                 d.get("SubmitterInformation__submitter_category")
             ),
-            SubmitterInformation__email_user=utils.to_int_maybe(
-                d.get("SubmitterInformation__email_user")
-            ),
-            SubmitterInformation__name=utils.safe_strip(
-                d.get("SubmitterInformation__name")
-            ),
-            SubmitterInformation__organisation=utils.safe_strip(
-                d.get("SubmitterInformation__organisation")
-            ),
+            SubmitterInformation__email_user=utils.to_int_maybe(d.get("SubmitterInformation__email_user")),
+            SubmitterInformation__name=utils.safe_strip(d.get("SubmitterInformation__name")),
+            SubmitterInformation__organisation=utils.safe_strip(d.get("SubmitterInformation__organisation")),
             OCRHabitatComposition__loose_rock_percent=utils.to_int_maybe(
                 d.get("OCRHabitatComposition__loose_rock_percent")
             ),
-            OCRHabitatComposition__habitat_notes=utils.safe_strip(
-                d.get("OCRHabitatComposition__habitat_notes")
-            ),
+            OCRHabitatComposition__habitat_notes=utils.safe_strip(d.get("OCRHabitatComposition__habitat_notes")),
             OCRHabitatComposition__vegetation_condition=utils.safe_strip(
                 d.get("OCRHabitatComposition__vegetation_condition")
             ),
-            OCRHabitatComposition__soil_colour=utils.safe_strip(
-                d.get("OCRHabitatComposition__soil_colour")
-            ),
-            OCRHabitatComposition__soil_condition=utils.safe_strip(
-                d.get("OCRHabitatComposition__soil_condition")
-            ),
-            OCRHabitatComposition__land_form=utils.safe_strip(
-                d.get("OCRHabitatComposition__land_form")
-            ),
-            OCRHabitatComposition__soil_type=utils.safe_strip(
-                d.get("OCRHabitatComposition__soil_type")
-            ),
-            OCRIdentification__barcode_number=utils.safe_strip(
-                d.get("OCRIdentification__barcode_number")
-            ),
-            OCRIdentification__collector_number=utils.safe_strip(
-                d.get("OCRIdentification__collector_number")
-            ),
-            OCRIdentification__permit_id=utils.safe_strip(
-                d.get("OCRIdentification__permit_id")
-            ),
+            OCRHabitatComposition__soil_colour=utils.safe_strip(d.get("OCRHabitatComposition__soil_colour")),
+            OCRHabitatComposition__soil_condition=utils.safe_strip(d.get("OCRHabitatComposition__soil_condition")),
+            OCRHabitatComposition__land_form=utils.safe_strip(d.get("OCRHabitatComposition__land_form")),
+            OCRHabitatComposition__soil_type=utils.safe_strip(d.get("OCRHabitatComposition__soil_type")),
+            OCRIdentification__barcode_number=utils.safe_strip(d.get("OCRIdentification__barcode_number")),
+            OCRIdentification__collector_number=utils.safe_strip(d.get("OCRIdentification__collector_number")),
+            OCRIdentification__permit_id=utils.safe_strip(d.get("OCRIdentification__permit_id")),
             OCRIdentification__identification_comment=utils.safe_strip(
                 d.get("OCRIdentification__identification_comment")
             ),
             OCRIdentification__identification_certainty=utils.to_int_maybe(
                 d.get("OCRIdentification__identification_certainty")
             ),
-            OCRIdentification__sample_destination=utils.to_int_maybe(
-                d.get("OCRIdentification__sample_destination")
-            ),
-            OCRLocation__coordinate_source=utils.to_int_maybe(
-                d.get("OCRLocation__coordinate_source")
-            ),
-            OCRLocation__location_accuracy=utils.to_int_maybe(
-                d.get("OCRLocation__location_accuracy")
-            ),
+            OCRIdentification__sample_destination=utils.to_int_maybe(d.get("OCRIdentification__sample_destination")),
+            OCRLocation__coordinate_source=utils.to_int_maybe(d.get("OCRLocation__coordinate_source")),
+            OCRLocation__location_accuracy=utils.to_int_maybe(d.get("OCRLocation__location_accuracy")),
             OCRLocation__district=utils.to_int_maybe(d.get("OCRLocation__district")),
             OCRLocation__region=utils.to_int_maybe(d.get("OCRLocation__region")),
             OCRLocation__locality=utils.safe_strip(d.get("OCRLocation__locality")),
-            OCRLocation__location_description=utils.safe_strip(
-                d.get("OCRLocation__location_description")
-            ),
-            OCRLocation__boundary_description=utils.safe_strip(
-                d.get("OCRLocation__boundary_description")
-            ),
+            OCRLocation__location_description=utils.safe_strip(d.get("OCRLocation__location_description")),
+            OCRLocation__boundary_description=utils.safe_strip(d.get("OCRLocation__boundary_description")),
             OCRLocation__epsg_code=utils.to_int_maybe(d.get("OCRLocation__epsg_code")),
-            OCRObservationDetail__area_assessment=utils.to_int_maybe(
-                d.get("OCRObservationDetail__area_assessment")
-            ),
-            OCRObservationDetail__area_surveyed=utils.safe_strip(
-                d.get("OCRObservationDetail__area_surveyed")
-            ),
-            OCRObservationDetail__survey_duration=utils.to_int_maybe(
-                d.get("OCRObservationDetail__survey_duration")
-            ),
-            OCRAssociatedSpecies__comment=utils.safe_strip(
-                d.get("OCRAssociatedSpecies__comment")
-            ),
-            OCRPlantCount__counted_subject=utils.to_int_maybe(
-                d.get("OCRPlantCount__counted_subject")
-            ),
-            OCRPlantCount__plant_condition=utils.to_int_maybe(
-                d.get("OCRPlantCount__plant_condition")
-            ),
-            OCRPlantCount__plant_count_method=utils.to_int_maybe(
-                d.get("OCRPlantCount__plant_count_method")
-            ),
-            OCRPlantCount__clonal_reproduction_present=d.get(
-                "OCRPlantCount__clonal_reproduction_present"
-            ),
+            OCRObservationDetail__area_assessment=utils.to_int_maybe(d.get("OCRObservationDetail__area_assessment")),
+            OCRObservationDetail__area_surveyed=utils.safe_strip(d.get("OCRObservationDetail__area_surveyed")),
+            OCRObservationDetail__survey_duration=utils.to_int_maybe(d.get("OCRObservationDetail__survey_duration")),
+            OCRAssociatedSpecies__comment=utils.safe_strip(d.get("OCRAssociatedSpecies__comment")),
+            OCRPlantCount__counted_subject=utils.to_int_maybe(d.get("OCRPlantCount__counted_subject")),
+            OCRPlantCount__plant_condition=utils.to_int_maybe(d.get("OCRPlantCount__plant_condition")),
+            OCRPlantCount__plant_count_method=utils.to_int_maybe(d.get("OCRPlantCount__plant_count_method")),
+            OCRPlantCount__clonal_reproduction_present=d.get("OCRPlantCount__clonal_reproduction_present"),
             OCRPlantCount__comment=utils.safe_strip(d.get("OCRPlantCount__comment")),
-            OCRPlantCount__count_status=utils.safe_strip(
-                d.get("OCRPlantCount__count_status")
-            ),
-            OCRPlantCount__dehisced_fruit_present=d.get(
-                "OCRPlantCount__dehisced_fruit_present"
-            ),
-            OCRPlantCount__detailed_alive_juvenile=utils.to_int_maybe(
-                d.get("OCRPlantCount__detailed_alive_juvenile")
-            ),
-            OCRPlantCount__detailed_alive_mature=utils.to_int_maybe(
-                d.get("OCRPlantCount__detailed_alive_mature")
-            ),
-            OCRPlantCount__detailed_alive_seedling=utils.to_int_maybe(
-                d.get("OCRPlantCount__detailed_alive_seedling")
-            ),
-            OCRPlantCount__detailed_dead_juvenile=utils.to_int_maybe(
-                d.get("OCRPlantCount__detailed_dead_juvenile")
-            ),
-            OCRPlantCount__detailed_dead_mature=utils.to_int_maybe(
-                d.get("OCRPlantCount__detailed_dead_mature")
-            ),
-            OCRPlantCount__detailed_dead_seedling=utils.to_int_maybe(
-                d.get("OCRPlantCount__detailed_dead_seedling")
-            ),
+            OCRPlantCount__count_status=utils.safe_strip(d.get("OCRPlantCount__count_status")),
+            OCRPlantCount__dehisced_fruit_present=d.get("OCRPlantCount__dehisced_fruit_present"),
+            OCRPlantCount__detailed_alive_juvenile=utils.to_int_maybe(d.get("OCRPlantCount__detailed_alive_juvenile")),
+            OCRPlantCount__detailed_alive_mature=utils.to_int_maybe(d.get("OCRPlantCount__detailed_alive_mature")),
+            OCRPlantCount__detailed_alive_seedling=utils.to_int_maybe(d.get("OCRPlantCount__detailed_alive_seedling")),
+            OCRPlantCount__detailed_dead_juvenile=utils.to_int_maybe(d.get("OCRPlantCount__detailed_dead_juvenile")),
+            OCRPlantCount__detailed_dead_mature=utils.to_int_maybe(d.get("OCRPlantCount__detailed_dead_mature")),
+            OCRPlantCount__detailed_dead_seedling=utils.to_int_maybe(d.get("OCRPlantCount__detailed_dead_seedling")),
             OCRPlantCount__estimated_population_area=utils.to_decimal_maybe(
                 d.get("OCRPlantCount__estimated_population_area")
             ),
-            OCRPlantCount__flower_bud_present=d.get(
-                "OCRPlantCount__flower_bud_present"
-            ),
+            OCRPlantCount__flower_bud_present=d.get("OCRPlantCount__flower_bud_present"),
             OCRPlantCount__flower_present=d.get("OCRPlantCount__flower_present"),
-            OCRPlantCount__flowering_plants_per=utils.to_decimal_maybe(
-                d.get("OCRPlantCount__flowering_plants_per")
-            ),
-            OCRPlantCount__immature_fruit_present=d.get(
-                "OCRPlantCount__immature_fruit_present"
-            ),
-            OCRPlantCount__pollinator_observation=utils.safe_strip(
-                d.get("OCRPlantCount__pollinator_observation")
-            ),
-            OCRPlantCount__quadrats_surveyed=utils.to_int_maybe(
-                d.get("OCRPlantCount__quadrats_surveyed")
-            ),
-            OCRPlantCount__ripe_fruit_present=d.get(
-                "OCRPlantCount__ripe_fruit_present"
-            ),
-            OCRPlantCount__simple_alive=utils.to_int_maybe(
-                d.get("OCRPlantCount__simple_alive")
-            ),
-            OCRPlantCount__simple_dead=utils.to_int_maybe(
-                d.get("OCRPlantCount__simple_dead")
-            ),
-            OCRPlantCount__total_quadrat_area=utils.to_decimal_maybe(
-                d.get("OCRPlantCount__total_quadrat_area")
-            ),
-            OCRPlantCount__vegetative_state_present=d.get(
-                "OCRPlantCount__vegetative_state_present"
-            ),
+            OCRPlantCount__flowering_plants_per=utils.to_decimal_maybe(d.get("OCRPlantCount__flowering_plants_per")),
+            OCRPlantCount__immature_fruit_present=d.get("OCRPlantCount__immature_fruit_present"),
+            OCRPlantCount__pollinator_observation=utils.safe_strip(d.get("OCRPlantCount__pollinator_observation")),
+            OCRPlantCount__quadrats_surveyed=utils.to_int_maybe(d.get("OCRPlantCount__quadrats_surveyed")),
+            OCRPlantCount__ripe_fruit_present=d.get("OCRPlantCount__ripe_fruit_present"),
+            OCRPlantCount__simple_alive=utils.to_int_maybe(d.get("OCRPlantCount__simple_alive")),
+            OCRPlantCount__simple_dead=utils.to_int_maybe(d.get("OCRPlantCount__simple_dead")),
+            OCRPlantCount__total_quadrat_area=utils.to_decimal_maybe(d.get("OCRPlantCount__total_quadrat_area")),
+            OCRPlantCount__vegetative_state_present=d.get("OCRPlantCount__vegetative_state_present"),
             OCRPlantCount__obs_date=obs_date,
             OCRVegetationStructure__vegetation_structure_layer_one=utils.safe_strip(
                 d.get("OCRVegetationStructure__vegetation_structure_layer_one")
@@ -480,12 +397,8 @@ class OccurrenceReportRow:
                 d.get("OCRVegetationStructure__vegetation_structure_layer_four")
             ),
             OCRFireHistory__comment=utils.safe_strip(d.get("OCRFireHistory__comment")),
-            OCRFireHistory__intensity=utils.safe_strip(
-                d.get("OCRFireHistory__intensity")
-            ),
-            OccurrenceReportGeometry__geometry=d.get(
-                "OccurrenceReportGeometry__geometry"
-            ),
+            OCRFireHistory__intensity=utils.safe_strip(d.get("OCRFireHistory__intensity")),
+            OccurrenceReportGeometry__geometry=d.get("OccurrenceReportGeometry__geometry"),
             OccurrenceReportGeometry__locked=d.get("OccurrenceReportGeometry__locked"),
         )
 
@@ -509,10 +422,7 @@ class OccurrenceReportRow:
             ]:
                 if not self.species_id:
                     issues.append(("error", "species_id is required for flora/fauna"))
-            elif (
-                str(self.group_type_id).lower()
-                == str(GroupType.GROUP_TYPE_COMMUNITY).lower()
-            ):
+            elif str(self.group_type_id).lower() == str(GroupType.GROUP_TYPE_COMMUNITY).lower():
                 if not self.community_id:
                     issues.append(("error", "community_id is required for community"))
 

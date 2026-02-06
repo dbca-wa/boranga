@@ -51,15 +51,11 @@ def invert_xy_coordinates(geometries):
     return geometries
 
 
-def intersect_geometry_with_layer(
-    geometry, intersect_layer, geometry_name="SHAPE", result_type="results"
-):
+def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAPE", result_type="results"):
     """Query a geoserver WFS layer with a geometry and return the intersecting features as JSON."""
 
     if result_type not in ["hits", "results"]:
-        raise serializers.ValidationError(
-            f"Invalid result type {result_type}. Must be 'hits' or 'results'"
-        )
+        raise serializers.ValidationError(f"Invalid result type {result_type}. Must be 'hits' or 'results'")
 
     geoserver_url = intersect_layer.geoserver_url
     intersect_layer_name = intersect_layer.layer_name
@@ -81,12 +77,8 @@ def intersect_geometry_with_layer(
         # though both forms are (topologically) valid by OGC definition, the jts (java topology suite) library only
         # seems to except singleton lists
         # (https://www.tsusiatsoftware.net/jts/javadoc/com/vividsolutions/jts/io/WKTReader.html)
-        logger.warning(
-            f"Converting MultiPoint geometry {wfs_geom} to double-bracket notation"
-        )
-        test_geom_wkt = (
-            f'MULTIPOINT ({", ".join([f"({c[0]} {c[1]})" for c in wfs_geom.coords])})'
-        )
+        logger.warning(f"Converting MultiPoint geometry {wfs_geom} to double-bracket notation")
+        test_geom_wkt = f'MULTIPOINT ({", ".join([f"({c[0]} {c[1]})" for c in wfs_geom.coords])})'
     else:
         test_geom_wkt = wfs_geom.wkt
 
@@ -149,9 +141,7 @@ def intersect_geometry_with_layer(
                 raise Exception("local-cadastre-missing")
 
             # Check table has at least one row. Validate identifiers before using them
-            if not re.match(r"^[A-Za-z0-9_]+$", sch) or not re.match(
-                r"^[A-Za-z0-9_]+$", tbl
-            ):
+            if not re.match(r"^[A-Za-z0-9_]+$", sch) or not re.match(r"^[A-Za-z0-9_]+$", tbl):
                 # Unexpected/complex table name; don't attempt raw SQL, fall back
                 logger.error(
                     "Local cadastre table name appears complex (%s.%s); skipping local check and falling back.",
@@ -222,7 +212,7 @@ def intersect_geometry_with_layer(
                 # or "CPT_CADASTRE_SCDB:cadastre_scdb" -> "cadastre_scdb"
                 layer_name_parts = intersect_layer_name.split(":")
                 layer_suffix = layer_name_parts[-1] if len(layer_name_parts) > 1 else intersect_layer_name
-                
+
                 # Build feature ID with layer name to match WFS format
                 # e.g., "LGATE-001.12345" or "cadastre_scdb.12345"
                 feature_id = f"{layer_suffix}.{gid}" if gid else None
@@ -251,9 +241,7 @@ def intersect_geometry_with_layer(
         try:
             proxy = Proxy.objects.get(active=True, request_path=request_path)
         except Proxy.DoesNotExist:
-            intersect = (
-                "intersect " if intersect_layer.is_tenure_intersects_query_layer else ""
-            )
+            intersect = "intersect " if intersect_layer.is_tenure_intersects_query_layer else ""
             raise Http404(
                 f"No active Proxy entry found for {request_path} for {intersect}layer {intersect_layer.display_title}"
             )
@@ -261,16 +249,12 @@ def intersect_geometry_with_layer(
             url = proxy.proxy_url
             auth_name = proxy.username
             auth_password = proxy.password
-            res = requests.post(
-                url + "wfs", params=params, auth=(auth_name, auth_password)
-            )
+            res = requests.post(url + "wfs", params=params, auth=(auth_name, auth_password))
     else:
         res = requests.post(geoserver_url.url, params=params)
 
     if res.reason != "OK":
-        basic_error_message = (
-            f"Failed to intersect geometry with layer {intersect_layer_name}."
-        )
+        basic_error_message = f"Failed to intersect geometry with layer {intersect_layer_name}."
 
         if res.status_code == 401:
             raise serializers.ValidationError(
@@ -282,15 +266,11 @@ def intersect_geometry_with_layer(
         namespace = root.tag.split("}")[0] + "}"
         exception = root.find(f".//{namespace}Exception")
         if exception is None:
-            raise serializers.ValidationError(
-                f"{basic_error_message}. {res.reason}: {res.text}"
-            )
+            raise serializers.ValidationError(f"{basic_error_message}. {res.reason}: {res.text}")
         exception_code = exception.attrib.get("exceptionCode")
         exception_text = root.find(f".//{namespace}ExceptionText")
 
-        raise serializers.ValidationError(
-            f"{basic_error_message}. {exception_code}: {exception_text.text}"
-        )
+        raise serializers.ValidationError(f"{basic_error_message}. {exception_code}: {exception_text.text}")
 
     if result_type == "hits":
         # resultType hits returns text/xml
@@ -301,9 +281,7 @@ def intersect_geometry_with_layer(
 
 def populate_occurrence_tenure_data(geometry_instance, features, request):
     # Get existing occurrence tenures for this geometry
-    occurrence_tenures_before = OccurrenceTenure.objects.filter(
-        occurrence_geometry=geometry_instance
-    )
+    occurrence_tenures_before = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance)
     # Keep a track of the occurrence tenure IDs that are created or updated
     occurrence_tenure_ids = []
     # Process each feature in the geometry
@@ -317,9 +295,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request):
             logger.warning(f"Feature does not have an ID: {feature}")
             continue
         # Check if an occurrence tenure entry already exists for this feature ID
-        occurrence_tenure_before = OccurrenceTenure.objects.filter(
-            tenure_area_id=feature_id
-        )
+        occurrence_tenure_before = OccurrenceTenure.objects.filter(tenure_area_id=feature_id)
         created = False
         if not occurrence_tenure_before.exists():
             # No tenure entry exists yet for this occurrence geometry
@@ -336,9 +312,9 @@ def populate_occurrence_tenure_data(geometry_instance, features, request):
                 logger.error(f"Error creating OccurrenceTenure: {e}")
                 continue
         else:
-            occurrence_tenures = OccurrenceTenure.objects.filter(
-                tenure_area_id=feature_id
-            ).exclude(occurrence_geometry=None, tenure_area_id=None)
+            occurrence_tenures = OccurrenceTenure.objects.filter(tenure_area_id=feature_id).exclude(
+                occurrence_geometry=None, tenure_area_id=None
+            )
 
             occurrence_tenures_current = occurrence_tenures.filter(
                 occurrence_geometry=geometry_instance,
@@ -359,9 +335,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request):
             else:
                 created = True
                 # Restore historical tenure details to current one if applicable
-                historical = occurrence_tenures_historical.order_by(
-                    "-datetime_updated"
-                ).first()
+                historical = occurrence_tenures_historical.order_by("-datetime_updated").first()
                 occurrence_tenure = OccurrenceTenure(
                     occurrence_geometry=geometry_instance,
                     tenure_area_id=feature_id,
@@ -370,9 +344,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request):
                     tenure_area_ewkb=tenure_area_ewkb,
                     purpose=historical.purpose if historical else None,
                     vesting=historical.vesting if historical else None,
-                    significant_to_occurrence=(
-                        historical.significant_to_occurrence if historical else None
-                    ),
+                    significant_to_occurrence=(historical.significant_to_occurrence if historical else None),
                     comments=historical.comments if historical else None,
                 )
                 occurrence_tenure.save(version_user=request.user)
@@ -385,20 +357,14 @@ def populate_occurrence_tenure_data(geometry_instance, features, request):
         occurrence_tenure_ids.append(occurrence_tenure.id)
 
     # Remaining tenures that where not handled up to this point
-    remaining_tenures = occurrence_tenures_before.filter(
-        ~Q(id__in=occurrence_tenure_ids)
-    )
+    remaining_tenures = occurrence_tenures_before.filter(~Q(id__in=occurrence_tenure_ids))
     for tenure_area in remaining_tenures:
         logger.info(f"Setting OccurrenceTenure {tenure_area} to historical")
         # Set the status of occurrence tenures that existed before, but were not created or updated to historical
         tenure_area.status = tenure_area.STATUS_HISTORICAL
         # Also populate the historical_ fields for back reference
-        tenure_area.historical_occurrence = (
-            tenure_area.occurrence_geometry.occurrence.id
-        )
-        tenure_area.historical_occurrence_geometry_ewkb = (
-            tenure_area.occurrence_geometry.geometry.ewkb
-        )
+        tenure_area.historical_occurrence = tenure_area.occurrence_geometry.occurrence.id
+        tenure_area.historical_occurrence_geometry_ewkb = tenure_area.occurrence_geometry.geometry.ewkb
         # Remove the reference to the occurrence geometry
         tenure_area.occurrence_geometry = None
         tenure_area.save()
@@ -429,9 +395,7 @@ def save_geometry(
         logger.warning(f"No {instance_model_name} geometry to save")
         return {}
 
-    InstanceGeometry = apps.get_model(
-        app_label=app_label, model_name=f"{instance_model_name}Geometry"
-    )
+    InstanceGeometry = apps.get_model(app_label=app_label, model_name=f"{instance_model_name}Geometry")
     InstanceGeometrySaveSerializer = getattr(
         sys.modules[f"boranga.components.{component}.serializers"],
         f"{instance_model_name}GeometrySaveSerializer",
@@ -445,8 +409,7 @@ def save_geometry(
 
     if (
         0 == len(geometry["features"])
-        and 0
-        == InstanceGeometry.objects.filter(**{instance_fk_field_name: instance}).count()
+        and 0 == InstanceGeometry.objects.filter(**{instance_fk_field_name: instance}).count()
     ):
         return
 
@@ -463,9 +426,7 @@ def save_geometry(
             )
             continue
 
-        logger.info(
-            f"Processing {instance_model_name} {instance} geometry feature type: {geometry_type}"
-        )
+        logger.info(f"Processing {instance_model_name} {instance} geometry feature type: {geometry_type}")
 
         # Check if the feature has a buffer radius to later update or create a buffer geometry
         buffer_radius = feature.get("properties", {}).get("buffer_radius", None)
@@ -478,20 +439,14 @@ def save_geometry(
         content_type_object = None
         if created_from:
             try:
-                InstanceCopiedFrom = apps.get_model(
-                    "boranga", created_from.get("model_class", None)
-                )
+                InstanceCopiedFrom = apps.get_model("boranga", created_from.get("model_class", None))
             except LookupError:
                 pass
             except ValueError:
                 pass
             else:
-                created_from_model = InstanceCopiedFrom.objects.filter(
-                    id=created_from.get("model_id")
-                ).last()
-                content_type_object = ct_models.ContentType.objects.get_for_model(
-                    InstanceCopiedFrom
-                )
+                created_from_model = InstanceCopiedFrom.objects.filter(id=created_from.get("model_id")).last()
+                content_type_object = ct_models.ContentType.objects.get_for_model(InstanceCopiedFrom)
 
         opacity = feature.get("properties", {}).get("opacity", 0.5)
 
@@ -500,9 +455,7 @@ def save_geometry(
         original_geometry = feature.get("properties", {}).get("original_geometry")
         srid_original = original_geometry.get("properties", {}).get("srid", 4326)
         if not srid_original:
-            raise ValidationError(
-                f"Geometry must have an SRID set: {original_geometry.get('coordinates', [])}"
-            )
+            raise ValidationError(f"Geometry must have an SRID set: {original_geometry.get('coordinates', [])}")
 
         if not original_geometry.get("type", None):
             original_geometry["type"] = geometry_type
@@ -517,15 +470,11 @@ def save_geometry(
 
             if not InstanceCopiedFrom:
                 try:
-                    content_type_model = ct_models.ContentType.objects.get(
-                        pk=content_type_id
-                    )
+                    content_type_model = ct_models.ContentType.objects.get(pk=content_type_id)
                 except ct_models.ContentType.DoesNotExist:
                     pass
                 else:
-                    created_from_geometry = (
-                        content_type_model.model_class().objects.get(pk=object_id)
-                    )
+                    created_from_geometry = content_type_model.model_class().objects.get(pk=object_id)
                     logger.info(f"Created from geometry: {created_from_geometry}")
 
             geometry_data = {
@@ -542,9 +491,7 @@ def save_geometry(
             # Note: Hardcoded. Possibly pass in via fn parameter whether to intersect and with what
             if instance_fk_field_name == "occurrence":
                 try:
-                    intersect_layer = TileLayer.objects.get(
-                        is_tenure_intersects_query_layer=True
-                    )
+                    intersect_layer = TileLayer.objects.get(is_tenure_intersects_query_layer=True)
                 except TileLayer.DoesNotExist:
                     logger.info("No tenure intersects query layer specified")
                     intersect_layer = None
@@ -570,18 +517,12 @@ def save_geometry(
                         )
 
                         # Query the intersect layer to get the number of features that intersect with geom[0]
-                        result_hits_xml = intersect_geometry_with_layer(
-                            geom[0], intersect_layer, result_type="hits"
-                        )
+                        result_hits_xml = intersect_geometry_with_layer(geom[0], intersect_layer, result_type="hits")
                         # Query returns xml, so have to parse
                         root = ET.fromstring(result_hits_xml)
                         number_matched = root.attrib.get("numberMatched", None)
 
-                    if (
-                        number_matched
-                        and isinstance(number_matched, str)
-                        and number_matched.isnumeric()
-                    ):
+                    if number_matched and isinstance(number_matched, str) and number_matched.isnumeric():
                         number_matched = int(number_matched)
 
                     if number_matched:
@@ -596,9 +537,7 @@ def save_geometry(
                                 f"{intersect_layer.layer_name}: {number_matched}. Error value: {error_value}"
                             )
 
-                    intersect_data = intersect_geometry_with_layer(
-                        geom[0], intersect_layer
-                    )
+                    intersect_data = intersect_geometry_with_layer(geom[0], intersect_layer)
                     totalFeatures = intersect_data.get("totalFeatures")
                     logger.info(
                         f"Geometry {geom[0]} intersects with {totalFeatures} features from {intersect_layer.layer_name}"
@@ -608,44 +547,33 @@ def save_geometry(
                 logger.info("No intersect layer specified")
 
             if feature.get("id"):
-                logger.info(
-                    f"Updating existing {instance_model_name} geometry: {feature.get('id')} for: {instance}"
-                )
+                logger.info(f"Updating existing {instance_model_name} geometry: {feature.get('id')} for: {instance}")
                 try:
                     geometry = InstanceGeometry.objects.get(id=feature.get("id"))
                 except InstanceGeometry.DoesNotExist:
-                    logger.warning(
-                        f"{instance_model_name} geometry does not exist: {feature.get('id')}"
-                    )
+                    logger.warning(f"{instance_model_name} geometry does not exist: {feature.get('id')}")
                     continue
                 geometry_data["drawn_by"] = geometry.drawn_by
                 geometry_data["last_updated_by"] = request.user.id
                 geometry_data["locked"] = (
-                    action in ["submit"]
-                    and geometry.drawn_by == request.user.id
-                    or geometry.locked
+                    action in ["submit"] and geometry.drawn_by == request.user.id or geometry.locked
                 )
-                serializer = InstanceGeometrySaveSerializer(
-                    geometry, data=geometry_data
-                )
+                serializer = InstanceGeometrySaveSerializer(geometry, data=geometry_data)
             else:
-                logger.info(
-                    f"Creating new geometry for {instance_model_name}: {instance}"
-                )
-                
+                logger.info(f"Creating new geometry for {instance_model_name}: {instance}")
+
                 # For fauna occurrences, limit to one geometry per occurrence
                 if instance_fk_field_name == "occurrence":
                     from boranga.components.species_and_communities.models import GroupType
-                    
-                    if hasattr(instance, 'group_type') and instance.group_type.name == GroupType.GROUP_TYPE_FAUNA:
-                        existing_count = InstanceGeometry.objects.filter(
-                            **{instance_fk_field_name: instance}
-                        ).count()
+
+                    if hasattr(instance, "group_type") and instance.group_type.name == GroupType.GROUP_TYPE_FAUNA:
+                        existing_count = InstanceGeometry.objects.filter(**{instance_fk_field_name: instance}).count()
                         if existing_count >= 1:
                             raise serializers.ValidationError(
-                                "Fauna occurrences are limited to one geometry. Please edit the existing geometry instead of creating a new one."
+                                "Fauna occurrences are limited to one geometry. "
+                                "Please edit the existing geometry instead of creating a new one."
                             )
-                
+
                 geometry_data["drawn_by"] = request.user.id
                 geometry_data["last_updated_by"] = request.user.id
                 geometry_data["locked"] = action in ["submit"]
@@ -664,52 +592,38 @@ def save_geometry(
             opacity = feature.get("properties", {}).get("buffer_opacity", 0.5)
 
             try:
-                buffer_geometry = BufferGeometry.objects.get(
-                    buffered_from_geometry=geometry_instance
-                )
+                buffer_geometry = BufferGeometry.objects.get(buffered_from_geometry=geometry_instance)
             except BufferGeometry.DoesNotExist:
                 if buffer_radius:
-                    content_type_object = ct_models.ContentType.objects.get_for_model(
-                        geometry_instance
-                    )
+                    content_type_object = ct_models.ContentType.objects.get_for_model(geometry_instance)
                     # There is a buffer radius, but no buffer geometry, so create a buffer geometry
                     BufferGeometry.objects.create(
                         buffered_from_geometry=geometry_instance,
-                        geometry=buffer_geos_geometry(
-                            geometry_instance.geometry, buffer_radius
-                        ),
+                        geometry=buffer_geos_geometry(geometry_instance.geometry, buffer_radius),
                         object_id=geometry_instance.id,
                         content_type=content_type_object,
                         opacity=opacity,
                     )
-                    logger.info(
-                        f"Created buffer geometry for {instance_model_name} geometry: {geometry_instance}"
-                    )
+                    logger.info(f"Created buffer geometry for {instance_model_name} geometry: {geometry_instance}")
             else:
                 if buffer_radius:
-                    buffer_geometry.geometry = buffer_geos_geometry(
-                        geometry_instance.geometry, buffer_radius
-                    )
+                    buffer_geometry.geometry = buffer_geos_geometry(geometry_instance.geometry, buffer_radius)
                     buffer_geometry.opacity = opacity
                     buffer_geometry.save()
-                    logger.info(
-                        f"Updated buffer geometry for {instance_model_name} geometry: {geometry_instance}"
-                    )
+                    logger.info(f"Updated buffer geometry for {instance_model_name} geometry: {geometry_instance}")
                 else:
                     buffer_geometry.delete()
-                    logger.info(
-                        f"Deleted buffer geometry for {instance_model_name} geometry: {geometry_instance}"
-                    )
+                    logger.info(f"Deleted buffer geometry for {instance_model_name} geometry: {geometry_instance}")
 
     # Remove any ocr geometries from the db that are no longer in the ocr_geometry that was submitted
     # Prevent deletion of polygons that are locked after status change (e.g. after submit)
     geometry_ids = list(geometry_id_intersect_data.keys())
-    
+
     # Build the base queryset for geometries to potentially delete
-    to_delete_qs = InstanceGeometry.objects.filter(
-        **{instance_fk_field_name: instance}
-    ).exclude(Q(id__in=geometry_ids) | Q(locked=True))
-    
+    to_delete_qs = InstanceGeometry.objects.filter(**{instance_fk_field_name: instance}).exclude(
+        Q(id__in=geometry_ids) | Q(locked=True)
+    )
+
     # For non-occurrence geometries, respect the drawn_by constraint
     # For occurrence geometries, only users who can edit the occurrence can delete geometries
     if instance_fk_field_name != "occurrence":
@@ -717,18 +631,14 @@ def save_geometry(
     elif not instance.can_user_edit:
         # User cannot edit this occurrence, so restrict to only their own geometries
         to_delete_qs = to_delete_qs.exclude(~Q(drawn_by=request.user.id))
-    
+
     if instance_fk_field_name == "occurrence":
         affected_tenure_ids = list(
-            OccurrenceTenure.objects.filter(
-                occurrence_geometry__in=to_delete_qs
-            ).values_list("id", flat=True)
+            OccurrenceTenure.objects.filter(occurrence_geometry__in=to_delete_qs).values_list("id", flat=True)
         )
 
         # Delete buffer geometries for parents being deleted
-        buffers_deleted = BufferGeometry.objects.filter(
-            buffered_from_geometry__in=to_delete_qs
-        ).delete()
+        buffers_deleted = BufferGeometry.objects.filter(buffered_from_geometry__in=to_delete_qs).delete()
         if buffers_deleted[0] > 0:
             logger.info(
                 f"Deleted {buffers_deleted[0]} buffer geometries for {instance_model_name} {instance} (parent removed)"
@@ -736,9 +646,7 @@ def save_geometry(
 
     deleted_geometries = to_delete_qs.delete()
     if deleted_geometries[0] > 0:
-        logger.info(
-            f"Deleted {instance_model_name} geometries: {deleted_geometries} for {instance}"
-        )
+        logger.info(f"Deleted {instance_model_name} geometries: {deleted_geometries} for {instance}")
 
     if instance_fk_field_name == "occurrence":
         # we save affected tenures to record the historical change
@@ -794,9 +702,7 @@ def feature_json_to_geosgeometry(feature, srid=4326):
             pass
         return geos
     except Exception as e:
-        logger.exception(
-            "Failed to convert feature to GEOSGeometry: %s -- feature: %s", e, feature
-        )
+        logger.exception("Failed to convert feature to GEOSGeometry: %s -- feature: %s", e, feature)
         raise
 
 
@@ -815,9 +721,7 @@ def spatially_process_geometry(json_geom, operation, parameters=[], unit=None):
         # Function from string
         spatial_operation = getattr(sys.modules[__name__], operation)
     except AttributeError:
-        raise serializers.ValidationError(
-            f"Spatial operation {operation} not supported"
-        )
+        raise serializers.ValidationError(f"Spatial operation {operation} not supported")
     else:
         res_json = spatial_operation(geoms, *parameters, unit)
 
@@ -827,10 +731,7 @@ def spatially_process_geometry(json_geom, operation, parameters=[], unit=None):
 def feature_collection(geoms):
     return {
         "type": "FeatureCollection",
-        "features": [
-            {"type": "Feature", "geometry": json.loads(geom.json), "properties": {}}
-            for geom in geoms
-        ],
+        "features": [{"type": "Feature", "geometry": json.loads(geom.json), "properties": {}} for geom in geoms],
     }
 
 
@@ -866,9 +767,7 @@ def transform_geosgeometry_3857_to_4326(geometry):
         # Potentially have to make this function more generic and allow for other projections as well
         return geometry
 
-    geom_type = (
-        "points" if geometry.geom_type in ["Point", "MultiPoint"] else "polygons"
-    )
+    geom_type = "points" if geometry.geom_type in ["Point", "MultiPoint"] else "polygons"
     projection_3857_to_4326 = Transformer.from_crs("EPSG:3857", "EPSG:4326")
 
     if geom_type == "points":
@@ -914,24 +813,19 @@ def buffer_polygon_m(polygon, distance):
     xy = plg_buffered.exterior.coords.xy
     plg_buffered_pnts = [shp.Point(p) for p in list(zip(xy[0], xy[1]))]
 
-    return shp.Polygon(
-        [transform(projection_aea_wa_to_4326(), p) for p in plg_buffered_pnts]
-    )
+    return shp.Polygon([transform(projection_aea_wa_to_4326(), p) for p in plg_buffered_pnts])
 
 
 def buffer_geometries(geoms, distance, unit):
     if unit == "m":
         buffered_geoms = []
         for geom in geoms:
-
             if geom.dims == 0:
                 # A point
                 pnt = shp.Point(geom)
                 buffer_geom = buffer_point_m(pnt, distance)
             elif geom.dims == 1:
-                raise serializers.ValidationError(
-                    "Buffer operation not supported for LineString (dim-1)"
-                )
+                raise serializers.ValidationError("Buffer operation not supported for LineString (dim-1)")
             else:
                 # A polygon (dim 2), can there possibly be a dim-3 geometry?
                 if geom.geom_type == "MultiPolygon":
@@ -948,18 +842,14 @@ def buffer_geometries(geoms, distance, unit):
     elif unit == "deg":
         buffered_geoms = [geom.buffer(distance) for geom in geoms]
     else:
-        raise serializers.ValidationError(
-            f"Buffer operation requires unit parameter, got {unit}"
-        )
+        raise serializers.ValidationError(f"Buffer operation requires unit parameter, got {unit}")
 
     return json.dumps(feature_collection(buffered_geoms))
 
 
 def buffer_geos_geometry(geometry, buffer_radius, unit="m"):
     buffer_geometry_json = buffer_geometries([geometry], buffer_radius, unit)
-    geosgeometries_list = features_json_to_geosgeometry(
-        json.loads(buffer_geometry_json).get("features")
-    )
+    geosgeometries_list = features_json_to_geosgeometry(json.loads(buffer_geometry_json).get("features"))
     if len(geosgeometries_list) == 1:
         geometry_object = geosgeometries_list[0]
     else:
@@ -979,17 +869,11 @@ def intersect_geometries(geoms, *args, **kwargs):
     """Calculates the intersection of the input geometries."""
 
     if len(geoms) < 2:
-        raise serializers.ValidationError(
-            "Intersection operation requires more than one geometry"
-        )
+        raise serializers.ValidationError("Intersection operation requires more than one geometry")
     if not geoms[0].intersects(geoms[1]):
-        raise serializers.ValidationError(
-            "Intersection operation requires intersecting geometries"
-        )
+        raise serializers.ValidationError("Intersection operation requires intersecting geometries")
 
-    intersection = unary_union(
-        shp.MultiPolygon([a.intersection(b) for a, b in combinations(geoms, 2)])
-    )
+    intersection = unary_union(shp.MultiPolygon([a.intersection(b) for a, b in combinations(geoms, 2)]))
 
     geom = GEOSGeometry(intersection.wkt)
 
@@ -1026,9 +910,7 @@ def centroid(geoms, *args, **kwargs):
         elif geom.geom_type == "Polygon":
             polygons.append(geom)
         else:
-            raise serializers.ValidationError(
-                "Centroid operation requires Polygon or MultiPolygon geometries"
-            )
+            raise serializers.ValidationError("Centroid operation requires Polygon or MultiPolygon geometries")
 
     centroid = shp.MultiPolygon(polygons).centroid
     geom = GEOSGeometry(centroid.wkt)
@@ -1092,9 +974,7 @@ def proxy_object(request_path):
 
 
 def get_proxy_cache(app_label, model_name):
-    cache_key = settings.CACHE_KEY_PROXY_LAYER_DATA.format(
-        app_label=app_label, model_name=model_name
-    )
+    cache_key = settings.CACHE_KEY_PROXY_LAYER_DATA.format(app_label=app_label, model_name=model_name)
     proxy_cache_dumped_data = cache.get(cache_key)
     proxy_cache_array = []
 
@@ -1131,13 +1011,9 @@ def process_proxy(request, remoteurl, queryString, auth_user, auth_password):
 
     cache_times_strings = get_proxy_cache("boranga", "tilelayer")
     if is_internal(request):
-        cache_times_strings = [
-            cts for cts in cache_times_strings if cts["is_internal"] is True
-        ]
+        cache_times_strings = [cts for cts in cache_times_strings if cts["is_internal"] is True]
     else:
-        cache_times_strings = [
-            cts for cts in cache_times_strings if cts["is_external"] is True
-        ]
+        cache_times_strings = [cts for cts in cache_times_strings if cts["is_external"] is True]
 
     CACHE_EXPIRY = 300
     layer_allowed = False
@@ -1184,9 +1060,7 @@ def process_proxy(request, remoteurl, queryString, auth_user, auth_password):
                 "cache_expiry": CACHE_EXPIRY,
             }
             if proxy_response.status_code == 200:
-                cache.set(
-                    query_string_remote_url, json.dumps(base64_json), CACHE_EXPIRY
-                )
+                cache.set(query_string_remote_url, json.dumps(base64_json), CACHE_EXPIRY)
             else:
                 cache.set(query_string_remote_url, json.dumps(base64_json), 15)
         else:
@@ -1197,9 +1071,7 @@ def process_proxy(request, remoteurl, queryString, auth_user, auth_password):
             content_type=base64_json["content_type"],
             status=base64_json["status_code"],
         )
-        http_response["Django-Cache-Expiry"] = (
-            str(base64_json["cache_expiry"]) + " seconds"
-        )
+        http_response["Django-Cache-Expiry"] = str(base64_json["cache_expiry"]) + " seconds"
         return http_response
     else:
         http_response = HttpResponse(
@@ -1233,9 +1105,7 @@ def get_geometry_array_from_geojson(
         geom = feature.get("geometry")
 
         if not geom:
-            error_message = (
-                f"Geometry not defined in {cell_value} for column {column_name}"
-            )
+            error_message = f"Geometry not defined in {cell_value} for column {column_name}"
             errors.append(
                 {
                     "row_index": index,
@@ -1252,9 +1122,7 @@ def get_geometry_array_from_geojson(
         if not geom.within(bbox):
             error_message = (
                 f"Geomtry defined in {cell_value} for column {column_name} "
-                "is not within the extent defined for the Boranga application ({})".format(
-                    settings.GIS_EXTENT
-                )
+                "is not within the extent defined for the Boranga application ({})".format(settings.GIS_EXTENT)
             )
             errors.append(
                 {
@@ -1296,7 +1164,9 @@ def validate_geometry_within_gis_extent(geometry, verbose_field_name="geometry")
     # Require the geometry to be completely within the configured extent.
     if gxmin < minx or gymin < miny or gxmax > maxx or gymax > maxy:
         raise serializers.ValidationError(
-            f"{verbose_field_name.capitalize()}  is outside the WA boundaries. Please select a Latitude between {miny} and {maxy} and Longitude between {minx} and {maxx}. (Remember to include the negative symbol for Latitude.)"
+            f"{verbose_field_name.capitalize()}  is outside the WA boundaries. "
+            f"Please select a Latitude between {miny} and {maxy} and Longitude between {minx} and {maxx}. "
+            "(Remember to include the negative symbol for Latitude.)"
         )
 
     return True

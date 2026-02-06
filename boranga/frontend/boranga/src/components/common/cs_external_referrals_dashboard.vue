@@ -330,7 +330,7 @@ export default {
             let vm = this;
             vm.$refs.flora_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFloraScientificName_cache,
@@ -341,7 +341,7 @@ export default {
             let vm = this;
             vm.$refs.flora_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFloraCommunityName_cache,
@@ -352,7 +352,7 @@ export default {
             let vm = this;
             vm.$refs.flora_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFloraApplicationStatus_cache,

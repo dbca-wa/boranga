@@ -80,9 +80,7 @@ class ConservationStatusTpflAdapter(SourceAdapter):
             p_status = canonical.get("processing_status")
             if p_status:
                 p_status = p_status.strip()
-                canonical["processing_status"] = PROCESSING_STATUS_MAP.get(
-                    p_status, p_status.lower()
-                )
+                canonical["processing_status"] = PROCESSING_STATUS_MAP.get(p_status, p_status.lower())
 
             # 3. Dates
             eff_date = canonical.get("effective_from_date")
@@ -143,12 +141,10 @@ class ConservationStatusTpflAdapter(SourceAdapter):
             # review_due_date
             wa_leg_cat = canonical.get("wa_legislative_category")
             if (
-                canonical.get("processing_status")
-                == ConservationStatus.PROCESSING_STATUS_APPROVED
+                canonical.get("processing_status") == ConservationStatus.PROCESSING_STATUS_APPROVED
                 and wa_leg_cat in ["CR", "EN", "VU"]
                 and canonical.get("effective_from_date")
             ):
-
                 dt = canonical["effective_from_date"]
                 try:
                     new_date = dt.replace(year=dt.year + 10)

@@ -538,7 +538,7 @@ export default {
             let vm = this;
             vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFloraOccurrenceName_cache,
@@ -549,7 +549,7 @@ export default {
             let vm = this;
             vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFloraScientificName_cache,
@@ -560,7 +560,7 @@ export default {
             let vm = this;
             vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFloraStatus_cache,
@@ -571,7 +571,7 @@ export default {
             let vm = this;
             vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFloraLocked_cache,
@@ -582,7 +582,7 @@ export default {
             let vm = this;
             vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFromFloraDueDate_cache,
@@ -593,7 +593,7 @@ export default {
             let vm = this;
             vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCToFloraDueDate_cache,
@@ -866,7 +866,7 @@ export default {
                                 });
                                 vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -926,7 +926,7 @@ export default {
                                 });
                                 vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

@@ -47,13 +47,9 @@ class Command(BaseCommand):
                                 kingdom_fk = Kingdom.objects.get(kingdom_id=kingdom_id)
                             except Kingdom.DoesNotExist:
                                 try:
-                                    kingdom_obj, created = (
-                                        Kingdom.objects.update_or_create(
-                                            kingdom_id=kingdom_id,
-                                            defaults={
-                                                "kingdom_name": t["kingdom_name"]
-                                            },
-                                        )
+                                    kingdom_obj, created = Kingdom.objects.update_or_create(
+                                        kingdom_id=kingdom_id,
+                                        defaults={"kingdom_name": t["kingdom_name"]},
                                     )
                                     kingdom_fk = kingdom_obj
                                 except Exception as e:
@@ -65,20 +61,16 @@ class Command(BaseCommand):
                         taxon_rank_fk = None
                         if rank_id and kingdom_id:
                             try:
-                                taxon_rank_fk = TaxonomyRank.objects.get(
-                                    taxon_rank_id=rank_id
-                                )
+                                taxon_rank_fk = TaxonomyRank.objects.get(taxon_rank_id=rank_id)
                             except TaxonomyRank.DoesNotExist:
                                 try:
-                                    rank_obj, created = (
-                                        TaxonomyRank.objects.update_or_create(
-                                            taxon_rank_id=rank_id,
-                                            defaults={
-                                                "kingdom_id": kingdom_id,
-                                                "kingdom_fk": kingdom_fk,
-                                                "rank_name": t["rank_name"],
-                                            },
-                                        )
+                                    rank_obj, created = TaxonomyRank.objects.update_or_create(
+                                        taxon_rank_id=rank_id,
+                                        defaults={
+                                            "kingdom_id": kingdom_id,
+                                            "kingdom_fk": kingdom_fk,
+                                            "rank_name": t["rank_name"],
+                                        },
                                     )
                                     taxon_rank_fk = rank_obj
                                 except Exception as e:
@@ -107,9 +99,7 @@ class Command(BaseCommand):
                         }
 
                         try:
-                            taxon_obj = Taxonomy.objects.get(
-                                taxon_name_id=t["taxon_name_id"]
-                            )
+                            taxon_obj = Taxonomy.objects.get(taxon_name_id=t["taxon_name_id"])
                             # Determine if any of the fields would change
                             changed = False
                             for field_name, incoming_value in defaults.items():
@@ -126,19 +116,13 @@ class Command(BaseCommand):
                                 taxon_obj.save()
                         except Taxonomy.DoesNotExist:
                             # Create new record when it doesn't exist
-                            taxon_obj = Taxonomy.objects.create(
-                                taxon_name_id=t["taxon_name_id"], **defaults
-                            )
+                            taxon_obj = Taxonomy.objects.create(taxon_name_id=t["taxon_name_id"], **defaults)
                             created = True
                         updates.append(taxon_obj.id)
                         count += 1
                         if count == 10000:
                             total_count += count
-                            logger.info(
-                                "{} Taxon Records Updated. Continuing...".format(
-                                    total_count
-                                )
-                            )
+                            logger.info(f"{total_count} Taxon Records Updated. Continuing...")
                             count = 0
 
                         if taxon_obj:
@@ -149,15 +133,13 @@ class Command(BaseCommand):
                                 try:
                                     # A taxon can have more than one vernaculars(common names)
                                     for v in vernaculars:
-                                        obj, created = (
-                                            TaxonVernacular.objects.update_or_create(
-                                                vernacular_id=v["id"],
-                                                defaults={
-                                                    "vernacular_name": v["name"],
-                                                    "taxonomy": taxon_obj,
-                                                    "taxon_name_id": taxon_obj.taxon_name_id,
-                                                },
-                                            )
+                                        obj, created = TaxonVernacular.objects.update_or_create(
+                                            vernacular_id=v["id"],
+                                            defaults={
+                                                "vernacular_name": v["name"],
+                                                "taxonomy": taxon_obj,
+                                                "taxon_name_id": taxon_obj.taxon_name_id,
+                                            },
                                         )
 
                                 except Exception as e:
@@ -167,40 +149,32 @@ class Command(BaseCommand):
 
                             # check if the taxon has classification_system_ids and then create the ClassificationSystem
                             # records for taxon which will be the "phylogenetic groups"
-                            classification_systems = (
-                                t["class_desc"] if "class_desc" in t else ""
-                            )
+                            classification_systems = t["class_desc"] if "class_desc" in t else ""
                             class_system_fk = None
                             if classification_systems is not None:
                                 for c in classification_systems:
                                     try:
-                                        class_system_fk = (
-                                            ClassificationSystem.objects.get(
-                                                classification_system_id=c["id"]
-                                            )
+                                        class_system_fk = ClassificationSystem.objects.get(
+                                            classification_system_id=c["id"]
                                         )
                                     except ClassificationSystem.DoesNotExist:
                                         try:
-                                            class_system_obj, created = (
-                                                ClassificationSystem.objects.update_or_create(
-                                                    classification_system_id=c["id"],
-                                                    defaults={
-                                                        "class_desc": c["name"],
-                                                    },
-                                                )
+                                            class_system_obj, created = ClassificationSystem.objects.update_or_create(
+                                                classification_system_id=c["id"],
+                                                defaults={
+                                                    "class_desc": c["name"],
+                                                },
                                             )
                                             class_system_fk = class_system_obj
                                             if class_system_obj:
                                                 try:
-                                                    obj, created = (
-                                                        InformalGroup.objects.update_or_create(
-                                                            taxonomy=taxon_obj,
-                                                            classification_system_fk=class_system_fk,
-                                                            defaults={
-                                                                "classification_system_id": class_system_fk.classification_system_id,  # noqa
-                                                                "taxon_name_id": taxon_obj.taxon_name_id,
-                                                            },
-                                                        )
+                                                    obj, created = InformalGroup.objects.update_or_create(
+                                                        taxonomy=taxon_obj,
+                                                        classification_system_fk=class_system_fk,
+                                                        defaults={
+                                                            "classification_system_id": class_system_fk.classification_system_id,  # noqa
+                                                            "taxon_name_id": taxon_obj.taxon_name_id,
+                                                        },
                                                     )
                                                 except Exception as e:
                                                     err_msg = "Create informal group:"
@@ -208,16 +182,12 @@ class Command(BaseCommand):
                                                     errors.append(str(e))
 
                                         except Exception as e:
-                                            err_msg = (
-                                                "Create Taxon Classification Systems:"
-                                            )
+                                            err_msg = "Create Taxon Classification Systems:"
                                             logger.error(f"{err_msg}\n{str(e)}")
                                             errors.append(str(e))
 
                             # check if the taxon has previous_names
-                            previous_names = (
-                                t["previous_names"] if "previous_names" in t else ""
-                            )
+                            previous_names = t["previous_names"] if "previous_names" in t else ""
                             if previous_names is not None:
                                 try:
                                     # A taxon can have more than one previous_names
@@ -225,23 +195,17 @@ class Command(BaseCommand):
                                     for p in previous_names:
                                         previous_taxonomy = None
                                         try:
-                                            previous_taxonomy = Taxonomy.objects.get(
-                                                taxon_name_id=p["id"]
-                                            )
+                                            previous_taxonomy = Taxonomy.objects.get(taxon_name_id=p["id"])
                                         except Taxonomy.DoesNotExist:
                                             previous_taxonomy = None
 
-                                        obj, created = (
-                                            TaxonPreviousName.objects.update_or_create(
-                                                previous_name_id=p["id"],
-                                                defaults={
-                                                    "previous_scientific_name": p[
-                                                        "canonical_name"
-                                                    ],
-                                                    "taxonomy": taxon_obj,
-                                                    "previous_taxonomy": previous_taxonomy,
-                                                },
-                                            )
+                                        obj, created = TaxonPreviousName.objects.update_or_create(
+                                            previous_name_id=p["id"],
+                                            defaults={
+                                                "previous_scientific_name": p["canonical_name"],
+                                                "taxonomy": taxon_obj,
+                                                "previous_taxonomy": previous_taxonomy,
+                                            },
                                         )
 
                                 except Exception as e:
@@ -259,9 +223,7 @@ class Command(BaseCommand):
                     errors.append(str(e))
 
             else:
-                err_msg = "Login failed with status code {}".format(
-                    taxon_res.status_code
-                )
+                err_msg = f"Login failed with status code {taxon_res.status_code}"
                 logger.error(f"{err_msg}")
 
         except Exception as e:
@@ -275,9 +237,7 @@ class Command(BaseCommand):
             if len(errors) > 0
             else '<strong style="color: green;">Errors: 0</strong>'
         )
-        msg = "{} completed. Errors: {}. Total IDs updated: {}.".format(
-            cmd_name, err_str, total_count
-        )
+        msg = f"{cmd_name} completed. Errors: {err_str}. Total IDs updated: {total_count}."
         logger.info(msg)
 
         # --- BEGIN: Track missing Taxonomy records ---
@@ -287,9 +247,9 @@ class Command(BaseCommand):
                 tid = t.get("taxon_name_id")
                 if tid is not None:
                     nomos_taxon_name_ids.add(tid)
-            missing_taxonomies = Taxonomy.objects.filter(
-                is_current=True, archived=False
-            ).exclude(taxon_name_id__in=nomos_taxon_name_ids)
+            missing_taxonomies = Taxonomy.objects.filter(is_current=True, archived=False).exclude(
+                taxon_name_id__in=nomos_taxon_name_ids
+            )
             to_set_current_false = []
             to_set_archived_true = []
 
@@ -319,19 +279,15 @@ class Command(BaseCommand):
 
                 # ConservationStatus may reference taxonomy via a linked Species
                 try:
-                    has_conservation_status_via_species = (
-                        ConservationStatus.objects.filter(
-                            species__taxonomy=taxonomy
-                        ).exists()
-                    )
+                    has_conservation_status_via_species = ConservationStatus.objects.filter(
+                        species__taxonomy=taxonomy
+                    ).exists()
                 except Exception:
                     has_conservation_status_via_species = False
 
                 # Occurrence referencing a Species that has this taxonomy
                 try:
-                    has_occurrence_via_species = Occurrence.objects.filter(
-                        species__taxonomy=taxonomy
-                    ).exists()
+                    has_occurrence_via_species = Occurrence.objects.filter(species__taxonomy=taxonomy).exists()
                 except Exception:
                     has_occurrence_via_species = False
 
@@ -345,11 +301,9 @@ class Command(BaseCommand):
 
                 # AssociatedSpeciesTaxonomy direct reference
                 try:
-                    has_associated_species_taxonomy = (
-                        AssociatedSpeciesTaxonomy.objects.filter(
-                            taxonomy=taxonomy
-                        ).exists()
-                    )
+                    has_associated_species_taxonomy = AssociatedSpeciesTaxonomy.objects.filter(
+                        taxonomy=taxonomy
+                    ).exists()
                 except Exception:
                     has_associated_species_taxonomy = False
 
@@ -389,12 +343,8 @@ class Command(BaseCommand):
                         archived=True, is_current=False, datetime_updated=Now()
                     )
 
-            logger.info(
-                f"Set is_current=False for {len(to_set_current_false)} missing Taxonomy records."
-            )
-            logger.info(
-                f"Set archived=True for {len(to_set_archived_true)} missing Taxonomy records."
-            )
+            logger.info(f"Set is_current=False for {len(to_set_current_false)} missing Taxonomy records.")
+            logger.info(f"Set archived=True for {len(to_set_archived_true)} missing Taxonomy records.")
         except Exception as e:
             logger.error(f"Error updating missing Taxonomy records: {str(e)}")
         # --- END: Track missing Taxonomy records ---

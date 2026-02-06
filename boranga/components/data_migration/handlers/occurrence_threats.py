@@ -28,9 +28,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
     slug = "occurrence_threats_legacy"
     description = "Import occurrence threats from legacy TPFL sources (SHEETNO=Null)"
 
-    def clear_targets(
-        self, ctx: ImportContext, include_children: bool = False, **options
-    ):
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OCCConservationThreat target data (only those without report link). Respect `ctx.dry_run`."""
         if ctx.dry_run:
             return
@@ -84,6 +82,29 @@ class OccurrenceThreatImporter(BaseSheetImporter):
                 OCCConservationThreat.objects.filter(**threat_filter).delete()
             except Exception:
                 logger.exception("Failed to delete OCCConservationThreat")
+
+            # Reset the primary key sequence for OCCConservationThreat when using PostgreSQL.
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = OCCConservationThreat._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(f"SELECT MAX(id) FROM {table}")
+                        row = cur.fetchone()
+                        max_id = row[0] if row else None
+
+                        if max_id is not None:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", max_id, True],
+                            )
+                        else:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", 1, False],
+                            )
+                    logger.info("Reset primary key sequence for table %s to %s", table, max_id)
+            except Exception:
+                logger.exception("Failed to reset OCCConservationThreat primary key sequence")
 
         finally:
             if not was_autocommit:
@@ -179,9 +200,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
             has_error = False
 
             src = row.get("_source")
-            pipeline_map = pipelines_by_source.get(
-                src, pipelines_by_source.get(None, {})
-            )
+            pipeline_map = pipelines_by_source.get(src, pipelines_by_source.get(None, {}))
             for col, pipeline in pipeline_map.items():
                 raw_val = row.get(col)
                 res = run_pipeline(pipeline, raw_val, tcx)
@@ -193,8 +212,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
                         errors += 1
                         errors_details.append(
                             {
-                                "migrated_from_id": row.get("migrated_from_id")
-                                or row.get("occurrence_id"),
+                                "migrated_from_id": row.get("migrated_from_id") or row.get("occurrence_id"),
                                 "column": col,
                                 "level": issue.level,
                                 "message": issue.message,
@@ -229,8 +247,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
                 errors += 1
                 errors_details.append(
                     {
-                        "migrated_from_id": row.get("migrated_from_id")
-                        or row.get("occurrence_id"),
+                        "migrated_from_id": row.get("migrated_from_id") or row.get("occurrence_id"),
                         "column": "occurrence_id",
                         "level": "error",
                         "message": "missing occurrence_id after transform",
@@ -249,8 +266,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
                 errors += 1
                 errors_details.append(
                     {
-                        "migrated_from_id": row.get("migrated_from_id")
-                        or row.get("occurrence_id"),
+                        "migrated_from_id": row.get("migrated_from_id") or row.get("occurrence_id"),
                         "column": "occurrence_id",
                         "level": "error",
                         "message": f"invalid occurrence_id format {occurrence_id}",
@@ -267,8 +283,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
                 errors += 1
                 errors_details.append(
                     {
-                        "migrated_from_id": row.get("migrated_from_id")
-                        or row.get("occurrence_id"),
+                        "migrated_from_id": row.get("migrated_from_id") or row.get("occurrence_id"),
                         "column": "occurrence_id",
                         "level": "error",
                         "message": f"occurrence_id {occurrence_id} not found",
@@ -286,9 +301,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
                 "threat_agent_id": transformed.get("threat_agent_id"),
                 "current_impact_id": transformed.get("current_impact_id"),
                 "potential_impact_id": transformed.get("potential_impact_id"),
-                "potential_threat_onset_id": transformed.get(
-                    "potential_threat_onset_id"
-                ),
+                "potential_threat_onset_id": transformed.get("potential_threat_onset_id"),
                 "comment": transformed.get("comment") or "",
                 "date_observed": transformed.get("date_observed"),
                 "visible": transformed.get("visible", True),
@@ -314,9 +327,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
 
             try:
                 with transaction.atomic():
-                    created_objs = OCCConservationThreat.objects.bulk_create(
-                        instances, batch_size=1000
-                    )
+                    created_objs = OCCConservationThreat.objects.bulk_create(instances, batch_size=1000)
                     created = len(created_objs)
 
                     # Post-process to set threat_number
@@ -330,9 +341,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
                     )
 
             except Exception as e:
-                logger.error(
-                    f"Bulk create failed ({e}), falling back to individual saves..."
-                )
+                logger.error(f"Bulk create failed ({e}), falling back to individual saves...")
                 for instance, row in to_create:
                     try:
                         instance.save()
@@ -347,8 +356,7 @@ class OccurrenceThreatImporter(BaseSheetImporter):
                         errors += 1
                         errors_details.append(
                             {
-                                "migrated_from_id": row.get("migrated_from_id")
-                                or row.get("occurrence_id"),
+                                "migrated_from_id": row.get("migrated_from_id") or row.get("occurrence_id"),
                                 "column": None,
                                 "level": "error",
                                 "message": str(inner_e),

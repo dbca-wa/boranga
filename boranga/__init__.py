@@ -1,1 +1,1 @@
-default_app_config = 'boranga.apps.BorangaConfig'
+default_app_config = "boranga.apps.BorangaConfig"

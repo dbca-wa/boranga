@@ -102,8 +102,22 @@ python scripts/combine_csvs.py \
 
 ## Occurrence Reports
 
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITES.csv --sources TEC_SITES
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITE_VISITS.csv --sources TEC_SITE_VISITS
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources TEC_SURVEYS
+
+## Occurrence Report Threats
+
+./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TEC/SURVEY_THREATS.csv --sources TEC_SURVEY_THREATS
+
+## Associated Species (from structured SITE_SPECIES.csv)
+
+./manage.py migrate_data run associated_species private-media/legacy_data/TEC/SITE_SPECIES.csv --sources TEC_SITE_SPECIES
+
+# -- TFAUNA
+
+## Species
+
+./manage.py migrate_data run species_legacy private-media/legacy_data/TFAUNA/Species List.csv --sources TFAUNA
 
 # --- Cleanup
 

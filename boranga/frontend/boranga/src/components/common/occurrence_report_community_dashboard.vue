@@ -713,7 +713,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunityOccurrence_cache,
@@ -724,7 +724,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunityName_cache,
@@ -735,7 +735,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunityMigratedId_cache,
@@ -746,7 +746,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunityStatus_cache,
@@ -757,7 +757,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunityObservationFromDate_cache,
@@ -768,7 +768,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunityObservationToDate_cache,
@@ -779,7 +779,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunitySubmittedFromDate_cache,
@@ -790,7 +790,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunitySubmittedToDate_cache,
@@ -801,7 +801,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRFromCommunityDueDate_cache,
@@ -812,7 +812,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRToCommunityDueDate_cache,
@@ -823,7 +823,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunityAssessor_cache,
@@ -834,7 +834,7 @@ export default {
             let vm = this;
             vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCRCommunitySubmitter_cache,
@@ -1257,7 +1257,7 @@ export default {
                                 });
                                 vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -1319,7 +1319,7 @@ export default {
                                 });
                                 vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

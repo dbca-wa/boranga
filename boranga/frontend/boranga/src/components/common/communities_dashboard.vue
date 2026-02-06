@@ -879,7 +879,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityMigratedId_cache,
@@ -890,7 +890,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityName_cache,
@@ -901,7 +901,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityApplicationStatus_cache,
@@ -912,7 +912,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityPublicationStatus_cache,
@@ -923,7 +923,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityRegion_cache,
@@ -934,7 +934,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityDistrict_cache,
@@ -945,7 +945,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityWALegislativeList_cache,
@@ -956,7 +956,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityWALegislativeCategory_cache,
@@ -967,7 +967,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityWAPriorityCategory_cache,
@@ -978,7 +978,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityCommonwealthRelevance_cache,
@@ -989,7 +989,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityInternationalRelevance_cache,
@@ -1000,7 +1000,7 @@ export default {
             let vm = this;
             vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCommunityConsevationCriteria_cache,
@@ -1286,7 +1286,7 @@ export default {
                                 });
                                 vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -1348,7 +1348,7 @@ export default {
                                 });
                                 vm.$refs.communities_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

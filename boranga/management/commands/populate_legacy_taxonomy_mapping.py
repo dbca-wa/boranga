@@ -52,9 +52,7 @@ class Command(BaseCommand):
             default=None,
         )
         parser.add_argument("--dry-run", action="store_true")
-        parser.add_argument(
-            "--verbose", action="store_true", help="Show details of skipped rows"
-        )
+        parser.add_argument("--verbose", action="store_true", help="Show details of skipped rows")
 
     def _get_field(self, row: dict, *keys):
         """Return the first present, non-empty value from row for given candidate keys."""
@@ -105,15 +103,11 @@ class Command(BaseCommand):
                     "legacy",
                     "NAME",
                 )
-                legacy_taxon_name_id = self._get_field(
-                    r, "TAXONID", "legacy_taxon_name_id", "taxonid", "TaxonId"
-                )
+                legacy_taxon_name_id = self._get_field(r, "TAXONID", "legacy_taxon_name_id", "taxonid", "TaxonId")
                 if legacy_taxon_name_id:
                     legacy_taxon_name_id = legacy_taxon_name_id.replace("WACENSUS:", "")
 
-                taxon_name_id_raw = self._get_field(
-                    r, "taxon_name_id", "taxon_id", "taxonnameid", "nomos_taxon_id"
-                )
+                taxon_name_id_raw = self._get_field(r, "taxon_name_id", "taxon_id", "taxonnameid", "nomos_taxon_id")
 
                 if not (list_name and legacy_name and taxon_name_id_raw):
                     self.stderr.write(
@@ -126,9 +120,7 @@ class Command(BaseCommand):
                 try:
                     taxon_name_id = int(taxon_name_id_raw)
                 except ValueError:
-                    self.stderr.write(
-                        f"Invalid taxon_name_id '{taxon_name_id_raw}'; skipping"
-                    )
+                    self.stderr.write(f"Invalid taxon_name_id '{taxon_name_id_raw}'; skipping")
                     failed += 1
                     continue
 

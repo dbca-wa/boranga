@@ -11,9 +11,7 @@ from boranga.admin import (
 from boranga.components.users import models
 
 
-class SubmitterCategoryAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin
-):
+class SubmitterCategoryAdmin(CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin):
     list_display = ("name", "visible_to")
 
 
@@ -32,9 +30,7 @@ class ExternalContributorBlacklistForm(forms.ModelForm):
         try:
             EmailUser.objects.get(email=email)
         except EmailUser.DoesNotExist:
-            raise ValidationError(
-                f"EmailUser with email {email} does not exist in ledger. Cannot blacklist."
-            )
+            raise ValidationError(f"EmailUser with email {email} does not exist in ledger. Cannot blacklist.")
 
         if models.ExternalContributorBlacklist.objects.filter(email=email).exists():
             raise forms.ValidationError("This email is already blacklisted.")
@@ -55,6 +51,4 @@ class ExternalContributorBlacklistAdmin(admin.ModelAdmin):
 
 admin.site.register(models.SubmitterCategory, SubmitterCategoryAdmin)
 admin.site.register(models.SubmitterInformation, SubmitterInformationAdmin)
-admin.site.register(
-    models.ExternalContributorBlacklist, ExternalContributorBlacklistAdmin
-)
+admin.site.register(models.ExternalContributorBlacklist, ExternalContributorBlacklistAdmin)

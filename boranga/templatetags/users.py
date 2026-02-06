@@ -63,10 +63,12 @@ def is_species_communities_approver(context):
     request = context["request"]
     return boranga_helpers.is_species_communities_approver(request)
 
+
 @register.simple_tag(takes_context=True)
 def is_contributor(context):
     request = context["request"]
     return boranga_helpers.is_contributor(request)
+
 
 @register.simple_tag(takes_context=True)
 def is_external_contributor(context):
@@ -124,11 +126,7 @@ def system_maintenance_due():
             hours=settings.SYSTEM_MAINTENANCE_WARNING
         ) and now <= obj.start_date + timedelta(minutes=1):
             # display time in local timezone
-            return "{} - {} (Duration: {} mins)".format(
-                obj.start_date.astimezone(tz=tz).ctime(),
-                obj.end_date.astimezone(tz=tz).ctime(),
-                obj.duration(),
-            )
+            return f"{obj.start_date.astimezone(tz=tz).ctime()} - {obj.end_date.astimezone(tz=tz).ctime()} (Duration: {obj.duration()} mins)"
     return False
 
 

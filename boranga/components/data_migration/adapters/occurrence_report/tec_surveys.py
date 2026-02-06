@@ -19,22 +19,12 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
         "internal_application": [static_value_factory(True)],
         "submitter": [TEC_USER_LOOKUP, "required"],
         # Copy submitter to other user fields
-        "assigned_approver_id": [
-            dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
-        ],
-        "assigned_officer_id": [
-            dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
-        ],
-        "approved_by": [
-            dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
-        ],
+        "assigned_approver_id": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
+        "assigned_officer_id": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
+        "approved_by": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
         # Also populate SubmitterInformation with the same user
-        "SubmitterInformation__email_user": [
-            dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)
-        ],
-        "processing_status": [
-            lambda val, ctx: _result("Approved") if not val else _result(val)
-        ],
+        "SubmitterInformation__email_user": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
+        "processing_status": [lambda val, ctx: _result("Approved") if not val else _result(val)],
         "customer_status": [
             dependent_from_column_factory(
                 "processing_status",
@@ -60,7 +50,11 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
 
             # Construct migrated_from_id for Surveys
             if sur_no and occ_id:
-                canonical["migrated_from_id"] = f"Survey {sur_no} of OCC {occ_id}"
+                canonical["migrated_from_id"] = f"tec-survey-{sur_no}-occ-{occ_id}"
+
+            # Map OCC_UNIQUE_ID to Occurrence__migrated_from_id with prefix so Handler can find it
+            if occ_id:
+                canonical["Occurrence__migrated_from_id"] = f"tec-{occ_id}"
 
             # Ensure SUR_NO is in canonical row so tec_user_lookup can find it in context
             if sur_no:

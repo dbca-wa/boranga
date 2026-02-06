@@ -28,9 +28,7 @@ class Command(BaseCommand):
         parser.add_argument("csvfile", type=str)
         parser.add_argument("--legacy-system", required=True)
         parser.add_argument("--dry-run", action="store_true")
-        parser.add_argument(
-            "--update", action="store_true", help="update existing rows"
-        )
+        parser.add_argument("--update", action="store_true", help="update existing rows")
         parser.add_argument(
             "--create-missing-targets",
             action="store_true",
@@ -72,19 +70,13 @@ class Command(BaseCommand):
                     continue
 
                 # list_name is taken per-row from the CSV (required)
-                row_list_name = (
-                    r.get("list_name") or r.get("list") or ""
-                ).strip() or None
+                row_list_name = (r.get("list_name") or r.get("list") or "").strip() or None
                 if not row_list_name:
-                    self.stderr.write(
-                        f"Missing list_name for legacy_value '{legacy_value}'; skipping"
-                    )
+                    self.stderr.write(f"Missing list_name for legacy_value '{legacy_value}'; skipping")
                     skipped += 1
                     continue
 
-                canonical = (
-                    r.get("canonical_name") or r.get("canonical") or ""
-                ).strip()
+                canonical = (r.get("canonical_name") or r.get("canonical") or "").strip()
                 active = r.get("active", "true").strip().lower() not in (
                     "0",
                     "false",
@@ -93,9 +85,7 @@ class Command(BaseCommand):
 
                 # Optional: model and lookup field/value for model-specific mappings
                 # When target_model is absent, this creates a simple value mapping
-                target_model = (
-                    r.get("target_model") or r.get("model") or ""
-                ).strip() or None
+                target_model = (r.get("target_model") or r.get("model") or "").strip() or None
 
                 target_id = None
                 ct = None
@@ -107,22 +97,16 @@ class Command(BaseCommand):
                     lookup_field = (r.get("target_lookup_field_name") or "").strip()
                     if not lookup_field:
                         lookup_field = "name"
-                    lookup_value = (
-                        r.get("target_lookup_field_value") or ""
-                    ).strip() or None
+                    lookup_value = (r.get("target_lookup_field_value") or "").strip() or None
 
                     # optional second lookup pair to further filter the target (parent/related)
                     # If provided, this will be added to the queryset filter as an additional key.
                     # Accepts related lookups using Django lookup syntax (e.g. "parent__name").
                     lookup_field_2 = (
-                        r.get("target_lookup_field_name_2")
-                        or r.get("lookup_field_2")
-                        or ""
+                        r.get("target_lookup_field_name_2") or r.get("lookup_field_2") or ""
                     ).strip() or None
                     lookup_value_2 = (
-                        r.get("target_lookup_field_value_2")
-                        or r.get("lookup_value_2")
-                        or ""
+                        r.get("target_lookup_field_value_2") or r.get("lookup_value_2") or ""
                     ).strip() or None
 
                     if not lookup_value:
@@ -135,9 +119,7 @@ class Command(BaseCommand):
 
                     # Resolve lookup -> target_id
                     try:
-                        model_cls = apps.get_model(
-                            APP_LABEL, target_model.strip().lower()
-                        )
+                        model_cls = apps.get_model(APP_LABEL, target_model.strip().lower())
                     except (LookupError, ValueError):
                         self.stderr.write(
                             f"Unknown model '{target_model}' in app '{APP_LABEL}'; skipping row '{legacy_value}'"
@@ -176,15 +158,9 @@ class Command(BaseCommand):
                                 # For ForeignKey fields, need to look up the related object first
                                 related_model = primary_field.related_model
                                 try:
-                                    related_obj = related_model._default_manager.get(
-                                        name__iexact=lookup_value
-                                    )
-                                    query_kwargs = {
-                                        lookup_field + "_id": related_obj.pk
-                                    }
-                                    create_kwargs = {
-                                        lookup_field + "_id": related_obj.pk
-                                    }
+                                    related_obj = related_model._default_manager.get(name__iexact=lookup_value)
+                                    query_kwargs = {lookup_field + "_id": related_obj.pk}
+                                    create_kwargs = {lookup_field + "_id": related_obj.pk}
                                 except related_model.DoesNotExist:
                                     self.stderr.write(
                                         f"Related {related_model.__name__} with name='{lookup_value}' "
@@ -201,9 +177,7 @@ class Command(BaseCommand):
                                     continue
                             else:
                                 # Non-ForeignKey field, use regular lookup
-                                query_kwargs = {
-                                    _ci_lookup_key(lookup_field): lookup_value
-                                }
+                                query_kwargs = {_ci_lookup_key(lookup_field): lookup_value}
                                 create_kwargs = {lookup_field: lookup_value}
                         except Exception as e:
                             self.stderr.write(
@@ -222,18 +196,10 @@ class Command(BaseCommand):
                                     related_model = field_2.related_model
                                     # Try to find by name with case-insensitive match
                                     try:
-                                        related_obj = (
-                                            related_model._default_manager.get(
-                                                name__iexact=lookup_value_2
-                                            )
-                                        )
+                                        related_obj = related_model._default_manager.get(name__iexact=lookup_value_2)
                                         # Use the ID in the query
-                                        query_kwargs[lookup_field_2 + "_id"] = (
-                                            related_obj.pk
-                                        )
-                                        create_kwargs[lookup_field_2 + "_id"] = (
-                                            related_obj.pk
-                                        )
+                                        query_kwargs[lookup_field_2 + "_id"] = related_obj.pk
+                                        create_kwargs[lookup_field_2 + "_id"] = related_obj.pk
                                     except related_model.DoesNotExist:
                                         self.stderr.write(
                                             f"Related {related_model.__name__} with name='{lookup_value_2}' "
@@ -250,9 +216,7 @@ class Command(BaseCommand):
                                         continue
                                 else:
                                     # Regular field, use lookup as-is
-                                    query_kwargs[_ci_lookup_key(lookup_field_2)] = (
-                                        lookup_value_2
-                                    )
+                                    query_kwargs[_ci_lookup_key(lookup_field_2)] = lookup_value_2
                                     create_kwargs[lookup_field_2] = lookup_value_2
                             except Exception as e:
                                 self.stderr.write(
@@ -276,9 +240,7 @@ class Command(BaseCommand):
                             try:
                                 # Use a savepoint to prevent transaction pollution
                                 with transaction.atomic():
-                                    obj = model_cls._default_manager.create(
-                                        **create_kwargs
-                                    )
+                                    obj = model_cls._default_manager.create(**create_kwargs)
                                     target_id = str(obj.pk)
                                     targets_created += 1
                             except Exception as e:

@@ -40,9 +40,7 @@ class HelpTextEntryViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         if not self.request.user.is_authenticated:
-            return qs.exclude(authenticated_users_only=True).exclude(
-                internal_users_only=True
-            )
+            return qs.exclude(authenticated_users_only=True).exclude(internal_users_only=True)
         if not helpers.is_internal(self.request):
             return qs.exclude(internal_users_only=True)
         return qs
@@ -148,24 +146,17 @@ def proj4_string_from_epsg_code(code):
 
     ellps_pos = [i for i, p in enumerate(prj_split) if "ellps" in p][0]
     # Insert ellps parameters after ellps name
-    prj_split = (
-        prj_split[: ellps_pos + 1] + prj_additional_params + prj_split[ellps_pos + 1 :]
-    )
+    prj_split = prj_split[: ellps_pos + 1] + prj_additional_params + prj_split[ellps_pos + 1 :]
 
     return "+".join(prj_split)
 
 
 def get_cached_epsg_codes(auth_name="EPSG", pj_type="CRS"):
-    cache_key = settings.CACHE_KEY_EPSG_CODES.format(
-        **{"auth_name": auth_name, "pj_type": pj_type}
-    )
+    cache_key = settings.CACHE_KEY_EPSG_CODES.format(**{"auth_name": auth_name, "pj_type": pj_type})
     codes = cache.get(cache_key)
 
     if not codes:
-        srids = [
-            str(s)
-            for s in Datum.objects.filter(archived=False).values_list("srid", flat=True)
-        ]
+        srids = [str(s) for s in Datum.objects.filter(archived=False).values_list("srid", flat=True)]
         codes = [c for c in pyproj.get_codes(auth_name, pj_type) if c in srids]
         cache.set(cache_key, codes, timeout=settings.CACHE_TIMEOUT_24_HOURS)
 
@@ -217,7 +208,7 @@ class GetGISExtent(views.APIView):
     def get(self, request, *args, **kwargs):
         """Returns the GIS extent as a list of floats"""
         extent = settings.GIS_EXTENT
-        if not isinstance(extent, (list, tuple)) or len(extent) != 4:
+        if not isinstance(extent, list | tuple) or len(extent) != 4:
             raise ValueError("GIS_EXTENT must be a list or tuple of four floats")
         return Response(list(extent))
 
@@ -243,9 +234,7 @@ class CheckUpdatedActionMixin:
         Client should pass ?<datetime_updated_field_name>=2025-07-09T10:56:30.069835+08:00
         """
         instance = self.get_object()
-        datetime_updated_field_name = getattr(
-            self, "DATE_UPDATED_FIELD_NAME", "datetime_updated"
-        )
+        datetime_updated_field_name = getattr(self, "DATE_UPDATED_FIELD_NAME", "datetime_updated")
         if not hasattr(instance, datetime_updated_field_name):
             raise ImproperlyConfigured(
                 f"CheckUpdatedActionMixin requires {instance._meta.model_name} "
@@ -273,9 +262,7 @@ class CheckUpdatedActionMixin:
             client_dt = parse_datetime(client_dt_str)
         except ValueError:
             return Response(
-                {
-                    "error": f"{datetime_updated_field_name} is not a valid datetime string"
-                },
+                {"error": f"{datetime_updated_field_name} is not a valid datetime string"},
                 status=400,
             )
 

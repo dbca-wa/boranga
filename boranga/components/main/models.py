@@ -21,9 +21,7 @@ from reversion.models import Version
 
 from boranga.helpers import check_file
 
-private_storage = FileSystemStorage(
-    location=settings.BASE_DIR + "/private-media/", base_url="/private-media/"
-)
+private_storage = FileSystemStorage(location=settings.BASE_DIR + "/private-media/", base_url="/private-media/")
 model_type = models.base.ModelBase
 
 logger = logging.getLogger(__name__)
@@ -39,7 +37,7 @@ class TagStrippingModelMixin:
 
     def save(self, *args, **kwargs):
         for field in self._meta.get_fields():
-            if isinstance(field, (models.CharField, models.TextField)):
+            if isinstance(field, models.CharField | models.TextField):
                 value = getattr(self, field.name, None)
                 if isinstance(value, str) and value:
                     cleaned = strip_tags(value)
@@ -68,7 +66,7 @@ class Nh3SanitizationModelMixin:
     def save(self, *args, **kwargs):
         # Sanitize CharField and TextField values
         for field in self._meta.get_fields():
-            if isinstance(field, (models.CharField, models.TextField)):
+            if isinstance(field, models.CharField | models.TextField):
                 value = getattr(self, field.name, None)
                 if isinstance(value, str):
                     setattr(self, field.name, neutralise_html(value))
@@ -159,13 +157,11 @@ class RevisionedMixin(BaseModel):
 
 class UserAction(BaseModel):
     who = models.IntegerField()  # EmailUserRO
-    when = models.DateTimeField(null=False, blank=False, auto_now_add=True)
+    when = models.DateTimeField(null=False, blank=False, default=timezone.now)
     what = models.TextField(blank=False)
 
     def __str__(self):
-        return "{what} ({who} at {when})".format(
-            what=self.what, who=self.who, when=self.when
-        )
+        return f"{self.what} ({self.who} at {self.when})"
 
     class Meta:
         abstract = True
@@ -192,9 +188,7 @@ class CommunicationsLogEntry(BaseModel):
 
     type = models.CharField(max_length=35, choices=TYPE_CHOICES, default=DEFAULT_TYPE)
     reference = models.CharField(max_length=100, blank=True)
-    subject = models.CharField(
-        max_length=200, blank=True, verbose_name="Subject / Description"
-    )
+    subject = models.CharField(max_length=200, blank=True, verbose_name="Subject / Description")
     text = models.TextField(blank=True)
 
     customer = models.IntegerField(null=True)  # EmailUserRO
@@ -207,7 +201,6 @@ class CommunicationsLogEntry(BaseModel):
 
 
 class FileExtensionWhitelist(BaseModel):
-
     name = models.CharField(
         max_length=16,
         help_text="The file extension without the dot, e.g. jpg, pdf, docx, etc",
@@ -233,8 +226,7 @@ class FileExtensionWhitelist(BaseModel):
             map(
                 lambda m: (m, m),
                 filter(
-                    lambda m: Document
-                    in apps.get_app_config("boranga").models[m].__bases__,
+                    lambda m: Document in apps.get_app_config("boranga").models[m].__bases__,
                     apps.get_app_config("boranga").models,
                 ),
             )
@@ -262,9 +254,7 @@ class ActiveManager(models.Manager):
 
 
 class Document(RevisionedMixin, metaclass=AbstractModelMeta):
-    name = models.CharField(
-        max_length=255, blank=True, verbose_name="name", help_text=""
-    )
+    name = models.CharField(max_length=255, blank=True, verbose_name="name", help_text="")
     description = models.TextField(blank=True, verbose_name="description", help_text="")
     uploaded_date = models.DateTimeField(auto_now_add=True)
     active = models.BooleanField(default=True)
@@ -282,9 +272,7 @@ class Document(RevisionedMixin, metaclass=AbstractModelMeta):
         # if they are related to a proposal that has not yet been submitted
         parent_instance = self.get_parent_instance()
         if not parent_instance:
-            raise AttributeError(
-                "Document does not have an associated parent instance. Cannot delete."
-            )
+            raise AttributeError("Document does not have an associated parent instance. Cannot delete.")
 
         # If the parent instance doesn't have a lodgement_date field
         # or it has a lodgement_date field and it is not None
@@ -296,11 +284,7 @@ class Document(RevisionedMixin, metaclass=AbstractModelMeta):
         # If the parent instance has a lodgement_date field and it is None
         # then we allow the file to be removed from the file system as the
         # parent instance has not yet been submitted
-        if (
-            hasattr(parent_instance, "lodgement_date")
-            and parent_instance.lodgement_date is None
-            and self._file
-        ):
+        if hasattr(parent_instance, "lodgement_date") and parent_instance.lodgement_date is None and self._file:
             if os.path.exists(self._file.path):
                 os.remove(self._file.path)
             else:
@@ -320,17 +304,12 @@ class Document(RevisionedMixin, metaclass=AbstractModelMeta):
 
     @abstractmethod
     def get_parent_instance(self) -> BaseModel:
-        raise NotImplementedError(
-            "Subclasses of Document must implement a get_parent_instance method"
-        )
+        raise NotImplementedError("Subclasses of Document must implement a get_parent_instance method")
 
     @property
     def parent_submitted(self):
         parent_instance = self.get_parent_instance()
-        if (
-            hasattr(parent_instance, "lodgement_date")
-            and parent_instance.lodgement_date
-        ):
+        if hasattr(parent_instance, "lodgement_date") and parent_instance.lodgement_date:
             return True
         return False
 
@@ -363,9 +342,7 @@ class SystemMaintenance(BaseModel):
     def duration(self):
         """Duration of system maintenance (in mins)"""
         return (
-            int((self.end_date - self.start_date).total_seconds() / 60.0)
-            if self.end_date and self.start_date
-            else ""
+            int((self.end_date - self.start_date).total_seconds() / 60.0) if self.end_date and self.start_date else ""
         )
         # return (datetime.now(tz=tz) - self.start_date).total_seconds()/60.
 
@@ -377,16 +354,13 @@ class SystemMaintenance(BaseModel):
 
     def __str__(self):
         return (
-            f"System Maintenance: {self.name} ({self.description}) "
-            f"- starting {self.start_date}, ending {self.end_date}"
+            f"System Maintenance: {self.name} ({self.description}) - starting {self.start_date}, ending {self.end_date}"
         )
 
 
 class UserSystemSettings(BaseModel):
     user = models.IntegerField(unique=True)  # EmailUserRO
-    area_of_interest = models.ForeignKey(
-        "GroupType", on_delete=models.PROTECT, null=True, blank=True
-    )
+    area_of_interest = models.ForeignKey("GroupType", on_delete=models.PROTECT, null=True, blank=True)
 
     class Meta:
         app_label = "boranga"
@@ -477,9 +451,7 @@ class AbstractOrderedList(OrderedModel, ArchivableModel):
 
 
 class LockableModel(BaseModel):
-    locked = models.BooleanField(
-        null=False, blank=False, default=False, help_text="Whether the record is locked"
-    )
+    locked = models.BooleanField(null=False, blank=False, default=False, help_text="Whether the record is locked")
 
     class Meta:
         abstract = True
@@ -540,9 +512,7 @@ class LegacyValueMap(models.Model):
     canonical_name = models.CharField(max_length=255, blank=True, null=True)
 
     # Generic FK to target object (optional)
-    target_content_type = models.ForeignKey(
-        ContentType, on_delete=models.CASCADE, blank=True, null=True
-    )
+    target_content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, blank=True, null=True)
     target_object_id = models.PositiveIntegerField(blank=True, null=True)
     target_object = GenericForeignKey("target_content_type", "target_object_id")
 
@@ -613,9 +583,7 @@ class LegacyValueMap(models.Model):
             return None
 
         # prefer target object if present, otherwise return canonical string (or None)
-        result = (
-            rec.target_object if rec.target_object is not None else rec.canonical_name
-        )
+        result = rec.target_object if rec.target_object is not None else rec.canonical_name
 
         if use_cache:
             cache.set(cache_key, result, 300)
@@ -704,7 +672,7 @@ class LegacyUsernameEmailuserMapping(models.Model):
     """
 
     legacy_system = models.CharField(max_length=50, db_index=True)
-    legacy_username = models.CharField(max_length=255, unique=True)
+    legacy_username = models.CharField(max_length=255)
     email = models.EmailField(max_length=255)
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
@@ -712,6 +680,7 @@ class LegacyUsernameEmailuserMapping(models.Model):
 
     class Meta:
         app_label = "boranga"
+        unique_together = (("legacy_system", "legacy_username"),)
 
     def __str__(self):
         return f"{self.legacy_username} -> {self.emailuser_id}"

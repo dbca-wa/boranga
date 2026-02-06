@@ -29,13 +29,10 @@ logger = logging.getLogger(__name__)
 
 @transaction.atomic
 def ocr_proposal_submit(ocr_proposal, request):
-
     ocr_proposal.validate_submit()
 
     if not ocr_proposal.can_user_edit(request):
-        raise ValidationError(
-            "You can't submit this report at the moment due to the status or a permission issue"
-        )
+        raise ValidationError("You can't submit this report at the moment due to the status or a permission issue")
 
     ocr_proposal.submitter = request.user.id
 
@@ -47,9 +44,9 @@ def ocr_proposal_submit(ocr_proposal, request):
     ocr_proposal.lodgement_date = timezone.now()
 
     # Set the status of any pending amendment requests to 'amended'
-    ocr_proposal.amendment_requests.filter(
-        status=OccurrenceReportAmendmentRequest.STATUS_CHOICE_REQUESTED
-    ).update(status=OccurrenceReportAmendmentRequest.STATUS_CHOICE_AMENDED)
+    ocr_proposal.amendment_requests.filter(status=OccurrenceReportAmendmentRequest.STATUS_CHOICE_REQUESTED).update(
+        status=OccurrenceReportAmendmentRequest.STATUS_CHOICE_AMENDED
+    )
 
     # Create a log entry for the proposal
     ocr_proposal.log_user_action(
@@ -67,9 +64,7 @@ def ocr_proposal_submit(ocr_proposal, request):
     ret2 = send_submitter_submit_email_notification(request, ocr_proposal)
 
     if ret1 and ret2:
-        ocr_proposal.processing_status = (
-            OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
-        )
+        ocr_proposal.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
         ocr_proposal.customer_status = OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
         ocr_proposal.save()
     else:
@@ -86,9 +81,7 @@ def save_document(request, instance, comms_instance, document_type, input_name=N
         _file = request.data.get("_file")
 
         if document_type == "shapefile_document":
-            document = instance.shapefile_documents.get_or_create(
-                input_name=input_name, name=filename
-            )[0]
+            document = instance.shapefile_documents.get_or_create(input_name=input_name, name=filename)[0]
         else:
             raise ValidationError(f"Invalid document type {document_type}")
 
@@ -160,9 +153,7 @@ def extract_attached_archives(instance, foreign_key_field=None):
 
         for zipped_file in z.filelist:
             extracted_file_path = os.path.join(archive_path, zipped_file.filename)
-            shapefile_model = apps.get_model(
-                "boranga", f"{instance_name}ShapefileDocument"
-            )
+            shapefile_model = apps.get_model("boranga", f"{instance_name}ShapefileDocument")
 
             # Open the extracted file and create a Django File object
             with open(extracted_file_path, "rb") as f:
@@ -199,17 +190,12 @@ def validate_map_files(request, instance, foreign_key_field=None):
 
     # Shapefile extensions shp (geometry), shx (index between shp and dbf), dbf (data) are essential
     shp_file_qs = instance.shapefile_documents.filter(
-        Q(name__endswith=".shp")
-        | Q(name__endswith=".shx")
-        | Q(name__endswith=".dbf")
-        | Q(name__endswith=".prj")
+        Q(name__endswith=".shp") | Q(name__endswith=".shx") | Q(name__endswith=".dbf") | Q(name__endswith=".prj")
     )
 
     # Validate shapefile and all the other related files are present
     if not shp_file_qs and not archive_files_qs:
-        raise ValidationError(
-            "You can only attach files with the following extensions: .shp, .shx, and .dbf or .zip"
-        )
+        raise ValidationError("You can only attach files with the following extensions: .shp, .shx, and .dbf or .zip")
 
     shp_files = shp_file_qs.filter(name__endswith=".shp").distinct()
     shp_file_basenames = [s[:-4] for s in shp_files.values_list("name", flat=True)]
@@ -256,9 +242,7 @@ def validate_map_files(request, instance, foreign_key_field=None):
         if gdf.geometry.crs is None:
             if archive_files_qs:
                 instance.shapefile_documents.exclude(name__endswith=".zip").delete()
-            raise ValidationError(
-                f"Geometry in {shp_file_obj.name} has no coordinate reference system (CRS)"
-            )
+            raise ValidationError(f"Geometry in {shp_file_obj.name} has no coordinate reference system (CRS)")
 
         # spatial reference identifier of the original uploaded geometry
         original_srid = SpatialReference(gdf.geometry.crs.srs).srid
@@ -282,9 +266,7 @@ def validate_map_files(request, instance, foreign_key_field=None):
             srid = 4326  # We transformed to 4326 above
 
             geometry = GEOSGeometry(row.geometry.wkt, srid=srid)
-            original_geometry = GEOSGeometry(
-                gdf.loc[idx, "geometry"].wkt, srid=original_srid
-            )
+            original_geometry = GEOSGeometry(gdf.loc[idx, "geometry"].wkt, srid=original_srid)
 
             # Add the file name as identifier to the geojson for use in the frontend
             if "source_" not in gdf_transform:
@@ -319,7 +301,6 @@ def validate_map_files(request, instance, foreign_key_field=None):
 
 # gets all species that are related to the occurrence's species - parents, children, parent's parents, etc
 def get_all_related_species(species_id, exclude=[]):
-
     species_ids = []
     # add species id to list
     species_ids.append(species_id)
@@ -332,9 +313,7 @@ def get_all_related_species(species_id, exclude=[]):
             # update list here (temporarily) to prevent infinite loop caused by a circular relation
             # (unlikely but possible)
             temp_exclude = exclude + species_ids
-            species_ids = species_ids + get_all_related_species(
-                i.id, exclude=temp_exclude
-            )
+            species_ids = species_ids + get_all_related_species(i.id, exclude=temp_exclude)
             # update the exclude list with the newly added species_ids so they are not processed again
             exclude = exclude + species_ids
     return species_ids

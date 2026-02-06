@@ -103,9 +103,7 @@ class Command(BaseCommand):
 
         # Build indices for fast lookups
         exact_lookup = defaultdict(list)  # scientific_name -> [Taxonomy objects]
-        iexact_lookup = defaultdict(
-            list
-        )  # scientific_name.lower() -> [Taxonomy objects]
+        iexact_lookup = defaultdict(list)  # scientific_name.lower() -> [Taxonomy objects]
 
         for tax in qs.iterator(chunk_size=1000):
             name = tax.scientific_name or ""
@@ -173,34 +171,22 @@ class Command(BaseCommand):
                             status = "found"
                             details = f"pk={exact_matches[0].pk} (exact)"
                             by_status["found"] += 1
-                            rows_out.append(
-                                (name, nomos_name, nomos_id, status, details)
-                            )
+                            rows_out.append((name, nomos_name, nomos_id, status, details))
                             continue
                         elif len(exact_matches) > 1:
                             # If one of the matches is marked is_current=True, prefer it
-                            current_matches = [
-                                t
-                                for t in exact_matches
-                                if getattr(t, "is_current", False)
-                            ]
+                            current_matches = [t for t in exact_matches if getattr(t, "is_current", False)]
                             if len(current_matches) == 1:
                                 status = "found"
-                                details = (
-                                    f"pk={current_matches[0].pk} (exact, is_current)"
-                                )
+                                details = f"pk={current_matches[0].pk} (exact, is_current)"
                                 by_status["found"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
                             # Otherwise treat as multiple
                             status = "multiple"
                             details = f"exact match count={len(exact_matches)}"
                             by_status["multiple"] += 1
-                            rows_out.append(
-                                (name, nomos_name, nomos_id, status, details)
-                            )
+                            rows_out.append((name, nomos_name, nomos_id, status, details))
                             continue
 
                         # Check case-insensitive match
@@ -209,34 +195,22 @@ class Command(BaseCommand):
                             status = "found"
                             details = f"pk={iexact_matches[0].pk} (iexact)"
                             by_status["found"] += 1
-                            rows_out.append(
-                                (name, nomos_name, nomos_id, status, details)
-                            )
+                            rows_out.append((name, nomos_name, nomos_id, status, details))
                             continue
                         elif len(iexact_matches) > 1:
                             # If one of the case-insensitive matches is marked is_current=True, prefer it
-                            current_matches = [
-                                t
-                                for t in iexact_matches
-                                if getattr(t, "is_current", False)
-                            ]
+                            current_matches = [t for t in iexact_matches if getattr(t, "is_current", False)]
                             if len(current_matches) == 1:
                                 status = "found"
-                                details = (
-                                    f"pk={current_matches[0].pk} (iexact, is_current)"
-                                )
+                                details = f"pk={current_matches[0].pk} (iexact, is_current)"
                                 by_status["found"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
                             # Otherwise treat as multiple
                             status = "multiple"
                             details = f"iexact match count={len(iexact_matches)}"
                             by_status["multiple"] += 1
-                            rows_out.append(
-                                (name, nomos_name, nomos_id, status, details)
-                            )
+                            rows_out.append((name, nomos_name, nomos_id, status, details))
                             continue
                     except Exception as e:
                         details = f"name lookup error: {e}"
@@ -254,66 +228,42 @@ class Command(BaseCommand):
                                 status = "found"
                                 details = f"pk={exact_matches[0].pk} (NAME exact)"
                                 by_status["found"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
                             elif len(exact_matches) > 1:
-                                current_matches = [
-                                    t
-                                    for t in exact_matches
-                                    if getattr(t, "is_current", False)
-                                ]
+                                current_matches = [t for t in exact_matches if getattr(t, "is_current", False)]
                                 if len(current_matches) == 1:
                                     status = "found"
                                     details = f"pk={current_matches[0].pk} (NAME exact, is_current)"
                                     by_status["found"] += 1
-                                    rows_out.append(
-                                        (name, nomos_name, nomos_id, status, details)
-                                    )
+                                    rows_out.append((name, nomos_name, nomos_id, status, details))
                                     continue
                                 status = "multiple"
                                 details = f"NAME exact match count={len(exact_matches)}"
                                 by_status["multiple"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
 
                             # Check case-insensitive match for NAME
-                            iexact_matches = iexact_lookup.get(
-                                name_candidate.lower(), []
-                            )
+                            iexact_matches = iexact_lookup.get(name_candidate.lower(), [])
                             if len(iexact_matches) == 1:
                                 status = "found"
                                 details = f"pk={iexact_matches[0].pk} (NAME iexact)"
                                 by_status["found"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
                             elif len(iexact_matches) > 1:
-                                current_matches = [
-                                    t
-                                    for t in iexact_matches
-                                    if getattr(t, "is_current", False)
-                                ]
+                                current_matches = [t for t in iexact_matches if getattr(t, "is_current", False)]
                                 if len(current_matches) == 1:
                                     status = "found"
                                     details = f"pk={current_matches[0].pk} (NAME iexact, is_current)"
                                     by_status["found"] += 1
-                                    rows_out.append(
-                                        (name, nomos_name, nomos_id, status, details)
-                                    )
+                                    rows_out.append((name, nomos_name, nomos_id, status, details))
                                     continue
                                 status = "multiple"
-                                details = (
-                                    f"NAME iexact match count={len(iexact_matches)}"
-                                )
+                                details = f"NAME iexact match count={len(iexact_matches)}"
                                 by_status["multiple"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
                     except Exception as e:
                         details = f"name lookup error: {e}"
@@ -333,34 +283,22 @@ class Command(BaseCommand):
                             alt_exact = exact_lookup.get(alt_candidate, [])
                             if len(alt_exact) == 1:
                                 status = "found"
-                                details = (
-                                    f"pk={alt_exact[0].pk} (NAME alt exact strip ' PN')"
-                                )
+                                details = f"pk={alt_exact[0].pk} (NAME alt exact strip ' PN')"
                                 by_status["found"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
                             elif len(alt_exact) > 1:
-                                current_matches = [
-                                    t
-                                    for t in alt_exact
-                                    if getattr(t, "is_current", False)
-                                ]
+                                current_matches = [t for t in alt_exact if getattr(t, "is_current", False)]
                                 if len(current_matches) == 1:
                                     status = "found"
                                     details = f"pk={current_matches[0].pk} (NAME alt exact is_current strip ' PN')"
                                     by_status["found"] += 1
-                                    rows_out.append(
-                                        (name, nomos_name, nomos_id, status, details)
-                                    )
+                                    rows_out.append((name, nomos_name, nomos_id, status, details))
                                     continue
                                 status = "multiple"
                                 details = f"alt exact match count={len(alt_exact)}"
                                 by_status["multiple"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
 
                             # Check case-insensitive for alt candidate
@@ -369,30 +307,20 @@ class Command(BaseCommand):
                                 status = "found"
                                 details = f"pk={alt_iexact[0].pk} (NAME alt iexact strip ' PN')"
                                 by_status["found"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
                             elif len(alt_iexact) > 1:
-                                current_matches = [
-                                    t
-                                    for t in alt_iexact
-                                    if getattr(t, "is_current", False)
-                                ]
+                                current_matches = [t for t in alt_iexact if getattr(t, "is_current", False)]
                                 if len(current_matches) == 1:
                                     status = "found"
                                     details = f"pk={current_matches[0].pk} (NAME alt iexact is_current strip ' PN')"
                                     by_status["found"] += 1
-                                    rows_out.append(
-                                        (name, nomos_name, nomos_id, status, details)
-                                    )
+                                    rows_out.append((name, nomos_name, nomos_id, status, details))
                                     continue
                                 status = "multiple"
                                 details = f"alt iexact match count={len(alt_iexact)}"
                                 by_status["multiple"] += 1
-                                rows_out.append(
-                                    (name, nomos_name, nomos_id, status, details)
-                                )
+                                rows_out.append((name, nomos_name, nomos_id, status, details))
                                 continue
 
                 # nothing matched
@@ -406,9 +334,7 @@ class Command(BaseCommand):
         written_count = 0
         with open(out_path, "w", newline="", encoding="utf-8") as outfh:
             w = csv.writer(outfh)
-            w.writerow(
-                ["NAME", "nomos_canonical_name", "nomos_taxon_id", "status", "details"]
-            )
+            w.writerow(["NAME", "nomos_canonical_name", "nomos_taxon_id", "status", "details"])
             for r in rows_out:
                 # if errors_only is set, skip rows where status is 'found'
                 if errors_only and r[3] == "found":
@@ -435,9 +361,7 @@ class Command(BaseCommand):
         if not_found_samples:
             self.stdout.write("\nSample not-found names (up to 20):")
             for s in not_found_samples[:20]:
-                self.stdout.write(
-                    f"- NAME={s[0]!r} nomos_canonical_name={s[1]!r} nomos_taxon_id={s[2]!r}"
-                )
+                self.stdout.write(f"- NAME={s[0]!r} nomos_canonical_name={s[1]!r} nomos_taxon_id={s[2]!r}")
 
         # Also emit a sample of rows that had multiple matches
         multiple_samples = [r for r in rows_out if r[3] == "multiple"]

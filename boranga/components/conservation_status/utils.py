@@ -26,9 +26,9 @@ def cs_proposal_submit(cs_proposal, request):
     cs_proposal.lodgement_date = timezone.now()
 
     # Set the status of any pending amendment requests to 'amended'
-    cs_proposal.amendment_requests.filter(
-        status=ConservationStatusAmendmentRequest.STATUS_CHOICE_REQUESTED
-    ).update(status=ConservationStatusAmendmentRequest.STATUS_CHOICE_AMENDED)
+    cs_proposal.amendment_requests.filter(status=ConservationStatusAmendmentRequest.STATUS_CHOICE_REQUESTED).update(
+        status=ConservationStatusAmendmentRequest.STATUS_CHOICE_AMENDED
+    )
 
     # Create a log entry for the proposal
     cs_proposal.log_user_action(
@@ -46,14 +46,10 @@ def cs_proposal_submit(cs_proposal, request):
     ret2 = send_submitter_submit_email_notification(request, cs_proposal)
 
     if ret1 and ret2:
-        cs_proposal.processing_status = (
-            ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR
-        )
+        cs_proposal.processing_status = ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR
         cs_proposal.customer_status = ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR
         cs_proposal.save()
     else:
-        raise ValidationError(
-            "An error occurred while submitting proposal (Submit email notifications failed)"
-        )
+        raise ValidationError("An error occurred while submitting proposal (Submit email notifications failed)")
 
     return cs_proposal

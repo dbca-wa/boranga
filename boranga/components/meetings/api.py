@@ -116,9 +116,7 @@ class MeetingPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
 
         filtered_data = []
         for obj in serialized_data:
-            filtered_obj = {
-                key: value for key, value in obj.items() if key in allowed_fields
-            }
+            filtered_obj = {key: value for key, value in obj.items() if key in allowed_fields}
             filtered_data.append(filtered_obj)
 
         def flatten_dict(d, parent_key="", sep="_"):
@@ -167,12 +165,8 @@ class MeetingPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
 
                 workbook.save(buffer)
                 buffer.seek(0)
-                response = HttpResponse(
-                    buffer.read(), content_type="application/vnd.ms-excel"
-                )
-                response["Content-Disposition"] = (
-                    "attachment; filename=DBCA_Meeting.xlsx"
-                )
+                response = HttpResponse(buffer.read(), content_type="application/vnd.ms-excel")
+                response["Content-Disposition"] = "attachment; filename=DBCA_Meeting.xlsx"
                 final_response = response
                 buffer.close()
                 return final_response
@@ -180,9 +174,7 @@ class MeetingPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
             elif export_format == "csv":
                 csv_data = df.to_csv(index=False)
                 response = HttpResponse(content_type="text/csv")
-                response["Content-Disposition"] = (
-                    "attachment; filename=DBCA_Meeting.csv"
-                )
+                response["Content-Disposition"] = "attachment; filename=DBCA_Meeting.csv"
                 response.write(csv_data)
                 return response
 
@@ -257,9 +249,7 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             saved_instance = serializer.save()
             # add the committee selected members to the meeting
             if "selected_committee_members" in request_data:
-                saved_instance.selected_committee_members.set(
-                    request_data.get("selected_committee_members")
-                )
+                saved_instance.selected_committee_members.set(request_data.get("selected_committee_members"))
 
             instance.log_user_action(
                 MeetingUserAction.ACTION_SAVE_MEETING.format(instance.meeting_number),
@@ -368,9 +358,7 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         filtered_data = []
         for i, obj in enumerate(serialized_data):
-            filtered_obj = {
-                key: value for key, value in obj.items() if key in allowed_fields
-            }
+            filtered_obj = {key: value for key, value in obj.items() if key in allowed_fields}
             filtered_obj["Number"] = i + 1  # Assign sequential numbers starting from 1
             filtered_data.append(filtered_obj)
 
@@ -406,12 +394,8 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
                 workbook.save(buffer)
 
                 buffer.seek(0)
-                response = HttpResponse(
-                    buffer.read(), content_type="application/vnd.ms-excel"
-                )
-                response["Content-Disposition"] = (
-                    "attachment; filename=DBCA_Meeting_AgendaItems.xlsx"
-                )
+                response = HttpResponse(buffer.read(), content_type="application/vnd.ms-excel")
+                response["Content-Disposition"] = "attachment; filename=DBCA_Meeting_AgendaItems.xlsx"
                 final_response = response
                 buffer.close()
                 return final_response
@@ -419,9 +403,7 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             elif export_format == "csv":
                 csv_data = df.to_csv(index=False)
                 response = HttpResponse(content_type="text/csv")
-                response["Content-Disposition"] = (
-                    "attachment; filename=DBCA_Meeting_AgendaItems.csv"
-                )
+                response["Content-Disposition"] = "attachment; filename=DBCA_Meeting_AgendaItems.csv"
                 response.write(csv_data)
                 return response
 
@@ -436,9 +418,7 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance = self.get_object()
         request_data = request.data
         if request_data["conservation_status_id"]:
-            cs = ConservationStatus.objects.get(
-                id=request_data["conservation_status_id"]
-            )
+            cs = ConservationStatus.objects.get(id=request_data["conservation_status_id"])
             instance.agenda_items.create(conservation_status=cs)
             cs.processing_status = ConservationStatus.PROCESSING_STATUS_ON_AGENDA
             cs.save()
@@ -453,12 +433,8 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance = self.get_object()
         request_data = request.data
         if request_data["conservation_status_id"]:
-            cs = ConservationStatus.objects.get(
-                id=request_data["conservation_status_id"]
-            )
-            agenda_item = AgendaItem.objects.get(
-                meeting=instance, conservation_status=cs
-            )
+            cs = ConservationStatus.objects.get(id=request_data["conservation_status_id"])
+            agenda_item = AgendaItem.objects.get(meeting=instance, conservation_status=cs)
             agenda_item.delete()
             cs.processing_status = ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA
             cs.save()
@@ -585,15 +561,11 @@ class MinutesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance.active = False
         instance.save(version_user=request.user)
         instance.meeting.log_user_action(
-            MeetingUserAction.ACTION_DISCARD_MINUTE.format(
-                instance.minutes_number, instance.meeting.meeting_number
-            ),
+            MeetingUserAction.ACTION_DISCARD_MINUTE.format(instance.minutes_number, instance.meeting.meeting_number),
             request,
         )
         request.user.log_user_action(
-            MeetingUserAction.ACTION_DISCARD_MINUTE.format(
-                instance.minutes_number, instance.meeting.meeting_number
-            ),
+            MeetingUserAction.ACTION_DISCARD_MINUTE.format(instance.minutes_number, instance.meeting.meeting_number),
             request,
         )
         serializer = self.get_serializer(instance)
@@ -611,37 +583,27 @@ class MinutesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance.save(version_user=request.user)
         serializer = self.get_serializer(instance)
         instance.meeting.log_user_action(
-            MeetingUserAction.ACTION_REINSTATE_MINUTE.format(
-                instance.minutes_number, instance.meeting.meeting_number
-            ),
+            MeetingUserAction.ACTION_REINSTATE_MINUTE.format(instance.minutes_number, instance.meeting.meeting_number),
             request,
         )
         request.user.log_user_action(
-            MeetingUserAction.ACTION_REINSTATE_MINUTE.format(
-                instance.minutes_number, instance.meeting.meeting_number
-            ),
+            MeetingUserAction.ACTION_REINSTATE_MINUTE.format(instance.minutes_number, instance.meeting.meeting_number),
             request,
         )
         return Response(serializer.data)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SaveMinutesSerializer(
-            instance, data=json.loads(request.data.get("data"))
-        )
+        serializer = SaveMinutesSerializer(instance, data=json.loads(request.data.get("data")))
         serializer.is_valid(raise_exception=True)
         serializer.save(no_revision=True)
         instance.add_documents(request, version_user=request.user)
         instance.meeting.log_user_action(
-            MeetingUserAction.ACTION_UPDATE_MINUTE.format(
-                instance.minutes_number, instance.meeting.meeting_number
-            ),
+            MeetingUserAction.ACTION_UPDATE_MINUTE.format(instance.minutes_number, instance.meeting.meeting_number),
             request,
         )
         request.user.log_user_action(
-            MeetingUserAction.ACTION_UPDATE_MINUTE.format(
-                instance.minutes_number, instance.meeting.meeting_number
-            ),
+            MeetingUserAction.ACTION_UPDATE_MINUTE.format(instance.minutes_number, instance.meeting.meeting_number),
             request,
         )
         return Response(serializer.data)
@@ -652,15 +614,11 @@ class MinutesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance = serializer.save(no_revision=True)
         instance.add_documents(request, version_user=request.user)
         instance.meeting.log_user_action(
-            MeetingUserAction.ACTION_ADD_MINUTE.format(
-                instance.minutes_number, instance.meeting.meeting_number
-            ),
+            MeetingUserAction.ACTION_ADD_MINUTE.format(instance.minutes_number, instance.meeting.meeting_number),
             request,
         )
         request.user.log_user_action(
-            MeetingUserAction.ACTION_ADD_MINUTE.format(
-                instance.minutes_number, instance.meeting.meeting_number
-            ),
+            MeetingUserAction.ACTION_ADD_MINUTE.format(instance.minutes_number, instance.meeting.meeting_number),
             request,
         )
         return Response(serializer.data)

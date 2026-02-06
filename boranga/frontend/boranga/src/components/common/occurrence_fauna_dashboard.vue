@@ -537,7 +537,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFaunaOccurrenceName_cache,
@@ -548,7 +548,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFaunaScientificName_cache,
@@ -559,7 +559,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFaunaStatus_cache,
@@ -570,7 +570,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFaunaLocked_cache,
@@ -581,7 +581,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFromFaunaDueDate_cache,
@@ -592,7 +592,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCToFaunaDueDate_cache,
@@ -863,7 +863,7 @@ export default {
                                 });
                                 vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -923,7 +923,7 @@ export default {
                                 });
                                 vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

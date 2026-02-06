@@ -39,9 +39,7 @@ class Command(BaseCommand):
     help = "Populate OccToOcrSectionMapping from DRF_POP_SECTION_MAP.csv"
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "csv_path", nargs="?", type=str, help="Path to DRF_POP_SECTION_MAP.csv"
-        )
+        parser.add_argument("csv_path", nargs="?", type=str, help="Path to DRF_POP_SECTION_MAP.csv")
         parser.add_argument(
             "--legacy-system",
             type=str,
@@ -66,9 +64,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         BASE_DIR = Path(settings.BASE_DIR)
-        default_csv_path = (
-            BASE_DIR / "private-media/legacy_data/TPFL/DRF_POP_SECTION_MAP.csv"
-        )
+        default_csv_path = BASE_DIR / "private-media/legacy_data/TPFL/DRF_POP_SECTION_MAP.csv"
 
         # options['csv_path'] may be None when omitted; handle safely
         csv_path_opt = options.get("csv_path")
@@ -106,9 +102,7 @@ class Command(BaseCommand):
             required = {"POP_ID", "SHEETNO", "SECT_CODE"}
             headers = set(reader.fieldnames or [])
             if not required.issubset(headers):
-                raise CommandError(
-                    f"CSV missing required columns. Found headers: {reader.fieldnames}"
-                )
+                raise CommandError(f"CSV missing required columns. Found headers: {reader.fieldnames}")
 
             rows = list(reader)
 
@@ -169,9 +163,7 @@ class Command(BaseCommand):
                                 changed = True
                             if changed:
                                 obj.processed_at = None
-                                obj.save(
-                                    update_fields=["processed", "processed_at", "error"]
-                                )
+                                obj.save(update_fields=["processed", "processed_at", "error"])
                                 updated += 1
                             else:
                                 skipped += 1
@@ -184,14 +176,9 @@ class Command(BaseCommand):
                 skipped += 1
 
         self.stdout.write(
-            self.style.SUCCESS(
-                f"Import finished. rows={total} created={created} updated={updated} skipped={skipped}"
-            )
+            self.style.SUCCESS(f"Import finished. rows={total} created={created} updated={updated} skipped={skipped}")
         )
         if unknown_codes:
             self.stdout.write(
-                self.style.WARNING(
-                    "Unknown SECT_CODE values encountered: "
-                    + ", ".join(sorted(unknown_codes))
-                )
+                self.style.WARNING("Unknown SECT_CODE values encountered: " + ", ".join(sorted(unknown_codes)))
             )

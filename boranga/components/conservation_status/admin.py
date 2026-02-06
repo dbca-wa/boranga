@@ -9,9 +9,7 @@ from boranga.components.conservation_status import models
 
 
 @admin.register(models.ProposalAmendmentReason)
-class ProposalAmendmentReasonAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin
-):
+class ProposalAmendmentReasonAdmin(CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin):
     list_display = ["reason"]
 
 
@@ -33,9 +31,7 @@ class WAPriorityListAdmin(CsvExportMixin, ArchivableModelAdminMixin, AbstractLis
     pass
 
 
-class WAPriorityCategoryAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, AbstractCategoryAdmin
-):
+class WAPriorityCategoryAdmin(CsvExportMixin, ArchivableModelAdminMixin, AbstractCategoryAdmin):
     filter_horizontal = ("wa_priority_lists",)
 
 
@@ -43,33 +39,23 @@ class IUCNVersionAdmin(CsvExportMixin, ArchivableModelAdminMixin, AbstractListAd
     pass
 
 
-class WALegislativeListAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, AbstractListAdmin
-):
+class WALegislativeListAdmin(CsvExportMixin, ArchivableModelAdminMixin, AbstractListAdmin):
     pass
 
 
-class WALegislativeCategoryAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, AbstractCategoryAdmin
-):
+class WALegislativeCategoryAdmin(CsvExportMixin, ArchivableModelAdminMixin, AbstractCategoryAdmin):
     filter_horizontal = ("wa_legislative_lists",)
 
 
-class CommonwealthConservationListAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, AbstractListAdmin
-):
+class CommonwealthConservationListAdmin(CsvExportMixin, ArchivableModelAdminMixin, AbstractListAdmin):
     pass
 
 
-class OtherConservationAssessmentListAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, AbstractListAdmin
-):
+class OtherConservationAssessmentListAdmin(CsvExportMixin, ArchivableModelAdminMixin, AbstractListAdmin):
     pass
 
 
-class ConservationChangeCodeAdmin(
-    CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin
-):
+class ConservationChangeCodeAdmin(CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin):
     list_display = ["code", "label"]
 
 
@@ -78,10 +64,6 @@ admin.site.register(models.WAPriorityCategory, WAPriorityCategoryAdmin)
 admin.site.register(models.WALegislativeList, WALegislativeListAdmin)
 admin.site.register(models.WALegislativeCategory, WALegislativeCategoryAdmin)
 admin.site.register(models.IUCNVersion, IUCNVersionAdmin)
-admin.site.register(
-    models.CommonwealthConservationList, CommonwealthConservationListAdmin
-)
-admin.site.register(
-    models.OtherConservationAssessmentList, OtherConservationAssessmentListAdmin
-)
+admin.site.register(models.CommonwealthConservationList, CommonwealthConservationListAdmin)
+admin.site.register(models.OtherConservationAssessmentList, OtherConservationAssessmentListAdmin)
 admin.site.register(models.ConservationChangeCode, ConservationChangeCodeAdmin)

@@ -64,9 +64,7 @@ from boranga.settings import (
 
 logger = logging.getLogger(__name__)
 
-private_storage = FileSystemStorage(
-    location=settings.BASE_DIR + "/private-media/", base_url="/private-media/"
-)
+private_storage = FileSystemStorage(location=settings.BASE_DIR + "/private-media/", base_url="/private-media/")
 
 
 def update_species_conservation_status_comms_log_filename(instance, filename):
@@ -84,9 +82,7 @@ def update_conservation_status_comms_log_filename(instance, filename):
 
 
 def update_referral_doc_filename(instance, filename):
-    return "{}/conservation_status/{}/referral/{}".format(
-        settings.MEDIA_APP_DIR, instance.referral.proposal.id, filename
-    )
+    return f"{settings.MEDIA_APP_DIR}/conservation_status/{instance.referral.proposal.id}/referral/{filename}"
 
 
 def update_conservation_status_amendment_request_doc_filename(instance, filename):
@@ -166,7 +162,6 @@ class AbstractConservationCategory(OrderedModel, ArchivableModel):
 
 
 class WAPriorityList(AbstractConservationList):
-
     class Meta:
         ordering = ["code"]
         app_label = "boranga"
@@ -174,9 +169,7 @@ class WAPriorityList(AbstractConservationList):
 
 
 class WAPriorityCategory(AbstractConservationCategory):
-    wa_priority_lists = models.ManyToManyField(
-        WAPriorityList, related_name="wa_priority_categories"
-    )
+    wa_priority_lists = models.ManyToManyField(WAPriorityList, related_name="wa_priority_categories")
 
     class Meta:
         ordering = ["code"]
@@ -205,30 +198,22 @@ class WAPriorityCategory(AbstractConservationCategory):
         if active_only:
             wa_priority_categories_qs = cls.objects.active()
 
-        wa_priority_categories_qs = wa_priority_categories_qs.only(
-            "id", "code", "label"
-        )
+        wa_priority_categories_qs = wa_priority_categories_qs.only("id", "code", "label")
         if group_type and group_type.name == GroupType.GROUP_TYPE_COMMUNITY:
-            wa_priority_categories_qs = wa_priority_categories_qs.filter(
-                wa_priority_lists__applies_to_communities=True
-            )
+            wa_priority_categories_qs = wa_priority_categories_qs.filter(wa_priority_lists__applies_to_communities=True)
         elif group_type and group_type.name in [
             GroupType.GROUP_TYPE_FLORA,
         ]:
-            wa_priority_categories_qs = wa_priority_categories_qs.filter(
-                wa_priority_lists__applies_to_flora=True
-            )
+            wa_priority_categories_qs = wa_priority_categories_qs.filter(wa_priority_lists__applies_to_flora=True)
         elif group_type and group_type.name in [
             GroupType.GROUP_TYPE_FAUNA,
         ]:
-            wa_priority_categories_qs = wa_priority_categories_qs.filter(
-                wa_priority_lists__applies_to_fauna=True
-            )
+            wa_priority_categories_qs = wa_priority_categories_qs.filter(wa_priority_lists__applies_to_fauna=True)
         for wa_priority_category in wa_priority_categories_qs.distinct():
             list_ids = list(
-                WAPriorityList.objects.filter(
-                    wa_priority_categories=wa_priority_category.id
-                ).values_list("id", flat=True)
+                WAPriorityList.objects.filter(wa_priority_categories=wa_priority_category.id).values_list(
+                    "id", flat=True
+                )
             )
             wa_priority_categories.append(
                 {
@@ -242,7 +227,6 @@ class WAPriorityCategory(AbstractConservationCategory):
 
 
 class WALegislativeList(AbstractConservationList):
-
     class Meta:
         ordering = ["code"]
         app_label = "boranga"
@@ -250,9 +234,7 @@ class WALegislativeList(AbstractConservationList):
 
 
 class WALegislativeCategory(AbstractConservationCategory):
-    wa_legislative_lists = models.ManyToManyField(
-        WALegislativeList, related_name="wa_legislative_categories"
-    )
+    wa_legislative_lists = models.ManyToManyField(WALegislativeList, related_name="wa_legislative_categories")
 
     class Meta:
         ordering = ["code"]
@@ -281,9 +263,7 @@ class WALegislativeCategory(AbstractConservationCategory):
         if active_only:
             wa_legislative_categories_qs = cls.objects.active()
 
-        wa_legislative_categories_qs = wa_legislative_categories_qs.only(
-            "id", "code", "label"
-        )
+        wa_legislative_categories_qs = wa_legislative_categories_qs.only("id", "code", "label")
         if group_type and group_type.name == GroupType.GROUP_TYPE_COMMUNITY:
             wa_legislative_categories_qs = wa_legislative_categories_qs.filter(
                 wa_legislative_lists__applies_to_communities=True
@@ -302,9 +282,9 @@ class WALegislativeCategory(AbstractConservationCategory):
             )
         for wa_legislative_category in wa_legislative_categories_qs.distinct():
             list_ids = list(
-                WALegislativeList.objects.filter(
-                    wa_legislative_categories=wa_legislative_category.id
-                ).values_list("id", flat=True)
+                WALegislativeList.objects.filter(wa_legislative_categories=wa_legislative_category.id).values_list(
+                    "id", flat=True
+                )
             )
             wa_legislative_categories.append(
                 {
@@ -325,7 +305,6 @@ class IUCNVersion(AbstractConservationList):
 
 
 class CommonwealthConservationList(AbstractConservationList):
-
     class Meta:
         ordering = ["code"]
         app_label = "boranga"
@@ -334,7 +313,6 @@ class CommonwealthConservationList(AbstractConservationList):
 
 
 class OtherConservationAssessmentList(AbstractConservationList):
-
     class Meta:
         ordering = ["code"]
         app_label = "boranga"
@@ -370,9 +348,7 @@ class ConservationChangeCode(OrderedModel, ArchivableModel):
         return list(cls.objects.active().values("id", "code"))
 
 
-class ConservationStatus(
-    LockableModel, SubmitterInformationModelMixin, RevisionedMixin
-):
+class ConservationStatus(LockableModel, SubmitterInformationModelMixin, RevisionedMixin):
     """
     Several lists with different attributes
 
@@ -491,9 +467,7 @@ class ConservationStatus(
         default=CUSTOMER_STATUS_CHOICES[0][0],
     )
 
-    change_code = models.ForeignKey(
-        ConservationChangeCode, on_delete=models.SET_NULL, blank=True, null=True
-    )
+    change_code = models.ForeignKey(ConservationChangeCode, on_delete=models.SET_NULL, blank=True, null=True)
 
     APPLICATION_TYPE_CHOICES = (
         ("new_proposal", "New Application"),
@@ -509,9 +483,7 @@ class ConservationStatus(
     ]
 
     # group_type of application
-    application_type = models.ForeignKey(
-        GroupType, on_delete=models.SET_NULL, blank=True, null=True
-    )
+    application_type = models.ForeignKey(GroupType, on_delete=models.SET_NULL, blank=True, null=True)
     #
     proposal_type = models.CharField(
         "Application Status Type",
@@ -715,9 +687,7 @@ class ConservationStatus(
         elif self.community:
             return self.community.group_type.get_name_display()
         else:
-            return (
-                self.application_type.get_name_display()
-            )  # when the form is incomplete
+            return self.application_type.get_name_display()  # when the form is incomplete
 
     @property
     def applicant(self):
@@ -809,10 +779,7 @@ class ConservationStatus(
 
     @property
     def is_deletable(self):
-        return (
-            self.customer_status == ConservationStatus.CUSTOMER_STATUS_DRAFT
-            and not self.conservation_status_number
-        )
+        return self.customer_status == ConservationStatus.CUSTOMER_STATUS_DRAFT and not self.conservation_status_number
 
     @property
     def latest_referrals(self):
@@ -882,9 +849,7 @@ class ConservationStatus(
         current_conservation_statuses = current_conservation_statuses.filter(
             processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
         )
-        current_conservation_statuses = current_conservation_statuses.exclude(
-            id=self.id
-        )
+        current_conservation_statuses = current_conservation_statuses.exclude(id=self.id)
         if current_conservation_statuses.count() > 1:
             logger.warning(warning)
 
@@ -938,9 +903,7 @@ class ConservationStatus(
             return is_conservation_status_assessor(request)
 
         if self.processing_status == ConservationStatus.PROCESSING_STATUS_DEFERRED:
-            return is_conservation_status_assessor(
-                request
-            ) or is_conservation_status_approver(request)
+            return is_conservation_status_assessor(request) or is_conservation_status_approver(request)
 
         elif not self.locked or self.processing_status in [
             ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA,
@@ -963,14 +926,10 @@ class ConservationStatus(
             ConservationStatus.PROCESSING_STATUS_DELISTED,
             ConservationStatus.PROCESSING_STATUS_DEFERRED,
         ]:
-            if ConservationStatusReferral.objects.filter(
-                conservation_status=self, referral=request.user.id
-            ).exists():
+            if ConservationStatusReferral.objects.filter(conservation_status=self, referral=request.user.id).exists():
                 return True
 
-            return is_conservation_status_approver(
-                request
-            ) or is_conservation_status_assessor(request)
+            return is_conservation_status_approver(request) or is_conservation_status_assessor(request)
         return False
 
     @property
@@ -991,21 +950,12 @@ class ConservationStatus(
             ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR,
             ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL,
         ]:
-            return (
-                self.assigned_officer != request.user.id
-                and is_conservation_status_assessor(request)
-            )
+            return self.assigned_officer != request.user.id and is_conservation_status_assessor(request)
 
         if self.processing_status == ConservationStatus.PROCESSING_STATUS_DEFERRED:
-            if (
-                self.assigned_officer != request.user.id
-                and is_conservation_status_assessor(request)
-            ):
+            if self.assigned_officer != request.user.id and is_conservation_status_assessor(request):
                 return True
-            if (
-                self.assigned_approver != request.user.id
-                and is_conservation_status_approver(request)
-            ):
+            if self.assigned_approver != request.user.id and is_conservation_status_approver(request):
                 return True
             return False
 
@@ -1019,10 +969,7 @@ class ConservationStatus(
             ConservationStatus.PROCESSING_STATUS_DECLINED,
             ConservationStatus.PROCESSING_STATUS_DELISTED,
         ]:
-            return (
-                self.assigned_approver != request.user.id
-                and is_conservation_status_approver(request)
-            )
+            return self.assigned_approver != request.user.id and is_conservation_status_approver(request)
 
     def has_assessor_mode(self, request):
         status_without_assessor = [
@@ -1043,18 +990,14 @@ class ConservationStatus(
 
         if self.assigned_officer:
             if self.assigned_officer == request.user.id:
-                return is_conservation_status_assessor(
-                    request
-                ) or is_conservation_status_approver(request)
+                return is_conservation_status_assessor(request) or is_conservation_status_approver(request)
             return False
 
         return False
 
     @transaction.atomic
     def assign_officer(self, request, officer):
-        if not is_conservation_status_assessor(
-            request
-        ) and not is_conservation_status_approver(request):
+        if not is_conservation_status_assessor(request) and not is_conservation_status_approver(request):
             raise ValidationError(
                 f"Officer with id {officer} is not authorised to be assigned to this conservation status"
             )
@@ -1071,13 +1014,9 @@ class ConservationStatus(
             ConservationStatus.PROCESSING_STATUS_DEFERRED,
         ]
 
-        if (
-            self.processing_status in approver_statuses
-        ) and is_conservation_status_approver(request):
+        if (self.processing_status in approver_statuses) and is_conservation_status_approver(request):
             if officer == self.assigned_approver:
-                logger.warning(
-                    "Approver is already assigned to this conservation status"
-                )
+                logger.warning("Approver is already assigned to this conservation status")
                 return
 
             self.assigned_approver = officer.id
@@ -1108,14 +1047,9 @@ class ConservationStatus(
             ConservationStatus.PROCESSING_STATUS_DEFERRED,
         ]
 
-        if (
-            self.processing_status in assessor_statuses
-            and is_conservation_status_assessor(request)
-        ):
+        if self.processing_status in assessor_statuses and is_conservation_status_assessor(request):
             if officer == self.assigned_officer:
-                logger.warning(
-                    "Assessor is already assigned to this conservation status"
-                )
+                logger.warning("Assessor is already assigned to this conservation status")
                 return
 
             self.assigned_officer = officer.id
@@ -1148,16 +1082,12 @@ class ConservationStatus(
                     self.save()
                     # Create a log entry for the proposal
                     self.log_user_action(
-                        ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(
-                            self.conservation_status_number
-                        ),
+                        ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(self.conservation_status_number),
                         request,
                     )
                     # Create a log entry for the user
                     request.user.log_user_action(
-                        ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(
-                            self.conservation_status_number
-                        ),
+                        ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(self.conservation_status_number),
                         request,
                     )
             elif is_conservation_status_assessor(request):
@@ -1166,16 +1096,12 @@ class ConservationStatus(
                     self.save()
                     # Create a log entry for the proposal
                     self.log_user_action(
-                        ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(
-                            self.conservation_status_number
-                        ),
+                        ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(self.conservation_status_number),
                         request,
                     )
                     # Create a log entry for the user
                     request.user.log_user_action(
-                        ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(
-                            self.conservation_status_number
-                        ),
+                        ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(self.conservation_status_number),
                         request,
                     )
             return
@@ -1196,17 +1122,13 @@ class ConservationStatus(
 
                 # Create a log entry for the proposal
                 self.log_user_action(
-                    ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(
-                        self.conservation_status_number
-                    ),
+                    ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(self.conservation_status_number),
                     request,
                 )
 
                 # Create a log entry for the user
                 request.user.log_user_action(
-                    ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(
-                        self.conservation_status_number
-                    ),
+                    ConservationStatusUserAction.ACTION_UNASSIGN_APPROVER.format(self.conservation_status_number),
                     request,
                 )
         else:
@@ -1216,17 +1138,13 @@ class ConservationStatus(
 
                 # Create a log entry for the proposal
                 self.log_user_action(
-                    ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(
-                        self.conservation_status_number
-                    ),
+                    ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(self.conservation_status_number),
                     request,
                 )
 
                 # Create a log entry for the user
                 request.user.log_user_action(
-                    ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(
-                        self.conservation_status_number
-                    ),
+                    ConservationStatusUserAction.ACTION_UNASSIGN_ASSESSOR.format(self.conservation_status_number),
                     request,
                 )
 
@@ -1258,9 +1176,7 @@ class ConservationStatus(
 
         referral = None
         try:
-            ConservationStatusReferral.objects.get(
-                referral=referee.id, conservation_status=self
-            )
+            ConservationStatusReferral.objects.get(referral=referee.id, conservation_status=self)
             raise ValidationError("A referral has already been sent to this user")
         except ConservationStatusReferral.DoesNotExist:
             referral = ConservationStatusReferral.objects.create(
@@ -1305,9 +1221,7 @@ class ConservationStatus(
     @property
     def most_recent_meeting(self):
         Meeting = apps.get_model("boranga", "Meeting")
-        meetings = Meeting.objects.order_by("-datetime_updated").filter(
-            agenda_items__conservation_status_id=self.id
-        )
+        meetings = Meeting.objects.order_by("-datetime_updated").filter(agenda_items__conservation_status_id=self.id)
         if not meetings.exists():
             return None
 
@@ -1322,9 +1236,7 @@ class ConservationStatus(
         if not most_recent_meeting:
             return False
 
-        return (
-            most_recent_meeting.processing_status == Meeting.PROCESSING_STATUS_COMPLETED
-        )
+        return most_recent_meeting.processing_status == Meeting.PROCESSING_STATUS_COMPLETED
 
     def move_to_status(self, request, status, approver_comment):
         if not self.can_assess(request):
@@ -1337,10 +1249,7 @@ class ConservationStatus(
         ]:
             raise ValidationError("The provided status cannot be found.")
 
-        if (
-            self.processing_status == ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
-            or self.can_user_edit
-        ):
+        if self.processing_status == ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL or self.can_user_edit:
             raise ValidationError("You cannot change the current status at this time")
 
         if self.processing_status == status:
@@ -1385,9 +1294,7 @@ class ConservationStatus(
         if not self.can_assess(request):
             raise exceptions.ProposalNotAuthorized()
         if self.processing_status != ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR:
-            raise ValidationError(
-                "You cannot propose to decline if it is not with assessor"
-            )
+            raise ValidationError("You cannot propose to decline if it is not with assessor")
 
         reason = details.get("reason")
         ConservationStatusDeclinedDetails.objects.update_or_create(
@@ -1409,9 +1316,7 @@ class ConservationStatus(
 
         # Log proposal action
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_PROPOSED_DECLINE.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_PROPOSED_DECLINE.format(self.conservation_status_number),
             request,
         )
 
@@ -1437,15 +1342,13 @@ class ConservationStatus(
                 "the processing status is On Agenda AND it has ministerial approval level"
             )
 
-        conservation_status_decline, created = (
-            ConservationStatusDeclinedDetails.objects.update_or_create(
-                conservation_status=self,
-                defaults={
-                    "officer": request.user.id,
-                    "reason": details.get("reason"),
-                    "cc_email": details.get("cc_email", None),
-                },
-            )
+        conservation_status_decline, created = ConservationStatusDeclinedDetails.objects.update_or_create(
+            conservation_status=self,
+            defaults={
+                "officer": request.user.id,
+                "reason": details.get("reason"),
+                "cc_email": details.get("cc_email", None),
+            },
         )
         self.proposed_decline_status = True
         self.processing_status = ConservationStatus.PROCESSING_STATUS_DECLINED
@@ -1456,9 +1359,7 @@ class ConservationStatus(
 
         # Log proposal action
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_DECLINE.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_DECLINE.format(self.conservation_status_number),
             request,
         )
 
@@ -1476,9 +1377,7 @@ class ConservationStatus(
             raise exceptions.ProposalNotAuthorized()
 
         if self.processing_status != ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR:
-            raise ValidationError(
-                "You cannot propose for approval if it is not with assessor"
-            )
+            raise ValidationError("You cannot propose for approval if it is not with assessor")
 
         ConservationStatusIssuanceApprovalDetails.objects.update_or_create(
             conservation_status=self,
@@ -1503,9 +1402,7 @@ class ConservationStatus(
 
         # Log proposal action
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_PROPOSED_APPROVAL.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_PROPOSED_APPROVAL.format(self.conservation_status_number),
             request,
         )
 
@@ -1556,9 +1453,7 @@ class ConservationStatus(
                 Meeting.PROCESSING_STATUS_SCHEDULED,
                 Meeting.PROCESSING_STATUS_COMPLETED,
             ]
-            if not self.agendaitem_set.filter(
-                meeting__processing_status__in=added_to_meeting_status
-            ).exists():
+            if not self.agendaitem_set.filter(meeting__processing_status__in=added_to_meeting_status).exists():
                 raise ValidationError(
                     f"Conservation status {self} can not be approved as there are no meetings "
                     f"for ministerial approval that are currently scheduled or completed that "
@@ -1598,10 +1493,7 @@ class ConservationStatus(
             },
         )
 
-        if (
-            self.change_code
-            and self.change_code.code == settings.CONSERVATION_CHANGE_CODE_DELIST
-        ):
+        if self.change_code and self.change_code.code == settings.CONSERVATION_CHANGE_CODE_DELIST:
             self.processing_status = ConservationStatus.PROCESSING_STATUS_DELISTED
             self.customer_status = ConservationStatus.CUSTOMER_STATUS_CLOSED
         else:
@@ -1643,13 +1535,9 @@ class ConservationStatus(
         )
 
         if self.species:
-            previous_approved_version = previous_approved_version.filter(
-                species=self.species
-            ).first()
+            previous_approved_version = previous_approved_version.filter(species=self.species).first()
         elif self.community:
-            previous_approved_version = previous_approved_version.filter(
-                community=self.community
-            ).first()
+            previous_approved_version = previous_approved_version.filter(community=self.community).first()
 
         if previous_approved_version:
             # Check if the previous conservation status has a priority list
@@ -1657,45 +1545,28 @@ class ConservationStatus(
                 self.wa_priority_list = previous_approved_version.wa_priority_list
 
                 # Check if the previous conservation status has a priority category
-                if (
-                    previous_approved_version.wa_priority_category
-                    and not self.wa_priority_category
-                ):
-                    self.wa_priority_category = (
-                        previous_approved_version.wa_priority_category
-                    )
+                if previous_approved_version.wa_priority_category and not self.wa_priority_category:
+                    self.wa_priority_category = previous_approved_version.wa_priority_category
 
-            previous_approved_version.customer_status = (
-                ConservationStatus.PROCESSING_STATUS_CLOSED
-            )
-            previous_approved_version.processing_status = (
-                ConservationStatus.PROCESSING_STATUS_CLOSED
-            )
+            previous_approved_version.customer_status = ConservationStatus.PROCESSING_STATUS_CLOSED
+            previous_approved_version.processing_status = ConservationStatus.PROCESSING_STATUS_CLOSED
             previous_approved_version.locked = True
             if self.effective_from:
-                previous_approved_version.effective_to = (
-                    self.effective_from - timedelta(days=1)
-                )
+                previous_approved_version.effective_to = self.effective_from - timedelta(days=1)
             previous_approved_version.save()
 
             # Create a log entry for the conservation status
-            cs_closed_message = (
-                ConservationStatusUserAction.ACTION_CLOSE_CONSERVATION_STATUS.format(
-                    previous_approved_version.conservation_status_number
-                )
+            cs_closed_message = ConservationStatusUserAction.ACTION_CLOSE_CONSERVATION_STATUS.format(
+                previous_approved_version.conservation_status_number
             )
-            cs_closed_message = (
-                f"{cs_closed_message} (Replaced by {self.conservation_status_number})"
-            )
+            cs_closed_message = f"{cs_closed_message} (Replaced by {self.conservation_status_number})"
             previous_approved_version.log_user_action(
                 cs_closed_message,
                 request,
             )
 
-            previous_cs_closed_message = (
-                ConservationStatusUserAction.ACTION_CLOSE_CONSERVATION_STATUS.format(
-                    previous_approved_version.conservation_status_number
-                )
+            previous_cs_closed_message = ConservationStatusUserAction.ACTION_CLOSE_CONSERVATION_STATUS.format(
+                previous_approved_version.conservation_status_number
             )
             previous_cs_closed_message = f"Previous {previous_cs_closed_message}"
             self.log_user_action(
@@ -1721,13 +1592,9 @@ class ConservationStatus(
             raise exceptions.ProposalNotAuthorized()
 
         if self.processing_status != ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR:
-            raise ValidationError(
-                "You cannot propose for ready for agenda if it is not with assessor"
-            )
+            raise ValidationError("You cannot propose for ready for agenda if it is not with assessor")
 
-        self.processing_status = (
-            ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA
-        )
+        self.processing_status = ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA
 
         # Save time by auto assigning the request user if they are in the CS assessor group
         if is_conservation_status_approver(request):
@@ -1753,19 +1620,14 @@ class ConservationStatus(
             request,
         )
 
-        send_approver_proposed_for_agenda_email_notification(
-            request, self, assessor_comment
-        )
+        send_approver_proposed_for_agenda_email_notification(request, self, assessor_comment)
 
     @transaction.atomic
     def ready_for_agenda(self, request):
         if not self.can_assess(request):
             raise exceptions.ProposalNotAuthorized()
 
-        if (
-            self.processing_status
-            != ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA
-        ):
+        if self.processing_status != ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA:
             raise ValidationError(
                 "You cannot change the processing status to 'Ready for Agenda'"
                 "unless it is currently 'Proposed for Agenda'"
@@ -1792,33 +1654,21 @@ class ConservationStatus(
             request,
         )
 
-        send_assessor_ready_for_agenda_email_notification(
-            request, self, assessor_comment
-        )
+        send_assessor_ready_for_agenda_email_notification(request, self, assessor_comment)
 
     @transaction.atomic
     def discard(self, request):
         if self.lodgement_date:
-            raise ValidationError(
-                "You cannot discard a conservation status that has been submitted"
-            )
+            raise ValidationError("You cannot discard a conservation status that has been submitted")
 
         if not self.processing_status == ConservationStatus.PROCESSING_STATUS_DRAFT:
-            raise ValidationError(
-                "You cannot discard a conservation status that is not a draft"
-            )
+            raise ValidationError("You cannot discard a conservation status that is not a draft")
 
         if not request.user.id == self.submitter:
-            raise ValidationError(
-                "You cannot discard a conservation status that is not yours"
-            )
+            raise ValidationError("You cannot discard a conservation status that is not yours")
 
-        if not is_external_contributor(request) and not is_internal_contributor(
-            request
-        ):
-            raise ValidationError(
-                "You cannot discard a conservation status unless you are a contributor"
-            )
+        if not is_external_contributor(request) and not is_internal_contributor(request):
+            raise ValidationError("You cannot discard a conservation status unless you are a contributor")
 
         self.processing_status = ConservationStatus.PROCESSING_STATUS_DISCARDED
         self.customer_status = ConservationStatus.CUSTOMER_STATUS_DISCARDED
@@ -1826,9 +1676,7 @@ class ConservationStatus(
 
         # Log proposal action
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_DISCARD_PROPOSAL.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_DISCARD_PROPOSAL.format(self.conservation_status_number),
             request,
         )
 
@@ -1843,29 +1691,16 @@ class ConservationStatus(
     @transaction.atomic
     def reinstate(self, request):
         if self.lodgement_date:
-            raise ValidationError(
-                "You cannot reinstate a conservation status that has been submitted"
-            )
+            raise ValidationError("You cannot reinstate a conservation status that has been submitted")
 
         if not self.processing_status == ConservationStatus.PROCESSING_STATUS_DISCARDED:
-            raise ValidationError(
-                "You cannot reinstate a conservation status that has not been discarded"
-            )
+            raise ValidationError("You cannot reinstate a conservation status that has not been discarded")
 
-        if (
-            not is_conservation_status_assessor(request)
-            and request.user.id != self.submitter
-        ):
-            raise ValidationError(
-                "You cannot reinstate a conservation status that is not yours"
-            )
+        if not is_conservation_status_assessor(request) and request.user.id != self.submitter:
+            raise ValidationError("You cannot reinstate a conservation status that is not yours")
 
-        if not is_external_contributor(request) and not is_internal_contributor(
-            request
-        ):
-            raise ValidationError(
-                "You cannot reinstate a conservation status unless you are a contributor"
-            )
+        if not is_external_contributor(request) and not is_internal_contributor(request):
+            raise ValidationError("You cannot reinstate a conservation status unless you are a contributor")
 
         self.processing_status = ConservationStatus.PROCESSING_STATUS_DRAFT
         self.customer_status = ConservationStatus.CUSTOMER_STATUS_DRAFT
@@ -1873,9 +1708,7 @@ class ConservationStatus(
 
         # Log proposal action
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_REINSTATE_PROPOSAL.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_REINSTATE_PROPOSAL.format(self.conservation_status_number),
             request,
         )
 
@@ -1890,9 +1723,7 @@ class ConservationStatus(
     @transaction.atomic
     def propose_delist(self, request):
         if not self.processing_status == ConservationStatus.PROCESSING_STATUS_APPROVED:
-            raise ValidationError(
-                "You cannot propose to delist a conservation status that is not approved"
-            )
+            raise ValidationError("You cannot propose to delist a conservation status that is not approved")
 
         if not is_conservation_status_assessor(request):
             raise ValidationError(
@@ -1900,9 +1731,7 @@ class ConservationStatus(
                 "are a member of the conservation status assessor group"
             )
 
-        self.effective_to = datetime.strptime(
-            request.data.get("effective_to"), "%Y-%m-%d"
-        ).date()
+        self.effective_to = datetime.strptime(request.data.get("effective_to"), "%Y-%m-%d").date()
         self.processing_status = ConservationStatus.PROCESSING_STATUS_WITH_APPROVER
         self.save()
 
@@ -1910,17 +1739,13 @@ class ConservationStatus(
 
         # Log proposal action
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_PROPOSE_DELIST_PROPOSAL.format(
-                self.conservation_status_number, reason
-            ),
+            ConservationStatusUserAction.ACTION_PROPOSE_DELIST_PROPOSAL.format(self.conservation_status_number, reason),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            ConservationStatusUserAction.ACTION_PROPOSE_DELIST_PROPOSAL.format(
-                self.conservation_status_number, reason
-            ),
+            ConservationStatusUserAction.ACTION_PROPOSE_DELIST_PROPOSAL.format(self.conservation_status_number, reason),
             request,
         )
 
@@ -1928,18 +1753,11 @@ class ConservationStatus(
 
     @transaction.atomic
     def delist(self, request):
-        if (
-            not self.processing_status
-            == ConservationStatus.PROCESSING_STATUS_WITH_APPROVER
-        ):
-            raise ValidationError(
-                "You cannot delist a conservation status that is not with approver"
-            )
+        if not self.processing_status == ConservationStatus.PROCESSING_STATUS_WITH_APPROVER:
+            raise ValidationError("You cannot delist a conservation status that is not with approver")
 
         if not self.assigned_approver == request.user.id:
-            raise ValidationError(
-                "You cannot delist a conservation status that you are not assigned to"
-            )
+            raise ValidationError("You cannot delist a conservation status that you are not assigned to")
 
         if not is_conservation_status_approver(request):
             raise ValidationError(
@@ -1953,9 +1771,7 @@ class ConservationStatus(
 
         # Log proposal action
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_DELIST_PROPOSAL.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_DELIST_PROPOSAL.format(self.conservation_status_number),
             request,
         )
 
@@ -1981,9 +1797,7 @@ class ConservationStatus(
                 f"processing status is {self.get_processing_status_display()}"
             )
 
-        if not is_conservation_status_assessor(
-            request
-        ) and not is_conservation_status_approver(request):
+        if not is_conservation_status_assessor(request) and not is_conservation_status_approver(request):
             raise ValidationError(
                 "You cannot defer a conservation status unless you are a member "
                 "of the conservation status assessor or approver group"
@@ -1996,24 +1810,27 @@ class ConservationStatus(
 
         # Log proposal action
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_DEFER_PROPOSAL.format(
-                self.conservation_status_number, reason
-            ),
+            ConservationStatusUserAction.ACTION_DEFER_PROPOSAL.format(self.conservation_status_number, reason),
             request,
         )
 
         # Create a log entry for the user
         request.user.log_user_action(
-            ConservationStatusUserAction.ACTION_DEFER_PROPOSAL.format(
-                self.conservation_status_number, reason
-            ),
+            ConservationStatusUserAction.ACTION_DEFER_PROPOSAL.format(self.conservation_status_number, reason),
             request,
         )
 
         send_approver_defer_email_notification(request, self, reason)
 
     def get_related_items(
-        self, filter_type, offset=None, limit=None, search_value=None, **kwargs
+        self,
+        filter_type,
+        offset=None,
+        limit=None,
+        search_value=None,
+        ordering_column=None,
+        ordering_direction=None,
+        **kwargs,
     ):
         return_list = []
         if filter_type == "all":
@@ -2028,24 +1845,6 @@ class ConservationStatus(
             related_field_names = [
                 filter_type,
             ]
-
-        total_count = 0
-
-        def get_slice_range(count):
-            if offset is None:
-                return 0, count
-
-            global_start = total_count
-            global_end = total_count + count
-            req_start = int(offset)
-            req_end = int(offset) + int(limit)
-
-            if global_end <= req_start or global_start >= req_end:
-                return 0, 0
-
-            start = max(0, req_start - global_start)
-            end = min(count, req_end - global_start)
-            return start, end
 
         all_fields = self._meta.get_fields()
         for a_field in all_fields:
@@ -2062,43 +1861,30 @@ class ConservationStatus(
                         else:
                             field_objects = []
                     elif a_field.one_to_many:  # reverse foreign key
-                        qs = a_field.related_model.objects.filter(
-                            **{a_field.remote_field.name: self}
-                        )
-                        field_objects = qs
+                        field_objects = a_field.related_model.objects.filter(**{a_field.remote_field.name: self})
                         is_queryset = True
                     elif a_field.one_to_one:
                         if hasattr(self, a_field.name):
                             field_objects = [getattr(self, a_field.name)]
 
-                count = 0
                 if is_queryset:
                     if "exclude_ids" in kwargs:
-                        field_objects = field_objects.exclude(
-                            id__in=kwargs["exclude_ids"]
-                        )
-                    count = field_objects.count()
+                        field_objects = field_objects.exclude(id__in=kwargs["exclude_ids"])
+                    subset = field_objects
                 else:
-                    count = len(field_objects)
+                    subset = field_objects
 
-                start, end = get_slice_range(count)
-
-                if start < end:
-                    subset = field_objects[start:end]
-                    for field_object in subset:
-                        if field_object:
-                            related_item = field_object.as_related_item
-                            if search_value:
-                                if (
-                                    search_value.lower()
-                                    not in related_item.identifier.lower()
-                                    and search_value.lower()
-                                    not in related_item.descriptor.lower()
-                                ):
-                                    continue
-                            return_list.append(related_item)
-
-                total_count += count
+                for field_object in subset:
+                    if field_object:
+                        related_item = field_object.as_related_item
+                        if search_value:
+                            if (
+                                search_value.lower() not in related_item.identifier.lower()
+                                and search_value.lower() not in related_item.descriptor.lower()
+                                and search_value.lower() not in related_item.related_sc_id.lower()
+                            ):
+                                continue
+                        return_list.append(related_item)
 
         # Handle nested related items for species/community
         species_filter = []
@@ -2108,26 +1894,33 @@ class ConservationStatus(
             species_filter.append("occurrence_report")
         for occ_filter_type in species_filter:
             if self.species:
-                items = self.species.get_related_items(occ_filter_type)
-                count = len(items)
-                start, end = get_slice_range(count)
-                if start < end:
-                    return_list.extend(items[start:end])
-                total_count += count
+                items = self.species.get_related_items(occ_filter_type, search_value=search_value)
+                return_list.extend(items)
             if self.community:
-                items = self.community.get_related_items(occ_filter_type)
-                count = len(items)
-                start, end = get_slice_range(count)
-                if start < end:
-                    return_list.extend(items[start:end])
-                total_count += count
+                items = self.community.get_related_items(occ_filter_type, search_value=search_value)
+                return_list.extend(items)
 
-        # Remove duplicates
-        if offset is None:
-            return_list = list(set(return_list))
-            return return_list
+        # Sort
+        if ordering_column:
+            reverse = ordering_direction == "desc"
 
-        return return_list, total_count
+            def sort_key(x):
+                val = getattr(x, ordering_column, "")
+                if val is None:
+                    return ""
+                return str(val).lower()
+
+            return_list.sort(key=sort_key, reverse=reverse)
+
+        total_count = len(return_list)
+
+        if offset is not None and limit is not None:
+            start = int(offset)
+            end = start + int(limit)
+            return_list = return_list[start:end]
+            return return_list, total_count
+
+        return return_list
 
     @property
     def as_related_item(self):
@@ -2193,9 +1986,7 @@ class ConservationStatus(
 
     def lock(self, request):
         if self.locked:
-            raise ValidationError(
-                "You cannot lock a conservation status that is already locked"
-            )
+            raise ValidationError("You cannot lock a conservation status that is already locked")
         if not is_conservation_status_approver(request):
             raise ValidationError(
                 "You cannot lock a conservation status unless you are a member "
@@ -2206,24 +1997,18 @@ class ConservationStatus(
         self.save(version_user=request.user)
 
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_LOCK.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_LOCK.format(self.conservation_status_number),
             request,
         )
 
         request.user.log_user_action(
-            ConservationStatusUserAction.ACTION_LOCK.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_LOCK.format(self.conservation_status_number),
             request,
         )
 
     def unlock(self, request):
         if not self.locked:
-            raise ValidationError(
-                "You cannot unlock a conservation status that is already unlocked"
-            )
+            raise ValidationError("You cannot unlock a conservation status that is already unlocked")
 
         if not is_conservation_status_approver(request):
             raise ValidationError(
@@ -2235,16 +2020,12 @@ class ConservationStatus(
         self.save(version_user=request.user)
 
         self.log_user_action(
-            ConservationStatusUserAction.ACTION_UNLOCK.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_UNLOCK.format(self.conservation_status_number),
             request,
         )
 
         request.user.log_user_action(
-            ConservationStatusUserAction.ACTION_UNLOCK.format(
-                self.conservation_status_number
-            ),
+            ConservationStatusUserAction.ACTION_UNLOCK.format(self.conservation_status_number),
             request,
         )
 
@@ -2262,15 +2043,11 @@ class ConservationStatus(
 
     @property
     def external_referral_invites(self):
-        return self.external_referee_invites.filter(
-            archived=False, datetime_first_logged_in__isnull=True
-        )
+        return self.external_referee_invites.filter(archived=False, datetime_first_logged_in__isnull=True)
 
 
 class ConservationStatusLogEntry(CommunicationsLogEntry):
-    conservation_status = models.ForeignKey(
-        ConservationStatus, related_name="comms_logs", on_delete=models.CASCADE
-    )
+    conservation_status = models.ForeignKey(ConservationStatus, related_name="comms_logs", on_delete=models.CASCADE)
 
     def __str__(self):
         return f"{self.reference} - {self.subject}"
@@ -2286,9 +2063,7 @@ class ConservationStatusLogEntry(CommunicationsLogEntry):
 
 
 class ConservationStatusLogDocument(Document):
-    log_entry = models.ForeignKey(
-        "ConservationStatusLogEntry", related_name="documents", on_delete=models.CASCADE
-    )
+    log_entry = models.ForeignKey("ConservationStatusLogEntry", related_name="documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=update_conservation_status_comms_log_filename,
         max_length=512,
@@ -2308,44 +2083,23 @@ class ConservationStatusUserAction(UserAction):
     ACTION_LODGE_PROPOSAL = "Lodge proposal for conservation status {}"
     ACTION_SAVE_APPLICATION = "Save proposal {}"
     ACTION_EDIT_APPLICATION = "Edit proposal {}"
-    ACTION_ASSIGN_TO_ASSESSOR = (
-        "Assign conservation status proposal {} to {} as the assessor"
-    )
+    ACTION_ASSIGN_TO_ASSESSOR = "Assign conservation status proposal {} to {} as the assessor"
     ACTION_UNASSIGN_ASSESSOR = "Unassign assessor from conservation status proposal {}"
-    ACTION_ASSIGN_TO_APPROVER = (
-        "Assign conservation status proposal {} to {} as the approver"
-    )
+    ACTION_ASSIGN_TO_APPROVER = "Assign conservation status proposal {} to {} as the approver"
     ACTION_UNASSIGN_APPROVER = "Unassign approver from conservation status proposal {}"
     ACTION_DECLINE = "Decline conservation status application {}"
-    ACTION_APPROVE_CONSERVATION_STATUS = (
-        "Approve conservation status proposal {}. Approver Comment: {}"
-    )
+    ACTION_APPROVE_CONSERVATION_STATUS = "Approve conservation status proposal {}. Approver Comment: {}"
     ACTION_CLOSE_CONSERVATION_STATUS = "Conservation status {} has been closed"
-    ACTION_CLOSE_CONSERVATION_STATUS_DUE_TO_RENAME = (
-        "Conservation status {} has been closed due to a rename"
-    )
-    ACTION_CLOSE_CONSERVATION_STATUS_DUE_TO_SPLIT = (
-        "Conservation status {} has been closed due to a split"
-    )
-    ACTION_CLOSE_CONSERVATION_STATUS_DUE_TO_COMBINE = (
-        "Conservation status {} has been closed due to a combine"
-    )
+    ACTION_CLOSE_CONSERVATION_STATUS_DUE_TO_RENAME = "Conservation status {} has been closed due to a rename"
+    ACTION_CLOSE_CONSERVATION_STATUS_DUE_TO_SPLIT = "Conservation status {} has been closed due to a split"
+    ACTION_CLOSE_CONSERVATION_STATUS_DUE_TO_COMBINE = "Conservation status {} has been closed due to a combine"
     ACTION_DISCARD_PROPOSAL = "Discard conservation status proposal {}"
-    ACTION_PROPOSE_DELIST_PROPOSAL = (
-        "Propose Delist conservation status proposal {}. Reason: {}"
-    )
-    ACTION_PROPOSED_FOR_AGENDA = (
-        "Conservation status proposal {} "
-        "has been proposed for agenda. Assessor Comment: {}"
-    )
-    ACTION_READY_FOR_AGENDA = (
-        "Conservation status proposal {} " "is ready for agenda. Assessor Comment: {}"
-    )
+    ACTION_PROPOSE_DELIST_PROPOSAL = "Propose Delist conservation status proposal {}. Reason: {}"
+    ACTION_PROPOSED_FOR_AGENDA = "Conservation status proposal {} has been proposed for agenda. Assessor Comment: {}"
+    ACTION_READY_FOR_AGENDA = "Conservation status proposal {} is ready for agenda. Assessor Comment: {}"
     ACTION_DELIST_PROPOSAL = "Delist conservation status proposal {}"
     ACTION_DEFER_PROPOSAL = "Defer conservation status proposal {}. Reason: {}"
-    ACTION_DISCARD_PROPOSAL_INTERNALLY = (
-        "Discard conservation status proposal internally {}"
-    )
+    ACTION_DISCARD_PROPOSAL_INTERNALLY = "Discard conservation status proposal internally {}"
     ACTION_REINSTATE_PROPOSAL = "Reinstate conservation status proposal {}"
     ACTION_APPROVAL_LEVEL_DOCUMENT = "Assign Approval level document {}"
     ACTION_UNLOCK = "Unlock conservation status proposal {}"
@@ -2357,35 +2111,17 @@ class ConservationStatusUserAction(UserAction):
     # Assessors
     ACTION_SAVE_ASSESSMENT_ = "Save assessment {}"
     ACTION_CONCLUDE_ASSESSMENT_ = "Conclude assessment {}"
-    ACTION_PROPOSED_APPROVAL = (
-        "Conservation status proposal {} has been proposed for approval"
-    )
-    ACTION_PROPOSED_DECLINE = (
-        "Conservation status proposal {} has been proposed for decline"
-    )
+    ACTION_PROPOSED_APPROVAL = "Conservation status proposal {} has been proposed for approval"
+    ACTION_PROPOSED_DECLINE = "Conservation status proposal {} has been proposed for decline"
 
     # Referrals
-    ACTION_SEND_REFERRAL_TO = (
-        "Send referral {} for conservation status proposal {} to {}"
-    )
-    ACTION_RESEND_REFERRAL_TO = (
-        "Resend referral {} for conservation status proposal {} to {}"
-    )
-    ACTION_REMIND_REFERRAL = (
-        "Send reminder for referral {} for conservation status proposal {} to {}"
-    )
-    ACTION_MOVE_TO_STATUS = (
-        "Change status for conservation status proposal {} from {} to {}"
-    )
-    RECALL_REFERRAL = (
-        "Referral {} for conservation status proposal {} has been recalled"
-    )
-    SAVE_REFERRAL = (
-        "Referral {} for conservation status proposal {} has been saved by {}"
-    )
-    CONCLUDE_REFERRAL = (
-        "Referral {} for conservation status proposal {} has been concluded by {}"
-    )
+    ACTION_SEND_REFERRAL_TO = "Send referral {} for conservation status proposal {} to {}"
+    ACTION_RESEND_REFERRAL_TO = "Resend referral {} for conservation status proposal {} to {}"
+    ACTION_REMIND_REFERRAL = "Send reminder for referral {} for conservation status proposal {} to {}"
+    ACTION_MOVE_TO_STATUS = "Change status for conservation status proposal {} from {} to {}"
+    RECALL_REFERRAL = "Referral {} for conservation status proposal {} has been recalled"
+    SAVE_REFERRAL = "Referral {} for conservation status proposal {} has been saved by {}"
+    CONCLUDE_REFERRAL = "Referral {} for conservation status proposal {} has been concluded by {}"
 
     class Meta:
         app_label = "boranga"
@@ -2393,20 +2129,14 @@ class ConservationStatusUserAction(UserAction):
 
     @classmethod
     def log_action(cls, conservation_status, action, user):
-        return cls.objects.create(
-            conservation_status=conservation_status, who=user, what=str(action)
-        )
+        return cls.objects.create(conservation_status=conservation_status, who=user, what=str(action))
 
-    conservation_status = models.ForeignKey(
-        ConservationStatus, related_name="action_logs", on_delete=models.CASCADE
-    )
+    conservation_status = models.ForeignKey(ConservationStatus, related_name="action_logs", on_delete=models.CASCADE)
 
 
 class ConservationStatusDocument(Document):
     document_number = models.CharField(max_length=9, blank=True, default="")
-    conservation_status = models.ForeignKey(
-        "ConservationStatus", related_name="documents", on_delete=models.CASCADE
-    )
+    conservation_status = models.ForeignKey("ConservationStatus", related_name="documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=update_conservation_status_doc_filename,
         max_length=512,
@@ -2414,12 +2144,8 @@ class ConservationStatusDocument(Document):
     )
     input_name = models.CharField(max_length=255, null=True, blank=True)
     can_submitter_access = models.BooleanField(default=False)
-    document_category = models.ForeignKey(
-        DocumentCategory, null=True, blank=True, on_delete=models.SET_NULL
-    )
-    document_sub_category = models.ForeignKey(
-        DocumentSubCategory, null=True, blank=True, on_delete=models.SET_NULL
-    )
+    document_category = models.ForeignKey(DocumentCategory, null=True, blank=True, on_delete=models.SET_NULL)
+    document_sub_category = models.ForeignKey(DocumentSubCategory, null=True, blank=True, on_delete=models.SET_NULL)
 
     class Meta:
         app_label = "boranga"
@@ -2457,9 +2183,7 @@ class ConservationStatusDocument(Document):
 
 
 class ConservationStatusDeclinedDetails(BaseModel):
-    conservation_status = models.OneToOneField(
-        ConservationStatus, on_delete=models.CASCADE
-    )
+    conservation_status = models.OneToOneField(ConservationStatus, on_delete=models.CASCADE)
     officer = models.IntegerField()  # EmailUserRO
     reason = models.TextField(blank=True)
     cc_email = models.TextField(null=True)
@@ -2469,9 +2193,7 @@ class ConservationStatusDeclinedDetails(BaseModel):
 
 
 class ConservationStatusIssuanceApprovalDetails(BaseModel):
-    conservation_status = models.OneToOneField(
-        ConservationStatus, on_delete=models.CASCADE
-    )
+    conservation_status = models.OneToOneField(ConservationStatus, on_delete=models.CASCADE)
     officer = models.IntegerField()  # EmailUserRO
     effective_from_date = models.DateField(null=True, blank=True)
     effective_to_date = models.DateField(null=True, blank=True)
@@ -2499,9 +2221,7 @@ class ConservationStatusReferral(BaseModel):
         (PROCESSING_STATUS_COMPLETED, "Completed"),
     )
     lodged_on = models.DateTimeField(auto_now_add=True)
-    conservation_status = models.ForeignKey(
-        ConservationStatus, related_name="referrals", on_delete=models.CASCADE
-    )
+    conservation_status = models.ForeignKey(ConservationStatus, related_name="referrals", on_delete=models.CASCADE)
     sent_by = models.IntegerField()  # EmailUserRO
     referral = models.IntegerField()  # EmailUserRO
     linked = models.BooleanField(default=False)
@@ -2580,9 +2300,7 @@ class ConservationStatusReferral(BaseModel):
             processing_status=ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
         )
         if len(outstanding) == 0:
-            self.conservation_status.processing_status = (
-                ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR
-            )
+            self.conservation_status.processing_status = ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR
             self.conservation_status.save()
 
         send_conservation_status_referral_recall_email_notification(self, request)
@@ -2611,12 +2329,8 @@ class ConservationStatusReferral(BaseModel):
         if not self.conservation_status.can_assess(request):
             raise exceptions.ProposalNotAuthorized()
 
-        self.processing_status = (
-            ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
-        )
-        self.conservation_status.processing_status = (
-            ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
-        )
+        self.processing_status = ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
+        self.conservation_status.processing_status = ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
         self.conservation_status.save()
 
         self.save()
@@ -2647,10 +2361,7 @@ class ConservationStatusReferral(BaseModel):
     @transaction.atomic
     def send_referral(self, request, referral_email, referral_text):
         referral_email = referral_email.lower()
-        if not (
-            self.conservation_status.processing_status
-            == ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
-        ):
+        if not (self.conservation_status.processing_status == ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL):
             raise exceptions.ConservationStatusReferralCannotBeSent()
 
         # Don't allow users to refer to themselves
@@ -2661,9 +2372,7 @@ class ConservationStatusReferral(BaseModel):
         if request.user.id == self.conservation_status.submitter:
             raise ValidationError("You cannot refer to the submitter")
 
-        self.conservation_status.processing_status = (
-            ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
-        )
+        self.conservation_status.processing_status = ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
         self.conservation_status.save()
         referral = None
 
@@ -2676,9 +2385,7 @@ class ConservationStatusReferral(BaseModel):
                 "Please check the email and try again."
             )
 
-        qs = ConservationStatusReferral.objects.filter(
-            sent_by=referee.id, conservation_status=self.conservation_status
-        )
+        qs = ConservationStatusReferral.objects.filter(sent_by=referee.id, conservation_status=self.conservation_status)
         if qs:
             raise ValidationError("You cannot send referral to this user")
         try:
@@ -2731,9 +2438,7 @@ class ConservationStatusReferral(BaseModel):
             processing_status=ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
         )
         if len(outstanding) == 0:
-            self.conservation_status.processing_status = (
-                ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR
-            )
+            self.conservation_status.processing_status = ConservationStatus.PROCESSING_STATUS_WITH_ASSESSOR
             self.conservation_status.save()
 
         # Create a log entry for the conservation status
@@ -2759,23 +2464,15 @@ class ConservationStatusReferral(BaseModel):
         send_conservation_status_referral_complete_email_notification(self, request)
 
     def can_assess_referral(self):
-        return (
-            self.processing_status
-            == ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
-        )
+        return self.processing_status == ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
 
     @property
     def can_be_processed(self):
-        return (
-            self.processing_status
-            == ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
-        )
+        return self.processing_status == ConservationStatusReferral.PROCESSING_STATUS_WITH_REFERRAL
 
 
 class ConservationStatusProposalRequest(BaseModel):
-    conservation_status = models.ForeignKey(
-        ConservationStatus, on_delete=models.CASCADE
-    )
+    conservation_status = models.ForeignKey(ConservationStatus, on_delete=models.CASCADE)
     text = models.TextField(blank=True)
 
     class Meta:
@@ -2785,9 +2482,7 @@ class ConservationStatusProposalRequest(BaseModel):
 class ProposalAmendmentReason(OrderedModel, ArchivableModel):
     objects = OrderedArchivableManager()
 
-    reason = models.CharField(
-        "Reason", max_length=125, validators=[no_commas_validator]
-    )
+    reason = models.CharField("Reason", max_length=125, validators=[no_commas_validator])
 
     class Meta(OrderedModel.Meta):
         app_label = "boranga"
@@ -2807,12 +2502,8 @@ class ConservationStatusAmendmentRequest(ConservationStatusProposalRequest):
         (STATUS_CHOICE_AMENDED, "Amended"),
     )
 
-    status = models.CharField(
-        "Status", max_length=30, choices=STATUS_CHOICES, default=STATUS_CHOICES[0][0]
-    )
-    reason = models.ForeignKey(
-        ProposalAmendmentReason, blank=True, null=True, on_delete=models.SET_NULL
-    )
+    status = models.CharField("Status", max_length=30, choices=STATUS_CHOICES, default=STATUS_CHOICES[0][0])
+    reason = models.ForeignKey(ProposalAmendmentReason, blank=True, null=True, on_delete=models.SET_NULL)
 
     class Meta:
         app_label = "boranga"
@@ -2824,16 +2515,9 @@ class ConservationStatusAmendmentRequest(ConservationStatusProposalRequest):
 
         if self.status == ConservationStatusAmendmentRequest.STATUS_CHOICE_REQUESTED:
             conservation_status = self.conservation_status
-            if (
-                conservation_status.processing_status
-                != ConservationStatus.PROCESSING_STATUS_DRAFT
-            ):
-                conservation_status.processing_status = (
-                    ConservationStatus.PROCESSING_STATUS_DRAFT
-                )
-                conservation_status.customer_status = (
-                    ConservationStatus.PROCESSING_STATUS_DRAFT
-                )
+            if conservation_status.processing_status != ConservationStatus.PROCESSING_STATUS_DRAFT:
+                conservation_status.processing_status = ConservationStatus.PROCESSING_STATUS_DRAFT
+                conservation_status.customer_status = ConservationStatus.PROCESSING_STATUS_DRAFT
                 conservation_status.save()
 
             # Create a log entry for the conservationstatus
@@ -2849,9 +2533,7 @@ class ConservationStatusAmendmentRequest(ConservationStatusProposalRequest):
             )
 
             # send email
-            send_conservation_status_amendment_email_notification(
-                self, request, conservation_status
-            )
+            send_conservation_status_amendment_email_notification(self, request, conservation_status)
 
         self.save()
 
@@ -2866,9 +2548,7 @@ class ConservationStatusAmendmentRequest(ConservationStatusProposalRequest):
                 documents_qs.delete()
             for idx in range(data["num_files"]):
                 _file = request.data.get("file-" + str(idx))
-                document = self.cs_amendment_request_documents.create(
-                    _file=_file, name=_file.name
-                )
+                document = self.cs_amendment_request_documents.create(_file=_file, name=_file.name)
                 document.check_file(request.data.get("file-" + str(idx)))
                 document.input_name = data["input_name"]
                 document.save()

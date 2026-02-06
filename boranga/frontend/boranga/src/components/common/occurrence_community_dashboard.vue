@@ -586,7 +586,7 @@ export default {
             let vm = this;
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCCommunityMigratedId_cache,
@@ -597,7 +597,7 @@ export default {
             let vm = this;
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCCommunityOccurrenceName_cache,
@@ -608,7 +608,7 @@ export default {
             let vm = this;
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCCommunityName_cache,
@@ -619,7 +619,7 @@ export default {
             let vm = this;
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCCommunityStatus_cache,
@@ -630,7 +630,7 @@ export default {
             let vm = this;
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCCommunityLocked_cache,
@@ -641,7 +641,7 @@ export default {
             let vm = this;
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCFromCommunityDueDate_cache,
@@ -652,7 +652,7 @@ export default {
             let vm = this;
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterOCCToCommunityDueDate_cache,
@@ -981,7 +981,7 @@ export default {
                                 });
                                 vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -1041,7 +1041,7 @@ export default {
                                 });
                                 vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

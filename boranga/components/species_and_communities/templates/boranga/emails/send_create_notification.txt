@@ -4,19 +4,19 @@
     {% if species_community_proposal.is_flora_application %}
         A new Species Flora {{ species_community_proposal.species_number }} has been created.
         You can access this Species using the following link:
-  
+
         {{url}}
     {% elif species_community_proposal.is_fauna_application %}
         A new Species Fauna {{ species_community_proposal.species_number }} has been created.
-        
+
         You can access this Species using the following link:
-  
+
         {{url}}
     {% else %}
         A new Community {{ species_community_proposal.community_number }} has been created.
 
         You can access this Community using the following link:
-  
+
         {{url}}
     {% endif %}
 

@@ -60,6 +60,7 @@ phonenumbers~=8.13
 pillow~=12.1.0
 pre-commit~=3.7
 psutil~=5.9
+ruff~=0.8
 psycopg2-binary~=2.9
 py4j~=0.10
 py7zr~=0.21.1

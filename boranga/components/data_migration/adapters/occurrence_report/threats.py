@@ -10,11 +10,14 @@ from boranga.components.data_migration.registry import (
     TransformIssue,
     _result,
     build_legacy_map_transform,
+    date_from_datetime_iso_factory,
     static_value_factory,
 )
 from boranga.components.occurrence.models import OccurrenceReport, OCRConservationThreat
 
 from ..sources import Source
+
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
 
 
 def preload_observation_dates(path: str) -> dict[str, str]:
@@ -40,9 +43,7 @@ def occurrence_report_lookup_transform(value, ctx):
     # Cache on function attribute
     if not hasattr(occurrence_report_lookup_transform, "_cache"):
         mapping = dict(
-            OccurrenceReport.objects.filter(migrated_from_id__isnull=False).values_list(
-                "migrated_from_id", "pk"
-            )
+            OccurrenceReport.objects.filter(migrated_from_id__isnull=False).values_list("migrated_from_id", "pk")
         )
         occurrence_report_lookup_transform._cache = mapping
 
@@ -57,9 +58,7 @@ def occurrence_report_lookup_transform(value, ctx):
 
     return _result(
         value,
-        TransformIssue(
-            "error", f"OccurrenceReport with migrated_from_id='{value}' not found"
-        ),
+        TransformIssue("error", f"OccurrenceReport with migrated_from_id='{value}' not found"),
     )
 
 
@@ -103,12 +102,10 @@ class OCRConservationThreatAdapter(SourceAdapter):
             ),
         ],
         "potential_threat_onset": [
-            build_legacy_map_transform(
-                "TPFL", "ONSET (DRF_LOV_ONSET_VWS)", required=False, return_type="id"
-            ),
+            build_legacy_map_transform("TPFL", "ONSET (DRF_LOV_ONSET_VWS)", required=False, return_type="id"),
         ],
         "comment": [],
-        "date_observed": ["date_from_datetime_iso"],
+        "date_observed": [DATE_FROM_DATETIME_ISO_PERTH],
         "visible": [static_value_factory(True)],
     }
 

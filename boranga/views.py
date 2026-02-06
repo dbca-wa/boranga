@@ -161,9 +161,7 @@ class ManagementCommandsView(LoginRequiredMixin, UserPassesTestMixin, TemplateVi
     template_name = "boranga/mgt-commands.html"
 
     def test_func(self):
-        return self.request.user.is_superuser or (
-            is_internal(self.request) and is_django_admin(self.request)
-        )
+        return self.request.user.is_superuser or (is_internal(self.request) and is_django_admin(self.request))
 
     def post(self, request):
         data = {}
@@ -250,9 +248,7 @@ def is_authorised_to_access_occurrence_report_document(request, document_id):
             occurrence_report__referrals__referral=request.user.id,
             occurrence_report_id=document_id,
             _file=file_name,
-        ).exists() and check_allowed_path(
-            document_id, request.path, referee_allowed_paths
-        )
+        ).exists() and check_allowed_path(document_id, request.path, referee_allowed_paths)
 
     if is_contributor(request):
         file_name = get_file_name_from_path(request.path)
@@ -325,9 +321,7 @@ def is_authorised_to_access_conservation_status_document(request, document_id):
             conservation_status__referrals__referral=request.user.id,
             conservation_status_id=document_id,
             _file=file_name,
-        ).exists() and check_allowed_path(
-            document_id, request.path, referee_allowed_paths
-        )
+        ).exists() and check_allowed_path(document_id, request.path, referee_allowed_paths)
 
     if is_contributor(request):
         contributor_allowed_paths = ["documents", "amendment_request_documents"]
@@ -358,10 +352,7 @@ def get_file_path_id(check_str, file_path):
     # if the check_str is in the file path, the next value should be the id
     if check_str in file_name_path_split:
         id_index = file_name_path_split.index(check_str) + 1
-        if (
-            len(file_name_path_split) > id_index
-            and file_name_path_split[id_index].isnumeric()
-        ):
+        if len(file_name_path_split) > id_index and file_name_path_split[id_index].isnumeric():
             return int(file_name_path_split[id_index])
         else:
             return False
@@ -378,9 +369,7 @@ def is_authorised_to_access_document(request):
     # occurrence reports
     document_or_id = get_file_path_id("occurrence_report", request.path)
     if document_or_id:
-        return is_authorised_to_access_occurrence_report_document(
-            request, document_or_id
-        )
+        return is_authorised_to_access_occurrence_report_document(request, document_or_id)
 
     # occurrence
     document_o_id = get_file_path_id("occurrence", request.path)
@@ -390,9 +379,7 @@ def is_authorised_to_access_document(request):
     # conservation status
     document_cs_id = get_file_path_id("conservation_status", request.path)
     if document_cs_id:
-        return is_authorised_to_access_conservation_status_document(
-            request, document_cs_id
-        )
+        return is_authorised_to_access_conservation_status_document(request, document_cs_id)
 
     # meeting
     document_m_id = get_file_path_id("meeting", request.path)
@@ -413,7 +400,6 @@ def is_authorised_to_access_document(request):
 
 
 def getPrivateFile(request):
-
     file_name_path = request.path
     # norm path will convert any traversal or repeat / in to its normalised form
     full_file_path = os.path.normpath(settings.BASE_DIR + file_name_path)
@@ -438,18 +424,14 @@ def getPrivateFile(request):
             try:
                 content_type = mimetypes.types_map["." + str(extension)]
             except KeyError:
-                raise ValueError(
-                    f"Extension {extension} not found in mimetypes.types_map"
-                )
+                raise ValueError(f"Extension {extension} not found in mimetypes.types_map")
 
         response = HttpResponse(the_data, content_type=content_type)
 
         if "image/" in content_type or "application/pdf" == content_type:
             return response
 
-        response["Content-Disposition"] = (
-            f'attachment; filename="{os.path.basename(full_file_path)}"'
-        )
+        response["Content-Disposition"] = f'attachment; filename="{os.path.basename(full_file_path)}"'
         response["Content-Length"] = os.path.getsize(full_file_path)
         response["X-Sendfile"] = full_file_path
         return response

@@ -46,9 +46,7 @@ class Schema:
         present = set(canonical_present)
         return [c for c in self.required if c not in present]
 
-    def validate_headers(
-        self, raw_headers: Iterable[str]
-    ) -> tuple[list[str], list[str]]:
+    def validate_headers(self, raw_headers: Iterable[str]) -> tuple[list[str], list[str]]:
         norm = [self.normalise_header(h) for h in raw_headers]
         canonical_present = [self.column_map[h] for h in norm if h in self.column_map]
         errors: list[str] = []
@@ -79,8 +77,5 @@ class Schema:
             return self.pipelines
         resolved: dict[str, list[str]] = {}
         for col, seq in self.pipelines.items():
-            resolved[col] = [
-                (self._choice_transform_name if step == "{SOURCE_CHOICE}" else step)
-                for step in seq
-            ]
+            resolved[col] = [(self._choice_transform_name if step == "{SOURCE_CHOICE}" else step) for step in seq]
         return resolved

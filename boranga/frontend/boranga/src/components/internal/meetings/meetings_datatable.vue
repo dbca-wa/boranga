@@ -412,7 +412,7 @@ export default {
             let vm = this;
             vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFromMeetingStartDate_cache,
@@ -423,7 +423,7 @@ export default {
             let vm = this;
             vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterToMeetingStartDate_cache,
@@ -434,7 +434,7 @@ export default {
             let vm = this;
             vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFromMeetingEndDate_cache,
@@ -445,7 +445,7 @@ export default {
             let vm = this;
             vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterToMeetingEndDate_cache,
@@ -456,7 +456,7 @@ export default {
             let vm = this;
             vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterMeetingStatus_cache,
@@ -563,7 +563,7 @@ export default {
                             });
                             vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
                                 helpers.enablePopovers,
-                                false
+                                true
                             );
                         },
                         (error) => {
@@ -617,7 +617,7 @@ export default {
                             });
                             vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
                                 helpers.enablePopovers,
-                                false
+                                true
                             );
                         },
                         (error) => {

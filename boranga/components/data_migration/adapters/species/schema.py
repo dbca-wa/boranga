@@ -100,10 +100,7 @@ def validate_species_row(row) -> list[tuple[str, str]]:
     lodgement_date = _get("lodgement_date")
 
     # Normalise comparison to canonical processing status value
-    if (
-        isinstance(proc, str)
-        and proc.strip().lower() == Species.PROCESSING_STATUS_ACTIVE
-    ):
+    if isinstance(proc, str) and proc.strip().lower() == Species.PROCESSING_STATUS_ACTIVE:
         if submitter in (None, "", []):
             errors.append(
                 (

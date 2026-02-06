@@ -4,6 +4,7 @@ from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
     conditional_transform_factory,
     csv_lookup_factory,
+    date_from_datetime_iso_factory,
     dependent_from_column_factory,
     emailuser_by_legacy_username_factory,
     emailuser_object_by_legacy_username_factory,
@@ -39,6 +40,8 @@ OCCURRENCE_NUMBER_FROM_POP_ID = occurrence_number_from_pop_id_factory("TPFL")
 
 # Create factory transform that maps SHEETNO to POP_ID directly
 POP_ID_FROM_SHEETNO = pop_id_from_sheetno_factory("TPFL")
+
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
 
 # Create factory transform for geometry from coordinates
 GEOMETRY_FROM_COORDS = geometry_from_coords_factory(
@@ -124,26 +127,16 @@ ROCK_TYPE_TRANSFORM = build_legacy_map_transform(
 )
 
 # List mappings for habitat closed-lists
-SOIL_COLOR_TRANSFORM = build_legacy_map_transform(
-    "TPFL", "SOIL_COLOR (DRF_LOV_SOIL_COLOR_VWS)", required=False
-)
+SOIL_COLOR_TRANSFORM = build_legacy_map_transform("TPFL", "SOIL_COLOR (DRF_LOV_SOIL_COLOR_VWS)", required=False)
 
-SOIL_CONDITION_TRANSFORM = build_legacy_map_transform(
-    "TPFL", "SOIL_CONDITION (DRF_LOV_SOIL_COND_VWS)", required=False
-)
+SOIL_CONDITION_TRANSFORM = build_legacy_map_transform("TPFL", "SOIL_CONDITION (DRF_LOV_SOIL_COND_VWS)", required=False)
 
-LANDFORM_TRANSFORM = build_legacy_map_transform(
-    "TPFL", "LANDFORM (DRF_LOV_LAND_FORM_VWS)", required=False
-)
+LANDFORM_TRANSFORM = build_legacy_map_transform("TPFL", "LANDFORM (DRF_LOV_LAND_FORM_VWS)", required=False)
 
-SOIL_TYPE_TRANSFORM = build_legacy_map_transform(
-    "TPFL", "SOIL_TYPE (DRF_LOV_SOIL_TYPE_VWS)", required=False
-)
+SOIL_TYPE_TRANSFORM = build_legacy_map_transform("TPFL", "SOIL_TYPE (DRF_LOV_SOIL_TYPE_VWS)", required=False)
 
 # Identification closed-list / default transforms
-SAMPLE_DEST_TRANSFORM = build_legacy_map_transform(
-    "TPFL", "VOUCHER_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)", required=False
-)
+SAMPLE_DEST_TRANSFORM = build_legacy_map_transform("TPFL", "VOUCHER_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)", required=False)
 
 
 def observer_name_fallback_transform(value: str, ctx=None):
@@ -222,9 +215,7 @@ GET_SUBMITTER_VALUE = dependent_from_column_factory(
 STATIC_DBCA = static_value_factory("DBCA")
 
 # Transform to fetch EmailUser object by legacy username, then pluck full_name
-EMAILUSER_OBJ_BY_LEGACY_USERNAME_TRANSFORM = (
-    emailuser_object_by_legacy_username_factory("TPFL")
-)
+EMAILUSER_OBJ_BY_LEGACY_USERNAME_TRANSFORM = emailuser_object_by_legacy_username_factory("TPFL")
 
 
 def submitter_name_from_emailuser(value, ctx=None):
@@ -483,19 +474,14 @@ def ocr_plant_count_status_transform(value, ctx):
         "OCRPlantCount__detailed_dead_mature",
         "OCRPlantCount__detailed_dead_seedling",
     ]
-    has_detailed = any(
-        row.get(f) is not None and str(row.get(f)).strip() != ""
-        for f in detailed_fields
-    )
+    has_detailed = any(row.get(f) is not None and str(row.get(f)).strip() != "" for f in detailed_fields)
 
     if has_detailed:
         return _result(COUNT_STATUS_COUNTED)
 
     # Check simple count fields
     simple_fields = ["OCRPlantCount__simple_alive", "OCRPlantCount__simple_dead"]
-    has_simple = any(
-        row.get(f) is not None and str(row.get(f)).strip() != "" for f in simple_fields
-    )
+    has_simple = any(row.get(f) is not None and str(row.get(f)).strip() != "" for f in simple_fields)
 
     if has_simple:
         return _result(COUNT_STATUS_SIMPLE_COUNT)
@@ -538,7 +524,7 @@ PIPELINES = {
     "species_id": ["strip", "blank_to_none", SPECIES_TRANSFORM],
     "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
     "lodgement_date": ["strip", "blank_to_none", "datetime_iso"],
-    "observation_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
+    "observation_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     "record_source": ["strip", "blank_to_none", RECORD_SOURCE_FROM_CSV],
     "customer_status": [CUSTOMER_STATUS_FROM_FORM_STATUS_CODE],
     "comments": ["ocr_comments_transform"],
@@ -731,7 +717,7 @@ PIPELINES = {
         "blank_to_none",
         "y_to_true_n_to_none",
     ],
-    "OCRPlantCount__obs_date": ["strip", "blank_to_none", "date_from_datetime_iso"],
+    "OCRPlantCount__obs_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     # OCRFireHistory pipelines
     "OCRFireHistory__comment": [ocr_fire_history_comment_transform],
     "OCRFireHistory__intensity": [FIRE_INTENSITY_TRANSFORM],
@@ -775,14 +761,10 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
         import os
 
         # Always use the standard location
-        veg_classes_path = (
-            "private-media/legacy_data/TPFL/DRF_SHEET_VEG_CLASSES_Sanitised.csv"
-        )
+        veg_classes_path = "private-media/legacy_data/TPFL/DRF_SHEET_VEG_CLASSES_Sanitised.csv"
 
         if not os.path.exists(veg_classes_path):
-            raise FileNotFoundError(
-                f"Vegetation classes file not found at {veg_classes_path}"
-            )
+            raise FileNotFoundError(f"Vegetation classes file not found at {veg_classes_path}")
 
         veg_classes_map = preload_veg_classes_map(veg_classes_path)
 
@@ -801,42 +783,22 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 veg_codes = veg_classes_map[sheetno]
                 # 1st record -> layer 4
                 if len(veg_codes) >= 1:
-                    canonical[
-                        "OCRVegetationStructure__vegetation_structure_layer_four"
-                    ] = veg_codes[0]
+                    canonical["OCRVegetationStructure__vegetation_structure_layer_four"] = veg_codes[0]
                 # 2nd record -> layer 3
                 if len(veg_codes) >= 2:
-                    canonical[
-                        "OCRVegetationStructure__vegetation_structure_layer_three"
-                    ] = veg_codes[1]
+                    canonical["OCRVegetationStructure__vegetation_structure_layer_three"] = veg_codes[1]
                 # 3rd record -> layer 2
                 if len(veg_codes) >= 3:
-                    canonical[
-                        "OCRVegetationStructure__vegetation_structure_layer_two"
-                    ] = veg_codes[2]
+                    canonical["OCRVegetationStructure__vegetation_structure_layer_two"] = veg_codes[2]
                 # 4th record -> layer 1
                 if len(veg_codes) >= 4:
-                    canonical[
-                        "OCRVegetationStructure__vegetation_structure_layer_one"
-                    ] = veg_codes[3]
+                    canonical["OCRVegetationStructure__vegetation_structure_layer_one"] = veg_codes[3]
 
             # Use SHEET_POP_NUMBER/SHEET_SUBPOP_CODE as POP_NUMBER/SUBPOP_CODE are not in RFR forms
             # and not in schema column map
-            pop_num = (
-                canonical.get("SHEET_POP_NUMBER")
-                or raw.get("SHEET_POP_NUMBER")
-                or raw.get("POP_NUMBER")
-                or ""
-            )
-            sub_pop = (
-                canonical.get("SHEET_SUBPOP_CODE")
-                or raw.get("SHEET_SUBPOP_CODE")
-                or raw.get("SUBPOP_CODE")
-                or ""
-            )
-            canonical["occurrence_report_name"] = (
-                f"{str(pop_num).strip()} {str(sub_pop).strip()}".strip()
-            )
+            pop_num = canonical.get("SHEET_POP_NUMBER") or raw.get("SHEET_POP_NUMBER") or raw.get("POP_NUMBER") or ""
+            sub_pop = canonical.get("SHEET_SUBPOP_CODE") or raw.get("SHEET_SUBPOP_CODE") or raw.get("SUBPOP_CODE") or ""
+            canonical["occurrence_report_name"] = f"{str(pop_num).strip()} {str(sub_pop).strip()}".strip()
 
             canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
             assessor_data = None
@@ -844,20 +806,14 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             REASON_DEACTIVATED = raw.get("REASON_DEACTIVATED", "").strip()
             if REASON_DEACTIVATED:
                 DEACTIVATED_DATE = raw.get("DEACTIVATED_DATE", "").strip()
-                assessor_data = (
-                    f"Reason Deactivated: {REASON_DEACTIVATED}, {DEACTIVATED_DATE}"
-                )
+                assessor_data = f"Reason Deactivated: {REASON_DEACTIVATED}, {DEACTIVATED_DATE}"
             canonical["assessor_data"] = assessor_data
             # Build occurrence_name: concat POP_NUMBER + SUBPOP_CODE (no space)
             pop = str(canonical.get("SHEET_POP_NUMBER", "") or "").strip()
             sub = str(canonical.get("SHEET_SUBPOP_CODE", "") or "").strip()
             ocr_for_occ_name = (pop + sub).strip()
             # If only a single digit (e.g. "1"), pad with leading zero -> "01"
-            if (
-                ocr_for_occ_name
-                and len(ocr_for_occ_name) == 1
-                and ocr_for_occ_name.isdigit()
-            ):
+            if ocr_for_occ_name and len(ocr_for_occ_name) == 1 and ocr_for_occ_name.isdigit():
                 ocr_for_occ_name = ocr_for_occ_name.zfill(2)
             canonical["ocr_for_occ_name"] = ocr_for_occ_name
             canonical["OCRObserverDetail__main_observer"] = True
@@ -888,9 +844,7 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
 
             # always populate habitat_notes (None when empty) so downstream
             # merge/creation logic sees the key consistently
-            canonical["OCRHabitatComposition__habitat_notes"] = (
-                "; ".join(hab_notes_parts) if hab_notes_parts else None
-            )
+            canonical["OCRHabitatComposition__habitat_notes"] = "; ".join(hab_notes_parts) if hab_notes_parts else None
 
             # HABITAT_CONDITION => populate OCRHabitatCondition flags per task
             # rules regardless of whether habitat notes exist. Previously these
@@ -900,9 +854,7 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             hc = hc_raw.strip().upper() if hc_raw else ""
             # default all zeros (will be overridden by merge logic which
             # prefers the maximum percentage across source rows)
-            canonical["OCRHabitatCondition__pristine"] = (
-                100 if hc in ("PRISTINE",) else 0
-            )
+            canonical["OCRHabitatCondition__pristine"] = 100 if hc in ("PRISTINE",) else 0
             canonical["OCRHabitatCondition__excellent"] = (
                 100
                 if hc
@@ -924,9 +876,7 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                 else 0
             )
             canonical["OCRHabitatCondition__good"] = 100 if hc in ("GOOD",) else 0
-            canonical["OCRHabitatCondition__degraded"] = (
-                100 if hc in ("DEGRADED",) else 0
-            )
+            canonical["OCRHabitatCondition__degraded"] = 100 if hc in ("DEGRADED",) else 0
             canonical["OCRHabitatCondition__completely_degraded"] = (
                 100
                 if hc
@@ -940,31 +890,19 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
 
             # copy through simple habitat fields if present
             if canonical.get("SOIL_COLOR"):
-                canonical["OCRHabitatComposition__soil_colour"] = canonical.get(
-                    "SOIL_COLOR"
-                )
+                canonical["OCRHabitatComposition__soil_colour"] = canonical.get("SOIL_COLOR")
             if canonical.get("SOIL_CONDITION"):
-                canonical["OCRHabitatComposition__soil_condition"] = canonical.get(
-                    "SOIL_CONDITION"
-                )
+                canonical["OCRHabitatComposition__soil_condition"] = canonical.get("SOIL_CONDITION")
             if canonical.get("LANDFORM"):
-                canonical["OCRHabitatComposition__land_form"] = canonical.get(
-                    "LANDFORM"
-                )
+                canonical["OCRHabitatComposition__land_form"] = canonical.get("LANDFORM")
             if canonical.get("SOIL_TYPE"):
-                canonical["OCRHabitatComposition__soil_type"] = canonical.get(
-                    "SOIL_TYPE"
-                )
+                canonical["OCRHabitatComposition__soil_type"] = canonical.get("SOIL_TYPE")
 
             # Identification: copy simple fields through so pipelines can map them
             if canonical.get("BARCODE"):
-                canonical["OCRIdentification__barcode_number"] = canonical.get(
-                    "BARCODE"
-                )
+                canonical["OCRIdentification__barcode_number"] = canonical.get("BARCODE")
             if canonical.get("COLLECTOR_NO"):
-                canonical["OCRIdentification__collector_number"] = canonical.get(
-                    "COLLECTOR_NO"
-                )
+                canonical["OCRIdentification__collector_number"] = canonical.get("COLLECTOR_NO")
             if canonical.get("LICENCE"):
                 canonical["OCRIdentification__permit_id"] = canonical.get("LICENCE")
 
@@ -994,22 +932,16 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
                         idc_parts.append(f"Duplicate Voucher Location: {mapped2}")
 
                 if idc_parts:
-                    canonical["OCRIdentification__identification_comment"] = "; ".join(
-                        idc_parts
-                    )
+                    canonical["OCRIdentification__identification_comment"] = "; ".join(idc_parts)
             except Exception:
                 # non-fatal: continue without identification comment
                 pass
 
             # OCRLocation: copy simple fields through so pipelines can map them
             if canonical.get("CO_ORD_SOURCE_CODE"):
-                canonical["OCRLocation__coordinate_source"] = canonical.get(
-                    "CO_ORD_SOURCE_CODE"
-                )
+                canonical["OCRLocation__coordinate_source"] = canonical.get("CO_ORD_SOURCE_CODE")
             if canonical.get("RESOLUTION"):
-                canonical["OCRLocation__location_accuracy"] = canonical.get(
-                    "RESOLUTION"
-                )
+                canonical["OCRLocation__location_accuracy"] = canonical.get("RESOLUTION")
             if canonical.get("DISTRICT"):
                 canonical["OCRLocation__district"] = canonical.get("DISTRICT")
             if canonical.get("LANDDISTRICT"):
@@ -1023,27 +955,17 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
 
             # OCRObservationDetail: copy simple fields through so pipelines can map them
             if canonical.get("SVY_EXTENT"):
-                canonical["OCRObservationDetail__area_assessment"] = canonical.get(
-                    "SVY_EXTENT"
-                )
+                canonical["OCRObservationDetail__area_assessment"] = canonical.get("SVY_EXTENT")
             if canonical.get("SVY_EFFORT_AREA"):
-                canonical["OCRObservationDetail__area_surveyed"] = canonical.get(
-                    "SVY_EFFORT_AREA"
-                )
+                canonical["OCRObservationDetail__area_surveyed"] = canonical.get("SVY_EFFORT_AREA")
             if canonical.get("SVY_EFFORT_TIME"):
-                canonical["OCRObservationDetail__survey_duration"] = canonical.get(
-                    "SVY_EFFORT_TIME"
-                )
+                canonical["OCRObservationDetail__survey_duration"] = canonical.get("SVY_EFFORT_TIME")
 
             # OccurrenceReportGeometry: trigger geometry creation with lat/long
             # Store lat/long as separate keys; the pipeline will convert them to geometry
             if canonical.get("GDA94LAT") or canonical.get("GDA94LONG"):
-                canonical["OccurrenceReportGeometry__geometry"] = (
-                    None  # Will be populated by pipeline
-                )
-                canonical["OccurrenceReportGeometry__locked"] = (
-                    True  # Default locked=True
-                )
+                canonical["OccurrenceReportGeometry__geometry"] = None  # Will be populated by pipeline
+                canonical["OccurrenceReportGeometry__locked"] = True  # Default locked=True
 
             # Prepend source prefix to migrated_from_id
             mid = canonical.get("migrated_from_id")

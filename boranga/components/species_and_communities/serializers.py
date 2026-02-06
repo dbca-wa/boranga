@@ -72,9 +72,7 @@ class ListSpeciesSerializer(BaseModelSerializer):
     commonwealth_conservation_category = serializers.SerializerMethodField()
     other_conservation_assessment = serializers.SerializerMethodField()
     conservation_criteria = serializers.SerializerMethodField()
-    fauna_group_name = serializers.CharField(
-        source="fauna_group.name", read_only=True, required=False, allow_null=True
-    )
+    fauna_group_name = serializers.CharField(source="fauna_group.name", read_only=True, required=False, allow_null=True)
     fauna_sub_group_name = serializers.CharField(
         source="fauna_sub_group.name", read_only=True, required=False, allow_null=True
     )
@@ -149,9 +147,7 @@ class ListSpeciesSerializer(BaseModelSerializer):
     def get_common_name(self, obj):
         if not obj.taxonomy or not obj.taxonomy.vernaculars:
             return ""
-        return ", ".join(
-            str(vn.vernacular_name) for vn in obj.taxonomy.vernaculars.all()
-        )
+        return ", ".join(str(vn.vernacular_name) for vn in obj.taxonomy.vernaculars.all())
 
     def get_family(self, obj):
         if obj.taxonomy:
@@ -221,10 +217,7 @@ class ListSpeciesSerializer(BaseModelSerializer):
 
     def get_commonwealth_conservation_category(self, obj):
         conservation_status = obj.approved_conservation_status
-        if (
-            conservation_status
-            and conservation_status.commonwealth_conservation_category
-        ):
+        if conservation_status and conservation_status.commonwealth_conservation_category:
             return conservation_status.commonwealth_conservation_category.code
         return ""
 
@@ -366,10 +359,7 @@ class ListCommunitiesSerializer(BaseModelSerializer):
 
     def get_commonwealth_conservation_category(self, obj):
         conservation_status = obj.approved_conservation_status
-        if (
-            conservation_status
-            and conservation_status.commonwealth_conservation_category
-        ):
+        if conservation_status and conservation_status.commonwealth_conservation_category:
             return conservation_status.commonwealth_conservation_category.code
         return ""
 
@@ -455,9 +445,9 @@ class TaxonomySerializer(BaseModelSerializer):
         try:
             if obj.informal_groups:
                 # informal_groups = InformalGroup.objects.get(taxonomy=obj.id)
-                informal_groups = InformalGroup.objects.filter(
-                    taxonomy_id=obj.id
-                ).values_list("classification_system_fk__class_desc", flat=True)
+                informal_groups = InformalGroup.objects.filter(taxonomy_id=obj.id).values_list(
+                    "classification_system_fk__class_desc", flat=True
+                )
                 return ", ".join(informal_groups)
         except InformalGroup.DoesNotExist:
             return ""
@@ -465,9 +455,7 @@ class TaxonomySerializer(BaseModelSerializer):
     def get_informal_groups_list(self, obj):
         if not obj.informal_groups:
             return ""
-        return obj.informal_groups.values_list(
-            "classification_system_fk__class_desc", flat=True
-        )
+        return obj.informal_groups.values_list("classification_system_fk__class_desc", flat=True)
 
     def get_conservation_status(self, obj):
         request = self.context["request"]
@@ -490,7 +478,6 @@ class CommonNameTaxonomySerializer(TaxonomySerializer):
 
 
 class SpeciesConservationAttributesSerializer(BaseModelSerializer):
-
     class Meta:
         model = SpeciesConservationAttributes
         fields = (
@@ -534,21 +521,17 @@ class SpeciesConservationAttributesSerializer(BaseModelSerializer):
         )
 
         def __init__(self, *args, **kwargs):
-            super(SpeciesConservationAttributesSerializer, self).__init__(
-                *args, **kwargs
-            )
+            super(SpeciesConservationAttributesSerializer, self).__init__(*args, **kwargs)
             PERIOD_CHOICES = []
             for rs in SpeciesConservationAttributes.PERIOD_CHOICES:
                 PERIOD_CHOICES.append([rs[0], rs[1]])
-            self.fields["flowering_period", "fruiting_period", "breeding_period"] = (
-                ListMultipleChoiceField(choices=PERIOD_CHOICES, allow_blank=False)
+            self.fields["flowering_period", "fruiting_period", "breeding_period"] = ListMultipleChoiceField(
+                choices=PERIOD_CHOICES, allow_blank=False
             )
 
 
 class SaveSpeciesConservationAttributesSerializer(BaseModelSerializer):
-    species_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    species_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
     flowering_period = ListMultipleChoiceField(
         choices=SpeciesConservationAttributes.PERIOD_CHOICES,
         allow_null=True,
@@ -561,21 +544,15 @@ class SaveSpeciesConservationAttributesSerializer(BaseModelSerializer):
         allow_blank=True,
         required=False,
     )
-    flora_recruitment_type_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    root_morphology_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    flora_recruitment_type_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    root_morphology_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
     breeding_period = ListMultipleChoiceField(
         choices=SpeciesConservationAttributes.PERIOD_CHOICES,
         allow_null=True,
         allow_blank=True,
         required=False,
     )
-    post_fire_habitat_interaction_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    post_fire_habitat_interaction_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = SpeciesConservationAttributes
@@ -639,15 +616,13 @@ class SpeciesDistributionSerializer(BaseModelSerializer):
         )
 
     def to_internal_value(self, data):
-        if data["extent_of_occurrences"] == "":
+        if data.get("extent_of_occurrences") == "":
             data["extent_of_occurrences"] = None
         return super().to_internal_value(data)
 
 
 class SaveSpeciesDistributionSerializer(BaseModelSerializer):
-    species_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    species_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
     extent_of_occurrences = serializers.FloatField(required=False, allow_null=True)
 
     class Meta:
@@ -689,10 +664,7 @@ class SpeciesPublishingStatusSerializer(BaseModelSerializer):
 
 
 class SaveSpeciesPublishingStatusSerializer(BaseModelSerializer):
-
-    species_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    species_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
     public_status = serializers.SerializerMethodField()
 
     class Meta:
@@ -769,9 +741,7 @@ class BaseSpeciesSerializer(BaseModelSerializer):
         if not obj.taxonomy:
             return None
 
-        return TaxonomySerializer(
-            obj.taxonomy, context={"request": self.context["request"]}
-        ).data
+        return TaxonomySerializer(obj.taxonomy, context={"request": self.context["request"]}).data
 
     def get_conservation_status(self, obj):
         request = self.context["request"]
@@ -838,16 +808,11 @@ class BaseSpeciesSerializer(BaseModelSerializer):
         if (
             is_internal(request)
             or is_referred
-            or (
-                obj.species_publishing_status.species_public
-                and obj.species_publishing_status.distribution_public
-            )
+            or (obj.species_publishing_status.species_public and obj.species_publishing_status.distribution_public)
         ):
             try:
                 # to create the distribution instance for fetching the calculated values from serializer
-                distribution_instance, created = (
-                    SpeciesDistribution.objects.get_or_create(species=obj)
-                )
+                distribution_instance, created = SpeciesDistribution.objects.get_or_create(species=obj)
                 return SpeciesDistributionSerializer(distribution_instance).data
             except SpeciesDistribution.DoesNotExist:
                 return SpeciesDistributionSerializer().data
@@ -919,9 +884,7 @@ class InternalSpeciesSerializer(BaseSpeciesSerializer):
     user_edit_mode = serializers.SerializerMethodField()
     can_user_edit = serializers.SerializerMethodField()
     can_add_log = serializers.SerializerMethodField()
-    fauna_group_name = serializers.CharField(
-        source="fauna_group.name", read_only=True, required=False, allow_null=True
-    )
+    fauna_group_name = serializers.CharField(source="fauna_group.name", read_only=True, required=False, allow_null=True)
     fauna_sub_group_name = serializers.CharField(
         source="fauna_sub_group.name", read_only=True, required=False, allow_null=True
     )
@@ -976,10 +939,7 @@ class InternalSpeciesSerializer(BaseSpeciesSerializer):
 
     def get_readonly(self, obj):
         request = self.context["request"]
-        return not (
-            (obj.can_user_edit or obj.has_user_edit_mode(request))
-            and is_species_communities_approver(request)
-        )
+        return not ((obj.can_user_edit or obj.has_user_edit_mode(request)) and is_species_communities_approver(request))
 
     def get_can_add_log(self, obj):
         request = self.context["request"]
@@ -1031,17 +991,15 @@ class CommunityDistributionSerializer(BaseModelSerializer):
         )
 
     def to_internal_value(self, data):
-        if data["extent_of_occurrences"] == "":
+        if data.get("extent_of_occurrences") == "":
             data["extent_of_occurrences"] = None
-        if data["community_original_area"] == "":
+        if data.get("community_original_area") == "":
             data["community_original_area"] = None
         return super().to_internal_value(data)
 
 
 class SaveCommunityDistributionSerializer(BaseModelSerializer):
-    community_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    community_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
     area_of_occupancy = serializers.IntegerField(
         required=False,
         allow_null=True,
@@ -1093,12 +1051,8 @@ class CommunityConservationAttributesSerializer(BaseModelSerializer):
 
 
 class SaveCommunityConservationAttributesSerializer(BaseModelSerializer):
-    community_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    post_fire_habitat_interaction_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    community_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    post_fire_habitat_interaction_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = CommunityConservationAttributes
@@ -1142,12 +1096,8 @@ class CommunityTaxonomySerializer(BaseModelSerializer):
 
 
 class SaveCommunityTaxonomySerializer(BaseModelSerializer):
-    community_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    community_common_id = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
+    community_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    community_common_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = CommunityTaxonomy
@@ -1174,15 +1124,11 @@ class SaveCommunityTaxonomySerializer(BaseModelSerializer):
 
         if (
             community_common_id
-            and CommunityTaxonomy.objects.filter(
-                community_common_id=community_common_id
-            )
+            and CommunityTaxonomy.objects.filter(community_common_id=community_common_id)
             .exclude(community_id=community_id)
             .exists()
         ):
-            raise serializers.ValidationError(
-                {"community_id": "Community ID must be unique."}
-            )
+            raise serializers.ValidationError({"community_id": "Community ID must be unique."})
         return data
 
 
@@ -1208,10 +1154,7 @@ class CommunityPublishingStatusSerializer(BaseModelSerializer):
 
 
 class SaveCommunityPublishingStatusSerializer(BaseModelSerializer):
-
-    community_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    community_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
     public_status = serializers.SerializerMethodField()
 
     class Meta:
@@ -1275,10 +1218,7 @@ class BaseCommunitySerializer(BaseModelSerializer):
 
     def get_readonly(self, obj):
         request = self.context["request"]
-        return not (
-            (obj.can_user_edit or obj.has_user_edit_mode(request))
-            and is_species_communities_approver(request)
-        )
+        return not ((obj.can_user_edit or obj.has_user_edit_mode(request)) and is_species_communities_approver(request))
 
     def get_group_type(self, obj):
         return obj.group_type.name
@@ -1291,9 +1231,7 @@ class BaseCommunitySerializer(BaseModelSerializer):
 
     def get_taxonomy_details(self, obj):
         try:
-            taxonomy_instance, created = CommunityTaxonomy.objects.get_or_create(
-                community=obj
-            )
+            taxonomy_instance, created = CommunityTaxonomy.objects.get_or_create(community=obj)
             return CommunityTaxonomySerializer(taxonomy_instance).data
         except CommunityTaxonomy.MultipleObjectsReturned:
             qs = None
@@ -1340,15 +1278,12 @@ class BaseCommunitySerializer(BaseModelSerializer):
             is_internal(request)
             or is_referred
             or (
-                obj.community_publishing_status.community_public
-                and obj.community_publishing_status.distribution_public
+                obj.community_publishing_status.community_public and obj.community_publishing_status.distribution_public
             )
         ):
             try:
                 # to create the distribution instance for fetching the calculated values from serializer
-                distribution_instance, created = (
-                    CommunityDistribution.objects.get_or_create(community=obj)
-                )
+                distribution_instance, created = CommunityDistribution.objects.get_or_create(community=obj)
                 return CommunityDistributionSerializer(distribution_instance).data
             except CommunityDistribution.MultipleObjectsReturned:
                 qs = None
@@ -1428,12 +1363,8 @@ class CommunitySerializer(BaseCommunitySerializer):
 
 
 class SimpleCommunityDisplaySerializer(BaseModelSerializer):
-    community_name = serializers.CharField(
-        source="taxonomy.community_name", read_only=True
-    )
-    community_common_id = serializers.CharField(
-        source="taxonomy.community_common_id", read_only=True
-    )
+    community_name = serializers.CharField(source="taxonomy.community_name", read_only=True)
+    community_common_id = serializers.CharField(source="taxonomy.community_common_id", read_only=True)
 
     class Meta:
         model = Community
@@ -1453,9 +1384,7 @@ class InternalCommunitySerializer(BaseCommunitySerializer):
     can_user_edit = serializers.SerializerMethodField()
     can_add_log = serializers.SerializerMethodField()
     renamed_from = SimpleCommunityDisplaySerializer(read_only=True, allow_null=True)
-    renamed_to = SimpleCommunityDisplaySerializer(
-        many=True, read_only=True, allow_null=True
-    )
+    renamed_to = SimpleCommunityDisplaySerializer(many=True, read_only=True, allow_null=True)
     readonly = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
@@ -1505,10 +1434,7 @@ class InternalCommunitySerializer(BaseCommunitySerializer):
 
     def get_readonly(self, obj):
         request = self.context["request"]
-        return not (
-            (obj.can_user_edit or obj.has_user_edit_mode(request))
-            and is_species_communities_approver(request)
-        )
+        return not ((obj.can_user_edit or obj.has_user_edit_mode(request)) and is_species_communities_approver(request))
 
     def get_can_add_log(self, obj):
         request = self.context["request"]
@@ -1539,9 +1465,7 @@ class InternalCommunitySerializer(BaseCommunitySerializer):
 
 
 class SaveSpeciesSerializer(BaseSpeciesSerializer):
-    taxonomy_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    taxonomy_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = Species
@@ -1646,9 +1570,7 @@ class EmptySpeciesSerializer(serializers.Serializer):
 
     def __init__(self, *args, **kwargs):
         if not kwargs["taxonomy"] or not isinstance(kwargs["taxonomy"], Taxonomy):
-            raise ValueError(
-                "EmptySpeciesSerializer requires a Taxonomy instance as the 'taxonomy' keyword argument."
-            )
+            raise ValueError("EmptySpeciesSerializer requires a Taxonomy instance as the 'taxonomy' keyword argument.")
 
         taxonomy = kwargs.pop("taxonomy")
         super().__init__(*args, **kwargs)
@@ -1683,9 +1605,7 @@ class EmptySpeciesSerializer(serializers.Serializer):
 
 
 class SaveCommunitySerializer(BaseCommunitySerializer):
-    community_common_id = serializers.CharField(
-        required=False, allow_null=True, write_only=True
-    )
+    community_common_id = serializers.CharField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = Community
@@ -1716,18 +1636,10 @@ class SaveCommunitySerializer(BaseCommunitySerializer):
 class RenameCommunitySerializer(BaseSerializer):
     community_name = serializers.CharField(required=True)
     community_common_id = serializers.CharField(required=True)
-    community_description = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
-    previous_name = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
-    name_authority = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
-    name_comments = serializers.CharField(
-        required=False, allow_blank=True, allow_null=True
-    )
+    community_description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    previous_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    name_authority = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    name_comments = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
 
 class CreateCommunitySerializer(BaseCommunitySerializer):
@@ -1826,10 +1738,7 @@ class SaveSpeciesDocumentSerializer(BaseModelSerializer):
             instance = SpeciesDocument()
             validated_data = self.run_validation(self.initial_data)
             for field_name in self.Meta.fields:
-                if (
-                    field_name in validated_data
-                    and field_name not in self.Meta.read_only_fields
-                ):
+                if field_name in validated_data and field_name not in self.Meta.read_only_fields:
                     setattr(instance, field_name, validated_data[field_name])
             instance.save(*args, **kwargs)
             return instance
@@ -1895,10 +1804,7 @@ class SaveCommunityDocumentSerializer(BaseModelSerializer):
             instance = CommunityDocument()
             validated_data = self.run_validation(self.initial_data)
             for field_name in self.Meta.fields:
-                if (
-                    field_name in validated_data
-                    and field_name not in self.Meta.read_only_fields
-                ):
+                if field_name in validated_data and field_name not in self.Meta.read_only_fields:
                     setattr(instance, field_name, validated_data[field_name])
             instance.save(*args, **kwargs)
             return instance
@@ -1985,12 +1891,8 @@ class ConservationThreatSerializer(BaseModelSerializer):
 
 
 class SaveConservationThreatSerializer(BaseModelSerializer):
-    threat_category_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    threat_agent_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    threat_category_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    threat_agent_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = ConservationThreat
@@ -2017,10 +1919,7 @@ class SaveConservationThreatSerializer(BaseModelSerializer):
             instance = ConservationThreat()
             validated_data = self.run_validation(self.initial_data)
             for field_name in self.Meta.fields:
-                if (
-                    field_name in validated_data
-                    and field_name not in self.Meta.read_only_fields
-                ):
+                if field_name in validated_data and field_name not in self.Meta.read_only_fields:
                     setattr(instance, field_name, validated_data[field_name])
             instance.save(*args, **kwargs)
             return instance

@@ -393,14 +393,14 @@ export default {
         filterStatus: function () {
             this.$refs.occurrence_tenure_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
             sessionStorage.setItem(this.filterStatusCache, this.filterStatus);
         },
         filterFeatureId: function () {
             this.$refs.occurrence_tenure_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
             sessionStorage.setItem(
                 this.filterFeatureIdCache,
@@ -410,14 +410,14 @@ export default {
         filterVesting: function () {
             this.$refs.occurrence_tenure_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
             sessionStorage.setItem(this.filterVestingCache, this.filterVesting);
         },
         filterPurpose: function () {
             this.$refs.occurrence_tenure_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
             sessionStorage.setItem(this.filterPurposeCache, this.filterPurpose);
         },
@@ -425,7 +425,7 @@ export default {
             // This is to ensure that the hrefContainerId is updated in the datatable
             this.$refs.occurrence_tenure_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
         },
     },
@@ -617,7 +617,7 @@ export default {
             console.log('New occurrence tenure area data', data);
             this.$refs.occurrence_tenure_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
         },
         adjust_table_width: function () {

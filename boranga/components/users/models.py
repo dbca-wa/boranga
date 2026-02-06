@@ -18,9 +18,7 @@ from boranga.components.main.models import (
 from boranga.helpers import no_commas_validator
 from boranga.ledger_api_utils import retrieve_email_user
 
-private_storage = FileSystemStorage(
-    location=settings.BASE_DIR + "/private-media/", base_url="/private-media/"
-)
+private_storage = FileSystemStorage(location=settings.BASE_DIR + "/private-media/", base_url="/private-media/")
 
 
 logger = logging.getLogger(__name__)
@@ -64,9 +62,7 @@ class SubmitterInformation(BaseModel):
     contact_details = models.TextField(blank=True, null=True)
     organisation = models.CharField(max_length=100, blank=True, null=True)
     position = models.CharField(max_length=100, blank=True, null=True)
-    submitter_category = models.ForeignKey(
-        SubmitterCategory, on_delete=models.PROTECT, blank=True, null=True
-    )
+    submitter_category = models.ForeignKey(SubmitterCategory, on_delete=models.PROTECT, blank=True, null=True)
 
     class Meta:
         app_label = "boranga"
@@ -124,15 +120,11 @@ class ExternalContributorBlacklist(BaseModel):
 
     def save(self, *args, **kwargs):
         # Remove the user from the external contributors group
-        external_contributor_group = SystemGroup.objects.get(
-            name=settings.GROUP_NAME_EXTERNAL_CONTRIBUTOR
-        )
+        external_contributor_group = SystemGroup.objects.get(name=settings.GROUP_NAME_EXTERNAL_CONTRIBUTOR)
 
         user = EmailUser.objects.get(email=self.email)
 
-        SystemGroupPermission.objects.filter(
-            system_group=external_contributor_group, emailuser=user
-        ).delete()
+        SystemGroupPermission.objects.filter(system_group=external_contributor_group, emailuser=user).delete()
         # Have to save the group to flush the member cache
         external_contributor_group.save()
 
@@ -150,16 +142,10 @@ class ExternalContributorBlacklist(BaseModel):
             return
 
         # If user is already in the external contributors group, don't add them again
-        external_contributor_group = SystemGroup.objects.get(
-            name=settings.GROUP_NAME_EXTERNAL_CONTRIBUTOR
-        )
-        if not SystemGroupPermission.objects.filter(
-            system_group=external_contributor_group, emailuser=user
-        ).exists():
+        external_contributor_group = SystemGroup.objects.get(name=settings.GROUP_NAME_EXTERNAL_CONTRIBUTOR)
+        if not SystemGroupPermission.objects.filter(system_group=external_contributor_group, emailuser=user).exists():
             # Add user back into the external contributors group
-            SystemGroupPermission.objects.create(
-                system_group=external_contributor_group, emailuser=user
-            )
+            SystemGroupPermission.objects.create(system_group=external_contributor_group, emailuser=user)
 
         # Have to save the group to flush the member cache
         external_contributor_group.save()
@@ -178,15 +164,11 @@ class EmailUserLogEntry(CommunicationsLogEntry):
 
 
 def email_user_comms_log_document_upload_location(instance, filename):
-    return "{}/email_user/{}/communications/{}".format(
-        settings.MEDIA_APP_DIR, instance.log_entry.email_user, filename
-    )
+    return f"{settings.MEDIA_APP_DIR}/email_user/{instance.log_entry.email_user}/communications/{filename}"
 
 
 class EmailUserLogDocument(Document):
-    log_entry = models.ForeignKey(
-        EmailUserLogEntry, related_name="documents", on_delete=models.CASCADE
-    )
+    log_entry = models.ForeignKey(EmailUserLogEntry, related_name="documents", on_delete=models.CASCADE)
     _file = models.FileField(
         upload_to=email_user_comms_log_document_upload_location,
         max_length=512,

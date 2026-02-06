@@ -10,9 +10,7 @@ log = logging.getLogger(__name__)
 class CronJobFetchNomosTaxonDataDaily(django_cron.CronJobBase):
     RUN_ON_DAYS = [0, 1, 2, 3, 4, 5, 6]
     RUN_AT_TIMES = [settings.FETCH_NOMOS_DATA_TIME_OF_DAY]
-    schedule = django_cron.Schedule(
-        run_weekly_on_days=RUN_ON_DAYS, run_at_times=RUN_AT_TIMES
-    )
+    schedule = django_cron.Schedule(run_weekly_on_days=RUN_ON_DAYS, run_at_times=RUN_AT_TIMES)
     code = "boranga.fetch_nomos_data"
 
     def do(self) -> None:
@@ -22,9 +20,7 @@ class CronJobFetchNomosTaxonDataDaily(django_cron.CronJobBase):
 
 
 class CronJobOCRPreProcessBulkImportTasks(django_cron.CronJobBase):
-    schedule = django_cron.Schedule(
-        run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=2
-    )
+    schedule = django_cron.Schedule(run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=2)
     code = "boranga.ocr_pre_process_bulk_import_tasks"
 
     def do(self) -> None:
@@ -34,9 +30,7 @@ class CronJobOCRPreProcessBulkImportTasks(django_cron.CronJobBase):
 
 
 class CronJobOCRProcessBulkImportQueue(django_cron.CronJobBase):
-    schedule = django_cron.Schedule(
-        run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=5
-    )
+    schedule = django_cron.Schedule(run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=5)
     code = "boranga.ocr_process_bulk_import_queue"
 
     def do(self) -> None:
@@ -46,9 +40,7 @@ class CronJobOCRProcessBulkImportQueue(django_cron.CronJobBase):
 
 
 class CronJobAutoLockConservationStatusRecords(django_cron.CronJobBase):
-    schedule = django_cron.Schedule(
-        run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=1
-    )
+    schedule = django_cron.Schedule(run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=1)
     code = "boranga.auto_lock_conservation_status_records"
 
     def do(self) -> None:
@@ -57,9 +49,7 @@ class CronJobAutoLockConservationStatusRecords(django_cron.CronJobBase):
 
 
 class CronJobAutoLockUnlockedOccurrenceRecords(django_cron.CronJobBase):
-    schedule = django_cron.Schedule(
-        run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=1
-    )
+    schedule = django_cron.Schedule(run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=1)
     code = "boranga.auto_lock_unlocked_occurrence_records"
 
     def do(self) -> None:
@@ -72,9 +62,7 @@ class CronJobImportCadastreGeoJSONDaily(django_cron.CronJobBase):
 
     RUN_ON_DAYS = [0, 1, 2, 3, 4, 5, 6]
     RUN_AT_TIMES = [settings.IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY]
-    schedule = django_cron.Schedule(
-        run_weekly_on_days=RUN_ON_DAYS, run_at_times=RUN_AT_TIMES
-    )
+    schedule = django_cron.Schedule(run_weekly_on_days=RUN_ON_DAYS, run_at_times=RUN_AT_TIMES)
     code = "boranga.import_cadastre_geojson_daily"
 
     def do(self) -> None:

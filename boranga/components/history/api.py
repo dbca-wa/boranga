@@ -74,23 +74,17 @@ class InternalAuthorizationView(views.APIView):
 
     def get(self, request, model_name):
         """Deny access to the version history for external users"""
-        if not is_internal(self.request) or not self.check_auth_by_model(
-            request, model_name
-        ):
+        if not is_internal(self.request) or not self.check_auth_by_model(request, model_name):
             raise PermissionDenied()
 
 
 class VersionsFilterBackend(DatatablesFilterBackend):
-
     def search_versions(self, request, queryset, view):
-
         search_value = get_param(request, "search[value]")
         if search_value:
             # get all revision ids in existing queryset
             revision_ids = (
-                queryset.distinct("revision_id")
-                .order_by("revision_id")
-                .values_list("revision_id", flat=True)
+                queryset.distinct("revision_id").order_by("revision_id").values_list("revision_id", flat=True)
             )
             # get all versions with those revision ids
             all_versions = Version.objects.filter(revision_id__in=revision_ids)
@@ -101,20 +95,13 @@ class VersionsFilterBackend(DatatablesFilterBackend):
             for i in fields:
                 if i["searchable"]:
                     search_fields.append(i["name"][0])
-                    if (
-                        i["name"][0] != "revision_id"
-                        and i["name"][0] != "revision_date"
-                    ):
+                    if i["name"][0] != "revision_id" and i["name"][0] != "revision_date":
                         search_fields_regex = search_fields_regex + i["name"][0] + "|"
             if search_fields_regex:
                 search_fields_regex = search_fields_regex[:-1]
 
             filter_regex = (
-                '.*"(?:'
-                + search_fields_regex
-                + r')":\s"?[\sa-zA-Z0-9-]*(?:'
-                + search_value
-                + r')[\sa-zA-Z0-9-]*"?.*'
+                '.*"(?:' + search_fields_regex + r')":\s"?[\sa-zA-Z0-9-]*(?:' + search_value + r')[\sa-zA-Z0-9-]*"?.*'
             )
 
             # apply search term to all searchable fields
@@ -122,36 +109,26 @@ class VersionsFilterBackend(DatatablesFilterBackend):
             qs_revision_id = all_versions.none()
             if "revision_id" in search_fields:
                 qs_revision_id = all_versions
-                qs_revision_id = qs_revision_id.filter(
-                    revision__id__icontains=search_value
-                )
+                qs_revision_id = qs_revision_id.filter(revision__id__icontains=search_value)
 
             qs_revision_date = all_versions.none()
             # revision date
             if "revision_date" in search_fields:
                 qs_revision_date = all_versions
-                qs_revision_date = qs_revision_date.filter(
-                    revision__date_created__icontains=search_value
-                )
+                qs_revision_date = qs_revision_date.filter(revision__date_created__icontains=search_value)
 
             qs_revision_data = all_versions.none()
             # otherwise, json data fields (regex?)
             if search_fields_regex:
                 qs_revision_data = all_versions
-                qs_revision_data = qs_revision_data.filter(
-                    serialized_data__iregex=filter_regex
-                )
+                qs_revision_data = qs_revision_data.filter(serialized_data__iregex=filter_regex)
 
             # union resulting querysets
-            all_versions = qs_revision_data.union(qs_revision_date).union(
-                qs_revision_id
-            )
+            all_versions = qs_revision_data.union(qs_revision_date).union(qs_revision_id)
 
             # get remaining revision ids, apply to main queryset for result
             try:
-                remaining_revision_ids = list(
-                    set(all_versions.values_list("revision_id", flat=True))
-                )
+                remaining_revision_ids = list(set(all_versions.values_list("revision_id", flat=True)))
                 queryset = queryset.filter(revision_id__in=remaining_revision_ids)
             except Exception as e:
                 logger.warning(f"Invalid search term: {e}")
@@ -172,7 +149,6 @@ class VersionsFilterBackend(DatatablesFilterBackend):
             ordering_values.append(field["name"][0])
         final_ordering_values = []
         for i in range(0, len(ordering)):
-
             # handle revision date and id
             if ordering_values[i] == "revision_id":
                 final_ordering_values.append(ordering[i] + "revision")
@@ -181,12 +157,7 @@ class VersionsFilterBackend(DatatablesFilterBackend):
             elif ordering_values[i] == "revision_date":
                 final_ordering_values.append(ordering[i] + "revision__date_created")
             else:
-                queryset = queryset.annotate(
-                    **{
-                        "order_field"
-                        + str(i): F("data__0__fields__" + ordering_values[i])
-                    }
-                )
+                queryset = queryset.annotate(**{"order_field" + str(i): F("data__0__fields__" + ordering_values[i])})
                 final_ordering_values.append(ordering[i] + "order_field" + str(i))
 
         queryset = queryset.order_by(*final_ordering_values)
@@ -195,7 +166,6 @@ class VersionsFilterBackend(DatatablesFilterBackend):
 
 
 class GetLookUpValues:
-
     lookup_fields = []
     lookup_values = {}
 
@@ -236,9 +206,7 @@ class GetLookUpValues:
         )
 
         # get queryset of the lookup_field values where the id is among the found unique instances
-        lookup_values = list(
-            lookup_model.objects.filter(pk__in=instance_field_occurrences).values()
-        )
+        lookup_values = list(lookup_model.objects.filter(pk__in=instance_field_occurrences).values())
         lookup_dict = {}
         primary_key = lookup_model._meta.pk.name
         for i in lookup_values:
@@ -295,9 +263,7 @@ class GetPaginatedVersionsView(InternalAuthorizationView):
 
         queryset = Version.objects.get_for_object(instance)
 
-        id_sequence_index = list(
-            queryset.order_by("revision_id").values_list("revision_id", flat=True)
-        )
+        id_sequence_index = list(queryset.order_by("revision_id").values_list("revision_id", flat=True))
 
         queryset = self.filter_backend().filter_queryset(self.request, queryset, self)
 
@@ -310,13 +276,11 @@ class GetPaginatedVersionsView(InternalAuthorizationView):
         versions_list = []
 
         # we do not want to present multiple versions of the same object
-        related_versions = Version.objects.annotate(
-            data=Cast("serialized_data", JSONField())
-        ).exclude(Q(content_type__model__iexact=model_name) & ~Q(object_id=pk))
-
-        paginated_queryset = Version.objects.filter(
-            id__in=list(map(lambda i: i.pk, queryset_list))
+        related_versions = Version.objects.annotate(data=Cast("serialized_data", JSONField())).exclude(
+            Q(content_type__model__iexact=model_name) & ~Q(object_id=pk)
         )
+
+        paginated_queryset = Version.objects.filter(id__in=list(map(lambda i: i.pk, queryset_list)))
         self.lookup_getter.getVersionModelLookUpFieldValues(paginated_queryset, model)
 
         for version in queryset_list:
@@ -327,12 +291,8 @@ class GetPaginatedVersionsView(InternalAuthorizationView):
                 # if multiple records are of the same model, convert the dict in to a list
                 if related_version.content_type.model in data:
                     if not isinstance(data[related_version.content_type.model], list):
-                        data[related_version.content_type.model] = [
-                            data[related_version.content_type.model]
-                        ]
-                    data[related_version.content_type.model].append(
-                        related_version.data[0]
-                    )
+                        data[related_version.content_type.model] = [data[related_version.content_type.model]]
+                    data[related_version.content_type.model].append(related_version.data[0])
                 else:
                     data[related_version.content_type.model] = related_version.data[0]
 
@@ -342,24 +302,17 @@ class GetPaginatedVersionsView(InternalAuthorizationView):
                     if (
                         i in data[model._meta.model_name]["fields"]
                         and data[model._meta.model_name]["fields"][i] is not None
-                        and data[model._meta.model_name]["fields"][i]
-                        in self.lookup_getter.lookup_values[i]
+                        and data[model._meta.model_name]["fields"][i] in self.lookup_getter.lookup_values[i]
                     ):
-                        data[model._meta.model_name]["fields"][i] = (
-                            self.lookup_getter.lookup_values[i][
-                                data[model._meta.model_name]["fields"][i]
-                            ]
-                        )
+                        data[model._meta.model_name]["fields"][i] = self.lookup_getter.lookup_values[i][
+                            data[model._meta.model_name]["fields"][i]
+                        ]
 
             user_email = ""
             user_name = ""
             if version.revision.user:
                 user_email = version.revision.user.email
-                user_name = (
-                    version.revision.user.first_name
-                    + " "
-                    + version.revision.user.last_name
-                )
+                user_name = version.revision.user.first_name + " " + version.revision.user.last_name
 
             versions_list.append(
                 {
@@ -367,9 +320,7 @@ class GetPaginatedVersionsView(InternalAuthorizationView):
                     "revision_sequence": id_sequence_index.index(version.revision_id),
                     "revision_user_email": user_email,
                     "revision_user": user_name,
-                    "date_created": version.revision.date_created.astimezone().strftime(
-                        "%Y-%m-%d %H:%M:%S"
-                    ),
+                    "date_created": version.revision.date_created.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
                     "data": data,
                 }
             )
@@ -378,7 +329,6 @@ class GetPaginatedVersionsView(InternalAuthorizationView):
 
 
 class GetRevisionVersionsView(InternalAuthorizationView):
-
     lookup_getter = GetLookUpValues()
 
     def get(self, request, app_label, model_name, revision_id):
@@ -392,9 +342,7 @@ class GetRevisionVersionsView(InternalAuthorizationView):
         """
         super().get(request, model_name)
 
-        queryset = Version.objects.filter(revision_id=revision_id).annotate(
-            data=Cast("serialized_data", JSONField())
-        )
+        queryset = Version.objects.filter(revision_id=revision_id).annotate(data=Cast("serialized_data", JSONField()))
 
         # Build the list of versions
         primary_version = queryset.filter(content_type__model__iexact=model_name)
@@ -408,17 +356,11 @@ class GetRevisionVersionsView(InternalAuthorizationView):
         user_name = ""
         if primary_version[0].revision.user:
             user_email = primary_version[0].revision.user.email
-            user_name = (
-                primary_version[0].revision.user.first_name
-                + " "
-                + primary_version[0].revision.user.last_name
-            )
+            user_name = primary_version[0].revision.user.first_name + " " + primary_version[0].revision.user.last_name
 
         revision_dict = {
             "revision_id": primary_version[0].revision_id,
-            "date_created": primary_version[0]
-            .revision.date_created.astimezone()
-            .strftime("%Y-%m-%d %H:%M:%S"),
+            "date_created": primary_version[0].revision.date_created.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
             "revision_user_email": user_email,
             "revision_user": user_name,
         }
@@ -431,36 +373,25 @@ class GetRevisionVersionsView(InternalAuthorizationView):
                     data = primary_version_sub.data[0]
                     for i in self.lookup_getter.lookup_fields:
                         if i in data["fields"] and data["fields"][i] is not None:
-                            data["fields"][i] = self.lookup_getter.lookup_values[i][
-                                data["fields"][i]
-                            ]
+                            data["fields"][i] = self.lookup_getter.lookup_values[i][data["fields"][i]]
                     data["model_display_name"] = primary_version_sub.content_type.name
-                    version_data[primary_version[0].content_type.model.lower()].append(
-                        data
-                    )
+                    version_data[primary_version[0].content_type.model.lower()].append(data)
         else:
             if primary_version[0].data:
                 data = primary_version[0].data[0]
                 for i in self.lookup_getter.lookup_fields:
                     if i in data["fields"] and data["fields"][i] is not None:
-                        data["fields"][i] = self.lookup_getter.lookup_values[i][
-                            data["fields"][i]
-                        ]
+                        data["fields"][i] = self.lookup_getter.lookup_values[i][data["fields"][i]]
                 version_data[primary_version[0].content_type.model.lower()] = data
-                version_data[primary_version[0].content_type.model.lower()][
-                    "model_display_name"
-                ] = primary_version[0].content_type.name
+                version_data[primary_version[0].content_type.model.lower()]["model_display_name"] = primary_version[
+                    0
+                ].content_type.name
 
         for version in queryset:
-            if (
-                not version.content_type.model.lower() == model_name.lower()
-                and version.data
-            ):
+            if not version.content_type.model.lower() == model_name.lower() and version.data:
                 if version.content_type.model in version_data:
                     if not isinstance(version_data[version.content_type.model], list):
-                        version_data[version.content_type.model] = [
-                            version_data[version.content_type.model]
-                        ]
+                        version_data[version.content_type.model] = [version_data[version.content_type.model]]
                     version.data[0]["model_display_name"] = version.content_type.name
                     version_data[version.content_type.model].append(version.data[0])
                 else:

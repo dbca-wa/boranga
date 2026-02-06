@@ -32,9 +32,7 @@ def dedupe(input_path, output_path=None):
                 migrated_examples[key].append(mid)
             ts = row.get("timestamp", "").strip()
             try:
-                parsed = (
-                    datetime.fromisoformat(ts.replace("Z", "+00:00")) if ts else None
-                )
+                parsed = datetime.fromisoformat(ts.replace("Z", "+00:00")) if ts else None
             except Exception:
                 parsed = None
             if parsed:

@@ -178,16 +178,10 @@ class OccurrenceRow:
             migrated_from_id=str(d["migrated_from_id"]),
             occurrence_name=utils.safe_strip(d.get("occurrence_name")),
             submitter=utils.to_int_maybe(d.get("submitter")),
-            group_type_id=utils.to_int_maybe(
-                d.get("group_type_id") or d.get("group_type")
-            ),
+            group_type_id=utils.to_int_maybe(d.get("group_type_id") or d.get("group_type")),
             species_id=species_id,
-            community_id=utils.to_int_maybe(
-                d.get("community_id") or d.get("community_code")
-            ),
-            wild_status_id=utils.to_int_maybe(
-                d.get("wild_status_id") or d.get("wild_status")
-            ),
+            community_id=utils.to_int_maybe(d.get("community_id") or d.get("community_code")),
+            wild_status_id=utils.to_int_maybe(d.get("wild_status_id") or d.get("wild_status")),
             occurrence_source=d.get("occurrence_source") or [],
             comment=utils.safe_strip(d.get("comment")),
             review_status=utils.safe_strip(d.get("review_status")),
@@ -196,65 +190,33 @@ class OccurrenceRow:
             datetime_created=d.get("datetime_created"),
             datetime_updated=d.get("datetime_updated"),
             locked=d.get("locked", False),
-            OCCContactDetail__contact=utils.safe_strip(
-                d.get("OCCContactDetail__contact")
-            ),
-            OCCContactDetail__contact_name=utils.safe_strip(
-                d.get("OCCContactDetail__contact_name")
-            ),
+            OCCContactDetail__contact=utils.safe_strip(d.get("OCCContactDetail__contact")),
+            OCCContactDetail__contact_name=utils.safe_strip(d.get("OCCContactDetail__contact_name")),
             OCCContactDetail__notes=utils.safe_strip(d.get("OCCContactDetail__notes")),
-            OccurrenceTenure__purpose_id=utils.to_int_maybe(
-                d.get("OccurrenceTenure__purpose_id")
-            ),
-            OccurrenceTenure__vesting_id=utils.to_int_maybe(
-                d.get("OccurrenceTenure__vesting_id")
-            ),
-            OCCLocation__coordinate_source_id=utils.to_int_maybe(
-                d.get("OCCLocation__coordinate_source_id")
-            ),
-            OCCLocation__boundary_description=utils.safe_strip(
-                d.get("OCCLocation__boundary_description")
-            ),
+            OccurrenceTenure__purpose_id=utils.to_int_maybe(d.get("OccurrenceTenure__purpose_id")),
+            OccurrenceTenure__vesting_id=utils.to_int_maybe(d.get("OccurrenceTenure__vesting_id")),
+            OCCLocation__coordinate_source_id=utils.to_int_maybe(d.get("OCCLocation__coordinate_source_id")),
+            OCCLocation__boundary_description=utils.safe_strip(d.get("OCCLocation__boundary_description")),
             OCCLocation__locality=utils.safe_strip(d.get("OCCLocation__locality")),
-            OCCLocation__location_description=utils.safe_strip(
-                d.get("OCCLocation__location_description")
-            ),
-            OccurrenceSite__comments=utils.safe_strip(
-                d.get("OccurrenceSite__comments")
-            ),
-            OccurrenceSite__latitude=utils.to_float_maybe(
-                d.get("OccurrenceSite__latitude")
-            ),
-            OccurrenceSite__longitude=utils.to_float_maybe(
-                d.get("OccurrenceSite__longitude")
-            ),
-            OccurrenceSite__site_name=utils.safe_strip(
-                d.get("OccurrenceSite__site_name")
-            ),
+            OCCLocation__location_description=utils.safe_strip(d.get("OCCLocation__location_description")),
+            OccurrenceSite__comments=utils.safe_strip(d.get("OccurrenceSite__comments")),
+            OccurrenceSite__latitude=utils.to_float_maybe(d.get("OccurrenceSite__latitude")),
+            OccurrenceSite__longitude=utils.to_float_maybe(d.get("OccurrenceSite__longitude")),
+            OccurrenceSite__site_name=utils.safe_strip(d.get("OccurrenceSite__site_name")),
             OccurrenceSite__updated_date=d.get("OccurrenceSite__updated_date"),
             OccurrenceSite__geometry=d.get("OccurrenceSite__geometry"),
-            OCCObservationDetail__comments=utils.safe_strip(
-                d.get("OCCObservationDetail__comments")
-            ),
-            OCCHabitatComposition__water_quality=utils.safe_strip(
-                d.get("OCCHabitatComposition__water_quality")
-            ),
-            OCCHabitatComposition__habitat_notes=utils.safe_strip(
-                d.get("OCCHabitatComposition__habitat_notes")
-            ),
+            OCCObservationDetail__comments=utils.safe_strip(d.get("OCCObservationDetail__comments")),
+            OCCHabitatComposition__water_quality=utils.safe_strip(d.get("OCCHabitatComposition__water_quality")),
+            OCCHabitatComposition__habitat_notes=utils.safe_strip(d.get("OCCHabitatComposition__habitat_notes")),
             OCCFireHistory__comment=utils.safe_strip(d.get("OCCFireHistory__comment")),
-            OCCAssociatedSpecies__comment=utils.safe_strip(
-                d.get("OCCAssociatedSpecies__comment")
-            ),
+            OCCAssociatedSpecies__comment=utils.safe_strip(d.get("OCCAssociatedSpecies__comment")),
             AssociatedSpeciesTaxonomy__species_role_id=utils.to_int_maybe(
                 d.get("AssociatedSpeciesTaxonomy__species_role_id")
             ),
             OccurrenceDocument__document_sub_category_id=utils.to_int_maybe(
                 d.get("OccurrenceDocument__document_sub_category_id")
             ),
-            OccurrenceDocument__description=utils.safe_strip(
-                d.get("OccurrenceDocument__description")
-            ),
+            OccurrenceDocument__description=utils.safe_strip(d.get("OccurrenceDocument__description")),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:
@@ -272,10 +234,7 @@ class OccurrenceRow:
             ]:
                 if not self.species_id:
                     issues.append(("error", "species_id is required for flora/fauna"))
-            elif (
-                str(self.group_type_id).lower()
-                == str(GroupType.GROUP_TYPE_COMMUNITY).lower()
-            ):
+            elif str(self.group_type_id).lower() == str(GroupType.GROUP_TYPE_COMMUNITY).lower():
                 if not self.community_id:
                     issues.append(("error", "community_id is required for community"))
         # source-specific rule example

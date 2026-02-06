@@ -23,17 +23,13 @@ def tec_comment_transform(val, ctx):
     if row.get("_temp_occ_original_area"):
         parts.append(f"Occurrence Original Area: {row['_temp_occ_original_area']}")
     if row.get("_temp_occ_area_accuracy"):
-        parts.append(
-            f"Occurrence Original Area Accuracy: {row['_temp_occ_area_accuracy']}"
-        )
+        parts.append(f"Occurrence Original Area Accuracy: {row['_temp_occ_area_accuracy']}")
     if row.get("_temp_occ_beard_map_code"):
         parts.append(f"Beard Map: {row['_temp_occ_beard_map_code']}")
     if row.get("_temp_occ_beard_desc"):
         parts.append(f"Beard Description: {row['_temp_occ_beard_desc']}")
     if row.get("_temp_occ_bush_forever_site_no"):
-        parts.append(
-            f"Bush Forever Site Number: {row['_temp_occ_bush_forever_site_no']}"
-        )
+        parts.append(f"Bush Forever Site Number: {row['_temp_occ_bush_forever_site_no']}")
 
     # Additional Data
     additional_data = row.get("_nested_additional_data", [])
@@ -170,9 +166,7 @@ PIPELINES = {
     "OCCLocation__location_description": ["strip"],
     "OCCLocation__boundary_description": ["strip"],
     "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
-    "OccurrenceDocument__document_sub_category_id": [
-        tec_document_sub_category_transform
-    ],
+    "OccurrenceDocument__document_sub_category_id": [tec_document_sub_category_transform],
     # Geometry transform for OccurrenceSite
     "OccurrenceSite__geometry": [tec_site_geometry_transform],
     # Pass-through fields for OccurrenceSite
@@ -357,11 +351,7 @@ class OccurrenceTecAdapter(SourceAdapter):
             site_rows, site_warns = self.read_table(site_path, **site_options)
             warnings.extend(site_warns)
         else:
-            warnings.append(
-                ExtractionWarning(
-                    f"Missing SITES.csv near {occ_path}, proceeding without sites"
-                )
-            )
+            warnings.append(ExtractionWarning(f"Missing SITES.csv near {occ_path}, proceeding without sites"))
 
         # Read Fire History
         fire_rows = []
@@ -485,9 +475,7 @@ class OccurrenceTecAdapter(SourceAdapter):
                     canonical_row[k] = v
 
             # Set TEC-specific defaults on canonical row
-            canonical_row["group_type_id"] = get_group_type_id(
-                GroupType.GROUP_TYPE_COMMUNITY
-            )
+            canonical_row["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_COMMUNITY)
             canonical_row["locked"] = True
             if not canonical_row.get("submitter") and tec_submitter_id:
                 canonical_row["submitter"] = tec_submitter_id

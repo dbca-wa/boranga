@@ -15,10 +15,7 @@ def _log_user_email(email_message, emailuser, customer, sender=None):
 
     if isinstance(
         email_message,
-        (
-            EmailMultiAlternatives,
-            EmailMessage,
-        ),
+        EmailMultiAlternatives | EmailMessage,
     ):
         text = email_message.body
         subject = email_message.subject

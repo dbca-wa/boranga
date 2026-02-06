@@ -12,12 +12,14 @@ from boranga.helpers import (
     is_species_communities_approver,
 )
 
+
 class TileLayerPermission(BasePermission):
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
 
-        return (is_readonly_user(request)
+        return (
+            is_readonly_user(request)
             or is_conservation_status_assessor(request)
             or is_conservation_status_approver(request)
             or is_species_communities_approver(request)

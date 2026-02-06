@@ -43,6 +43,7 @@ from boranga.components.occurrence.models import (
     Occurrence,
     OccurrenceGeometry,
     OccurrenceReport,
+    OccurrenceReportDocument,
     OccurrenceReportGeometry,
     OCCVegetationStructure,
     OCRAssociatedSpecies,
@@ -56,7 +57,11 @@ from boranga.components.occurrence.models import (
     OCRPlantCount,
     OCRVegetationStructure,
 )
-from boranga.components.species_and_communities.models import Taxonomy
+from boranga.components.species_and_communities.models import (
+    DocumentCategory,
+    DocumentSubCategory,
+    Taxonomy,
+)
 from boranga.components.users.models import SubmitterInformation
 
 logger = logging.getLogger(__name__)
@@ -72,13 +77,11 @@ SOURCE_ADAPTERS = {
     # time. We'll import the class lazily inside `run()` after emitting
     # initial logs to avoid long silent startup delays.
     Source.TPFL.value: "boranga.components.data_migration.adapters.occurrence_report.tpfl.OccurrenceReportTpflAdapter",
-    Source.TEC_SITES.value: (
-        "boranga.components.data_migration.adapters."
-        "occurrence_report.tec_sites.OccurrenceReportTecSitesAdapter"
+    Source.TEC_SITE_VISITS.value: (
+        "boranga.components.data_migration.adapters.occurrence_report.tec_site_visits.OccurrenceReportTecSiteVisitsAdapter"
     ),
     Source.TEC_SURVEYS.value: (
-        "boranga.components.data_migration.adapters."
-        "occurrence_report.tec_surveys.OccurrenceReportTecSurveysAdapter"
+        "boranga.components.data_migration.adapters.occurrence_report.tec_surveys.OccurrenceReportTecSurveysAdapter"
     ),
     # add other adapters when available
 }
@@ -89,14 +92,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
     slug = "occurrence_report_legacy"
     description = "Import occurrence reports from legacy sources (TPFL etc)"
 
-    def clear_targets(
-        self, ctx: ImportContext, include_children: bool = False, **options
-    ):
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OccurrenceReport target data and its child tables. Respect `ctx.dry_run`."""
         if ctx.dry_run:
-            logger.info(
-                "OccurrenceReportImporter.clear_targets: dry-run, skipping delete"
-            )
+            logger.info("OccurrenceReportImporter.clear_targets: dry-run, skipping delete")
             return
 
         from boranga.components.data_migration.adapters.sources import (
@@ -125,9 +124,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             )
             report_filter = {"group_type__name__in": target_group_types}
         else:
-            logger.warning(
-                "OccurrenceReportImporter: deleting OccurrenceReport and related data..."
-            )
+            logger.warning("OccurrenceReportImporter: deleting OccurrenceReport and related data...")
             report_filter = {}
 
         # Perform deletes in an autocommit block so they are committed
@@ -149,20 +146,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 logger.exception("Failed to delete OccurrenceReport")
 
             # Reset the primary key sequence for OccurrenceReport when using PostgreSQL.
-            if not is_filtered:
-                try:
-                    if getattr(conn, "vendor", None) == "postgresql":
-                        table = OccurrenceReport._meta.db_table
-                        with conn.cursor() as cur:
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = OccurrenceReport._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(f"SELECT MAX(id) FROM {table}")
+                        row = cur.fetchone()
+                        max_id = row[0] if row else None
+
+                        if max_id is not None:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", max_id, True],
+                            )
+                        else:
                             cur.execute(
                                 "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
                                 [table, "id", 1, False],
                             )
-                        logger.info("Reset primary key sequence for table %s", table)
-                except Exception:
-                    logger.exception(
-                        "Failed to reset OccurrenceReport primary key sequence"
-                    )
+                    logger.info("Reset primary key sequence for table %s to %s", table, max_id)
+            except Exception:
+                logger.exception("Failed to reset OccurrenceReport primary key sequence")
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
@@ -184,9 +188,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             map_path = "private-media/legacy_data/TPFL/DRF_POP_SECTION_MAP.csv"
 
         if not os.path.exists(map_path):
-            logger.warning(
-                f"DRF_POP_SECTION_MAP.csv not found at {map_path}. Skipping section copying."
-            )
+            logger.warning(f"DRF_POP_SECTION_MAP.csv not found at {map_path}. Skipping section copying.")
             return {}
 
         mapping = defaultdict(list)
@@ -225,9 +227,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             map_path = "private-media/legacy_data/TPFL/DRF_SHEET_VWS.csv"
 
         if not os.path.exists(map_path):
-            logger.warning(
-                f"DRF_SHEET_VWS.csv not found at {map_path}. Skipping fallback linking."
-            )
+            logger.warning(f"DRF_SHEET_VWS.csv not found at {map_path}. Skipping fallback linking.")
             return {}
 
         mapping = {}
@@ -244,6 +244,71 @@ class OccurrenceReportImporter(BaseSheetImporter):
             return mapping
         except Exception as e:
             logger.exception(f"Failed to load DRF_SHEET_VWS.csv: {e}")
+            return {}
+
+    def preload_tec_site_species_map(self, path: str) -> dict[str, list[dict]]:
+        """
+        Load SITE_SPECIES.csv into a dict:
+        SITE_VISIT_ID -> [{taxon_name_id, comments, ...}, ...]
+        """
+        import csv
+        import os
+        from collections import defaultdict
+
+        base_dir = os.path.dirname(path)
+        map_path = os.path.join(base_dir, "SITE_SPECIES.csv")
+
+        # If input path is SITE_VISITS.csv, map_path should be correct.
+        if not os.path.exists(map_path) and "SITE_VISITS" in path:
+            # Try replacing SITE_VISITS with SITE_SPECIES if naming convention differs
+            map_path = path.replace("SITE_VISITS", "SITE_SPECIES").replace(".csv", ".csv")
+
+        if not os.path.exists(map_path):
+            # Fallback for dev/test environments
+            map_path = "private-media/legacy_data/TEC/SITE_SPECIES.csv"
+
+        if not os.path.exists(map_path):
+            logger.warning(
+                "SITE_SPECIES.csv not found at %s. Skipping TEC associated species loading.",
+                map_path,
+            )
+            return {}
+
+        mapping = defaultdict(list)
+        try:
+            with open(map_path, encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    visit_id = row.get("SITE_VISIT_ID", "").strip()
+                    if not visit_id:
+                        continue
+
+                    # Extract fields
+                    taxon_id = row.get("taxon_name_id", "").strip()
+                    # Comments construction: SSP_NOTES + SSP_HEIGHT + SSP_COLLECTOR_CODE + SSP_COLLECTION_NUMBER
+                    notes = row.get("SSP_NOTES", "").strip()
+                    height = row.get("SSP_HEIGHT", "").strip()
+                    coll_code = row.get("SSP_COLLECTOR_CODE", "").strip()
+                    coll_num = row.get("SSP_COLLECTION_NUMBER", "").strip()
+
+                    parts = []
+                    if notes:
+                        parts.append(notes)
+                    if height:
+                        parts.append(f"Height: {height}")
+                    if coll_code:
+                        parts.append(f"Collector Code: {coll_code}")
+                    if coll_num:
+                        parts.append(f"Collector Number: {coll_num}")
+
+                    comments = "; ".join(parts)
+
+                    mapping[visit_id].append({"taxon_name_id": taxon_id, "comments": comments})
+
+            logger.info(f"Loaded associated species for {len(mapping)} visits from {map_path}")
+            return mapping
+        except Exception as e:
+            logger.warning(f"Failed to load SITE_SPECIES.csv: {e}")
             return {}
 
     def add_arguments(self, parser):
@@ -289,8 +354,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
         path_map = self._parse_path_map(options.get("path_map"))
 
         # Load pop_section_map early so we can use it for associated species filtering
-        pop_section_map = self.preload_pop_section_map(path)
-        sheet_vws_map = self.preload_sheet_vws_map(path)
+        # CONDITIONAL LOADING: Only load TPFL specific maps if TPFL is in the sources
+        # (This avoids loading large unnecessary files when running TEC migrations)
+        pop_section_map = {}
+        sheet_vws_map = {}
+        if Source.TPFL.value in sources:
+            pop_section_map = self.preload_pop_section_map(path)
+            sheet_vws_map = self.preload_sheet_vws_map(path)
+
+        tec_site_species_map = {}
+        if Source.TEC_SITE_VISITS.value in sources:
+            tec_site_species_map = self.preload_tec_site_species_map(path)
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
@@ -398,9 +472,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         warn_count = 0
 
         # 3. Transform every row into canonical form, collect per-key groups
-        groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(
-            list
-        )
+        groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(list)
 
         for row in all_rows:
             processed += 1
@@ -417,9 +489,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             has_error = False
             # choose pipeline by row source
             src = row.get("_source")
-            pipeline_map = pipelines_by_source.get(
-                src, pipelines_by_source.get(None, {})
-            )
+            pipeline_map = pipelines_by_source.get(src, pipelines_by_source.get(None, {}))
             for col, pipeline in pipeline_map.items():
                 raw_val = row.get(col)
                 res = run_pipeline(pipeline, raw_val, tcx)
@@ -472,11 +542,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         def merge_group(entries, source_priority):
             entries_sorted = sorted(
                 entries,
-                key=lambda e: (
-                    source_priority.index(e[1])
-                    if e[1] in source_priority
-                    else len(source_priority)
-                ),
+                key=lambda e: (source_priority.index(e[1]) if e[1] in source_priority else len(source_priority)),
             )
             merged = {}
             combined_issues = []
@@ -490,9 +556,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         break
                 merged[col] = val
             # adapter-added extras
-            extra_keys = set().union(
-                *(set(trans.keys()) for trans, _, _ in entries_sorted)
-            )
+            extra_keys = set().union(*(set(trans.keys()) for trans, _, _ in entries_sorted))
             for extra in sorted(extra_keys):
                 if extra in pipelines:
                     continue
@@ -569,9 +633,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         warnings_details.append(rec)
                 if any(level == "error" for level, _ in validation_issues):
                     skipped += 1
-                    errors += sum(
-                        1 for level, _ in validation_issues if level == "error"
-                    )
+                    errors += sum(1 for level, _ in validation_issues if level == "error")
                     continue
 
             defaults = report_row.to_model_defaults()
@@ -581,10 +643,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # copy of `lodgement_date` but the TPFL pipelines only produce
             # `lodgement_date`, so fill it here to avoid NULLs for the
             # model's non-nullable `reported_date` field.
-            if (
-                defaults.get("reported_date") is None
-                and defaults.get("lodgement_date") is not None
-            ):
+            if defaults.get("reported_date") is None and defaults.get("lodgement_date") is not None:
                 defaults["reported_date"] = defaults.get("lodgement_date")
 
             # If transforms produced None for fields that have model defaults
@@ -605,9 +664,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     defaults[k] = field_default
                     continue
                 # Fallback: for non-nullable text fields, prefer empty string
-                if not getattr(field, "null", False) and isinstance(
-                    field, (dj_models.CharField, dj_models.TextField)
-                ):
+                if not getattr(field, "null", False) and isinstance(field, dj_models.CharField | dj_models.TextField):
                     defaults[k] = ""
                     continue
 
@@ -618,9 +675,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 try:
                     pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
                     if len(pretty) > 2000:
-                        preview = pretty[
-                            :2000
-                        ] + "\n... (truncated, total %d chars)" % (len(pretty))
+                        preview = f"{pretty[:2000]}\n... (truncated, total {len(pretty)} chars)"
                     else:
                         preview = pretty
                 except Exception:
@@ -761,10 +816,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         occ_map = {}
         if occ_mig_ids:
-            occ_map = {
-                o.migrated_from_id: o
-                for o in Occurrence.objects.filter(migrated_from_id__in=occ_mig_ids)
-            }
+            occ_map = {o.migrated_from_id: o for o in Occurrence.objects.filter(migrated_from_id__in=occ_mig_ids)}
 
         for op in ops:
             row = op["canonical"]
@@ -772,9 +824,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # Resolve occurrence link and copy details
             if row.Occurrence__migrated_from_id:
-                lid = get_occ_lookup_id(
-                    op["migrated_from_id"], row.Occurrence__migrated_from_id
-                )
+                lid = get_occ_lookup_id(op["migrated_from_id"], row.Occurrence__migrated_from_id)
                 occ = occ_map.get(lid)
                 if occ:
                     # Replace string mapping with ID
@@ -791,6 +841,36 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if occ.community_id and not defaults.get("community_id"):
                         defaults["community_id"] = occ.community_id
 
+                    # Copy Location info from Parent Occurrence (Tasks 12349, 12352, 12357)
+                    loc_data = op["location_data"]
+                    occ_loc = getattr(occ, "location", None)
+                    if occ_loc:
+                        if not loc_data.get("district") and occ_loc.district_id:
+                            loc_data["district"] = occ_loc.district_id
+                        if not loc_data.get("region") and occ_loc.region_id:
+                            loc_data["region"] = occ_loc.region_id
+                        if not loc_data.get("location_description") and occ_loc.location_description:
+                            loc_data["location_description"] = occ_loc.location_description
+
+            # Cleanup: If we failed to link an occurrence, ensure we don't pass the raw string ID
+            # (e.g. "1993") as a PK to Django, which causes ForeignKey Violations.
+            # We log a warning if we are dropping a real value so the data gap is visible.
+            if "occurrence" in defaults:
+                removed_val = defaults.pop("occurrence")
+                if removed_val and not defaults.get("occurrence_id"):
+                    # Only log provided we haven't already linked it (occurrence_id)
+                    errors_details.append(
+                        {
+                            "migrated_from_id": op["migrated_from_id"],
+                            "column": "occurrence",
+                            "level": "warning",
+                            "message": f"Link broken. Report refers to Occurrence '{removed_val}' which was not found in DB. Creating unlinked.",
+                            "raw_value": removed_val,
+                            "reason": "broken_link",
+                            "row": {"occurrence_link": removed_val},
+                        }
+                    )
+
         # Build op_map for O(1) access to per-migrated-id data (avoid O(n) scans)
         op_map = {o["migrated_from_id"]: o for o in ops}
 
@@ -798,9 +878,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         migrated_keys = [o["migrated_from_id"] for o in ops]
         existing_by_migrated = {
             s.migrated_from_id: s
-            for s in OccurrenceReport.objects.filter(
-                migrated_from_id__in=migrated_keys
-            ).select_related("occurrence")
+            for s in OccurrenceReport.objects.filter(migrated_from_id__in=migrated_keys).select_related("occurrence")
         }
 
         # Prepare lists for bulk ops
@@ -848,9 +926,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             create_kwargs["migrated_from_id"] = migrated_from_id
             if getattr(ctx, "migration_run", None) is not None:
                 create_kwargs["migration_run"] = ctx.migration_run
-            inst = OccurrenceReport(
-                **normalize_create_kwargs(OccurrenceReport, create_kwargs)
-            )
+            inst = OccurrenceReport(**normalize_create_kwargs(OccurrenceReport, create_kwargs))
             to_create.append(inst)
             create_meta.append(
                 (
@@ -882,11 +958,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Refresh created objects to get PKs
         if create_meta:
             created_keys = [m[0] for m in create_meta]
-            logger.info(f"created_keys for lookup: {created_keys[:5]}")
-            for s in OccurrenceReport.objects.filter(
-                migrated_from_id__in=created_keys
-            ).select_related("occurrence"):
-                logger.info(f"Adding to created_map: {s.migrated_from_id}={s.pk}")
+            # logger.info(f"created_keys for lookup: {created_keys[:5]}")
+            for s in OccurrenceReport.objects.filter(migrated_from_id__in=created_keys).select_related("occurrence"):
+                # logger.info(f"Adding to created_map: {s.migrated_from_id}={s.pk}")
                 created_map[s.migrated_from_id] = s
 
         # Populate occurrence_report_number for newly-created objects (bulk_update)
@@ -898,9 +972,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     occs_to_update.append(s)
             if occs_to_update:
                 try:
-                    OccurrenceReport.objects.bulk_update(
-                        occs_to_update, ["occurrence_report_number"], batch_size=BATCH
-                    )
+                    OccurrenceReport.objects.bulk_update(occs_to_update, ["occurrence_report_number"], batch_size=BATCH)
                 except Exception:
                     for s in occs_to_update:
                         try:
@@ -932,10 +1004,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     # include field only if every instance has a non-None value
                     try:
-                        if f.null or all(
-                            getattr(inst, f.name, None) is not None
-                            for inst in update_instances
-                        ):
+                        if f.null or all(getattr(inst, f.name, None) is not None for inst in update_instances):
                             fields.append(f.name)
                     except Exception:
                         # Be conservative: skip fields that raise on getattr
@@ -943,13 +1012,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # perform bulk_update only if we have safe fields to update
             try:
                 if fields:
-                    OccurrenceReport.objects.bulk_update(
-                        update_instances, fields, batch_size=BATCH
-                    )
+                    OccurrenceReport.objects.bulk_update(update_instances, fields, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OccurrenceReport; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OccurrenceReport; falling back to individual saves")
                 for inst in update_instances:
                     try:
                         # Build a conservative per-instance update_fields list:
@@ -960,8 +1025,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         update_fields = [
                             f.name
                             for f in inst._meta.fields
-                            if getattr(inst, f.name, None) is not None
-                            and f.name not in ("id", "migrated_from_id")
+                            if getattr(inst, f.name, None) is not None and f.name not in ("id", "migrated_from_id")
                         ]
                         if update_fields:
                             inst.save(update_fields=update_fields)
@@ -980,9 +1044,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Now handle related models in bulk for both created and updated occurrence reports
         # Prepare target occurrence_report ids
         target_mig_ids = [o["migrated_from_id"] for o in ops]
-        target_occs = list(
-            OccurrenceReport.objects.filter(migrated_from_id__in=target_mig_ids)
-        )
+        target_occs = list(OccurrenceReport.objects.filter(migrated_from_id__in=target_mig_ids))
         target_map = {o.migrated_from_id: o for o in target_occs}
 
         # Load associated-species mapping (SHEETNO -> [species names]) from
@@ -997,9 +1059,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         if getattr(ctx, "dry_run", False):
             sheet_to_species = None
         else:
-            sheet_to_species = load_sheet_associated_species_names(
-                path, split_values=True
-            )
+            sheet_to_species = load_sheet_associated_species_names(path, split_values=True)
 
         # If any mapping rows found, resolve names to AssociatedSpeciesTaxonomy
         # Also, scan OCRAssociatedSpecies__comment for additional species names
@@ -1071,9 +1131,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # which are slow to plan/parse and may hit driver/param limits.
 
             # Normalize names client-side to match lower(...) on DB.
-            lower_names = {
-                str(n).strip().casefold() for n in uniq_names if n and str(n).strip()
-            }
+            lower_names = {str(n).strip().casefold() for n in uniq_names if n and str(n).strip()}
             lower_names = list(lower_names)
 
             # 1. Resolve name -> taxonomy via Legacy Mapping if exists (highest priority)
@@ -1109,9 +1167,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 batch_size = 2000
                 for i in range(0, len(lower_names), batch_size):
                     batch = lower_names[i : i + batch_size]
-                    qs = Taxonomy.objects.annotate(
-                        lname=Lower("scientific_name")
-                    ).filter(lname__in=batch)
+                    qs = Taxonomy.objects.annotate(lname=Lower("scientific_name")).filter(lname__in=batch)
                     # We might need to select is_cal_name or similar if that indicates "current"?
                     # Checking usage: TaxonPreviousName suggests Taxonomy might not have is_current flag directly?
                     # Let's check the model first in a separate step or assume a field exists.
@@ -1144,9 +1200,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
 
                     # Multiple candidates found
-                    current_candidates = [
-                        c for c in candidates if getattr(c, "is_current", False)
-                    ]
+                    current_candidates = [c for c in candidates if getattr(c, "is_current", False)]
 
                     if len(current_candidates) == 1:
                         # Case 2: Exactly one active
@@ -1198,9 +1252,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     # Try to find candidates sharing the same genus
                     candidates = list(
-                        Taxonomy.objects.filter(
-                            is_current=True, genera_name__iexact=genus
-                        )
+                        Taxonomy.objects.filter(is_current=True, genera_name__iexact=genus)
                         .values_list("scientific_name", flat=True)
                         .order_by("scientific_name")
                     )
@@ -1208,22 +1260,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if not candidates:
                         # Fallback try startswith
                         candidates = list(
-                            Taxonomy.objects.filter(
-                                is_current=True, scientific_name__istartswith=genus
-                            )
+                            Taxonomy.objects.filter(is_current=True, scientific_name__istartswith=genus)
                             .values_list("scientific_name", flat=True)
                             .order_by("scientific_name")
                         )
 
                     if candidates:
-                        matches = difflib.get_close_matches(
-                            name, candidates, n=1, cutoff=0.85
-                        )
+                        matches = difflib.get_close_matches(name, candidates, n=1, cutoff=0.85)
                         if matches:
                             guess_name = matches[0]
-                            tax = Taxonomy.objects.filter(
-                                is_current=True, scientific_name=guess_name
-                            ).first()
+                            tax = Taxonomy.objects.filter(is_current=True, scientific_name=guess_name).first()
                             if tax:
                                 name_to_tax[name] = tax
                                 best_guess_map[name] = tax
@@ -1256,8 +1302,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     "column": "associated_species",
                                     "level": "warning",
                                     "message": (
-                                        f"Best-guess taxonomy match for '{raw_name}': "
-                                        f"using '{tax.scientific_name}'"
+                                        f"Best-guess taxonomy match for '{raw_name}': using '{tax.scientific_name}'"
                                     ),
                                     "raw_value": raw_name,
                                     "reason": "associated_species_best_guess",
@@ -1360,9 +1405,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # Load existing AssociatedSpeciesTaxonomy rows for all resolved taxonomy ids
             tax_ids = {t.pk for t in name_to_tax.values()}
-            ast_qs = AssociatedSpeciesTaxonomy.objects.filter(
-                taxonomy__in=list(tax_ids)
-            )
+            ast_qs = AssociatedSpeciesTaxonomy.objects.filter(taxonomy__in=list(tax_ids))
             # Map taxonomy_id -> AssociatedSpeciesTaxonomy (take first if multiple)
             taxid_to_ast = {}
             for ast in ast_qs:
@@ -1375,31 +1418,18 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # avoid per-id DB roundtrips. Fall back to individual creates
                 # if bulk_create fails for any reason.
                 try:
-                    create_objs = [
-                        AssociatedSpeciesTaxonomy(taxonomy_id=tid)
-                        for tid in missing_tax_ids
-                    ]
-                    AssociatedSpeciesTaxonomy.objects.bulk_create(
-                        create_objs, batch_size=BATCH
-                    )
+                    create_objs = [AssociatedSpeciesTaxonomy(taxonomy_id=tid) for tid in missing_tax_ids]
+                    AssociatedSpeciesTaxonomy.objects.bulk_create(create_objs, batch_size=BATCH)
                     # Refresh created rows to ensure we have their PKs
-                    for ast in AssociatedSpeciesTaxonomy.objects.filter(
-                        taxonomy_id__in=list(missing_tax_ids)
-                    ):
+                    for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=list(missing_tax_ids)):
                         if ast.taxonomy_id not in taxid_to_ast:
                             taxid_to_ast[ast.taxonomy_id] = ast
                 except Exception:
-                    logger.exception(
-                        "Bulk create failed for AssociatedSpeciesTaxonomy; trying individual creates"
-                    )
+                    logger.exception("Bulk create failed for AssociatedSpeciesTaxonomy; trying individual creates")
                     created_asts = []
                     for tid in missing_tax_ids:
                         try:
-                            created_asts.append(
-                                AssociatedSpeciesTaxonomy.objects.create(
-                                    taxonomy_id=tid
-                                )
-                            )
+                            created_asts.append(AssociatedSpeciesTaxonomy.objects.create(taxonomy_id=tid))
                         except Exception:
                             logger.exception(
                                 "Failed to create AssociatedSpeciesTaxonomy for taxonomy_id %s",
@@ -1419,9 +1449,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # related_species to avoid per-object queries later.
             existing_assoc = {
                 a.occurrence_report_id: a
-                for a in OCRAssociatedSpecies.objects.filter(
-                    occurrence_report__in=target_occs
-                ).prefetch_related("related_species")
+                for a in OCRAssociatedSpecies.objects.filter(occurrence_report__in=target_occs).prefetch_related(
+                    "related_species"
+                )
             }
 
             # Create OCRAssociatedSpecies for occurrence reports that need them
@@ -1455,9 +1485,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             if assoc_to_create:
                 try:
-                    OCRAssociatedSpecies.objects.bulk_create(
-                        assoc_to_create, batch_size=BATCH
-                    )
+                    OCRAssociatedSpecies.objects.bulk_create(assoc_to_create, batch_size=BATCH)
 
                     # Populate ManyToMany relations for newly created objects
                     # Use through model for bulk creation to avoid N+1 queries
@@ -1488,17 +1516,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ThroughModel.objects.bulk_create(m2m_links, batch_size=BATCH)
 
                 except Exception:
-                    logger.exception(
-                        "Failed to bulk_create OCRAssociatedSpecies; falling back to individual saves"
-                    )
+                    logger.exception("Failed to bulk_create OCRAssociatedSpecies; falling back to individual saves")
                     for a in assoc_to_create:
                         try:
                             a.save()
                             # Also populate M2M on fallback
                             if a.occurrence_report_id in ocr_id_to_resolved:
-                                a.related_species.add(
-                                    *ocr_id_to_resolved[a.occurrence_report_id]
-                                )
+                                a.related_species.add(*ocr_id_to_resolved[a.occurrence_report_id])
                         except Exception as exc:
                             logger.exception(
                                 "Failed to create OCRAssociatedSpecies for occurrence_report %s",
@@ -1507,9 +1531,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             ocr_ref = getattr(a, "occurrence_report", None)
                             errors_details.append(
                                 {
-                                    "migrated_from_id": getattr(
-                                        ocr_ref, "migrated_from_id", ""
-                                    ),
+                                    "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                     "column": "OCRAssociatedSpecies",
                                     "level": "error",
                                     "message": f"Failed to create associated species: {exc}",
@@ -1538,9 +1560,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             if assoc_to_update:
                 try:
-                    OCRAssociatedSpecies.objects.bulk_update(
-                        assoc_to_update, ["comment"], batch_size=BATCH
-                    )
+                    OCRAssociatedSpecies.objects.bulk_update(assoc_to_update, ["comment"], batch_size=BATCH)
                 except Exception:
                     logger.exception(
                         "Failed to bulk_update OCRAssociatedSpecies comments; falling back to individual saves"
@@ -1556,9 +1576,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(a, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRAssociatedSpecies",
                                 "level": "error",
                                 "message": f"Failed to update associated species comment: {exc}",
@@ -1573,15 +1591,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
             assoc_fk_field = None
             tax_fk_field = None
             for f in through._meta.get_fields():
-                if (
-                    getattr(f, "remote_field", None)
-                    and getattr(f.remote_field, "model", None) == OCRAssociatedSpecies
-                ):
+                if getattr(f, "remote_field", None) and getattr(f.remote_field, "model", None) == OCRAssociatedSpecies:
                     assoc_fk_field = f.name
                 if (
                     getattr(f, "remote_field", None)
-                    and getattr(f.remote_field, "model", None)
-                    == AssociatedSpeciesTaxonomy
+                    and getattr(f.remote_field, "model", None) == AssociatedSpeciesTaxonomy
                 ):
                     tax_fk_field = f.name
             if assoc_fk_field and tax_fk_field:
@@ -1597,17 +1611,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     assoc_obj = existing_assoc.get(ocr.pk)
                     if not assoc_obj:
                         continue
-                    desired_ids = {
-                        name_to_assoc[n].pk for n in names if n in name_to_assoc
-                    }
+                    desired_ids = {name_to_assoc[n].pk for n in names if n in name_to_assoc}
                     # existing related ids (prefetched so no DB hit per-obj)
                     existing_ids = {s.pk for s in assoc_obj.related_species.all()}
                     add_ids = desired_ids - existing_ids
                     remove_ids = existing_ids - desired_ids
                     for aid in add_ids:
-                        to_create_through.append(
-                            through(**{assoc_fk_id: assoc_obj.pk, tax_fk_id: aid})
-                        )
+                        to_create_through.append(through(**{assoc_fk_id: assoc_obj.pk, tax_fk_id: aid}))
                     if remove_ids:
                         to_delete_filters.append(
                             {
@@ -1630,9 +1640,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if to_create_through:
                     try:
                         for i in range(0, len(to_create_through), BATCH):
-                            through.objects.bulk_create(
-                                to_create_through[i : i + BATCH], batch_size=BATCH
-                            )
+                            through.objects.bulk_create(to_create_through[i : i + BATCH], batch_size=BATCH)
                     except Exception:
                         logger.exception(
                             "Failed to bulk_create associated-species through rows; falling back to individual saves"
@@ -1656,9 +1664,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # clean up the temporary markers.
                 try:
                     # target_occs is a list of OccurrenceReport instances we loaded earlier
-                    occ_reports_with_occ = [
-                        o for o in target_occs if getattr(o, "occurrence_id", None)
-                    ]
+                    occ_reports_with_occ = [o for o in target_occs if getattr(o, "occurrence_id", None)]
                     if occ_reports_with_occ:
                         from boranga.components.occurrence.models import (
                             AssociatedSpeciesTaxonomy as _AST,
@@ -1670,9 +1676,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         # Ensure OCCAssociatedSpecies exists for each occurrence (bulk-create missing)
                         existing_occ_assoc = {
                             a.occurrence_id: a
-                            for a in OCCAssociatedSpecies.objects.filter(
-                                occurrence_id__in=list(occ_ids)
-                            )
+                            for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=list(occ_ids))
                         }
                         occ_assoc_to_create = []
                         for o in occ_reports_with_occ:
@@ -1680,15 +1684,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             if not occ:
                                 continue
                             if occ.id not in existing_occ_assoc:
-                                occ_assoc_to_create.append(
-                                    OCCAssociatedSpecies(occurrence=occ)
-                                )
+                                occ_assoc_to_create.append(OCCAssociatedSpecies(occurrence=occ))
 
                         if occ_assoc_to_create:
                             try:
-                                OCCAssociatedSpecies.objects.bulk_create(
-                                    occ_assoc_to_create, batch_size=BATCH
-                                )
+                                OCCAssociatedSpecies.objects.bulk_create(occ_assoc_to_create, batch_size=BATCH)
                             except Exception:
                                 logger.exception(
                                     "Failed to bulk_create OCCAssociatedSpecies; falling back to individual creates"
@@ -1705,9 +1705,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         # Refresh mapping
                         existing_occ_assoc = {
                             a.occurrence_id: a
-                            for a in OCCAssociatedSpecies.objects.filter(
-                                occurrence_id__in=list(occ_ids)
-                            )
+                            for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=list(occ_ids))
                         }
 
                         # Prepare duplicates to create: list of (occ_assoc_pk, AST instance to create)
@@ -1740,16 +1738,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                             # Update OCCAssociatedSpecies fields (comment and link)
                             updated = False
-                            if (
-                                ocr_assoc.comment
-                                and occ_assoc.comment != ocr_assoc.comment
-                            ):
+                            if ocr_assoc.comment and occ_assoc.comment != ocr_assoc.comment:
                                 occ_assoc.comment = ocr_assoc.comment
                                 updated = True
-                            if (
-                                occ_assoc.copied_ocr_associated_species_id
-                                != ocr_assoc.pk
-                            ):
+                            if occ_assoc.copied_ocr_associated_species_id != ocr_assoc.pk:
                                 occ_assoc.copied_ocr_associated_species = ocr_assoc
                                 updated = True
 
@@ -1759,9 +1751,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             for ast in ocr_assoc.related_species.all():
                                 inst = _AST(
                                     taxonomy_id=ast.taxonomy_id,
-                                    species_role_id=getattr(
-                                        ast, "species_role_id", None
-                                    ),
+                                    species_role_id=getattr(ast, "species_role_id", None),
                                     comments=ast.comments or "",
                                 )
                                 dup_create_list.append((occ_assoc.pk, inst))
@@ -1792,9 +1782,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             try:
                                 # Django 4.1+ bulk_create sets primary keys on instances (Postgres)
                                 # We rely on this to avoid fetch-back loops.
-                                _AST.objects.bulk_create(
-                                    ast_instances, batch_size=BATCH
-                                )
+                                _AST.objects.bulk_create(ast_instances, batch_size=BATCH)
                             except Exception:
                                 logger.exception(
                                     "Failed bulk_create of AssociatedSpeciesTaxonomy duplicates; "
@@ -1817,14 +1805,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             for f in through_occ._meta.get_fields():
                                 if (
                                     getattr(f, "remote_field", None)
-                                    and getattr(f.remote_field, "model", None)
-                                    == OCCAssociatedSpecies
+                                    and getattr(f.remote_field, "model", None) == OCCAssociatedSpecies
                                 ):
                                     occ_fk_field = f.name
-                                if (
-                                    getattr(f, "remote_field", None)
-                                    and getattr(f.remote_field, "model", None) == _AST
-                                ):
+                                if getattr(f, "remote_field", None) and getattr(f.remote_field, "model", None) == _AST:
                                     tax_fk_field = f.name
 
                             if occ_fk_field and tax_fk_field:
@@ -1847,9 +1831,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                                 if through_to_create:
                                     try:
-                                        for i in range(
-                                            0, len(through_to_create), BATCH
-                                        ):
+                                        for i in range(0, len(through_to_create), BATCH):
                                             through_occ.objects.bulk_create(
                                                 through_to_create[i : i + BATCH],
                                                 batch_size=BATCH,
@@ -1868,9 +1850,117 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                                     getattr(t, occ_fk_id, None),
                                                 )
                 except Exception:
-                    logger.exception(
-                        "Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences"
-                    )
+                    logger.exception("Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences")
+
+        # Process TEC Associated Species (with comments)
+        if tec_site_species_map:
+            logger.info("Processing TEC Associated Species with comments...")
+
+            # 1. Gather all taxon_name_ids
+            tec_tax_ids = set()
+            for details_list in tec_site_species_map.values():
+                for d in details_list:
+                    if d["taxon_name_id"]:
+                        try:
+                            tec_tax_ids.add(int(d["taxon_name_id"]))
+                        except ValueError:
+                            pass
+
+            # 2. Resolve to Taxonomy PKs
+            # Map taxon_name_id (Nomos ID) -> Taxonomy PK
+            nomos_to_pk = {}
+            if tec_tax_ids:
+                nomos_to_pk = {
+                    t["taxon_name_id"]: t["id"]
+                    for t in Taxonomy.objects.filter(taxon_name_id__in=list(tec_tax_ids)).values("taxon_name_id", "id")
+                }
+
+            # 3. Identify TEC reports and ensure OCRAssociatedSpecies exists
+            tec_mig_ids = [op["migrated_from_id"] for op in ops if op["migrated_from_id"].startswith("tec-site-")]
+            tec_ocr_ids = [target_map[mid].pk for mid in tec_mig_ids if mid in target_map]
+
+            existing_assocs = {
+                a.occurrence_report_id: a
+                for a in OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=tec_ocr_ids)
+            }
+
+            new_assocs = []
+            for mid in tec_mig_ids:
+                if mid in target_map:
+                    ocr_id = target_map[mid].pk
+                    visit_id = mid[len("tec-site-") :]
+                    if visit_id in tec_site_species_map and ocr_id not in existing_assocs:
+                        new_assocs.append(OCRAssociatedSpecies(occurrence_report_id=ocr_id))
+
+            if new_assocs:
+                OCRAssociatedSpecies.objects.bulk_create(new_assocs)
+                # Refresh map
+                existing_assocs = {
+                    a.occurrence_report_id: a
+                    for a in OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=tec_ocr_ids)
+                }
+
+            # 4. Create AssociatedSpeciesTaxonomy and links
+            ast_batch = []
+            links_batch = []  # List of OCRAssociatedSpecies instances corresponding to ast_batch
+
+            for mid in tec_mig_ids:
+                if mid in target_map:
+                    ocr_id = target_map[mid].pk
+                    if ocr_id in existing_assocs:
+                        visit_id = mid[len("tec-site-") :]
+                        specs = tec_site_species_map.get(visit_id, [])
+                        ocra = existing_assocs[ocr_id]
+
+                        for sp in specs:
+                            tn_id = sp["taxon_name_id"]
+                            comments = sp["comments"]
+                            try:
+                                tn_val = int(tn_id) if tn_id else None
+                            except ValueError:
+                                tn_val = None
+
+                            tax_pk = nomos_to_pk.get(tn_val) if tn_val else None
+
+                            if tax_pk:
+                                ast = AssociatedSpeciesTaxonomy(taxonomy_id=tax_pk, comments=comments)
+                                ast_batch.append(ast)
+                                links_batch.append(ocra)
+                            else:
+                                # Log warning if taxonomy not found
+                                warnings_details.append(
+                                    {
+                                        "migrated_from_id": mid,
+                                        "column": "associated_species",
+                                        "level": "warning",
+                                        "message": f"Taxonomy not found for Nomos ID {tn_id}",
+                                        "raw_value": tn_id,
+                                        "reason": "taxonomy_lookup_failed",
+                                        "row": {},
+                                        "timestamp": timezone.now().isoformat(),
+                                    }
+                                )
+
+            if ast_batch:
+                try:
+                    AssociatedSpeciesTaxonomy.objects.bulk_create(ast_batch, batch_size=BATCH)
+
+                    # Create Through relationships
+                    Through = OCRAssociatedSpecies.related_species.through
+                    through_objs = []
+                    for i, ast in enumerate(ast_batch):
+                        ocra = links_batch[i]
+                        through_objs.append(
+                            Through(
+                                ocrassociatedspecies_id=ocra.id,
+                                associatedspeciestaxonomy_id=ast.id,
+                            )
+                        )
+
+                    Through.objects.bulk_create(through_objs, batch_size=BATCH)
+                    logger.info(f"Created {len(through_objs)} TEC associated species links.")
+                except Exception:
+                    logger.exception("Failed to bulk create TEC associated species")
 
         # SubmitterInformation: OneToOne - create or update submitter information
         # Note: OneToOne relationship is defined on OccurrenceReport side (submitter_information field)
@@ -1887,9 +1977,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 pass
 
         submitter_info_to_create = []
-        submitter_info_create_map = (
-            {}
-        )  # Maps (ocr_id, mig_id) -> SubmitterInformation instance
+        submitter_info_create_map = {}  # Maps (ocr_id, mig_id) -> SubmitterInformation instance
         submitter_info_to_update = []
 
         for up in to_update:
@@ -1925,9 +2013,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     try:
                         from boranga.components.users.models import SubmitterCategory
 
-                        dbca_cat = SubmitterCategory.objects.filter(
-                            name__iexact="DBCA"
-                        ).first()
+                        dbca_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
                         if dbca_cat:
                             si.submitter_category_id = dbca_cat.pk
                     except Exception:
@@ -1946,35 +2032,23 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         si_create[field_name] = val
 
                 # Ensure defaults for organisation and submitter_category
-                if (
-                    "organisation" not in si_create
-                    or si_create.get("organisation") is None
-                ):
+                if "organisation" not in si_create or si_create.get("organisation") is None:
                     si_create["organisation"] = "DBCA"
 
-                if (
-                    "submitter_category_id" not in si_create
-                    or si_create.get("submitter_category_id") is None
-                ):
+                if "submitter_category_id" not in si_create or si_create.get("submitter_category_id") is None:
                     try:
                         from boranga.components.users.models import SubmitterCategory
 
-                        dbca_cat = SubmitterCategory.objects.filter(
-                            name__iexact="DBCA"
-                        ).first()
+                        dbca_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
                         if dbca_cat:
                             si_create["submitter_category_id"] = dbca_cat.pk
                     except Exception:
                         pass
 
                 if si_data:  # only create if we have data
-                    si_instance = SubmitterInformation(
-                        **normalize_create_kwargs(SubmitterInformation, si_create)
-                    )
+                    si_instance = SubmitterInformation(**normalize_create_kwargs(SubmitterInformation, si_create))
                     submitter_info_to_create.append(si_instance)
-                    submitter_info_create_map[(sid, None)] = (
-                        si_instance  # track for linking later
-                    )
+                    submitter_info_create_map[(sid, None)] = si_instance  # track for linking later
 
         # Handle created ones (from create_meta)
         for (
@@ -2011,9 +2085,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     try:
                         from boranga.components.users.models import SubmitterCategory
 
-                        dbca_cat = SubmitterCategory.objects.filter(
-                            name__iexact="DBCA"
-                        ).first()
+                        dbca_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
                         if dbca_cat:
                             si.submitter_category_id = dbca_cat.pk
                     except Exception:
@@ -2031,36 +2103,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         si_create[field_name] = val
 
                 # Ensure organisation defaults to 'DBCA' if not provided
-                if (
-                    "organisation" not in si_create
-                    or si_create.get("organisation") is None
-                ):
+                if "organisation" not in si_create or si_create.get("organisation") is None:
                     si_create["organisation"] = "DBCA"
 
                 # Ensure submitter_category defaults to DBCA category if not provided
-                if (
-                    "submitter_category_id" not in si_create
-                    or si_create.get("submitter_category_id") is None
-                ):
+                if "submitter_category_id" not in si_create or si_create.get("submitter_category_id") is None:
                     try:
                         from boranga.components.users.models import SubmitterCategory
 
-                        dbca_cat = SubmitterCategory.objects.filter(
-                            name__iexact="DBCA"
-                        ).first()
+                        dbca_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
                         if dbca_cat:
                             si_create["submitter_category_id"] = dbca_cat.pk
                     except Exception:
                         pass
 
                 if si_data:  # only create if we have data
-                    si_instance = SubmitterInformation(
-                        **normalize_create_kwargs(SubmitterInformation, si_create)
-                    )
+                    si_instance = SubmitterInformation(**normalize_create_kwargs(SubmitterInformation, si_create))
                     submitter_info_to_create.append(si_instance)
-                    submitter_info_create_map[(ocr.pk, mig)] = (
-                        si_instance  # track for linking later
-                    )
+                    submitter_info_create_map[(ocr.pk, mig)] = si_instance  # track for linking later
 
         # Bulk update existing SubmitterInformation records with defaults
         if submitter_info_to_update:
@@ -2084,26 +2144,18 @@ class OccurrenceReportImporter(BaseSheetImporter):
             update_fields = list(update_fields)
 
             try:
-                SubmitterInformation.objects.bulk_update(
-                    submitter_info_to_update, update_fields, batch_size=BATCH
-                )
+                SubmitterInformation.objects.bulk_update(submitter_info_to_update, update_fields, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update SubmitterInformation; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update SubmitterInformation; falling back to individual saves")
                 for obj in submitter_info_to_update:
                     try:
                         obj.save(update_fields=update_fields)
                     except Exception as exc:
-                        logger.exception(
-                            "Failed to update SubmitterInformation %s", obj.pk
-                        )
+                        logger.exception("Failed to update SubmitterInformation %s", obj.pk)
                         # Try to find related OCR for error reporting
                         try:
                             # Reverse lookup
-                            rel_ocr = OccurrenceReport.objects.filter(
-                                submitter_information=obj
-                            ).first()
+                            rel_ocr = OccurrenceReport.objects.filter(submitter_information=obj).first()
                             mig_id = rel_ocr.migrated_from_id if rel_ocr else "unknown"
                             ocr_pk = rel_ocr.pk if rel_ocr else "unknown"
                         except Exception:
@@ -2130,13 +2182,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 len(submitter_info_to_create),
             )
             try:
-                SubmitterInformation.objects.bulk_create(
-                    submitter_info_to_create, batch_size=BATCH
-                )
+                SubmitterInformation.objects.bulk_create(submitter_info_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create SubmitterInformation; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create SubmitterInformation; falling back to individual creates")
                 for (ocr_id, mig), obj in submitter_info_create_map.items():
                     if obj.pk:
                         continue
@@ -2193,9 +2241,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         occs_to_link_si, ["submitter_information_id"], batch_size=BATCH
                     )
                 except Exception:
-                    logger.exception(
-                        "Failed to link SubmitterInformation to OccurrenceReport"
-                    )
+                    logger.exception("Failed to link SubmitterInformation to OccurrenceReport")
                     # Fallback to individual saves if bulk_update fails
                     for ocr in occs_to_link_si:
                         try:
@@ -2206,12 +2252,46 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 ocr.pk,
                             )
 
+        # OccurrenceReportDocument: Create from SV_PHOTO (Task 12502-12508)
+        # Note: We create a text file containing the reference if no file is provided.
+        doc_cat_photo = DocumentCategory.objects.filter(document_category_name="ORF Document").first()
+        doc_sub_photo = DocumentSubCategory.objects.filter(document_sub_category_name="Photo").first()
+
+        for mid in target_mig_ids:
+            if mid in op_map:
+                op = op_map[mid]
+                photo_ref = op["merged"].get("temp_sv_photo")
+                if photo_ref:
+                    ocr = target_map[mid]
+                    # Check if already exists to avoid duplication
+                    if not OccurrenceReportDocument.objects.filter(
+                        occurrence_report=ocr, description=photo_ref
+                    ).exists():
+                        try:
+                            doc = OccurrenceReportDocument(
+                                occurrence_report=ocr,
+                                description=photo_ref,
+                                document_category=doc_cat_photo,
+                                document_sub_category=doc_sub_photo,
+                                can_submitter_access=False,
+                            )
+                            # User request: No dummy file needed, just the description.
+                            # However, if _file is mandatory at model level, this might fail saving.
+                            # Assuming _file is optional or handled otherwise.
+                            # If _file is mandatory, we might need to skip validation or save with empty string?
+                            # Models generally require a file for FileField unless blank=True.
+                            # Checking OccurrenceReportDocument definition:
+                            # _file = models.FileField(...) -> blank=False by default.
+                            doc.save()
+                        except Exception:
+                            logger.exception("Failed to create legacy photo document for %s", mid)
+
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report
         want_obs_create = []
         existing_obs = set(
-            OCRObserverDetail.objects.filter(
-                occurrence_report__in=target_occs, main_observer=True
-            ).values_list("occurrence_report_id", flat=True)
+            OCRObserverDetail.objects.filter(occurrence_report__in=target_occs, main_observer=True).values_list(
+                "occurrence_report_id", flat=True
+            )
         )
         for mig in target_mig_ids:
             ocr = target_map.get(mig)
@@ -2238,9 +2318,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 main_observer=True,
                 visible=True,
             )
-            apply_value_to_instance(
-                ocr_observer_detail_instance, "observer_name", observer_name
-            )
+            apply_value_to_instance(ocr_observer_detail_instance, "observer_name", observer_name)
             apply_value_to_instance(ocr_observer_detail_instance, "role", observer_role)
 
             want_obs_create.append(ocr_observer_detail_instance)
@@ -2249,9 +2327,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             try:
                 OCRObserverDetail.objects.bulk_create(want_obs_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRObserverDetail; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRObserverDetail; falling back to individual creates")
                 for obs in want_obs_create:
                     try:
                         obs.save()
@@ -2263,9 +2339,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(obs, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRObserverDetail",
                                 "level": "error",
                                 "message": f"Failed to create observer detail: {exc}",
@@ -2280,50 +2354,33 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # OCRHabitatComposition: OneToOne - create or update loose_rock_percent
         # Fetch existing habitat comps
         existing_habs = {
-            h.occurrence_report_id: h
-            for h in OCRHabitatComposition.objects.filter(
-                occurrence_report__in=target_occs
-            )
+            h.occurrence_report_id: h for h in OCRHabitatComposition.objects.filter(occurrence_report__in=target_occs)
         }
         # Fetch existing habitat conditions
         existing_conds = {
-            c.occurrence_report_id: c
-            for c in OCRHabitatCondition.objects.filter(
-                occurrence_report__in=target_occs
-            )
+            c.occurrence_report_id: c for c in OCRHabitatCondition.objects.filter(occurrence_report__in=target_occs)
         }
         # Fetch existing identifications
         existing_idents = {
-            it.occurrence_report_id: it
-            for it in OCRIdentification.objects.filter(
-                occurrence_report__in=target_occs
-            )
+            it.occurrence_report_id: it for it in OCRIdentification.objects.filter(occurrence_report__in=target_occs)
         }
         # Fetch existing locations
         existing_locations = {
-            loc.occurrence_report_id: loc
-            for loc in OCRLocation.objects.filter(occurrence_report__in=target_occs)
+            loc.occurrence_report_id: loc for loc in OCRLocation.objects.filter(occurrence_report__in=target_occs)
         }
         # Fetch existing observation details
         existing_observations = {
-            od.occurrence_report_id: od
-            for od in OCRObservationDetail.objects.filter(
-                occurrence_report__in=target_occs
-            )
+            od.occurrence_report_id: od for od in OCRObservationDetail.objects.filter(occurrence_report__in=target_occs)
         }
         existing_plant_counts = {
-            pc.occurrence_report_id: pc
-            for pc in OCRPlantCount.objects.filter(occurrence_report__in=target_occs)
+            pc.occurrence_report_id: pc for pc in OCRPlantCount.objects.filter(occurrence_report__in=target_occs)
         }
         existing_vegetation_structures = {
             vs.occurrence_report_id: vs
-            for vs in OCRVegetationStructure.objects.filter(
-                occurrence_report__in=target_occs
-            )
+            for vs in OCRVegetationStructure.objects.filter(occurrence_report__in=target_occs)
         }
         existing_fire_histories = {
-            fh.occurrence_report_id: fh
-            for fh in OCRFireHistory.objects.filter(occurrence_report__in=target_occs)
+            fh.occurrence_report_id: fh for fh in OCRFireHistory.objects.filter(occurrence_report__in=target_occs)
         }
         intensity_map = {i.name: i for i in Intensity.objects.all()}
         intensity_id_map = {i.id: i for i in Intensity.objects.all()}
@@ -2359,9 +2416,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         existing_ocr_geoms = {
             g.occurrence_report_id: g
-            for g in OccurrenceReportGeometry.objects.filter(
-                occurrence_report_id__in=all_ocr_ids
-            )
+            for g in OccurrenceReportGeometry.objects.filter(occurrence_report_id__in=all_ocr_ids)
         }
 
         for up in to_update:
@@ -2400,9 +2455,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_fields:
                         create_kwargs[field_name] = val
                 habs_to_create.append(
-                    OCRHabitatComposition(
-                        **normalize_create_kwargs(OCRHabitatComposition, create_kwargs)
-                    )
+                    OCRHabitatComposition(**normalize_create_kwargs(OCRHabitatComposition, create_kwargs))
                 )
             # OCRHabitatCondition handling for updates: check existing_conds
             if hid in existing_conds:
@@ -2422,11 +2475,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_c_fields:
                         cond_create[field_name] = val
-                conds_to_create.append(
-                    OCRHabitatCondition(
-                        **normalize_create_kwargs(OCRHabitatCondition, cond_create)
-                    )
-                )
+                conds_to_create.append(OCRHabitatCondition(**normalize_create_kwargs(OCRHabitatCondition, cond_create)))
             # OCRIdentification handling for updates: try to pull identification_data from op mapping created earlier
             # find corresponding op by migrated_from_id -> inst.migrated_from_id is not stored on inst;
             # instead use target_map reverse lookup
@@ -2459,11 +2508,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_i_fields:
                         create_kwargs[field_name] = val
-                idents_to_create.append(
-                    OCRIdentification(
-                        **normalize_create_kwargs(OCRIdentification, create_kwargs)
-                    )
-                )
+                idents_to_create.append(OCRIdentification(**normalize_create_kwargs(OCRIdentification, create_kwargs)))
 
             # OCRLocation handling for updates
             ld = location_data or {}
@@ -2485,9 +2530,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_loc_fields:
                         create_kwargs[field_name] = val
-                locs_to_create.append(
-                    OCRLocation(**normalize_create_kwargs(OCRLocation, create_kwargs))
-                )
+                locs_to_create.append(OCRLocation(**normalize_create_kwargs(OCRLocation, create_kwargs)))
 
             # OCRObservationDetail handling for updates
             od = observation_detail_data or {}
@@ -2510,9 +2553,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         obs_create[field_name] = val
                 if len(od) > 0:
                     obs_to_create.append(
-                        OCRObservationDetail(
-                            **normalize_create_kwargs(OCRObservationDetail, obs_create)
-                        )
+                        OCRObservationDetail(**normalize_create_kwargs(OCRObservationDetail, obs_create))
                     )
 
             # OCRPlantCount handling for updates
@@ -2535,11 +2576,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_pc_fields:
                         pc_create[field_name] = val
                 if len(pcd) > 0:
-                    plant_counts_to_create.append(
-                        OCRPlantCount(
-                            **normalize_create_kwargs(OCRPlantCount, pc_create)
-                        )
-                    )
+                    plant_counts_to_create.append(OCRPlantCount(**normalize_create_kwargs(OCRPlantCount, pc_create)))
 
             # OCRVegetationStructure handling for updates
             vsd = vegetation_structure_data or {}
@@ -2562,9 +2599,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         vs_create[field_name] = val
                 if len(vsd) > 0:
                     vegetation_structures_to_create.append(
-                        OCRVegetationStructure(
-                            **normalize_create_kwargs(OCRVegetationStructure, vs_create)
-                        )
+                        OCRVegetationStructure(**normalize_create_kwargs(OCRVegetationStructure, vs_create))
                     )
 
             # OCRFireHistory handling for updates
@@ -2602,11 +2637,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_fh_fields:
                         fh_create[field_name] = val
                 if len(fh_fields) > 0:
-                    fire_history_to_create.append(
-                        OCRFireHistory(
-                            **normalize_create_kwargs(OCRFireHistory, fh_create)
-                        )
-                    )
+                    fire_history_to_create.append(OCRFireHistory(**normalize_create_kwargs(OCRFireHistory, fh_create)))
 
             # OccurrenceReportGeometry handling for updates
             gd = geometry_data or {}
@@ -2615,9 +2646,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                 if existing_geom:
                     # Update existing geometry
-                    valid_geom_fields = {
-                        f.name for f in OccurrenceReportGeometry._meta.fields
-                    }
+                    valid_geom_fields = {f.name for f in OccurrenceReportGeometry._meta.fields}
                     for field_name, val in gd.items():
                         if field_name == "occurrence_report":
                             continue
@@ -2637,9 +2666,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "content_type": ocr_content_type,
                         "object_id": inst.pk,
                     }
-                    valid_geom_fields = {
-                        f.name for f in OccurrenceReportGeometry._meta.fields
-                    }
+                    valid_geom_fields = {f.name for f in OccurrenceReportGeometry._meta.fields}
                     for field_name, val in gd.items():
                         if field_name == "occurrence_report":
                             continue
@@ -2651,17 +2678,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         if buffered_geom and hasattr(buffered_geom, "centroid"):
                             original_point = buffered_geom.centroid
                             if original_point:
-                                geom_create_kwargs["original_geometry_ewkb"] = (
-                                    original_point.ewkb
-                                )
+                                geom_create_kwargs["original_geometry_ewkb"] = original_point.ewkb
                     except Exception:
-                        logger.debug("Could not extract original point geometry")
+                        pass
+                        # logger.debug("Could not extract original point geometry")
 
                     try:
                         new_geom = OccurrenceReportGeometry.objects.create(
-                            **normalize_create_kwargs(
-                                OccurrenceReportGeometry, geom_create_kwargs
-                            )
+                            **normalize_create_kwargs(OccurrenceReportGeometry, geom_create_kwargs)
                         )
                         existing_ocr_geoms[inst.pk] = new_geom
                     except Exception as exc:
@@ -2687,9 +2711,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # to the final population phase based on DRF_POP_SECTION_MAP (SECT_CODE='LOCATION')
 
         # Handle created ones
-        logger.debug(
-            f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}"
-        )
+        logger.debug(f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}")
         # logger.info(f"created_map keys: {list(created_map.keys())}")
 
         cm_processed = 0
@@ -2746,9 +2768,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_fields:
                         create_kwargs[field_name] = val
                 habs_to_create.append(
-                    OCRHabitatComposition(
-                        **normalize_create_kwargs(OCRHabitatComposition, create_kwargs)
-                    )
+                    OCRHabitatComposition(**normalize_create_kwargs(OCRHabitatComposition, create_kwargs))
                 )
             # OCRHabitatCondition create/update for newly created ocr
             if ocr.pk in existing_conds:
@@ -2768,11 +2788,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_c_fields:
                         cond_create[field_name] = val
-                conds_to_create.append(
-                    OCRHabitatCondition(
-                        **normalize_create_kwargs(OCRHabitatCondition, cond_create)
-                    )
-                )
+                conds_to_create.append(OCRHabitatCondition(**normalize_create_kwargs(OCRHabitatCondition, cond_create)))
             # identification create for newly created ocr
             if ocr.pk in existing_idents:
                 id_obj = existing_idents[ocr.pk]
@@ -2791,11 +2807,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_i_fields:
                         create_kwargs[field_name] = val
-                idents_to_create.append(
-                    OCRIdentification(
-                        **normalize_create_kwargs(OCRIdentification, create_kwargs)
-                    )
-                )
+                idents_to_create.append(OCRIdentification(**normalize_create_kwargs(OCRIdentification, create_kwargs)))
 
             # OCRObservationDetail: OneToOne - create or update survey fields
             od = observation_detail_data or {}
@@ -2819,9 +2831,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # Only create OCRObservationDetail if we have data
                 if len(od) > 0:
                     obs_to_create.append(
-                        OCRObservationDetail(
-                            **normalize_create_kwargs(OCRObservationDetail, obs_create)
-                        )
+                        OCRObservationDetail(**normalize_create_kwargs(OCRObservationDetail, obs_create))
                     )
 
             # OCRPlantCount handling for newly created ocr
@@ -2844,11 +2854,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_pc_fields:
                         pc_create[field_name] = val
                 if len(pcd) > 0:
-                    plant_counts_to_create.append(
-                        OCRPlantCount(
-                            **normalize_create_kwargs(OCRPlantCount, pc_create)
-                        )
-                    )
+                    plant_counts_to_create.append(OCRPlantCount(**normalize_create_kwargs(OCRPlantCount, pc_create)))
 
             # OCRVegetationStructure handling for newly created ocr
             vsd = vegetation_structure_data or {}
@@ -2870,9 +2876,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     vs_create[field_name] = val
             if len(vsd) > 0:
                 vegetation_structures_to_create.append(
-                    OCRVegetationStructure(
-                        **normalize_create_kwargs(OCRVegetationStructure, vs_create)
-                    )
+                    OCRVegetationStructure(**normalize_create_kwargs(OCRVegetationStructure, vs_create))
                 )
 
             # OCRFireHistory handling for newly created ocr
@@ -2913,11 +2917,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     if val is not None and field_name in valid_fh_fields:
                         fh_create[field_name] = val
                 if len(fh_fields) > 0:
-                    fire_history_to_create.append(
-                        OCRFireHistory(
-                            **normalize_create_kwargs(OCRFireHistory, fh_create)
-                        )
-                    )
+                    fire_history_to_create.append(OCRFireHistory(**normalize_create_kwargs(OCRFireHistory, fh_create)))
 
             # OCRLocation create/update for newly created ocr
             if ocr.pk in existing_locations:
@@ -2937,9 +2937,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
                     if val is not None and field_name in valid_loc_fields:
                         create_kwargs[field_name] = val
-                locs_to_create.append(
-                    OCRLocation(**normalize_create_kwargs(OCRLocation, create_kwargs))
-                )
+                locs_to_create.append(OCRLocation(**normalize_create_kwargs(OCRLocation, create_kwargs)))
 
             # OccurrenceReportGeometry: OneToOne - create geometry with locked=True and content_type set
             gd = geometry_data or {}
@@ -2953,9 +2951,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                 if existing_geom:
                     # Update existing geometry
-                    valid_geom_fields = {
-                        f.name for f in OccurrenceReportGeometry._meta.fields
-                    }
+                    valid_geom_fields = {f.name for f in OccurrenceReportGeometry._meta.fields}
                     for field_name, val in gd.items():
                         if field_name == "occurrence_report":
                             continue
@@ -2976,9 +2972,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "object_id": ocr.pk,
                     }
                     # Add geometry fields from gd
-                    valid_geom_fields = {
-                        f.name for f in OccurrenceReportGeometry._meta.fields
-                    }
+                    valid_geom_fields = {f.name for f in OccurrenceReportGeometry._meta.fields}
                     for field_name, val in gd.items():
                         if field_name == "occurrence_report":
                             continue
@@ -2994,17 +2988,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             # Extract the centroid of the buffered polygon as the original point
                             original_point = buffered_geom.centroid
                             if original_point:
-                                geom_create_kwargs["original_geometry_ewkb"] = (
-                                    original_point.ewkb
-                                )
+                                geom_create_kwargs["original_geometry_ewkb"] = original_point.ewkb
                     except Exception:
-                        logger.debug("Could not extract original point geometry")
+                        pass
+                        # logger.debug("Could not extract original point geometry")
 
                     try:
                         new_geom = OccurrenceReportGeometry.objects.create(
-                            **normalize_create_kwargs(
-                                OccurrenceReportGeometry, geom_create_kwargs
-                            )
+                            **normalize_create_kwargs(OccurrenceReportGeometry, geom_create_kwargs)
                         )
                         existing_ocr_geoms[ocr.pk] = new_geom
                     except Exception as exc:
@@ -3030,13 +3021,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         if habs_to_create:
             try:
-                OCRHabitatComposition.objects.bulk_create(
-                    habs_to_create, batch_size=BATCH
-                )
+                OCRHabitatComposition.objects.bulk_create(habs_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRHabitatComposition; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRHabitatComposition; falling back to individual creates")
                 for h in habs_to_create:
                     try:
                         h.save()
@@ -3048,9 +3035,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(h, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRHabitatComposition",
                                 "level": "error",
                                 "message": f"Failed to create habitat composition: {exc}",
@@ -3064,13 +3049,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         if habs_to_update:
             try:
-                OCRHabitatComposition.objects.bulk_update(
-                    habs_to_update, ["loose_rock_percent"], batch_size=BATCH
-                )
+                OCRHabitatComposition.objects.bulk_update(habs_to_update, ["loose_rock_percent"], batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OCRHabitatComposition; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OCRHabitatComposition; falling back to individual saves")
                 for h in habs_to_update:
                     try:
                         h.save()
@@ -3082,9 +3063,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(h, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRHabitatComposition",
                                 "level": "error",
                                 "message": f"Failed to update habitat composition: {exc}",
@@ -3099,13 +3078,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # OCRHabitatCondition: OneToOne - create or update percentage flags
         if conds_to_create:
             try:
-                OCRHabitatCondition.objects.bulk_create(
-                    conds_to_create, batch_size=BATCH
-                )
+                OCRHabitatCondition.objects.bulk_create(conds_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRHabitatCondition; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRHabitatCondition; falling back to individual creates")
                 for c in conds_to_create:
                     try:
                         c.save()
@@ -3117,9 +3092,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(c, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRHabitatCondition",
                                 "level": "error",
                                 "message": f"Failed to create habitat condition: {exc}",
@@ -3136,27 +3109,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # determine fields to update from condition instances
                 cond_fields = set()
                 for inst in conds_to_update:
-                    cond_fields.update(
-                        [
-                            f.name
-                            for f in inst._meta.fields
-                            if getattr(inst, f.name, None) is not None
-                        ]
-                    )
+                    cond_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
                 # ensure occurrence_report_id or id not included
-                cond_fields = {
-                    f
-                    for f in cond_fields
-                    if f not in ("id", "occurrence_report", "occurrence_report_id")
-                }
+                cond_fields = {f for f in cond_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
                 if cond_fields:
-                    OCRHabitatCondition.objects.bulk_update(
-                        conds_to_update, list(cond_fields), batch_size=BATCH
-                    )
+                    OCRHabitatCondition.objects.bulk_update(conds_to_update, list(cond_fields), batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OCRHabitatCondition; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OCRHabitatCondition; falling back to individual saves")
                 for c in conds_to_update:
                     try:
                         c.save()
@@ -3168,9 +3127,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(c, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRHabitatCondition",
                                 "level": "error",
                                 "message": f"Failed to update habitat condition: {exc}",
@@ -3185,13 +3142,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # OCRIdentification: OneToOne - create or update identification records
         if idents_to_create:
             try:
-                OCRIdentification.objects.bulk_create(
-                    idents_to_create, batch_size=BATCH
-                )
+                OCRIdentification.objects.bulk_create(idents_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRIdentification; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRIdentification; falling back to individual creates")
                 for i in idents_to_create:
                     try:
                         i.save()
@@ -3203,9 +3156,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(i, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRIdentification",
                                 "level": "error",
                                 "message": f"Failed to create identification: {exc}",
@@ -3221,27 +3172,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
             try:
                 ident_fields = set()
                 for inst in idents_to_update:
-                    ident_fields.update(
-                        [
-                            f.name
-                            for f in inst._meta.fields
-                            if getattr(inst, f.name, None) is not None
-                        ]
-                    )
+                    ident_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
                 # exclude id or FK reference
-                ident_fields = {
-                    f
-                    for f in ident_fields
-                    if f not in ("id", "occurrence_report", "occurrence_report_id")
-                }
+                ident_fields = {f for f in ident_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
                 if ident_fields:
-                    OCRIdentification.objects.bulk_update(
-                        idents_to_update, list(ident_fields), batch_size=BATCH
-                    )
+                    OCRIdentification.objects.bulk_update(idents_to_update, list(ident_fields), batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OCRIdentification; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OCRIdentification; falling back to individual saves")
                 for i in idents_to_update:
                     try:
                         i.save()
@@ -3253,9 +3190,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(i, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRIdentification",
                                 "level": "error",
                                 "message": f"Failed to update identification: {exc}",
@@ -3272,9 +3207,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             try:
                 OCRLocation.objects.bulk_create(locs_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRLocation; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRLocation; falling back to individual creates")
                 for loc in locs_to_create:
                     try:
                         loc.save()
@@ -3286,9 +3219,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(loc, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRLocation",
                                 "level": "error",
                                 "message": f"Failed to create location: {exc}",
@@ -3304,27 +3235,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
             try:
                 loc_fields = set()
                 for inst in locs_to_update:
-                    loc_fields.update(
-                        [
-                            f.name
-                            for f in inst._meta.fields
-                            if getattr(inst, f.name, None) is not None
-                        ]
-                    )
+                    loc_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
                 # exclude id or FK reference
-                loc_fields = {
-                    f
-                    for f in loc_fields
-                    if f not in ("id", "occurrence_report", "occurrence_report_id")
-                }
+                loc_fields = {f for f in loc_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
                 if loc_fields:
-                    OCRLocation.objects.bulk_update(
-                        locs_to_update, list(loc_fields), batch_size=BATCH
-                    )
+                    OCRLocation.objects.bulk_update(locs_to_update, list(loc_fields), batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OCRLocation; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OCRLocation; falling back to individual saves")
                 for loc in locs_to_update:
                     try:
                         loc.save()
@@ -3336,9 +3253,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(loc, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRLocation",
                                 "level": "error",
                                 "message": f"Failed to update location: {exc}",
@@ -3353,13 +3268,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # OCRObservationDetail: OneToOne - create or update observation detail records
         if obs_to_create:
             try:
-                OCRObservationDetail.objects.bulk_create(
-                    obs_to_create, batch_size=BATCH
-                )
+                OCRObservationDetail.objects.bulk_create(obs_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRObservationDetail; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRObservationDetail; falling back to individual creates")
                 for obs in obs_to_create:
                     try:
                         obs.save()
@@ -3371,9 +3282,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(obs, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRObservationDetail",
                                 "level": "error",
                                 "message": f"Failed to create observation detail: {exc}",
@@ -3389,27 +3298,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
             try:
                 obs_fields = set()
                 for inst in obs_to_update:
-                    obs_fields.update(
-                        [
-                            f.name
-                            for f in inst._meta.fields
-                            if getattr(inst, f.name, None) is not None
-                        ]
-                    )
+                    obs_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
                 # exclude id or FK reference
-                obs_fields = {
-                    f
-                    for f in obs_fields
-                    if f not in ("id", "occurrence_report", "occurrence_report_id")
-                }
+                obs_fields = {f for f in obs_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
                 if obs_fields:
-                    OCRObservationDetail.objects.bulk_update(
-                        obs_to_update, list(obs_fields), batch_size=BATCH
-                    )
+                    OCRObservationDetail.objects.bulk_update(obs_to_update, list(obs_fields), batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OCRObservationDetail; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OCRObservationDetail; falling back to individual saves")
                 for obs in obs_to_update:
                     try:
                         obs.save()
@@ -3421,9 +3316,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(obs, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRObservationDetail",
                                 "level": "error",
                                 "message": f"Failed to update observation detail: {exc}",
@@ -3438,13 +3331,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # OCRPlantCount: OneToOne - create or update plant count records
         if plant_counts_to_create:
             try:
-                OCRPlantCount.objects.bulk_create(
-                    plant_counts_to_create, batch_size=BATCH
-                )
+                OCRPlantCount.objects.bulk_create(plant_counts_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRPlantCount; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRPlantCount; falling back to individual creates")
                 for pc in plant_counts_to_create:
                     try:
                         pc.save()
@@ -3456,9 +3345,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(pc, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRPlantCount",
                                 "level": "error",
                                 "message": f"Failed to create plant count: {exc}",
@@ -3474,27 +3361,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
             try:
                 pc_fields = set()
                 for inst in plant_counts_to_update:
-                    pc_fields.update(
-                        [
-                            f.name
-                            for f in inst._meta.fields
-                            if getattr(inst, f.name, None) is not None
-                        ]
-                    )
+                    pc_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
                 # exclude id or FK reference
-                pc_fields = {
-                    f
-                    for f in pc_fields
-                    if f not in ("id", "occurrence_report", "occurrence_report_id")
-                }
+                pc_fields = {f for f in pc_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
                 if pc_fields:
-                    OCRPlantCount.objects.bulk_update(
-                        plant_counts_to_update, list(pc_fields), batch_size=BATCH
-                    )
+                    OCRPlantCount.objects.bulk_update(plant_counts_to_update, list(pc_fields), batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OCRPlantCount; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OCRPlantCount; falling back to individual saves")
                 for pc in plant_counts_to_update:
                     try:
                         pc.save()
@@ -3506,9 +3379,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(pc, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRPlantCount",
                                 "level": "error",
                                 "message": f"Failed to update plant count: {exc}",
@@ -3523,13 +3394,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # OCRVegetationStructure: OneToOne - create or update vegetation structure records
         if vegetation_structures_to_create:
             try:
-                OCRVegetationStructure.objects.bulk_create(
-                    vegetation_structures_to_create, batch_size=BATCH
-                )
+                OCRVegetationStructure.objects.bulk_create(vegetation_structures_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRVegetationStructure; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRVegetationStructure; falling back to individual creates")
                 for vs in vegetation_structures_to_create:
                     try:
                         vs.save()
@@ -3541,9 +3408,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(vs, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRVegetationStructure",
                                 "level": "error",
                                 "message": f"Failed to create vegetation structure: {exc}",
@@ -3559,19 +3424,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
             try:
                 vs_fields = set()
                 for inst in vegetation_structures_to_update:
-                    vs_fields.update(
-                        [
-                            f.name
-                            for f in inst._meta.fields
-                            if getattr(inst, f.name, None) is not None
-                        ]
-                    )
+                    vs_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
                 # exclude id or FK reference
-                vs_fields = {
-                    f
-                    for f in vs_fields
-                    if f not in ("id", "occurrence_report", "occurrence_report_id")
-                }
+                vs_fields = {f for f in vs_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
                 if vs_fields:
                     OCRVegetationStructure.objects.bulk_update(
                         vegetation_structures_to_update,
@@ -3579,9 +3434,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         batch_size=BATCH,
                     )
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OCRVegetationStructure; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OCRVegetationStructure; falling back to individual saves")
                 for vs in vegetation_structures_to_update:
                     try:
                         vs.save()
@@ -3593,9 +3446,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(vs, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRVegetationStructure",
                                 "level": "error",
                                 "message": f"Failed to update vegetation structure: {exc}",
@@ -3610,13 +3461,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # OCRFireHistory: OneToOne - create or update fire history records
         if fire_history_to_create:
             try:
-                OCRFireHistory.objects.bulk_create(
-                    fire_history_to_create, batch_size=BATCH
-                )
+                OCRFireHistory.objects.bulk_create(fire_history_to_create, batch_size=BATCH)
             except Exception:
-                logger.exception(
-                    "Failed to bulk_create OCRFireHistory; falling back to individual creates"
-                )
+                logger.exception("Failed to bulk_create OCRFireHistory; falling back to individual creates")
                 for fh in fire_history_to_create:
                     try:
                         fh.save()
@@ -3628,9 +3475,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(fh, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRFireHistory",
                                 "level": "error",
                                 "message": f"Failed to create fire history: {exc}",
@@ -3646,19 +3491,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
             try:
                 fh_fields = set()
                 for inst in fire_history_to_update:
-                    fh_fields.update(
-                        [
-                            f.name
-                            for f in inst._meta.fields
-                            if getattr(inst, f.name, None) is not None
-                        ]
-                    )
+                    fh_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
                 # exclude id or FK reference
-                fh_fields = {
-                    f
-                    for f in fh_fields
-                    if f not in ("id", "occurrence_report", "occurrence_report_id")
-                }
+                fh_fields = {f for f in fh_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
                 if fh_fields:
                     OCRFireHistory.objects.bulk_update(
                         fire_history_to_update,
@@ -3666,9 +3501,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         batch_size=BATCH,
                     )
             except Exception:
-                logger.exception(
-                    "Failed to bulk_update OCRFireHistory; falling back to individual saves"
-                )
+                logger.exception("Failed to bulk_update OCRFireHistory; falling back to individual saves")
                 for fh in fire_history_to_update:
                     try:
                         fh.save()
@@ -3680,9 +3513,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         ocr_ref = getattr(fh, "occurrence_report", None)
                         errors_details.append(
                             {
-                                "migrated_from_id": getattr(
-                                    ocr_ref, "migrated_from_id", ""
-                                ),
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRFireHistory",
                                 "level": "error",
                                 "message": f"Failed to update fire history: {exc}",
@@ -3703,9 +3534,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # based on DRF_POP_SECTION_MAP.csv
         # ---------------------------------------------------------------------
         if pop_section_map:
-            logger.info(
-                "Starting population of Occurrence 1-to-1 objects from OccurrenceReports..."
-            )
+            logger.info("Starting population of Occurrence 1-to-1 objects from OccurrenceReports...")
             # We iterate over all processed OccurrenceReports (both created and updated)
             # For each OCR, we check if its SHEETNO (migrated_from_id) is in the map.
             # If so, we clone the relevant sections to the parent Occurrence.
@@ -3760,9 +3589,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # Use bulk pre-fetching to avoid N+1 queries in the loop
             ocr_ids = [ocr.pk for ocr in all_processed_ocrs]
-            occ_ids = [
-                ocr.occurrence_id for ocr in all_processed_ocrs if ocr.occurrence_id
-            ]
+            occ_ids = [ocr.occurrence_id for ocr in all_processed_ocrs if ocr.occurrence_id]
 
             source_lookup = {}
             target_lookup = {}
@@ -3801,9 +3628,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             for ocr in all_processed_ocrs:
                 pop_processed += 1
                 if pop_processed % 500 == 0:
-                    logger.info(
-                        f"Population progress: {pop_processed}/{total_ocrs} occurrence reports processed..."
-                    )
+                    logger.info(f"Population progress: {pop_processed}/{total_ocrs} occurrence reports processed...")
 
                 sheetno = ocr.migrated_from_id
                 if not sheetno:
@@ -3855,14 +3680,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         # Set content_type/object_id if model supports them (e.g. GeometryBase)
                         # We must do this explicitly and exclude them from common_fields to prevent
                         # finding/copying the source's content_type (which would be OccurrenceReport).
-                        if hasattr(target_obj, "content_type_id") and hasattr(
-                            target_obj, "object_id"
-                        ):
+                        if hasattr(target_obj, "content_type_id") and hasattr(target_obj, "object_id"):
                             from django.contrib.contenttypes.models import ContentType
 
-                            target_obj.content_type = ContentType.objects.get_for_model(
-                                occurrence
-                            )
+                            target_obj.content_type = ContentType.objects.get_for_model(occurrence)
                             target_obj.object_id = occurrence.pk
 
                         # 3. Clone data
@@ -3886,13 +3707,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 val = getattr(source_obj, field_name)
                                 # Default missing color/stroke for OccurrenceGeometry if missing
                                 if field_name == "color" and not val:
-                                    val = target_obj._meta.get_field(
-                                        "color"
-                                    ).get_default()
+                                    val = target_obj._meta.get_field("color").get_default()
                                 if field_name == "stroke" and not val:
-                                    val = target_obj._meta.get_field(
-                                        "stroke"
-                                    ).get_default()
+                                    val = target_obj._meta.get_field("stroke").get_default()
 
                                 setattr(target_obj, field_name, val)
 
@@ -3910,9 +3727,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             )
                             errors_details.append(
                                 {
-                                    "migrated_from_id": getattr(
-                                        ocr, "migrated_from_id", ""
-                                    ),
+                                    "migrated_from_id": getattr(ocr, "migrated_from_id", ""),
                                     "column": f"CLONE-{sect_code}",
                                     "level": "error",
                                     "message": f"Failed to clone {sect_code} to Occurrence {occurrence.pk}: {exc}",
@@ -3920,9 +3735,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 }
                             )
 
-            logger.info(
-                f"Finished populating Occurrence 1-to-1 objects. Cloned {cloned_count} sections."
-            )
+            logger.info(f"Finished populating Occurrence 1-to-1 objects. Cloned {cloned_count} sections.")
 
         persist_end = timezone.now()
         persist_duration = persist_end - transform_end
@@ -4030,9 +3843,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     csv_path,
                 )
             except Exception as e:
-                logger.error(
-                    "Failed to write error CSV for %s at %s: %s", self.slug, csv_path, e
-                )
+                logger.error("Failed to write error CSV for %s at %s: %s", self.slug, csv_path, e)
                 logger.info(
                     (
                         "OccurrenceReportImporter %s finished; processed=%d created=%d "

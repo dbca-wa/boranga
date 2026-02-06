@@ -37,7 +37,7 @@ def normalize_create_kwargs(model_cls, kwargs: dict) -> dict:
                     out[k] = v
                 elif isinstance(v, str):
                     out[k] = [s.strip() for s in v.split(",") if s.strip()]
-                elif isinstance(v, (list, tuple, set)):
+                elif isinstance(v, list | tuple | set):
                     out[k] = [str(x) for x in v]
                 else:
                     out[k] = [str(v)]
@@ -72,7 +72,7 @@ def apply_value_to_instance(inst, field_name: str, val: Any):
                 val_list = [s.strip() for s in val.split(",") if s.strip()]
                 setattr(inst, field_name, val_list)
                 return
-            if isinstance(val, (list, tuple, set)):
+            if isinstance(val, list | tuple | set):
                 setattr(inst, field_name, [str(x) for x in val])
                 return
             setattr(inst, field_name, [str(val)])
@@ -100,9 +100,7 @@ def apply_model_defaults(model_cls, data: dict) -> dict:
             continue
 
         # Fallback: for non-nullable text fields, prefer empty string
-        if not getattr(field, "null", False) and isinstance(
-            field, (dj_models.CharField, dj_models.TextField)
-        ):
+        if not getattr(field, "null", False) and isinstance(field, dj_models.CharField | dj_models.TextField):
             data[k] = ""
             continue
     return data

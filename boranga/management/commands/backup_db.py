@@ -61,9 +61,7 @@ class Command(BaseCommand):
         engine = db.get("ENGINE", "")
         # Accept both the standard PostgreSQL and the GeoDjango/PostGIS backends
         if not any(x in engine for x in ("postgres", "postgis")):
-            raise CommandError(
-                "This command currently supports PostgreSQL/PostGIS only (postgresql/postgis backend)"
-            )
+            raise CommandError("This command currently supports PostgreSQL/PostGIS only (postgresql/postgis backend)")
 
         name = db.get("NAME")
         user = db.get("USER")
@@ -83,13 +81,9 @@ class Command(BaseCommand):
 
         pg_dump_path = shutil.which("pg_dump")
         if not pg_dump_path:
-            raise CommandError(
-                "pg_dump not found in PATH. Please install PostgreSQL client tools."
-            )
+            raise CommandError("pg_dump not found in PATH. Please install PostgreSQL client tools.")
 
-        self.stdout.write(
-            self.style.NOTICE(f"Starting dump of database '{name}' to '{path}'...")
-        )
+        self.stdout.write(self.style.NOTICE(f"Starting dump of database '{name}' to '{path}'..."))
 
         env = os.environ.copy()
         if password:
@@ -104,9 +98,7 @@ class Command(BaseCommand):
 
         # Stream pg_dump stdout into a gzip file to avoid shell usage and large memory use
         try:
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
-            )
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         except Exception as e:
             raise CommandError(f"Failed to start pg_dump: {e}")
 
@@ -127,11 +119,7 @@ class Command(BaseCommand):
                     os.remove(path)
                 except Exception:
                     pass
-                err_text = (
-                    stderr.decode(errors="ignore")
-                    if isinstance(stderr, (bytes, bytearray))
-                    else str(stderr)
-                )
+                err_text = stderr.decode(errors="ignore") if isinstance(stderr, bytes | bytearray) else str(stderr)
                 raise CommandError(f"pg_dump failed (exit {returncode}): {err_text}")
 
         except Exception as e:

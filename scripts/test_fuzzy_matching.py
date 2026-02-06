@@ -36,9 +36,7 @@ def find_best_guess(name, threshold=0.85):
     if not candidates:
         # Fallback try startswith for the first 4 chars of genus (catches typos in genus name)
         candidates = list(
-            Taxonomy.objects.filter(
-                is_current=True, scientific_name__istartswith=genus_clean[:4]
-            )
+            Taxonomy.objects.filter(is_current=True, scientific_name__istartswith=genus_clean[:4])
             .values_list("scientific_name", flat=True)
             .order_by("scientific_name")
         )
@@ -61,9 +59,7 @@ def main():
         print(f"Error: CSV file not found at {csv_path}")
         return
 
-    print(
-        f"Reading unique 'associated_species' names from: {os.path.basename(csv_path)}"
-    )
+    print(f"Reading unique 'associated_species' names from: {os.path.basename(csv_path)}")
 
     unique_names = set()
     try:
@@ -82,9 +78,7 @@ def main():
         print("No 'associated_species' errors found in this CSV.")
         return
 
-    print(
-        f"Found {len(unique_names)} unique unresolved names. Testing fuzzy matching...\n"
-    )
+    print(f"Found {len(unique_names)} unique unresolved names. Testing fuzzy matching...\n")
     print(f"{'RAW NAME':<45} | {'FUZZY MATCH (BEST GUESS)'}")
     print("-" * 90)
 
@@ -100,9 +94,7 @@ def main():
             pass
 
     print("\n" + "=" * 90)
-    print(
-        f"Summary: Found candidates for {len(results)} out of {len(unique_names)} unique names."
-    )
+    print(f"Summary: Found candidates for {len(results)} out of {len(unique_names)} unique names.")
 
 
 if __name__ == "__main__":

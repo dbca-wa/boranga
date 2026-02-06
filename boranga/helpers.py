@@ -62,24 +62,19 @@ def check_file(file, model_name):
 
 
 def file_extension_valid(file, whitelist, model):
-
     logger.info("Uploaded File: " + file + " For Model: " + model)
 
     filename, extension = os.path.splitext(file)
     extension = extension.replace(".", "").lower()
 
-    check = whitelist.filter(name=extension).filter(
-        Q(model="all") | Q(model__iexact=model)
-    )
+    check = whitelist.filter(name=extension).filter(Q(model="all") | Q(model__iexact=model))
     valid = check.exists()
     compression = False
 
     if valid:
         compression = check.first().compressed
     else:
-        logger.warning(
-            "Uploaded File: " + file + " For Model: " + model + " to be Rejected"
-        )
+        logger.warning("Uploaded File: " + file + " For Model: " + model + " to be Rejected")
 
     return valid, compression
 
@@ -90,16 +85,8 @@ def tar_content_valid(file, whitelist, model):
     for i in tarFile.getnames():
         valid, compression = file_extension_valid(i, whitelist, model)
         if compression:
-            logger.warning(
-                "Uploaded File: "
-                + str(file)
-                + " For Model: "
-                + model
-                + " to be Rejected"
-            )
-            raise ValidationError(
-                "Compressed files not supported within compressed files"
-            )
+            logger.warning("Uploaded File: " + str(file) + " For Model: " + model + " to be Rejected")
+            raise ValidationError("Compressed files not supported within compressed files")
         if not valid:
             return False
 
@@ -111,16 +98,8 @@ def sevenz_content_valid(file, whitelist, model):
     for i in sevenZipFile.getnames():
         valid, compression = file_extension_valid(i, whitelist, model)
         if compression:
-            logger.warning(
-                "Uploaded File: "
-                + str(file)
-                + " For Model: "
-                + model
-                + " to be Rejected"
-            )
-            raise ValidationError(
-                "Compressed files not supported within compressed files"
-            )
+            logger.warning("Uploaded File: " + str(file) + " For Model: " + model + " to be Rejected")
+            raise ValidationError("Compressed files not supported within compressed files")
         if not valid:
             return False
 
@@ -133,16 +112,8 @@ def zip_content_valid(file, whitelist, model):
         valid, compression = file_extension_valid(i.filename, whitelist, model)
         if compression:
             if not i.filename.endswith(".zip"):
-                logger.warning(
-                    "Uploaded File: "
-                    + str(file)
-                    + " For Model: "
-                    + model
-                    + " to be Rejected"
-                )
-                raise ValidationError(
-                    "The only compressed format allowed in a .zip file is .zip"
-                )
+                logger.warning("Uploaded File: " + str(file) + " For Model: " + model + " to be Rejected")
+                raise ValidationError("The only compressed format allowed in a .zip file is .zip")
             valid = zip_content_valid(zipFile.open(i.filename), whitelist, model)
 
         if not valid:
@@ -152,7 +123,6 @@ def zip_content_valid(file, whitelist, model):
 
 
 def compressed_content_valid(file, whitelist, model):
-
     file = file.open()
 
     if zipfile.is_zipfile(file):
@@ -210,9 +180,7 @@ def superuser_ids_list():
     cache_key = settings.CACHE_KEY_SUPERUSER_IDS
     superuser_ids = cache.get(cache_key)
     if superuser_ids is None:
-        superuser_ids = list(
-            EmailUser.objects.filter(is_superuser=True).values_list("id", flat=True)
-        )
+        superuser_ids = list(EmailUser.objects.filter(is_superuser=True).values_list("id", flat=True))
         cache.set(cache_key, superuser_ids, settings.CACHE_TIMEOUT_5_SECONDS)
     return superuser_ids
 
@@ -221,15 +189,11 @@ def belongs_to_by_user_id(user_id, group_name):
     superuser_ids = superuser_ids_list()
     if superuser_ids and user_id in superuser_ids:
         return True
-    cache_key = settings.CACHE_KEY_USER_BELONGS_TO_GROUP.format(
-        **{"user_id": user_id, "group_name": group_name}
-    )
+    cache_key = settings.CACHE_KEY_USER_BELONGS_TO_GROUP.format(**{"user_id": user_id, "group_name": group_name})
     belongs_to = cache.get(cache_key)
     if belongs_to is None:
         system_group = SystemGroup.objects.filter(name=group_name).first()
-        belongs_to = (
-            system_group and user_id in system_group.get_system_group_member_ids()
-        )
+        belongs_to = system_group and user_id in system_group.get_system_group_member_ids()
         cache.set(cache_key, belongs_to, settings.CACHE_TIMEOUT_5_SECONDS)
     return belongs_to
 
@@ -299,21 +263,15 @@ def is_readonly_user(request):
 
 
 def is_species_communities_approver(request):
-    return belongs_to(
-        request, GROUP_NAME_SPECIES_COMMUNITIES_APPROVER, internal_only=True
-    )
+    return belongs_to(request, GROUP_NAME_SPECIES_COMMUNITIES_APPROVER, internal_only=True)
 
 
 def is_conservation_status_assessor(request):
-    return belongs_to(
-        request, GROUP_NAME_CONSERVATION_STATUS_ASSESSOR, internal_only=True
-    )
+    return belongs_to(request, GROUP_NAME_CONSERVATION_STATUS_ASSESSOR, internal_only=True)
 
 
 def is_conservation_status_approver(request):
-    return belongs_to(
-        request, GROUP_NAME_CONSERVATION_STATUS_APPROVER, internal_only=True
-    )
+    return belongs_to(request, GROUP_NAME_CONSERVATION_STATUS_APPROVER, internal_only=True)
 
 
 def is_internal_contributor(request):
@@ -420,9 +378,7 @@ def is_occurrence_report_referee(request, occurrence_report=None):
 
 
 def is_referee(request):
-    return is_conservation_status_referee(request) or is_occurrence_report_referee(
-        request
-    )
+    return is_conservation_status_referee(request) or is_occurrence_report_referee(request)
 
 
 def in_dbca_domain(request):
@@ -444,9 +400,7 @@ def email_in_dbca_domain(email: str) -> bool:
 
 
 def is_in_organisation_contacts(request, organisation):
-    return request.user.email in organisation.contacts.all().values_list(
-        "email", flat=True
-    )
+    return request.user.email in organisation.contacts.all().values_list("email", flat=True)
 
 
 def is_departmentUser(request):
@@ -458,9 +412,7 @@ def is_customer(request):
 
 
 def is_internal(request):
-    return is_departmentUser(request) and (
-        belongs_to_groups(request, settings.INTERNAL_GROUPS)
-    )
+    return is_departmentUser(request) and (belongs_to_groups(request, settings.INTERNAL_GROUPS))
 
 
 def is_internal_by_user_id(user_id):
@@ -500,9 +452,7 @@ def get_openpyxl_data_validation_type_for_django_field(field, column=None):
         models.DateTimeField: "date",
     }
 
-    if isinstance(field, MultiSelectField) or (
-        isinstance(field, models.CharField) and field.choices
-    ):
+    if isinstance(field, MultiSelectField) or (isinstance(field, models.CharField) and field.choices):
         return dv_types["list"]
 
     if column:
@@ -542,9 +492,7 @@ def clone_model(
         return None
 
     if not isinstance(source_model, source_model_class):
-        raise ValueError(
-            f"source_model is not an instance of {source_model_class.__name__}"
-        )
+        raise ValueError(f"source_model is not an instance of {source_model_class.__name__}")
 
     target_model = target_model_class()
 
@@ -555,9 +503,7 @@ def clone_model(
 
             setattr(target_model, field.name, getattr(source_model, field.name))
     except AttributeError as e:
-        logger.error(
-            f"Error copying field values from {source_model} to {target_model}: {e}"
-        )
+        logger.error(f"Error copying field values from {source_model} to {target_model}: {e}")
     if save:
         target_model.save()
 
@@ -604,9 +550,7 @@ def get_display_field_for_model(model: models.Model) -> str:
     return "id"
 
 
-def get_choices_for_field(
-    model_class: models.base.ModelBase, field: models.Field
-) -> list | None:
+def get_choices_for_field(model_class: models.base.ModelBase, field: models.Field) -> list | None:
     from boranga.components.main.models import ArchivableModel
     from boranga.components.occurrence.models import OccurrenceReport
 
@@ -622,7 +566,7 @@ def get_choices_for_field(
         instance = model_class()
         multi_select_field = instance._meta.get_field(field.name)
         choices = multi_select_field.choices
-    elif isinstance(field, (models.ForeignKey, models.ManyToManyField)):
+    elif isinstance(field, models.ForeignKey | models.ManyToManyField):
         related_model = field.related_model
         related_model_qs = related_model.objects.all()
 
@@ -647,7 +591,7 @@ def get_choices_for_field(
 def get_lookup_field_options_for_field(field: models.Field) -> list | None:
     lookup_field_options = None
 
-    if isinstance(field, (models.ForeignKey, models.ManyToManyField)):
+    if isinstance(field, models.ForeignKey | models.ManyToManyField):
         related_model = field.related_model
         lookup_field_options = [
             field.verbose_name.lower()
@@ -661,14 +605,10 @@ def get_lookup_field_options_for_field(field: models.Field) -> list | None:
 
 
 def get_filter_field_options_for_field(field: models.Field) -> list:
-    if not isinstance(field, (models.ForeignKey, models.ManyToManyField)):
+    if not isinstance(field, models.ForeignKey | models.ManyToManyField):
         return []
 
-    return [
-        field.name
-        for field in field.related_model._meta.get_fields()
-        if not field.related_model
-    ]
+    return [field.name for field in field.related_model._meta.get_fields() if not field.related_model]
 
 
 def get_mock_request(emailuser: EmailUser):

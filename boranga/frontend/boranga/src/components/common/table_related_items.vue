@@ -82,7 +82,7 @@ export default {
         column_lodgement_number: function () {
             return {
                 data: 'identifier',
-                orderable: false,
+                orderable: true,
                 searchable: true,
                 visible: true,
             };

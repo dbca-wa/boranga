@@ -1093,12 +1093,12 @@
                     >Conservation Plan Reference:
                 </label>
                 <div class="col-sm-8">
-                    <input
+                    <textarea
                         ref="conservation_plan_reference"
                         v-model="species_community.conservation_plan_reference"
-                        type="text"
                         :disabled="!species_community.conservation_plan_exists"
                         class="form-control"
+                        maxlength="500"
                         name="conservation_plan_reference"
                     />
                 </div>
@@ -1290,7 +1290,7 @@ export default {
             var selectedValue = newVal;
             if (selectedValue === 'true') {
                 vm.species_community.distribution.number_of_occurrences =
-                    vm.species_community.distribution.cal_number_of_occurrences;
+                    vm.species_community.occurrence_count;
             } else {
                 if (vm.species_id && vm.selected_species_community_copy) {
                     vm.species_community.distribution.number_of_occurrences =
@@ -1306,7 +1306,7 @@ export default {
             var selectedValue = newVal;
             if (selectedValue === 'true') {
                 vm.species_community.distribution.extent_of_occurrences =
-                    vm.species_community.distribution.cal_extent_of_occurrences;
+                    vm.species_community.area_occurrence_convex_hull_km2;
             } else {
                 if (vm.species_id && vm.selected_species_community_copy) {
                     vm.species_community.distribution.extent_of_occurrences =
@@ -1322,7 +1322,7 @@ export default {
             var selectedValue = newVal;
             if (selectedValue === 'true') {
                 vm.species_community.distribution.area_of_occupancy_actual =
-                    vm.species_community.distribution.cal_area_of_occupancy_actual;
+                    vm.species_community.area_of_occupancy_km2;
             } else {
                 if (vm.species_id && vm.selected_species_community_copy) {
                     vm.species_community.distribution.area_of_occupancy_actual =
@@ -1402,15 +1402,15 @@ export default {
         //----set the distribution field values if auto onload
         if (vm.species_community.distribution.noo_auto == true) {
             vm.species_community.distribution.number_of_occurrences =
-                vm.species_community.distribution.cal_number_of_occurrences;
+                vm.species_community.occurrence_count;
         }
         if (vm.species_community.distribution.eoo_auto == true) {
             vm.species_community.distribution.extent_of_occurrences =
-                vm.species_community.distribution.cal_extent_of_occurrences;
+                vm.species_community.area_occurrence_convex_hull_km2;
         }
         if (vm.species_community.distribution.aoo_actual_auto == true) {
             vm.species_community.distribution.area_of_occupancy_actual =
-                vm.species_community.distribution.cal_area_of_occupancy_actual;
+                vm.species_community.area_of_occupancy_km2;
         }
         vm.fetchRegions();
     },

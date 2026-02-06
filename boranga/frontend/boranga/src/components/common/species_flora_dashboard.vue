@@ -1033,7 +1033,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraScientificName_cache,
@@ -1044,7 +1044,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraCommonName_cache,
@@ -1055,7 +1055,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraFamily_cache,
@@ -1066,7 +1066,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraPhylogeneticGroup_cache,
@@ -1077,7 +1077,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraGenus_cache,
@@ -1088,7 +1088,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraNameStatus_cache,
@@ -1099,7 +1099,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraPublicationStatus_cache,
@@ -1110,7 +1110,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraApplicationStatus_cache,
@@ -1121,7 +1121,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraRegion_cache,
@@ -1132,7 +1132,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraDistrict_cache,
@@ -1143,7 +1143,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraWALegislativeList_cache,
@@ -1154,7 +1154,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraWALegislativeCategory_cache,
@@ -1165,7 +1165,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraWAPriorityCategory_cache,
@@ -1176,7 +1176,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraCommonwealthRelevance_cache,
@@ -1187,7 +1187,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraInternationalRelevance_cache,
@@ -1198,7 +1198,7 @@ export default {
             let vm = this;
             vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterFloraConsevationCriteria_cache,
@@ -1661,7 +1661,7 @@ export default {
                                 });
                                 vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {
@@ -1723,7 +1723,7 @@ export default {
                                 });
                                 vm.$refs.flora_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

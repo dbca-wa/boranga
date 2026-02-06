@@ -1,7 +1,7 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
 {%  block content %}
-        A referral for Conservation Status {{cs_proposal.conservation_status_number}} has been completed: 
+        A referral for Conservation Status {{cs_proposal.conservation_status_number}} has been completed:
         Referral Comments: {{referral_comments}}
 
     You can access this referral using the following link:

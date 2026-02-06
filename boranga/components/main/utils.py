@@ -56,9 +56,7 @@ def validate_threat_request(request):
             missing_required.append(required_fields[i])
 
     if missing_required:
-        raise serializers.ValidationError(
-            "Missing required values for Threat - " + ", ".join(missing_required)
-        )
+        raise serializers.ValidationError("Missing required values for Threat - " + ", ".join(missing_required))
 
     # data observed must not be in the future
     if (
@@ -66,9 +64,7 @@ def validate_threat_request(request):
         and data["date_observed"]
         and datetime.strptime(data["date_observed"], "%Y-%m-%d") > datetime.now()
     ):
-        raise serializers.ValidationError(
-            "Date observed value invalid - must be on or before the current date"
-        )
+        raise serializers.ValidationError("Date observed value invalid - must be on or before the current date")
 
     return True
 
@@ -83,9 +79,7 @@ def get_geometry_source(geometry_obj):
     elif not geometry_obj.drawn_by:
         source = "Unknown"
 
-    elif isinstance(
-        geometry_obj, OccurrenceReportGeometry
-    ) and geometry_obj.drawn_by in [
+    elif isinstance(geometry_obj, OccurrenceReportGeometry) and geometry_obj.drawn_by in [
         geometry_obj.occurrence_report.submitter,
     ]:
         source = "Proponent"

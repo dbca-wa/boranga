@@ -88,9 +88,7 @@ class TransformRegistry:
             try:
                 pipeline.append(self._fns[n])
             except KeyError:
-                raise KeyError(
-                    f"unknown transform {n!r} (pipeline entry must be a registered name or a callable)"
-                )
+                raise KeyError(f"unknown transform {n!r} (pipeline entry must be a registered name or a callable)")
         return pipeline
 
 
@@ -230,9 +228,7 @@ def t_to_decimal(value, ctx):
         return _result(value, TransformIssue("error", f"Not a decimal: {value!r}"))
 
 
-def to_decimal_factory(
-    max_digits: int | None = None, decimal_places: int | None = None
-):
+def to_decimal_factory(max_digits: int | None = None, decimal_places: int | None = None):
     """
     Return a registered transform name that converts value -> Decimal and optionally
     enforces max_digits (total digits) and decimal_places (scale).
@@ -262,9 +258,7 @@ def to_decimal_factory(
             except Exception as e:
                 return _result(
                     value,
-                    TransformIssue(
-                        "error", f"Failed to quantize to {decimal_places} dp: {e}"
-                    ),
+                    TransformIssue("error", f"Failed to quantize to {decimal_places} dp: {e}"),
                 )
 
         # enforce max digits (total significant digits excluding sign)
@@ -295,20 +289,21 @@ def t_date_iso(value, ctx):
             return _result(datetime.strptime(str(value), fmt).date())
         except ValueError:
             pass
-    return _result(
-        value, TransformIssue("error", f"Unrecognized date format: {value!r}")
-    )
+    return _result(value, TransformIssue("error", f"Unrecognized date format: {value!r}"))
 
 
-@registry.register("datetime_iso")
-def t_datetime_iso(value, ctx):
+def _parse_datetime_iso(value: Any, default_tz: Any = None) -> TransformResult:
     """
     Parse datetimes (including ISO strings) and return a timezone-aware datetime
     in UTC suitable for Django (USE_TZ=True).
 
     If the incoming string contains an explicit UTC offset token (+0000 / +00:00 / Z)
-    we strip that token and treat the remainder as naive UTC (useful when source
-    emits +0000 style offsets that some parsers don't accept).
+    we strip that token and treat the remainder as naive. This remainder will be
+    made aware using `default_tz` (if provided) or UTC.
+
+    This behaviour is useful when source systems emit +0000 style offsets for
+    local times (mojibake-like timezone handling) or when some parsers don't
+    accept +0000.
     """
     if not value:
         return _result(None)
@@ -320,8 +315,9 @@ def t_datetime_iso(value, ctx):
     m = re.search(r"([+-]\d{2}:?\d{2}|Z)$", s)
     if m:
         tz_token = m.group(1)
-        # Treat explicit UTC tokens as no-offset (strip them and parse as UTC)
-        if tz_token in ("Z", "+0000", "+00:00", "+0000", "+00:00"):
+        # Treat explicit UTC tokens as no-offset (strip them and parse as naive,
+        # then we'll apply default_tz or UTC later)
+        if tz_token in ("Z", "+0000", "+00:00"):
             # remove trailing offset (handles both +0000 and +00:00)
             s = s[: m.start(1)].rstrip()
         # else: leave non-UTC offsets intact so parser can handle/convert them
@@ -339,13 +335,13 @@ def t_datetime_iso(value, ctx):
         try:
             from dateutil import parser
 
-            dt = parser.parse(s)
+            dt = parser.parse(s, dayfirst=True)
         except Exception:
             dt = None
 
     # fallback to explicit legacy formats
     if dt is None:
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d"):
             try:
                 dt = datetime.strptime(s, fmt)
                 break
@@ -353,19 +349,74 @@ def t_datetime_iso(value, ctx):
                 dt = None
 
     if dt is None:
-        return _result(
-            value, TransformIssue("error", f"Unrecognized datetime format: {value!r}")
-        )
+        return _result(value, TransformIssue("error", f"Unrecognized datetime format: {value!r}"))
 
-    # Make timezone-aware in UTC for Django:
+    # Make timezone-aware
     if dt.tzinfo is None:
-        # treat naive datetimes as UTC and make them aware
-        dt = timezone.make_aware(dt, stdlib_timezone.utc)
-    else:
-        # convert any aware datetime to UTC
-        dt = dt.astimezone(stdlib_timezone.utc)
+        # Resolve default_tz to a timezone object
+        tz_obj = default_tz
+        if isinstance(tz_obj, str):
+            try:
+                from zoneinfo import ZoneInfo
+
+                tz_obj = ZoneInfo(tz_obj)
+            except ImportError:
+                # fall back to pytz if on older python/django or if preferred
+                import pytz
+
+                tz_obj = pytz.timezone(tz_obj)
+
+        if tz_obj is None:
+            tz_obj = stdlib_timezone.utc
+
+        # treat naive datetimes as being in tz_obj and make them aware
+        dt = timezone.make_aware(dt, tz_obj)
+
+    # convert any aware datetime (including those just made aware) to UTC for storage
+    dt = dt.astimezone(stdlib_timezone.utc)
 
     return _result(dt)
+
+
+@registry.register("datetime_iso")
+def t_datetime_iso(value, ctx):
+    """
+    Parse datetimes (including ISO strings) and return a timezone-aware datetime
+    in UTC suitable for Django (USE_TZ=True).
+
+    If the incoming string contains an explicit UTC offset token (+0000 / +00:00 / Z)
+    we strip that token and treat the remainder as naive UTC (useful when source
+    emits +0000 style offsets that some parsers don't accept).
+    """
+    return _parse_datetime_iso(value)
+
+
+def datetime_iso_factory(default_tz: str | None = None) -> str:
+    """
+    Return a registered transform name that parses datetimes (ISO or legacy)
+    and returns a UTC-aware datetime.
+
+    If the source has +0000/+00:00/Z but is actually local time, or if the
+    source is naive, `default_tz` can be used to correctly localise before
+    conversion to UTC.
+
+    Parameters:
+      - default_tz: optional timezone name (e.g. 'Australia/Perth') or tzinfo
+
+    Usage:
+      PERTH_DT = datetime_iso_factory('Australia/Perth')
+      PIPELINES['created_at'] = [PERTH_DT]
+    """
+    key = f"datetime_iso_{default_tz or 'UTC'}"
+    name = "datetime_iso_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    @registry.register(name)
+    def inner(value, ctx):
+        return _parse_datetime_iso(value, default_tz=default_tz)
+
+    return name
 
 
 @registry.register("date_from_datetime_iso")
@@ -380,56 +431,40 @@ def t_date_from_datetime_iso(value, ctx):
     - parses naive datetimes as UTC and returns the date.
     - on parse failure returns the original value with a TransformIssue.
     """
-    if not value:
-        return _result(None)
+    res = _parse_datetime_iso(value)
+    if res.errors:
+        return res
+    if res.value:
+        res.value = res.value.date()
+    return res
 
-    s = str(value).strip()
-    dt = None
 
-    # strip explicit UTC tokens (keep non-UTC offsets intact)
-    m = re.search(r"([+-]\d{2}:?\d{2}|Z)$", s)
-    if m:
-        tz_token = m.group(1)
-        if tz_token in ("Z", "+0000", "+00:00"):
-            s = s[: m.start(1)].rstrip()
+def date_from_datetime_iso_factory(default_tz: str | None = None) -> str:
+    """
+    Return a registered transform name that parses datetimes (ISO or legacy)
+    and returns a UTC date.
 
-    # try stdlib ISO parsing
-    try:
-        iso = s[:-1] + "+00:00" if s.endswith("Z") else s
-        dt = datetime.fromisoformat(iso)
-    except Exception:
-        dt = None
+    See datetime_iso_factory for details on default_tz.
 
-    # try dateutil if available
-    if dt is None:
-        try:
-            from dateutil import parser
+    Usage:
+      PERTH_DATE = date_from_datetime_iso_factory('Australia/Perth')
+      PIPELINES['observed_at'] = [PERTH_DATE]
+    """
+    key = f"date_from_datetime_iso_{default_tz or 'UTC'}"
+    name = "date_from_datetime_iso_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
 
-            dt = parser.parse(s)
-        except Exception:
-            dt = None
+    @registry.register(name)
+    def inner(value, ctx):
+        res = _parse_datetime_iso(value, default_tz=default_tz)
+        if res.errors:
+            return res
+        if res.value:
+            res.value = res.value.date()
+        return res
 
-    # fallback legacy formats
-    if dt is None:
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
-            try:
-                dt = datetime.strptime(s, fmt)
-                break
-            except ValueError:
-                dt = None
-
-    if dt is None:
-        return _result(
-            value, TransformIssue("error", f"Unrecognized datetime format: {value!r}")
-        )
-
-    # normalise to UTC date
-    if dt.tzinfo is None:
-        dt = timezone.make_aware(dt, stdlib_timezone.utc)
-    else:
-        dt = dt.astimezone(stdlib_timezone.utc)
-
-    return _result(dt.date())
+    return name
 
 
 @registry.register("ocr_comments_transform")
@@ -464,9 +499,7 @@ def t_ocr_comments_transform(value, ctx):
         )
         if not purpose1:
             transform_issues.append(
-                TransformIssue(
-                    "error", f"No Purpose found that maps to legacy value: {PURPOSE1!r}"
-                )
+                TransformIssue("error", f"No Purpose found that maps to legacy value: {PURPOSE1!r}")
             )
         else:
             _append_part(purpose1)
@@ -480,9 +513,7 @@ def t_ocr_comments_transform(value, ctx):
         )
         if not purpose2:
             transform_issues.append(
-                TransformIssue(
-                    "error", f"No Purpose found that maps to legacy value: {PURPOSE2!r}"
-                )
+                TransformIssue("error", f"No Purpose found that maps to legacy value: {PURPOSE2!r}")
             )
         else:
             _append_part(purpose2)
@@ -495,26 +526,14 @@ def t_ocr_comments_transform(value, ctx):
             use_cache=True,
         )
         if not vesting:
-            transform_issues.append(
-                TransformIssue(
-                    "error", f"No Vesting found that maps to legacy value: {VESTING!r}"
-                )
-            )
+            transform_issues.append(TransformIssue("error", f"No Vesting found that maps to legacy value: {VESTING!r}"))
         else:
             _append_part(f"Vesting: {vesting}")
 
     _append_part(f"Fencing Status: {FENCING_STATUS}" if FENCING_STATUS else None)
     _append_part(f"Fencing Comments: {FENCING_COMMENTS}" if FENCING_COMMENTS else None)
-    _append_part(
-        f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}"
-        if ROADSIDE_MARKER_STATUS
-        else None
-    )
-    _append_part(
-        f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}"
-        if RDSIDE_MKR_COMMENTS
-        else None
-    )
+    _append_part(f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}" if ROADSIDE_MARKER_STATUS else None)
+    _append_part(f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}" if RDSIDE_MKR_COMMENTS else None)
 
     return _result(comments, *transform_issues)
 
@@ -556,12 +575,7 @@ def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
                     # the TPFL adapter sets NAME on the source row; normalise it the same way
                     tpfl_name = ctx.row.get("NAME")
                     if tpfl_name:
-                        tpfl_name_key = (
-                            str(tpfl_name)
-                            .replace("\u00a0", " ")
-                            .replace("\u202f", " ")
-                            .strip()
-                        )
+                        tpfl_name_key = str(tpfl_name).replace("\u00a0", " ").replace("\u202f", " ").strip()
                         mapped = tpfl_map.get(tpfl_name_key)
                         if mapped:
                             # prefer cleaned mapping first
@@ -611,9 +625,7 @@ def fk_lookup(model: type[models.Model], lookup_field: str = "id"):
     return key
 
 
-def fk_lookup_static(
-    model: type[models.Model], lookup_field: str, static_value: Any
-) -> str:
+def fk_lookup_static(model: type[models.Model], lookup_field: str, static_value: Any) -> str:
     """
     Return a registered transform name that looks up a foreign key using a
     static/constant value (ignoring the incoming row value).
@@ -682,6 +694,79 @@ def fk_lookup_static(
             return _result(value, error)
 
     return key
+
+
+def lookup_model_value_factory(model_name: str, field_name: str, static_value: Any = None) -> str:
+    """
+    Return a registered transform name that looks up a model instance ID using a string reference.
+
+    Parameters:
+      - model_name: 'app_label.Model' name string (e.g. 'boranga.Species')
+      - field_name: field to filter by (e.g. 'scientific_name')
+      - static_value: if not None, use this value for lookup (ignoring row value).
+                      If None, use the row value for lookup.
+    """
+    key_parts = ["lookup_model", model_name, field_name]
+    if static_value is not None:
+        key_parts.append(str(static_value))
+
+    key_repr = ":".join(key_parts)
+    name = "lookup_model_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+
+    if name in registry._fns:
+        return name
+
+    # Cache lookup results to avoid repeated DB queries for the same input value
+    # Key: input value, Value: (result_value, list[TransformIssue])
+    _lookup_cache = {}
+
+    @registry.register(name)
+    def inner(value, ctx):
+        from django.apps import apps
+        from django.core.exceptions import FieldDoesNotExist
+
+        # Determine value to search: either the static config or the row value
+        search_value = static_value if static_value is not None else value
+
+        # Return cached result if available
+        if search_value in _lookup_cache:
+            res_val, res_issues = _lookup_cache[search_value]
+            return _result(res_val, *res_issues)
+
+        # Resolve Model
+        try:
+            Model = apps.get_model("boranga", model_name)
+        except LookupError:
+            r = (None, [TransformIssue("error", f"Model '{model_name}' not found")])
+            _lookup_cache[search_value] = r
+            return _result(r[0], *r[1])
+
+        # Validate Field
+        try:
+            Model._meta.get_field(field_name)
+        except FieldDoesNotExist:
+            r = (None, [TransformIssue("error", f"Field '{field_name}' not found on model '{model_name}'")])
+            _lookup_cache[search_value] = r
+            return _result(r[0], *r[1])
+
+        # If value is empty/None, return None (skip lookup)
+        if search_value in (None, ""):
+            _lookup_cache[search_value] = (None, [])
+            return _result(None)
+
+        # Perform Lookup
+        try:
+            obj = Model.objects.get(**{field_name: search_value})
+            r = (obj.pk, [])
+        except Model.DoesNotExist:
+            r = (None, [TransformIssue("error", f"{model_name} with {field_name}='{search_value}' not found")])
+        except Model.MultipleObjectsReturned:
+            r = (None, [TransformIssue("error", f"Multiple {model_name} found with {field_name}='{search_value}'")])
+
+        _lookup_cache[search_value] = r
+        return _result(r[0], *r[1])
+
+    return name
 
 
 def static_value_factory(static_value: Any) -> str:
@@ -806,12 +891,7 @@ def taxonomy_lookup(
                         tpfl_name = ctx.row.get("NAME")
 
                     if tpfl_name:
-                        tpfl_key = (
-                            str(tpfl_name)
-                            .replace("\u00a0", " ")
-                            .replace("\u202f", " ")
-                            .strip()
-                        )
+                        tpfl_key = str(tpfl_name).replace("\u00a0", " ").replace("\u202f", " ").strip()
                         mapped = tpfl_map.get(tpfl_key)
                         if mapped:
                             try:
@@ -876,13 +956,9 @@ def taxonomy_lookup(
         if check_previous:
             for candidate in candidates:
                 if isinstance(candidate, str):
-                    prev_qs = TaxonPreviousName.objects.filter(
-                        previous_scientific_name__iexact=str(candidate).strip()
-                    )
+                    prev_qs = TaxonPreviousName.objects.filter(previous_scientific_name__iexact=str(candidate).strip())
                 else:
-                    prev_qs = TaxonPreviousName.objects.filter(
-                        previous_name_id=candidate
-                    )
+                    prev_qs = TaxonPreviousName.objects.filter(previous_name_id=candidate)
 
                 if not prev_qs.exists():
                     continue
@@ -927,9 +1003,7 @@ def taxonomy_lookup(
 
         return _result(
             value,
-            TransformIssue(
-                "error", f"Taxonomy with {lookup_field}='{value}' not found"
-            ),
+            TransformIssue("error", f"Taxonomy with {lookup_field}='{value}' not found"),
         )
 
     # end inner
@@ -1070,9 +1144,7 @@ def _load_legacy_taxonomy_mappings(list_name: str) -> dict:
         if Species and taxonomy_ids:
             # Fetch all species linked to these taxonomy_ids
             # Note: Assuming one species per taxonomy_id, or taking one arbitrarily if multiple
-            sp_qs = Species.objects.filter(taxonomy_id__in=taxonomy_ids).values(
-                "taxonomy_id", "id"
-            )
+            sp_qs = Species.objects.filter(taxonomy_id__in=taxonomy_ids).values("taxonomy_id", "id")
             for sp in sp_qs:
                 tax_to_species[sp["taxonomy_id"]] = sp["id"]
 
@@ -1127,9 +1199,7 @@ def _load_legacy_taxonomy_id_mappings(list_name: str) -> dict:
             entry = {"taxonomy_id": rec.taxonomy_id, "taxon_name_id": rec.taxon_name_id}
             mapping[key] = entry
     except Exception:
-        logger.exception(
-            "Failed to load LegacyTaxonomyMapping (ID) for list %s", list_name
-        )
+        logger.exception("Failed to load LegacyTaxonomyMapping (ID) for list %s", list_name)
         mapping = {}
 
     _legacy_taxonomy_id_mappings_cache[list_name] = mapping
@@ -1170,9 +1240,7 @@ def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
 
         norm = _norm_legacy_canonical_name(value)
         if norm is None:
-            return _result(
-                value, TransformIssue("error", f"Invalid legacy name: {value!r}")
-            )
+            return _result(value, TransformIssue("error", f"Invalid legacy name: {value!r}"))
 
         entry = table.get(norm) or table.get(norm.casefold())
         if entry:
@@ -1206,9 +1274,7 @@ def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
                     return res
                 return _result(res)
         except Exception:
-            logger.exception(
-                "taxonomy_lookup_legacy_mapping fallback to taxonomy_lookup failed"
-            )
+            logger.exception("taxonomy_lookup_legacy_mapping fallback to taxonomy_lookup failed")
 
         return _result(
             value,
@@ -1238,10 +1304,7 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
         raise ValueError("list_name must be provided")
 
     key_repr = f"taxonom_lookup_legacy_species:{list_name}"
-    name = (
-        "taxonom_lookup_legacy_species_"
-        + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
-    )
+    name = "taxonom_lookup_legacy_species_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
 
@@ -1261,9 +1324,7 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
 
         norm = _norm_legacy_canonical_name(value)
         if norm is None:
-            return _result(
-                value, TransformIssue("error", f"Invalid legacy name: {value!r}")
-            )
+            return _result(value, TransformIssue("error", f"Invalid legacy name: {value!r}"))
 
         entry = table.get(norm) or table.get(norm.casefold())
         if not entry:
@@ -1317,13 +1378,9 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
                                     ),
                                 )
                         except Exception:
-                            logger.exception(
-                                "taxonomy_lookup_legacy_mapping_species fallback lookup failed"
-                            )
+                            logger.exception("taxonomy_lookup_legacy_mapping_species fallback lookup failed")
             except Exception:
-                logger.exception(
-                    "taxonomy_lookup_legacy_mapping_species fallback to taxonomy_lookup failed"
-                )
+                logger.exception("taxonomy_lookup_legacy_mapping_species fallback to taxonomy_lookup failed")
 
             return _result(
                 value,
@@ -1416,9 +1473,7 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
             )
 
         except Exception as e:
-            logger.exception(
-                "taxonomy_lookup_legacy_mapping_species lookup failed: %s", e
-            )
+            logger.exception("taxonomy_lookup_legacy_mapping_species lookup failed: %s", e)
             return _result(value, TransformIssue("error", f"lookup error: {e}"))
 
     registry._fns[name] = _inner
@@ -1511,9 +1566,7 @@ def t_cap_len_50(value, ctx):
 @registry.register("group_type_by_name")
 def t_group_type_by_name(value, ctx):
     if value in (None, ""):
-        return TransformResult(
-            value=None, issues=[TransformIssue("error", "group_type required")]
-        )
+        return TransformResult(value=None, issues=[TransformIssue("error", "group_type required")])
     try:
         gt = GroupType.objects.get(name__iexact=str(value).strip())
         return _result(gt.id)
@@ -1533,13 +1586,9 @@ def t_emailuser_by_email(value, ctx):
         user = EmailUserRO.objects.get(email__iexact=email)
         return _result(user.id)
     except EmailUserRO.DoesNotExist:
-        return _result(
-            value, TransformIssue("error", f"User with email='{value}' not found")
-        )
+        return _result(value, TransformIssue("error", f"User with email='{value}' not found"))
     except EmailUserRO.MultipleObjectsReturned:
-        return _result(
-            value, TransformIssue("error", f"Multiple users with email='{value}'")
-        )
+        return _result(value, TransformIssue("error", f"Multiple users with email='{value}'"))
 
 
 def emailuser_by_legacy_username_factory(legacy_system: str) -> str:
@@ -1625,10 +1674,7 @@ def emailuser_object_by_legacy_username_factory(legacy_system: str) -> str:
         raise ValueError("legacy_system must be provided to bind this transform")
 
     key = f"emailuser_object_by_legacy_username:{legacy_system}"
-    name = (
-        "emailuser_object_by_legacy_username_"
-        + hashlib.sha1(key.encode()).hexdigest()[:8]
-    )
+    name = "emailuser_object_by_legacy_username_" + hashlib.sha1(key.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
 
@@ -1746,24 +1792,16 @@ def point_to_circle_factory(
         # support both TransformContext objects and plain dict ctx
         row = None
         if ctx is None:
-            logger.warning(
-                "point_to_circle: missing transform context for value=%r", value
-            )
+            logger.warning("point_to_circle: missing transform context for value=%r", value)
             return _result(
                 None,
                 TransformIssue("warning", "No valid coordinates (missing context)"),
             )
         # ctx may be an object with .row attribute (TransformContext) or a dict
-        row = getattr(ctx, "row", None) or (
-            ctx.get("row") if isinstance(ctx, dict) else None
-        )
+        row = getattr(ctx, "row", None) or (ctx.get("row") if isinstance(ctx, dict) else None)
         if not row:
-            logger.warning(
-                "point_to_circle: missing row in context for value=%r", value
-            )
-            return _result(
-                None, TransformIssue("warning", "No valid coordinates (missing row)")
-            )
+            logger.warning("point_to_circle: missing row in context for value=%r", value)
+            return _result(None, TransformIssue("warning", "No valid coordinates (missing row)"))
 
         try:
             raw_lat = row.get(lat_col)
@@ -1793,25 +1831,19 @@ def point_to_circle_factory(
 
             # project to Albers (meters), buffer, then back to 4326
             to_albers = Transformer.from_crs("EPSG:4326", _ALBERS_EPSG, always_xy=True)
-            from_albers = Transformer.from_crs(
-                _ALBERS_EPSG, "EPSG:4326", always_xy=True
-            )
+            from_albers = Transformer.from_crs(_ALBERS_EPSG, "EPSG:4326", always_xy=True)
 
             pt_geo = Point(lon_x, lat_y)
             pt_alb = shapely_transform(lambda x, y: to_albers.transform(x, y), pt_geo)
             circ_alb = pt_alb.buffer(radius, resolution=buffer_resolution)
-            circ_4326 = shapely_transform(
-                lambda x, y: from_albers.transform(x, y), circ_alb
-            )
+            circ_4326 = shapely_transform(lambda x, y: from_albers.transform(x, y), circ_alb)
 
             geom = GEOSGeometry(circ_4326.wkt, srid=4326)
             return _result(geom.wkt if return_wkt else geom)
 
         except Exception as e:
             logger.exception("point_to_circle transform failed for row: %r", row)
-            return _result(
-                value, TransformIssue("error", f"point_to_circle error: {e}")
-            )
+            return _result(value, TransformIssue("error", f"point_to_circle error: {e}"))
 
     return transform_fn
 
@@ -1838,10 +1870,8 @@ def validate_multiselect(choice_transform_name: str):
     def inner(value, ctx):
         if value in (None, ""):
             return _result(None)
-        if not isinstance(value, (list, tuple)):
-            return _result(
-                value, TransformIssue("error", "Expected list for multiselect")
-            )
+        if not isinstance(value, list | tuple):
+            return _result(value, TransformIssue("error", "Expected list for multiselect"))
         item_fn = registry._fns.get(choice_transform_name)
         if item_fn is None:
             return _result(
@@ -1957,10 +1987,7 @@ def csv_lookup_factory(
 
         # Use cache keyed by resolved path + params
         cache_key = (
-            "csv_lookup_map:"
-            + hashlib.sha1(
-                f"{resolved_path}:{case_insensitive}:{delimiter}".encode()
-            ).hexdigest()
+            "csv_lookup_map:" + hashlib.sha1(f"{resolved_path}:{case_insensitive}:{delimiter}".encode()).hexdigest()
         )
         if use_cache:
             cached = cache.get(cache_key)
@@ -1997,9 +2024,7 @@ def csv_lookup_factory(
 # ------------------------ End Common Transform Functions ------------------------
 
 
-def run_pipeline(
-    pipeline: list[TransformFn], value: Any, ctx: TransformContext
-) -> TransformResult:
+def run_pipeline(pipeline: list[TransformFn], value: Any, ctx: TransformContext) -> TransformResult:
     current = TransformResult(value)
     for fn in pipeline:
         step_res = fn(current.value, ctx)
@@ -2066,9 +2091,7 @@ class BaseSheetImporter:
     def run(self, path: str, ctx: ImportContext, **options):
         raise NotImplementedError
 
-    def clear_targets(
-        self, ctx: ImportContext, include_children: bool = False, **options
-    ):
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """
         Optional hook to delete target model data prior to running an importer.
 
@@ -2126,9 +2149,7 @@ def get(slug: str) -> type[BaseSheetImporter]:
     try:
         return _importer_registry[slug]
     except KeyError:
-        raise KeyError(
-            f"Importer slug '{slug}' not found. Available: {', '.join(sorted(_importer_registry))}"
-        )
+        raise KeyError(f"Importer slug '{slug}' not found. Available: {', '.join(sorted(_importer_registry))}")
 
 
 def dependent_from_column_factory(
@@ -2156,11 +2177,7 @@ def dependent_from_column_factory(
         return name
 
     def _inner(value, ctx: TransformContext):
-        dep = (
-            ctx.row.get(dependency_column)
-            if ctx and isinstance(ctx.row, dict)
-            else None
-        )
+        dep = ctx.row.get(dependency_column) if ctx and isinstance(ctx.row, dict) else None
 
         # mapper supplied -> call it
         if mapper is not None:
@@ -2176,18 +2193,14 @@ def dependent_from_column_factory(
             if isinstance(mapping, str):
                 fn = registry._fns.get(mapping)
                 if fn is None:
-                    return _result(
-                        value, TransformIssue("error", f"Unknown transform '{mapping}'")
-                    )
+                    return _result(value, TransformIssue("error", f"Unknown transform '{mapping}'"))
                 try:
                     res = fn(dep, ctx)
                     if isinstance(res, TransformResult):
                         return res
                     return _result(res)
                 except Exception as e:
-                    return _result(
-                        value, TransformIssue("error", f"mapping transform error: {e}")
-                    )
+                    return _result(value, TransformIssue("error", f"mapping transform error: {e}"))
 
             # callable mapping
             if callable(mapping):
@@ -2197,9 +2210,7 @@ def dependent_from_column_factory(
                         return res
                     return _result(res)
                 except Exception as e:
-                    return _result(
-                        value, TransformIssue("error", f"mapping callable error: {e}")
-                    )
+                    return _result(value, TransformIssue("error", f"mapping callable error: {e}"))
 
             # mapping dict behaviour (fallback)
             try:
@@ -2214,16 +2225,12 @@ def dependent_from_column_factory(
             if error_on_unknown:
                 return _result(
                     value,
-                    TransformIssue(
-                        "error", f"Unknown value for {dependency_column}: {dep!r}"
-                    ),
+                    TransformIssue("error", f"Unknown value for {dependency_column}: {dep!r}"),
                 )
             if warning_on_unknown:
                 return _result(
                     value,
-                    TransformIssue(
-                        "warning", f"Unknown value for {dependency_column}: {dep!r}"
-                    ),
+                    TransformIssue("warning", f"Unknown value for {dependency_column}: {dep!r}"),
                 )
             return _result(default)
 
@@ -2234,9 +2241,7 @@ def dependent_from_column_factory(
     return name
 
 
-def dependent_apply_transform_factory(
-    dependency_column: str, transform_name: str
-) -> str:
+def dependent_apply_transform_factory(dependency_column: str, transform_name: str) -> str:
     """
     Return a registered transform name which takes the value from `dependency_column`
     in the raw row and applies the already-registered transform `transform_name`
@@ -2257,11 +2262,7 @@ def dependent_apply_transform_factory(
         return name
 
     def _inner(_value, ctx: TransformContext):
-        dep = (
-            ctx.row.get(dependency_column)
-            if ctx and isinstance(ctx.row, dict)
-            else None
-        )
+        dep = ctx.row.get(dependency_column) if ctx and isinstance(ctx.row, dict) else None
 
         fn = registry._fns.get(transform_name)
         if fn is None:
@@ -2310,9 +2311,7 @@ def pluck_attribute_factory(attr: str, default=None) -> str:
                 TransformIssue("warning", f"attribute {attr!r} not found on value"),
             )
         except Exception as e:
-            return _result(
-                default, TransformIssue("error", f"pluck attribute error: {e}")
-            )
+            return _result(default, TransformIssue("error", f"pluck attribute error: {e}"))
 
     registry._fns[name] = _inner
     return name
@@ -2350,11 +2349,7 @@ def build_legacy_map_transform(
         if norm not in table:
             return TransformResult(
                 value=None,
-                issues=[
-                    TransformIssue(
-                        "error", f"Unmapped {legacy_system}.{list_name} value '{value}'"
-                    )
-                ],
+                issues=[TransformIssue("error", f"Unmapped {legacy_system}.{list_name} value '{value}'")],
             )
         entry = table[norm]
         canonical = entry.get("canonical") or entry.get("raw")
@@ -2408,16 +2403,12 @@ def t_format_date_dmy(value, ctx):
                 else:
                     return _result(
                         value,
-                        TransformIssue(
-                            "error", f"Unrecognized date for formatting: {value!r}"
-                        ),
+                        TransformIssue("error", f"Unrecognized date for formatting: {value!r}"),
                     )
             else:
                 return _result(
                     value,
-                    TransformIssue(
-                        "error", f"No parser available for date value: {value!r}"
-                    ),
+                    TransformIssue("error", f"No parser available for date value: {value!r}"),
                 )
         return _result(d.strftime("%d/%m/%Y"))
     except Exception as e:
@@ -2439,26 +2430,20 @@ def to_int_trailing_factory(prefix: str, required: bool = False):
         # must start with prefix
         if not s.startswith(pref):
             if required:
-                return _result(
-                    value, TransformIssue("error", f"expected prefix {pref!r}")
-                )
+                return _result(value, TransformIssue("error", f"expected prefix {pref!r}"))
             return _result(None)
         m = re.search(r"(" + r"\d+" + r")\s*$", s)
         if not m:
             if required:
                 return _result(
                     value,
-                    TransformIssue(
-                        "error", f"no trailing digits after prefix {pref!r}"
-                    ),
+                    TransformIssue("error", f"no trailing digits after prefix {pref!r}"),
                 )
             return _result(None)
         try:
             return _result(int(m.group(1)))
         except Exception as e:
-            return _result(
-                value, TransformIssue("error", f"to_int_trailing failed: {e}")
-            )
+            return _result(value, TransformIssue("error", f"to_int_trailing failed: {e}"))
 
     return _transform
 
@@ -2531,9 +2516,7 @@ def conditional_transform_factory(
                 return res
             return _result(res)
         except Exception as e:
-            return _result(
-                value, TransformIssue("error", f"conditional transform error: {e}")
-            )
+            return _result(value, TransformIssue("error", f"conditional transform error: {e}"))
 
     registry._fns[name] = _inner
     return name
@@ -2665,12 +2648,8 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
 
             # Initialize cache on first call: preload all Occurrences
             if not cache_initialized[0]:
-                for occ in Occurrence.objects.filter(
-                    migrated_from_id__isnull=False
-                ).values("pk", "migrated_from_id"):
-                    pop_id_to_occurrence_pk_cache[str(occ["migrated_from_id"])] = occ[
-                        "pk"
-                    ]
+                for occ in Occurrence.objects.filter(migrated_from_id__isnull=False).values("pk", "migrated_from_id"):
+                    pop_id_to_occurrence_pk_cache[str(occ["migrated_from_id"])] = occ["pk"]
                 cache_initialized[0] = True
                 logger.debug(
                     "occurrence_from_pop_id: initialized cache with %d entries",
@@ -2689,9 +2668,7 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
                 sheetno_str = sheetno_str[len(prefix) :]
 
             # Get POP_ID from SHEETNO using the mapping
-            pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno_str, legacy_system=legacy_system
-            )
+            pop_id = dm_mappings.get_pop_id_for_sheetno(sheetno_str, legacy_system=legacy_system)
             if not pop_id:
                 return _result(None)
 
@@ -2700,9 +2677,7 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
             # Check cache for the occurrence PK
             occ_pk = pop_id_to_occurrence_pk_cache.get(pop_id_str)
             if not occ_pk and legacy_system:
-                occ_pk = pop_id_to_occurrence_pk_cache.get(
-                    f"{legacy_system.lower()}-{pop_id_str}"
-                )
+                occ_pk = pop_id_to_occurrence_pk_cache.get(f"{legacy_system.lower()}-{pop_id_str}")
 
             if occ_pk:
                 # Return the Occurrence instance for normalize_create_kwargs to handle
@@ -2759,9 +2734,7 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
                 for occ in Occurrence.objects.filter(
                     migrated_from_id__isnull=False, occurrence_number__isnull=False
                 ).values("occurrence_number", "migrated_from_id"):
-                    pop_id_to_occurrence_number_cache[str(occ["migrated_from_id"])] = (
-                        occ["occurrence_number"]
-                    )
+                    pop_id_to_occurrence_number_cache[str(occ["migrated_from_id"])] = occ["occurrence_number"]
                 cache_initialized[0] = True
                 logger.debug(
                     "occurrence_number_from_pop_id: initialized cache with %d entries",
@@ -2780,9 +2753,7 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
                 sheetno_str = sheetno_str[len(prefix) :]
 
             # Get POP_ID from SHEETNO using the mapping
-            pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno_str, legacy_system=legacy_system
-            )
+            pop_id = dm_mappings.get_pop_id_for_sheetno(sheetno_str, legacy_system=legacy_system)
             if not pop_id:
                 return _result(None)
 
@@ -2791,9 +2762,7 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
             # Check cache for the occurrence_number
             occurrence_number = pop_id_to_occurrence_number_cache.get(pop_id_str)
             if not occurrence_number and legacy_system:
-                occurrence_number = pop_id_to_occurrence_number_cache.get(
-                    f"{legacy_system.lower()}-{pop_id_str}"
-                )
+                occurrence_number = pop_id_to_occurrence_number_cache.get(f"{legacy_system.lower()}-{pop_id_str}")
 
             if occurrence_number:
                 return _result(occurrence_number)
@@ -2846,9 +2815,7 @@ def pop_id_from_sheetno_factory(legacy_system: str = "TPFL"):
                 sheetno_str = sheetno_str[len(prefix) :]
 
             # Get POP_ID from SHEETNO using the mapping
-            pop_id = dm_mappings.get_pop_id_for_sheetno(
-                sheetno_str, legacy_system=legacy_system
-            )
+            pop_id = dm_mappings.get_pop_id_for_sheetno(sheetno_str, legacy_system=legacy_system)
             if not pop_id:
                 return _result(None)
 
@@ -2930,9 +2897,7 @@ def geometry_from_coords_factory(
             # Transform coordinates to WGS84 if necessary
             if source_epsg != "EPSG:4326":
                 try:
-                    transformer = Transformer.from_crs(
-                        source_epsg, "EPSG:4326", always_xy=True
-                    )
+                    transformer = Transformer.from_crs(source_epsg, "EPSG:4326", always_xy=True)
                     lng, lat = transformer.transform(lng, lat)
                 except Exception as e:
                     logger.warning(
@@ -2977,12 +2942,17 @@ def t_community_id_from_legacy(value, ctx):
     mapping = dm_mappings.get_community_id_map()
     pk = mapping.get(val_str)
 
+    if pk is None and ctx and getattr(ctx, "row", None):
+        source = ctx.row.get("_source")
+        if source:
+            prefix = source.lower().replace("_", "-")
+            prefixed = f"{prefix}-{val_str}"
+            pk = mapping.get(prefixed)
+
     if pk is None:
         return _result(
             None,
-            TransformIssue(
-                "warning", f"Community with migrated_from_id '{val_str}' not found"
-            ),
+            TransformIssue("warning", f"Community with migrated_from_id '{val_str}' not found"),
         )
 
     return _result(pk)
@@ -3056,9 +3026,7 @@ def wkt_to_geometry_factory(source_srid: int = 4326, target_srid: int = 4326) ->
         except Exception as e:
             return _result(
                 None,
-                TransformIssue(
-                    "error", f"WKT parse/transform error for value '{value}': {e}"
-                ),
+                TransformIssue("error", f"WKT parse/transform error for value '{value}': {e}"),
             )
 
     registry._fns[name] = inner

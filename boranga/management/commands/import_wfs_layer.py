@@ -32,23 +32,15 @@ class Command(BaseCommand):
             help="Destination table name (schema.table or table)",
             required=True,
         )
-        parser.add_argument(
-            "--nln", help="OGR -nln (if you need override)", default=None
-        )
+        parser.add_argument("--nln", help="OGR -nln (if you need override)", default=None)
         parser.add_argument(
             "--layer",
             help="workspace:layer_name (used to construct WFS URL from Proxy.proxy_url when wfs_url omitted)",
         )
-        parser.add_argument(
-            "--srid", help="Target SRID (e.g. 4326)", type=int, default=4326
-        )
-        parser.add_argument(
-            "--overwrite", action="store_true", help="Pass -overwrite to ogr2ogr"
-        )
+        parser.add_argument("--srid", help="Target SRID (e.g. 4326)", type=int, default=4326)
+        parser.add_argument("--overwrite", action="store_true", help="Pass -overwrite to ogr2ogr")
         parser.add_argument("--dry-run", action="store_true")
-        parser.add_argument(
-            "--extra-args", help="Extra args to pass to ogr2ogr (quoted)", default=""
-        )
+        parser.add_argument("--extra-args", help="Extra args to pass to ogr2ogr (quoted)", default="")
         parser.add_argument(
             "--page-count",
             type=int,
@@ -85,9 +77,7 @@ class Command(BaseCommand):
         if not name:
             raise CommandError("DATABASES['default']['NAME'] not set")
         # build PG connection string for ogr2ogr
-        pg_conn = (
-            f"PG:host={host} user={user} dbname={name} password={password} port={port}"
-        )
+        pg_conn = f"PG:host={host} user={user} dbname={name} password={password} port={port}"
         wfs_url = options.get("wfs_url")
         layer = options.get("layer")
         proxy_request_path = options.get("proxy_request_path")
@@ -96,15 +86,11 @@ class Command(BaseCommand):
         proxy = None
         if not wfs_url:
             if not proxy_request_path:
-                raise CommandError(
-                    "Either wfs_url or --proxy-request-path (and --layer) must be provided"
-                )
+                raise CommandError("Either wfs_url or --proxy-request-path (and --layer) must be provided")
             try:
                 proxy = Proxy.objects.get(request_path=proxy_request_path, active=True)
             except Proxy.DoesNotExist:
-                raise CommandError(
-                    f"No active Proxy found for request_path={proxy_request_path!r}"
-                )
+                raise CommandError(f"No active Proxy found for request_path={proxy_request_path!r}")
             if not layer:
                 raise CommandError(
                     "--layer is required when wfs_url is omitted; it will be combined with Proxy.proxy_url"
@@ -119,13 +105,9 @@ class Command(BaseCommand):
             # wfs_url provided; optionally fetch proxy for HTTP proxy/env if requested
             if proxy_request_path:
                 try:
-                    proxy = Proxy.objects.get(
-                        request_path=proxy_request_path, active=True
-                    )
+                    proxy = Proxy.objects.get(request_path=proxy_request_path, active=True)
                 except Proxy.DoesNotExist:
-                    raise CommandError(
-                        f"No active Proxy found for request_path={proxy_request_path!r}"
-                    )
+                    raise CommandError(f"No active Proxy found for request_path={proxy_request_path!r}")
 
         dest_table = options["table"]
         nln = options["nln"] or dest_table
@@ -138,9 +120,7 @@ class Command(BaseCommand):
         fetched_tempfile = None
         if proxy and getattr(proxy, "basic_auth_enabled", False):
             auth = (proxy.username, proxy.password)
-            self.stdout.write(
-                "Fetching WFS as authenticated request to avoid embedding creds in URL..."
-            )
+            self.stdout.write("Fetching WFS as authenticated request to avoid embedding creds in URL...")
             try:
                 with requests.get(wfs_url, auth=auth, stream=True, timeout=60) as r:
                     r.raise_for_status()
@@ -154,9 +134,7 @@ class Command(BaseCommand):
                     # replace the WFS source for ogr2ogr with the local file
                     wfs_source = fetched_tempfile
             except Exception as exc:
-                raise CommandError(
-                    f"Failed to fetch WFS as authenticated request: {exc}"
-                )
+                raise CommandError(f"Failed to fetch WFS as authenticated request: {exc}")
         else:
             wfs_source = wfs_url
 
@@ -219,15 +197,11 @@ class Command(BaseCommand):
             first = True
             while True:
                 page_url = f"{wfs_url}&count={page_count}&startIndex={start}&outputFormat=application/json"
-                self.stdout.write(
-                    f"Fetching page startIndex={start} count={page_count}"
-                )
+                self.stdout.write(f"Fetching page startIndex={start} count={page_count}")
                 try:
                     with session.get(page_url, stream=True, timeout=(10, 300)) as r:
                         r.raise_for_status()
-                        tmp = tempfile.NamedTemporaryFile(
-                            suffix=".geojson", delete=False
-                        )
+                        tmp = tempfile.NamedTemporaryFile(suffix=".geojson", delete=False)
                         for chunk in r.iter_content(chunk_size=64 * 1024):
                             if chunk:
                                 tmp.write(chunk)
@@ -235,9 +209,7 @@ class Command(BaseCommand):
                         tmp.close()
                         fname = tmp.name
                 except Exception as exc:
-                    raise CommandError(
-                        f"Failed to fetch page startIndex={start}: {exc}"
-                    )
+                    raise CommandError(f"Failed to fetch page startIndex={start}: {exc}")
 
                 # quick inspect page to decide whether to continue
                 try:
@@ -247,9 +219,7 @@ class Command(BaseCommand):
                 except Exception:
                     # not valid json -> likely an error HTML from server
                     head = open(fname, "rb").read(1024)
-                    raise CommandError(
-                        f"Page {start} is not valid GeoJSON; head={head[:400]!r}"
-                    )
+                    raise CommandError(f"Page {start} is not valid GeoJSON; head={head[:400]!r}")
 
                 if num == 0:
                     os.unlink(fname)
@@ -285,9 +255,7 @@ class Command(BaseCommand):
                 try:
                     subprocess.run(ogr_args, check=True, env=run_env)
                 except subprocess.CalledProcessError as e:
-                    raise CommandError(
-                        f"ogr2ogr failed on page startIndex={start}: {e}"
-                    )
+                    raise CommandError(f"ogr2ogr failed on page startIndex={start}: {e}")
                 finally:
                     try:
                         os.unlink(fname)
@@ -300,9 +268,7 @@ class Command(BaseCommand):
 
             # close session and finish
             session.close()
-            self.stdout.write(
-                self.style.SUCCESS(f"Imported WFS layer to {nln} (paged)")
-            )
+            self.stdout.write(self.style.SUCCESS(f"Imported WFS layer to {nln} (paged)"))
             return
 
         try:

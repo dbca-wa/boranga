@@ -3,10 +3,9 @@ from rest_framework import viewsets
 from rest_framework.response import Response
 
 from boranga.components.spatial.models import TileLayer
-from boranga.components.spatial.serializers import TileLayerSerializer
-
-from boranga.helpers import is_customer, is_internal, is_referee
 from boranga.components.spatial.permissions import TileLayerPermission
+from boranga.components.spatial.serializers import TileLayerSerializer
+from boranga.helpers import is_customer, is_internal, is_referee
 
 
 class TileLayerViewSet(viewsets.ReadOnlyModelViewSet):
@@ -31,17 +30,11 @@ class TileLayerViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         if is_internal(self.request):
-            return TileLayer.objects.filter(active=True, is_internal=True).order_by(
-                "id"
-            )
+            return TileLayer.objects.filter(active=True, is_internal=True).order_by("id")
         elif is_referee(self.request):
-            return TileLayer.objects.filter(active=True, is_external=True).order_by(
-                "id"
-            )
+            return TileLayer.objects.filter(active=True, is_external=True).order_by("id")
         elif is_customer(self.request):
-            return TileLayer.objects.filter(active=True, is_external=True).order_by(
-                "id"
-            )
+            return TileLayer.objects.filter(active=True, is_external=True).order_by("id")
         else:
             return TileLayer.objects.none()
-            #raise ValueError("User is not a customer, internal user, or referee.")
+            # raise ValueError("User is not a customer, internal user, or referee.")

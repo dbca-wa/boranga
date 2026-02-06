@@ -38,7 +38,6 @@ class ProxySerializer(BaseModelSerializer):
 
 
 class PlausibilityGeometrySerializer(GeoFeatureModelSerializer):
-
     class Meta:
         model = PlausibilityGeometry
         geo_field = "geometry"

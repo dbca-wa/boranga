@@ -844,9 +844,7 @@ admin.site.register(ObservationMethod, ObservationMethodAdmin)
 admin.site.register(ObservationTime, ObservationTimeAdmin)
 admin.site.register(ObserverCategory, ObserverCategoryAdmin)
 admin.site.register(ObserverRole, ObserverRoleAdmin)
-admin.site.register(
-    OccurrenceReportBulkImportSchema, OccurrenceReportBulkImportSchemaAdmin
-)
+admin.site.register(OccurrenceReportBulkImportSchema, OccurrenceReportBulkImportSchemaAdmin)
 admin.site.register(OccurrenceReportBulkImportTask, OccurrenceReportBulkImportTaskAdmin)
 admin.site.register(OccurrenceSite)
 admin.site.register(PermitType, PermitTypeAdmin)

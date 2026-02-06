@@ -1,14 +1,15 @@
 import json
-import geojson
-from shapely import from_geojson
-from shapely.geometry import Polygon, MultiPolygon
-from django.contrib.gis.geos import GEOSGeometry
-from django.core.cache import cache
 import re
 
+import geojson
 from django.contrib.gis import admin, forms
+from django.contrib.gis.geos import GEOSGeometry
+from django.core.cache import cache
+from shapely import from_geojson
+from shapely.geometry import MultiPolygon, Polygon
 
 from boranga import settings
+
 from .models import GeoserverUrl, PlausibilityGeometry, Proxy, TileLayer
 
 
@@ -220,7 +221,6 @@ class GeometryField(forms.GeometryField):
             "map_height": 600,
             "default_lat": -31.9502682,
             "default_lon": 115.8590241,
-            "map_srid": 4326,
         }
     )
 
@@ -247,11 +247,7 @@ class PlausibilityGeometryForm(forms.ModelForm):
 
             geo_json = geojson.loads(geometry)
             srid = 3857
-            crs_name = (
-                geo_json.get("crs", {})
-                .get("properties", {})
-                .get("name", f"EPSG:{srid}")
-            )
+            crs_name = geo_json.get("crs", {}).get("properties", {}).get("name", f"EPSG:{srid}")
             res = re.search(r"EPSG::(\d+)", crs_name)
             if res:
                 srid = res.groups(1)[0]
@@ -267,11 +263,7 @@ class PlausibilityGeometryForm(forms.ModelForm):
             if geosgeom.geom_type in ["GeometryCollection"]:
                 # Handling GeometryCollections is painful, so we just extract the polygons into a MultiPolygon
                 geo_json = json.loads(geosgeom.geojson)
-                polygons = [
-                    Polygon(p["coordinates"][0])
-                    for p in geo_json["geometries"]
-                    if p["type"] in ["Polygon"]
-                ]
+                polygons = [Polygon(p["coordinates"][0]) for p in geo_json["geometries"] if p["type"] in ["Polygon"]]
                 multi_polygon = MultiPolygon(polygons)
                 geosgeom = GEOSGeometry(multi_polygon.wkt)
 
@@ -295,9 +287,7 @@ class PlausibilityGeometryForm(forms.ModelForm):
             cache_key_old = settings.CACHE_KEY_PLAUSIBILITY_GEOMETRY.format(
                 **{"geometry_model": self.initial.get("check_for_geometry", None)}
             )
-        cache_key = settings.CACHE_KEY_PLAUSIBILITY_GEOMETRY.format(
-            **{"geometry_model": instance.check_for_geometry}
-        )
+        cache_key = settings.CACHE_KEY_PLAUSIBILITY_GEOMETRY.format(**{"geometry_model": instance.check_for_geometry})
         cache.delete(cache_key)
         if cache_key_old and cache_key_old != cache_key:
             cache.delete(cache_key_old)

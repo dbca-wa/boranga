@@ -79,10 +79,7 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
                 if any(i.level == "error" for i in res.issues):
                     has_error = True
                     # Log error
-                    msg = (
-                        f"Error transforming {col} for row {row.get('SHEETNO')}: "
-                        f"{res.issues}"
-                    )
+                    msg = f"Error transforming {col} for row {row.get('SHEETNO')}: " f"{res.issues}"
                     logger.error(msg)
                     for issue in res.issues:
                         if issue.level == "error":
@@ -131,9 +128,7 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
 
             # Check required fields
             if not transformed.get("occurrence_report_id"):
-                logger.warning(
-                    f"Skipping row {row.get('SHEETNO')}: occurrence_report_id not resolved"
-                )
+                logger.warning(f"Skipping row {row.get('SHEETNO')}: occurrence_report_id not resolved")
                 skipped += 1
                 # This is a warning/skip, not necessarily an error we want to dump to CSV unless requested.
                 # But let's log it as an error detail if we want to track skips.
@@ -198,9 +193,7 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
 
                 with transaction.atomic():
                     # Use batch_size to avoid huge SQL queries
-                    created_objs = OccurrenceReportDocument.objects.bulk_create(
-                        instances, batch_size=1000
-                    )
+                    created_objs = OccurrenceReportDocument.objects.bulk_create(instances, batch_size=1000)
                     created = len(created_objs)
 
                     # Post-process to set document_number and ensure uploaded_date is preserved
@@ -217,9 +210,7 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
                     )
 
             except Exception as e:
-                logger.error(
-                    f"Bulk create failed ({e}), falling back to individual saves..."
-                )
+                logger.error(f"Bulk create failed ({e}), falling back to individual saves...")
 
                 # Fallback: Try to save one by one to isolate errors
                 for instance, row_data in to_create:
@@ -233,9 +224,7 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
 
                         # Patch the date if needed
                         if target_date:
-                            OccurrenceReportDocument.objects.filter(
-                                pk=instance.pk
-                            ).update(uploaded_date=target_date)
+                            OccurrenceReportDocument.objects.filter(pk=instance.pk).update(uploaded_date=target_date)
 
                     except Exception as inner_e:
                         errors += 1

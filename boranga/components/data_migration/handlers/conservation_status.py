@@ -37,9 +37,7 @@ class ConservationStatusImporter(BaseSheetImporter):
     slug = "conservation_status_legacy"
     description = "Import conservation status from legacy TPFL sources"
 
-    def clear_targets(
-        self, ctx: ImportContext, include_children: bool = False, **options
-    ):
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete ConservationStatus target data. Respect `ctx.dry_run`."""
         if ctx.dry_run:
             return
@@ -70,9 +68,7 @@ class ConservationStatusImporter(BaseSheetImporter):
                 "migrated_from_id__isnull": False,
             }
         else:
-            logger.warning(
-                "ConservationStatusImporter: deleting ConservationStatus data..."
-            )
+            logger.warning("ConservationStatusImporter: deleting ConservationStatus data...")
             cs_filter = {"migrated_from_id__isnull": False}
 
         from django.apps import apps
@@ -88,13 +84,28 @@ class ConservationStatusImporter(BaseSheetImporter):
             # Only delete migrated records
             ConservationStatus.objects.filter(**cs_filter).delete()
 
-            # Reset sequence? Only if not filtered.
-            if not is_filtered:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT setval(pg_get_serial_sequence('boranga_conservationstatus', 'id'), "
-                        "coalesce(max(id), 1), max(id) IS NOT null) FROM boranga_conservationstatus;"
-                    )
+            # Reset the primary key sequence for ConservationStatus when using PostgreSQL.
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = ConservationStatus._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(f"SELECT MAX(id) FROM {table}")
+                        row = cur.fetchone()
+                        max_id = row[0] if row else None
+
+                        if max_id is not None:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", max_id, True],
+                            )
+                        else:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", 1, False],
+                            )
+                    logger.info("Reset primary key sequence for table %s to %s", table, max_id)
+            except Exception:
+                logger.exception("Failed to reset ConservationStatus primary key sequence")
 
         finally:
             if not was_autocommit:
@@ -151,6 +162,19 @@ class ConservationStatusImporter(BaseSheetImporter):
         value_str = str(value).strip()
         if not value_str:
             return None
+
+        # Correction for legacy data with incorrect UTC offsets (e.g. +0000)
+        # If the string assumes +0000 but the time is actually local Perth time,
+        # we strip the offset so we can parse as naive (Perth) and extract the date.
+        if value_str.endswith("+0000") or value_str.endswith("Z"):
+            s_clean = value_str[:-5] if value_str.endswith("+0000") else value_str[:-1]
+            try:
+                # parse as naive (Perth/Local)
+                # This works for '2008-08-12T00:00:00'
+                dt = datetime.fromisoformat(s_clean)
+                return dt.date()
+            except ValueError:
+                pass
 
         # Try ISO 8601 format with timezone (TEC format)
         # e.g., '2008-08-12T00:00:00+0000' or '2008-08-12T00:00:00Z'
@@ -235,10 +259,7 @@ class ConservationStatusImporter(BaseSheetImporter):
 
         # Community lookup by migrated_from_id
         Community = apps.get_model("boranga", "Community")
-        community_map = {
-            c.migrated_from_id: c
-            for c in Community.objects.filter(migrated_from_id__isnull=False)
-        }
+        community_map = {c.migrated_from_id: c for c in Community.objects.filter(migrated_from_id__isnull=False)}
 
         # Load legacy name map (TPFL only - used for species name lookup)
         legacy_name_map = {}
@@ -256,34 +277,22 @@ class ConservationStatusImporter(BaseSheetImporter):
                         reader = csv.DictReader(f)
                         for row in reader:
                             if row.get("NAME") and row.get("nomos_canonical_name"):
-                                legacy_name_map[row["NAME"].strip().lower()] = row[
-                                    "nomos_canonical_name"
-                                ].strip()
+                                legacy_name_map[row["NAME"].strip().lower()] = row["nomos_canonical_name"].strip()
                 else:
                     logger.warning(f"Legacy name map not found at {map_path}")
             except Exception as e:
                 logger.warning(f"Failed to load legacy name map: {e}")
 
         # Lists and Categories Caches
-        wa_priority_list_map = {
-            pl.code.strip().upper(): pl for pl in WAPriorityList.objects.all()
-        }
-        wa_priority_category_map = {
-            pc.code.strip().upper(): pc for pc in WAPriorityCategory.objects.all()
-        }
-        wa_legislative_list_map = {
-            ll.code.strip().upper(): ll for ll in WALegislativeList.objects.all()
-        }
-        wa_legislative_category_map = {
-            lc.code.strip().upper(): lc for lc in WALegislativeCategory.objects.all()
-        }
+        wa_priority_list_map = {pl.code.strip().upper(): pl for pl in WAPriorityList.objects.all()}
+        wa_priority_category_map = {pc.code.strip().upper(): pc for pc in WAPriorityCategory.objects.all()}
+        wa_legislative_list_map = {ll.code.strip().upper(): ll for ll in WALegislativeList.objects.all()}
+        wa_legislative_category_map = {lc.code.strip().upper(): lc for lc in WALegislativeCategory.objects.all()}
 
         # Submitter Category 'DBCA'
         submitter_category_dbca = SubmitterCategory.objects.filter(name="DBCA").first()
         if not submitter_category_dbca:
-            logger.warning(
-                "SubmitterCategory 'DBCA' not found. SubmitterInformation records may be incomplete."
-            )
+            logger.warning("SubmitterCategory 'DBCA' not found. SubmitterInformation records may be incomplete.")
 
         # 3. Create objects
         ConservationStatus = apps.get_model("boranga", "ConservationStatus")
@@ -429,25 +438,13 @@ class ConservationStatusImporter(BaseSheetImporter):
                         wa_pl_obj = wa_priority_list_map.get(wa_pl_code.strip().upper())
 
                 wa_pc_code = row.get("wa_priority_category")
-                wa_pc_obj = (
-                    wa_priority_category_map.get(wa_pc_code.strip().upper())
-                    if wa_pc_code
-                    else None
-                )
+                wa_pc_obj = wa_priority_category_map.get(wa_pc_code.strip().upper()) if wa_pc_code else None
 
                 wa_ll_code = row.get("wa_legislative_list")
-                wa_ll_obj = (
-                    wa_legislative_list_map.get(wa_ll_code.strip().upper())
-                    if wa_ll_code
-                    else None
-                )
+                wa_ll_obj = wa_legislative_list_map.get(wa_ll_code.strip().upper()) if wa_ll_code else None
 
                 wa_lc_code = row.get("wa_legislative_category")
-                wa_lc_obj = (
-                    wa_legislative_category_map.get(wa_lc_code.strip().upper())
-                    if wa_lc_code
-                    else None
-                )
+                wa_lc_obj = wa_legislative_category_map.get(wa_lc_code.strip().upper()) if wa_lc_code else None
 
                 # Determine submitter for SubmitterInformation
                 si_email_user = row.get("submitter")
@@ -475,9 +472,7 @@ class ConservationStatusImporter(BaseSheetImporter):
                     wa_legislative_list=wa_ll_obj,
                     wa_legislative_category=wa_lc_obj,
                     review_due_date=self._clean_date_field(row.get("review_due_date")),
-                    effective_from=self._clean_date_field(
-                        row.get("effective_from_date")
-                    ),
+                    effective_from=self._clean_date_field(row.get("effective_from_date")),
                     submitter=row.get("submitter"),  # ID
                     assigned_approver=row.get("assigned_approver"),  # ID
                     approved_by=row.get("approved_by"),  # ID
@@ -508,9 +503,7 @@ class ConservationStatusImporter(BaseSheetImporter):
 
         # Bulk create SubmitterInformation
         if submitter_infos:
-            logger.info(
-                f"Bulk creating {len(submitter_infos)} SubmitterInformation records..."
-            )
+            logger.info(f"Bulk creating {len(submitter_infos)} SubmitterInformation records...")
             SubmitterInformation.objects.bulk_create(submitter_infos)
 
             # Assign saved SubmitterInformation to ConservationStatus objects
@@ -520,9 +513,7 @@ class ConservationStatusImporter(BaseSheetImporter):
 
         # Bulk create ConservationStatus
         if cs_objects:
-            logger.info(
-                f"Bulk creating {len(cs_objects)} ConservationStatus records..."
-            )
+            logger.info(f"Bulk creating {len(cs_objects)} ConservationStatus records...")
             # Use bulk_create and get back objects with IDs (Postgres feature)
             created_cs = ConservationStatus.objects.bulk_create(cs_objects)
 
@@ -535,12 +526,8 @@ class ConservationStatusImporter(BaseSheetImporter):
                     to_update.append(cs)
 
             if to_update:
-                logger.info(
-                    f"Bulk updating conservation_status_number for {len(to_update)} records..."
-                )
-                ConservationStatus.objects.bulk_update(
-                    to_update, ["conservation_status_number"]
-                )
+                logger.info(f"Bulk updating conservation_status_number for {len(to_update)} records...")
+                ConservationStatus.objects.bulk_update(to_update, ["conservation_status_number"])
 
             stats["created"] += len(created_cs)
 

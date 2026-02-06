@@ -38,9 +38,7 @@ class IsAssessor(BasePermission):
         if request.user.is_superuser:
             return True
 
-        return is_conservation_status_assessor(request) or is_occurrence_assessor(
-            request
-        )
+        return is_conservation_status_assessor(request) or is_occurrence_assessor(request)
 
 
 class IsApprover(BasePermission):

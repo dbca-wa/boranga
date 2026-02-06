@@ -87,9 +87,7 @@ class OccurrenceTenureImporter(BaseSheetImporter):
     slug = "occurrence_tenure"
     description = "Create OccurrenceTenure from spatial intersection and legacy CSV"
 
-    def clear_targets(
-        self, ctx: ImportContext, include_children: bool = False, **options
-    ):
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OccurrenceTenure target data. Respect `ctx.dry_run`."""
         if ctx.dry_run:
             logger.info("Dry run: Would delete all OccurrenceTenure objects")
@@ -100,6 +98,32 @@ class OccurrenceTenureImporter(BaseSheetImporter):
         count = OccurrenceTenure.objects.count()
         logger.info(f"Deleting {count} OccurrenceTenure objects...")
         OccurrenceTenure.objects.all().delete()
+
+        # Reset the primary key sequence for OccurrenceTenure when using PostgreSQL.
+        try:
+            from django.db import connection as conn
+
+            if getattr(conn, "vendor", None) == "postgresql":
+                table = OccurrenceTenure._meta.db_table
+                with conn.cursor() as cur:
+                    cur.execute(f"SELECT MAX(id) FROM {table}")
+                    row = cur.fetchone()
+                    max_id = row[0] if row else None
+
+                    if max_id is not None:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", max_id, True],
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                logger.info("Reset primary key sequence for table %s to %s", table, max_id)
+        except Exception:
+            logger.exception("Failed to reset OccurrenceTenure primary key sequence")
+
         logger.info("Deletion complete.")
 
     def run(self, path: str, ctx: ImportContext, **options):
@@ -163,9 +187,7 @@ class OccurrenceTenureImporter(BaseSheetImporter):
 
         # Get the tenure intersect layer
         try:
-            intersect_layer = TileLayer.objects.get(
-                is_tenure_intersects_query_layer=True
-            )
+            intersect_layer = TileLayer.objects.get(is_tenure_intersects_query_layer=True)
         except TileLayer.DoesNotExist:
             logger.error("No tenure intersects query layer specified")
             return stats
@@ -185,9 +207,7 @@ class OccurrenceTenureImporter(BaseSheetImporter):
         # Subquery to check if a valid geometry exists and get its PK
         # This prevents N+1 queries later and allows us to verify geometry existence efficiently
         geom_qs = (
-            OccurrenceGeometry.objects.filter(
-                occurrence=OuterRef("pk"), geometry__isnull=False
-            )
+            OccurrenceGeometry.objects.filter(occurrence=OuterRef("pk"), geometry__isnull=False)
             .order_by("-id")
             .values("pk")[:1]
         )
@@ -334,32 +354,23 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 # If multiple, maybe process all?
                 # For now let's take the first one or log warning
                 logger.warning(f"Multiple geometries for {occurrence_str}")
-                geometry_instance = OccurrenceGeometry.objects.filter(
-                    occurrence=occurrence
-                ).first()
+                geometry_instance = OccurrenceGeometry.objects.filter(occurrence=occurrence).first()
 
             if not geometry_instance.geometry:
                 skipped += 1
                 continue
 
             if ctx.dry_run:
-                logger.info(
-                    f"Dry run: Would process tenure for Occurrence {occurrence}"
-                )
+                logger.info(f"Dry run: Would process tenure for Occurrence {occurrence}")
                 continue
 
             try:
                 # Use preloaded set to check existence without DB hit
-                exists_before = (
-                    options.get("wipe_targets") is not True
-                    and geometry_instance.id in geometry_has_tenure
-                )
+                exists_before = options.get("wipe_targets") is not True and geometry_instance.id in geometry_has_tenure
 
                 # Intersect
                 # intersect_geometry_with_layer expects a GEOSGeometry
-                intersect_data = intersect_geometry_with_layer(
-                    geometry_instance.geometry, intersect_layer
-                )
+                intersect_data = intersect_geometry_with_layer(geometry_instance.geometry, intersect_layer)
 
                 features = intersect_data.get("features", [])
                 if not features:
@@ -368,9 +379,7 @@ class OccurrenceTenureImporter(BaseSheetImporter):
 
                 # Populate Tenure
                 # This creates/updates OccurrenceTenure objects
-                tenure_count_before = OccurrenceTenure.objects.filter(
-                    occurrence_geometry=geometry_instance
-                ).count()
+                tenure_count_before = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).count()
 
                 populate_occurrence_tenure_data(geometry_instance, features, request)
 
@@ -379,9 +388,7 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 vesting_id = transformed.get("OccurrenceTenure__vesting_id")
 
                 # Get all tenures for this geometry (could be multiple if intersecting multiple features)
-                tenures = OccurrenceTenure.objects.filter(
-                    occurrence_geometry=geometry_instance
-                ).order_by("id")
+                tenures = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).order_by("id")
 
                 tenure_count_after = tenures.count()
 
@@ -417,9 +424,7 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                     # )
 
             except Exception as e:
-                logger.exception(
-                    f"Error processing tenure for Occurrence {occurrence}: {e}"
-                )
+                logger.exception(f"Error processing tenure for Occurrence {occurrence}: {e}")
                 errors += 1
                 errors_details.append(
                     {

@@ -339,7 +339,7 @@ export default {
 };
 </script>
 <style scoped>
-.master-schema {
+.master-schema td {
     background-color: rgba(255, 193, 7, 0.3) !important;
 }
 </style>

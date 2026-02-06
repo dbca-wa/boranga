@@ -14,9 +14,7 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
     # Pipelines for the geometry record
     PIPELINES = {
         # Transform WKT (Source GDA94/4283 -> Target WGS84/4326)
-        "OccurrenceGeometry__geometry": [
-            wkt_to_geometry_factory(source_srid=4283, target_srid=4326)
-        ],
+        "OccurrenceGeometry__geometry": [wkt_to_geometry_factory(source_srid=4283, target_srid=4326)],
         "OccurrenceGeometry__drawn_by": [static_value_factory(None)],
         "OccurrenceGeometry__locked": [static_value_factory(False)],
         # Default show_on_map to True?

@@ -70,16 +70,12 @@ GROUP_NAME_CHOICES = [
 
 # This settings is used for security checks in which case an internal contributor is not considered 'internal'
 INTERNAL_GROUPS = [
-    g
-    for g in GROUP_NAME_CHOICES
-    if g != GROUP_NAME_EXTERNAL_CONTRIBUTOR and g != GROUP_NAME_INTERNAL_CONTRIBUTOR
+    g for g in GROUP_NAME_CHOICES if g != GROUP_NAME_EXTERNAL_CONTRIBUTOR and g != GROUP_NAME_INTERNAL_CONTRIBUTOR
 ]
 
 # This settings is used in django admin to prevent internal users from being added to external groups and visa versa
 # I.e. we don't want external users added to the internal contributor group
-GROUPS_THAT_ALLOW_INTERNAL_MEMBERS_ONLY = [
-    g for g in GROUP_NAME_CHOICES if g != GROUP_NAME_EXTERNAL_CONTRIBUTOR
-]
+GROUPS_THAT_ALLOW_INTERNAL_MEMBERS_ONLY = [g for g in GROUP_NAME_CHOICES if g != GROUP_NAME_EXTERNAL_CONTRIBUTOR]
 
 if env("CONSOLE_EMAIL_BACKEND", False):
     EMAIL_BACKEND = "wagov_utils.components.utils.email_backend.EmailBackend"
@@ -167,16 +163,10 @@ MIDDLEWARE = MIDDLEWARE_CLASSES
 MIDDLEWARE_CLASSES = None
 
 TEMPLATES[0]["DIRS"].append(os.path.join(BASE_DIR, "boranga", "templates"))
-TEMPLATES[0]["DIRS"].append(
-    os.path.join(BASE_DIR, "boranga", "components", "organisations", "templates")
-)
-TEMPLATES[0]["DIRS"].append(
-    os.path.join(BASE_DIR, "boranga", "components", "emails", "templates")
-)
+TEMPLATES[0]["DIRS"].append(os.path.join(BASE_DIR, "boranga", "components", "organisations", "templates"))
+TEMPLATES[0]["DIRS"].append(os.path.join(BASE_DIR, "boranga", "components", "emails", "templates"))
 
-TEMPLATES[0]["OPTIONS"]["context_processors"].append(
-    "boranga.context_processors.config"
-)
+TEMPLATES[0]["OPTIONS"]["context_processors"].append("boranga.context_processors.config")
 
 del BOOTSTRAP3["css_url"]
 CACHES = {
@@ -187,9 +177,7 @@ CACHES = {
 }
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS.append(os.path.join(os.path.join(BASE_DIR, "boranga", "static")))
-STATICFILES_DIRS.append(
-    os.path.join(os.path.join(BASE_DIR, "boranga", "static", "boranga_vue"))
-)
+STATICFILES_DIRS.append(os.path.join(os.path.join(BASE_DIR, "boranga", "static", "boranga_vue")))
 DATA_UPLOAD_MAX_NUMBER_FIELDS = None
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = env("FILE_UPLOAD_MAX_MEMORY_SIZE", 2621440)
@@ -216,9 +204,7 @@ DEP_URL = env("DEP_URL", "www." + SITE_DOMAIN)
 DEP_PHONE = env("DEP_PHONE", "(08) 9219 9978")
 DEP_PHONE_SUPPORT = env("DEP_PHONE_SUPPORT", "(08) 9219 9000")
 DEP_FAX = env("DEP_FAX", "(08) 9423 8242")
-DEP_POSTAL = env(
-    "DEP_POSTAL", "Locked Bag 104, Bentley Delivery Centre, Western Australia 6983"
-)
+DEP_POSTAL = env("DEP_POSTAL", "Locked Bag 104, Bentley Delivery Centre, Western Australia 6983")
 DEP_NAME = env("DEP_NAME", "Department of Biodiversity, Conservation and Attractions")
 DEP_NAME_SHORT = env("DEP_NAME_SHORT", "DBCA")
 BRANCH_NAME = env("BRANCH_NAME", "Tourism and Concessions Branch")
@@ -231,9 +217,7 @@ CRON_RUN_AT_TIMES = env("CRON_RUN_AT_TIMES", "04:05")
 CRON_EMAIL = env("CRON_EMAIL", "cron@" + SITE_DOMAIN).lower()
 EMAIL_FROM = DEFAULT_FROM_EMAIL
 # Time of day to run the import cadastre geojson cron job. Read from env or default to 03:00
-IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY = env(
-    "IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY", "03:00"
-)
+IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY = env("IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY", "03:00")
 
 CRON_CLASSES = [
     "appmonitor_client.cron.CronJobAppMonitorClient",
@@ -252,12 +236,8 @@ BASE_URL = env("BASE_URL")
 LOGGING["loggers"]["boranga"] = {"handlers": ["file"], "level": "INFO"}
 if DEBUG:
     LOGGING["formatters"] = {
-        "verbose": {
-            "format": "%(levelname)s %(asctime)s %(name)s [Line:%(lineno)s][%(funcName)s] %(message)s"
-        },
-        "simple": {
-            "format": "[Line:%(lineno)s][%(funcName)s] %(levelname)s %(message)s"
-        },
+        "verbose": {"format": "%(levelname)s %(asctime)s %(name)s [Line:%(lineno)s][%(funcName)s] %(message)s"},
+        "simple": {"format": "[Line:%(lineno)s][%(funcName)s] %(levelname)s %(message)s"},
     }
     LOGGING["loggers"]["boranga"] = {
         "handlers": ["console"],
@@ -281,12 +261,8 @@ if len(GIT_COMMIT_HASH) == 0:
     if len(GIT_COMMIT_HASH) == 0:
         print("ERROR: No git hash provided")
         if os.path.isdir(BASE_DIR + "/.git/") is True:
-            GIT_COMMIT_DATE = os.popen(
-                "cd " + BASE_DIR + " ; git log -1 --format=%cd"
-            ).read()
-            GIT_COMMIT_HASH = os.popen(
-                "cd  " + BASE_DIR + " ; git log -1 --format=%H"
-            ).read()
+            GIT_COMMIT_DATE = os.popen("cd " + BASE_DIR + " ; git log -1 --format=%cd").read()
+            GIT_COMMIT_HASH = os.popen("cd  " + BASE_DIR + " ; git log -1 --format=%H").read()
 
 APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0")
 
@@ -295,9 +271,7 @@ RUNNING_DEVSERVER = len(sys.argv) > 1 and sys.argv[1] == "runserver"
 # Sentry settings
 SENTRY_DSN = env("SENTRY_DSN", default=None)
 SENTRY_SAMPLE_RATE = env("SENTRY_SAMPLE_RATE", default=1.0)  # Error sampling rate
-SENTRY_TRANSACTION_SAMPLE_RATE = env(
-    "SENTRY_TRANSACTION_SAMPLE_RATE", default=0.0
-)  # Transaction sampling
+SENTRY_TRANSACTION_SAMPLE_RATE = env("SENTRY_TRANSACTION_SAMPLE_RATE", default=0.0)  # Transaction sampling
 if not RUNNING_DEVSERVER and SENTRY_DSN and EMAIL_INSTANCE:
     import sentry_sdk
 
@@ -325,9 +299,7 @@ RECENT_REFERRAL_COUNT = env("RECENT_REFERRAL_COUNT", 5)
 #  ------------- NOMOS JSON file url --------------
 NOMOS_BLOB_URL = env("NOMOS_BLOB_URL")
 
-GIS_SERVER_URL = env(
-    "GIS_SERVER_URL", "https://kaartdijin-boodja-geoserver.dbca.wa.gov.au/geoserver/ows"
-)
+GIS_SERVER_URL = env("GIS_SERVER_URL", "https://kaartdijin-boodja-geoserver.dbca.wa.gov.au/geoserver/ows")
 
 # Proxy prefix for basic authentication
 BASIC_AUTH_PROXY_PREFIX = env("BASIC_AUTH_PROXY_PREFIX", "kb-proxy/")
@@ -359,9 +331,7 @@ STATIC_URL_PREFIX = "/static/boranga_vue/" if DJANGO_VITE_DEV_MODE else "boranga
 DJANGO_VITE = {
     "default": {
         "dev_mode": DJANGO_VITE_DEV_MODE,
-        "manifest_path": os.path.join(
-            BASE_DIR, "boranga", "static", "boranga_vue", "manifest.json"
-        ),
+        "manifest_path": os.path.join(BASE_DIR, "boranga", "static", "boranga_vue", "manifest.json"),
         "dev_server_host": "localhost",  # Default host for vite (can change if needed)
         "dev_server_port": config(
             "DEV_SERVER_PORT", default=9002, cast=int
@@ -521,9 +491,7 @@ COMMONWEALTH_CONSERVATION_LISTS = [COMMONWEALTH_CONSERVATION_LIST_EPBC]
 # As it causes a permission exception when using azure network drives
 FILE_UPLOAD_PERMISSIONS = None
 
-OCR_BULK_IMPORT_TASK_TIMEOUT_SECONDS = env(
-    "OCR_BULK_IMPORT_TASK_TIMEOUT_SECONDS", 60 * 5
-)  # Default = 5 minutes
+OCR_BULK_IMPORT_TASK_TIMEOUT_SECONDS = env("OCR_BULK_IMPORT_TASK_TIMEOUT_SECONDS", 60 * 5)  # Default = 5 minutes
 
 OCR_BULK_IMPORT_PROCESS_TASKS_IMMEDIATELY = env(
     "OCR_BULK_IMPORT_PROCESS_TASKS_IMMEDIATELY", False
@@ -536,9 +504,7 @@ OCR_BULK_IMPORT_LOOKUP_TABLE_DISPLAY_FIELDS = [
     "code",
 ]
 
-OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT = env(
-    "OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT", 30
-)
+OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT = env("OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT", 30)
 
 OCR_BULK_IMPORT_M2M_DELIMITER = env("OCR_BULK_IMPORT_M2M_DELIMITER", "||")
 
@@ -562,9 +528,7 @@ CSV_EXPORT_DOUBLEQUOTE = config("CSV_EXPORT_DOUBLEQUOTE", default=True, cast=boo
 CSV_EXPORT_LINETERMINATOR = config("CSV_EXPORT_LINETERMINATOR", default=r"\n")
 CSV_EXPORT_QUOTING = config("CSV_EXPORT_QUOTING", default="QUOTE_ALL")
 
-DEFAULT_SELECT2_RECORDS_LIMIT = config(
-    "DEFAULT_SELECT2_RECORDS_LIMIT", default=20, cast=int
-)
+DEFAULT_SELECT2_RECORDS_LIMIT = config("DEFAULT_SELECT2_RECORDS_LIMIT", default=20, cast=int)
 
 GIS_EXTENT = config(
     "GIS_EXTENT",
@@ -575,19 +539,13 @@ GIS_EXTENT = config(
     cast=Csv(float, post_process=tuple),
 )
 
-DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES = config(
-    "DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES", default=30, cast=int
-)
+DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES = config("DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES", default=30, cast=int)
 UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES = config(
     "UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES", default=30, cast=int
 )
-UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES = config(
-    "UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES", default=30, cast=int
-)
+UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES = config("UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES", default=30, cast=int)
 
-FETCH_NOMOS_DATA_TIME_OF_DAY = config(
-    "FETCH_NOMOS_DATA_TIME_OF_DAY", default="03:00"
-)  # 24 hour format HH:MM
+FETCH_NOMOS_DATA_TIME_OF_DAY = config("FETCH_NOMOS_DATA_TIME_OF_DAY", default="03:00")  # 24 hour format HH:MM
 
 INCLUDE_ROOT_VIEW = env("INCLUDE_ROOT_VIEW", False)
 

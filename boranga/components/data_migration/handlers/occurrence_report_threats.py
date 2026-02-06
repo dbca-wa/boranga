@@ -9,6 +9,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.occurrence_report import schema
+from boranga.components.data_migration.adapters.occurrence_report.tec_survey_threats import (
+    OccurrenceReportTecSurveyThreatsAdapter,
+)
 from boranga.components.data_migration.adapters.occurrence_report.threats import (
     OCRConservationThreatAdapter,
 )
@@ -23,6 +26,7 @@ from boranga.components.data_migration.registry import (
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OCRConservationThreatAdapter(),
+    Source.TEC_SURVEY_THREATS.value: OccurrenceReportTecSurveyThreatsAdapter(),
 }
 
 
@@ -31,9 +35,7 @@ class OCRConservationThreatImporter(BaseSheetImporter):
     slug = "occurrence_report_threats_legacy"
     description = "Import occurrence report threats from legacy TPFL sources"
 
-    def clear_targets(
-        self, ctx: ImportContext, include_children: bool = False, **options
-    ):
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OCRConservationThreat target data. Respect `ctx.dry_run`."""
         if ctx.dry_run:
             return
@@ -60,15 +62,12 @@ class OCRConservationThreatImporter(BaseSheetImporter):
                 "OCRConservationThreatImporter: deleting OCRConservationThreat data for group_types: %s ...",
                 target_group_types,
             )
-            threat_filter = {
-                "occurrence_report__group_type__name__in": target_group_types
-            }
+            threat_filter = {"occurrence_report__group_type__name__in": target_group_types}
         else:
-            logger.warning(
-                "OCRConservationThreatImporter: deleting OCRConservationThreat data..."
-            )
+            logger.warning("OCRConservationThreatImporter: deleting OCRConservationThreat data...")
             threat_filter = {}
 
+        from django.db import connection as conn
         from django.db import transaction
 
         with transaction.atomic():
@@ -81,6 +80,31 @@ class OCRConservationThreatImporter(BaseSheetImporter):
                     OCRConservationThreat.objects.all().delete()
             except Exception:
                 logger.exception("Failed to delete OCRConservationThreat")
+
+        # Reset the primary key sequence for OCRConservationThreat when using PostgreSQL.
+        try:
+            if getattr(conn, "vendor", None) == "postgresql":
+                from boranga.components.occurrence.models import OCRConservationThreat
+
+                table = OCRConservationThreat._meta.db_table
+                with conn.cursor() as cur:
+                    cur.execute(f"SELECT MAX(id) FROM {table}")
+                    row = cur.fetchone()
+                    max_id = row[0] if row else None
+
+                    if max_id is not None:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", max_id, True],
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                            [table, "id", 1, False],
+                        )
+                logger.info("Reset primary key sequence for table %s to %s", table, max_id)
+        except Exception:
+            logger.exception("Failed to reset OCRConservationThreat primary key sequence")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -170,9 +194,7 @@ class OCRConservationThreatImporter(BaseSheetImporter):
             has_error = False
             # Choose pipeline map based on row source (fallback to base)
             src = row.get("_source")
-            pipeline_map = pipelines_by_source.get(
-                src, pipelines_by_source.get(None, {})
-            )
+            pipeline_map = pipelines_by_source.get(src, pipelines_by_source.get(None, {}))
             for col, pipeline in pipeline_map.items():
                 raw_val = row.get(col)
                 res = run_pipeline(pipeline, raw_val, tcx)
@@ -259,18 +281,14 @@ class OCRConservationThreatImporter(BaseSheetImporter):
             try:
                 with transaction.atomic():
                     # Use batch_size to avoid huge SQL queries
-                    created_objs = OCRConservationThreat.objects.bulk_create(
-                        to_create, batch_size=1000
-                    )
+                    created_objs = OCRConservationThreat.objects.bulk_create(to_create, batch_size=1000)
                     created = len(created_objs)
 
                     # Post-process to set threat_number (mimic save() method)
                     for obj in created_objs:
                         obj.threat_number = f"T{obj.pk}"
 
-                    OCRConservationThreat.objects.bulk_update(
-                        created_objs, ["threat_number"], batch_size=1000
-                    )
+                    OCRConservationThreat.objects.bulk_update(created_objs, ["threat_number"], batch_size=1000)
 
             except Exception as e:
                 logger = __import__("logging").getLogger(__name__)

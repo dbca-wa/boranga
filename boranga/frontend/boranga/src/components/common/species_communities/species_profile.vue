@@ -884,14 +884,14 @@
                         >Conservation Plan Reference:
                     </label>
                     <div class="col-sm-9">
-                        <input
+                        <textarea
                             ref="conservation_plan_reference"
                             v-model="
                                 species_community.conservation_plan_reference
                             "
                             :disabled="isReadOnly"
-                            type="text"
                             class="form-control"
+                            maxlength="500"
                             name="conservation_plan_reference"
                         />
                     </div>

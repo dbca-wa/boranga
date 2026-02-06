@@ -484,7 +484,7 @@ export default {
         reloadDatatable: function (dashRef, datatableRef) {
             this.$refs[dashRef].$refs[datatableRef].vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             );
         },
     },

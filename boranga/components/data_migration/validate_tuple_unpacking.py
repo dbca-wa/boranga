@@ -74,9 +74,7 @@ def find_unpacking_locations(handler_path: str) -> dict:
         # Pattern A: Single-line "for var1, var2, ... in create_meta:"
         if " in create_meta:" in line and "(" not in line and "," in line:
             before_in = line.split(" in create_meta:")[0]
-            after_for = (
-                before_in.split("for")[1].strip() if "for" in before_in else before_in
-            )
+            after_for = before_in.split("for")[1].strip() if "for" in before_in else before_in
             vars_list = [v.strip() for v in after_for.split(",") if v.strip()]
             size = len(vars_list)
 
@@ -110,9 +108,7 @@ def find_unpacking_locations(handler_path: str) -> dict:
                         # Found closing paren, extract variables
                         after_open = unpacking.split("(")[1]
                         before_close = after_open.split(")")[0]
-                        vars_list = [
-                            v.strip() for v in before_close.split(",") if v.strip()
-                        ]
+                        vars_list = [v.strip() for v in before_close.split(",") if v.strip()]
                         size = len(vars_list)
                         context = unpacking.replace("\n", " ").strip()[:100]
                         break
@@ -127,9 +123,7 @@ def find_unpacking_locations(handler_path: str) -> dict:
                     if next_line.strip() and next_indent <= base_indent:
                         break
 
-                    if (
-                        f"= {loop_var}" in next_line or f"={loop_var}" in next_line
-                    ) and "(" not in next_line:
+                    if (f"= {loop_var}" in next_line or f"={loop_var}" in next_line) and "(" not in next_line:
                         left = next_line.split("=")[0]
                         vars_list = [v.strip() for v in left.split(",") if v.strip()]
                         size = len(vars_list)

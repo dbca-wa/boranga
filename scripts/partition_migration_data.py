@@ -41,9 +41,7 @@ def load_adapter_class(adapter_path: str):
         sys.exit(1)
 
 
-def get_interesting_columns(
-    adapter_class: Any, headers: list[str], ignore_list: list[str]
-) -> dict[str, str]:
+def get_interesting_columns(adapter_class: Any, headers: list[str], ignore_list: list[str]) -> dict[str, str]:
     """
     Identify columns that have non-trivial pipelines and are not ignored.
     Returns: Dict[header_name, canonical_key]
@@ -138,19 +136,13 @@ def partition_data(
     logger.info(f"Found {len(headers)} columns.")
 
     # Returns Dict[header, canonical_key]
-    interesting_columns_map = get_interesting_columns(
-        adapter_class, headers, ignore_fields
-    )
+    interesting_columns_map = get_interesting_columns(adapter_class, headers, ignore_fields)
     interesting_columns = list(interesting_columns_map.keys())
 
-    logger.info(
-        f" identified {len(interesting_columns)} interesting columns: {interesting_columns}"
-    )
+    logger.info(f" identified {len(interesting_columns)} interesting columns: {interesting_columns}")
 
     if not interesting_columns:
-        logger.warning(
-            "No interesting columns found. Copying only the first row as sample."
-        )
+        logger.warning("No interesting columns found. Copying only the first row as sample.")
         df.head(1).to_csv(output_path, index=False)
         return
 
@@ -177,9 +169,7 @@ def partition_data(
             final_columns.append(col)
 
     interesting_columns = final_columns
-    logger.info(
-        f"Targeting {len(interesting_columns)} columns for exhaustive coverage."
-    )
+    logger.info(f"Targeting {len(interesting_columns)} columns for exhaustive coverage.")
 
     for col in interesting_columns:
         unique_vals = df[col].unique()
@@ -292,8 +282,14 @@ def partition_data(
                 targets.append(parse_target(canonical))
             targets_str = ", ".join(targets)
 
+            # Get row identity from first few columns (usually ID/Ref)
+            original_row = df.loc[idx]
+            identity_parts = [f"{h}={original_row[h]}" for h in headers[:3]]
+            identity_str = "; ".join(identity_parts)
+
             row_data = {
                 "original_row_index": idx,
+                "row_identity": identity_str,
                 "new_features_count": len(features),
                 "contributing_columns": columns_str,
                 "targets": targets_str,
@@ -305,15 +301,11 @@ def partition_data(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Partition migration data for equivalence partitioning"
-    )
+    parser = argparse.ArgumentParser(description="Partition migration data for equivalence partitioning")
     parser.add_argument("--adapter", required=True, help="Dotted path to Adapter class")
     parser.add_argument("--input", required=True, help="Path to input CSV")
     parser.add_argument("--output", required=True, help="Path to output CSV")
-    parser.add_argument(
-        "--ignore", help="Comma separated list of columns to ignore", default=""
-    )
+    parser.add_argument("--ignore", help="Comma separated list of columns to ignore", default="")
     parser.add_argument(
         "--max-cardinality",
         type=int,

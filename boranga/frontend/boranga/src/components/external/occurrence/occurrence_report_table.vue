@@ -714,7 +714,7 @@ export default {
                                 });
                                 vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload(
                                     helpers.enablePopovers,
-                                    false
+                                    true
                                 );
                             },
                             (error) => {

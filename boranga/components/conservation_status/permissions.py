@@ -13,8 +13,6 @@ from boranga.helpers import (
     is_conservation_status_assessor,
     is_conservation_status_referee,
     is_contributor,
-    is_external_contributor,
-    is_internal_contributor,
     is_occurrence_approver,
     is_occurrence_assessor,
     is_readonly_user,
@@ -53,9 +51,7 @@ class IsConservationStatusReferee(BasePermission):
     def has_object_permission(self, request, view, obj):
         return (
             obj.referrals.filter(referral=request.user.id)
-            .exclude(
-                processing_status=ConservationStatusReferral.PROCESSING_STATUS_RECALLED
-            )
+            .exclude(processing_status=ConservationStatusReferral.PROCESSING_STATUS_RECALLED)
             .exists()
         )
 
@@ -79,7 +75,6 @@ class ConservationStatusPermission(BasePermission):
         )
 
     def has_object_permission(self, request, view, obj):
-
         if request.method in permissions.SAFE_METHODS:
             return True
 
@@ -128,10 +123,7 @@ class ExternalConservationStatusPermission(BasePermission):
                 or is_occurrence_approver(request)
             )
 
-        if (
-            obj.submitter == request.user.id
-            and obj.processing_status == ConservationStatus.PROCESSING_STATUS_DRAFT
-        ):
+        if obj.submitter == request.user.id and obj.processing_status == ConservationStatus.PROCESSING_STATUS_DRAFT:
             return (
                 is_contributor(request)
                 or is_readonly_user(request)
@@ -212,14 +204,8 @@ class ConservationStatusDocumentPermission(BasePermission):
         if request.user.is_superuser:
             return True
 
-        if (
-            hasattr(view, "action")
-            and view.action in ["create"]
-            and request.method == "POST"
-        ):
-            if is_conservation_status_assessor(
-                request
-            ) or is_conservation_status_approver(request):
+        if hasattr(view, "action") and view.action in ["create"] and request.method == "POST":
+            if is_conservation_status_assessor(request) or is_conservation_status_approver(request):
                 return True
 
             data_str = request.data.get("data", None)
@@ -237,9 +223,7 @@ class ConservationStatusDocumentPermission(BasePermission):
             if not conservation_status_id:
                 return False
             try:
-                conservation_status = ConservationStatus.objects.get(
-                    id=conservation_status_id
-                )
+                conservation_status = ConservationStatus.objects.get(id=conservation_status_id)
             except ConservationStatus.DoesNotExist:
                 return False
 
@@ -255,16 +239,12 @@ class ConservationStatusDocumentPermission(BasePermission):
                     or is_contributor(request)
                     or is_conservation_status_referee(request)
                 )
-                and conservation_status.processing_status
-                == ConservationStatus.PROCESSING_STATUS_DRAFT
+                and conservation_status.processing_status == ConservationStatus.PROCESSING_STATUS_DRAFT
             ) or (  # Check if the user is a referee for the document
                 view.basename == "conservationstatusdocument"
-                and conservation_status.referrals.filter(
-                    referral=request.user.id
-                ).exists()
+                and conservation_status.referrals.filter(referral=request.user.id).exists()
                 and is_conservation_status_referee(request)
-                and conservation_status.processing_status
-                == ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
+                and conservation_status.processing_status == ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
             )
 
         return (
@@ -284,8 +264,7 @@ class ConservationStatusDocumentPermission(BasePermission):
 
         if (
             obj.conservation_status.submitter == request.user.id
-            and obj.conservation_status.processing_status
-            == ConservationStatus.PROCESSING_STATUS_DRAFT
+            and obj.conservation_status.processing_status == ConservationStatus.PROCESSING_STATUS_DRAFT
         ):
             if view.action in ["update", "discard", "reinstate"]:
                 return (
@@ -300,8 +279,7 @@ class ConservationStatusDocumentPermission(BasePermission):
         # Check if the user is a referee for the document
         if (
             obj.conservation_status.referrals.filter(referral=request.user.id).exists()
-            and obj.conservation_status.processing_status
-            == ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
+            and obj.conservation_status.processing_status == ConservationStatus.PROCESSING_STATUS_WITH_REFERRAL
         ):
             return is_conservation_status_referee(request)
 

@@ -6,6 +6,8 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
     choices_transform,
+    date_from_datetime_iso_factory,
+    datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     fk_lookup,
     taxonomy_lookup_legacy_mapping,
@@ -22,6 +24,9 @@ from ..sources import Source
 
 # TPFL-specific transform bindings
 TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_mapping("TPFL")
+DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
+
 COORD_SOURCE_TRANSFORM = build_legacy_map_transform(
     legacy_system="TPFL",
     list_name="CO_ORD_SOURCE_CODE (DRF_LOV_CORDINATE_SOURCE_VWS)",
@@ -45,9 +50,7 @@ LEGACY_WILD_STATUS_TRANSFORM = build_legacy_map_transform(
     required=False,
 )
 
-PROCESSING_STATUS = choices_transform(
-    [c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES]
-)
+PROCESSING_STATUS = choices_transform([c[0] for c in Occurrence.PROCESSING_STATUS_CHOICES])
 
 EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
@@ -80,8 +83,9 @@ PIPELINES = {
         WILD_STATUS_TRANSFORM,
     ],
     "comment": ["strip", "blank_to_none"],
-    "datetime_created": ["strip", "blank_to_none", "datetime_iso"],
-    "datetime_updated": ["strip", "blank_to_none", "datetime_iso"],
+    "datetime_created": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
+    "datetime_updated": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
+    "lodgment_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     "processing_status": [
         "strip",
         "required",
@@ -176,9 +180,7 @@ class OccurrenceTpflAdapter(SourceAdapter):
             # Set TPFL-specific location fields (map from TPFL columns to OCCLocation canonical fields)
             canonical_row["OCCLocation__location_description"] = raw.get("LOCATION")
             # CO_ORD_SOURCE_CODE will be mapped via COORD_SOURCE_TRANSFORM in PIPELINES
-            canonical_row["OCCLocation__coordinate_source_id"] = raw.get(
-                "CO_ORD_SOURCE_CODE"
-            )
+            canonical_row["OCCLocation__coordinate_source_id"] = raw.get("CO_ORD_SOURCE_CODE")
             # TPFL doesn't have boundary_description in standard columns - use empty string for NOT NULL constraint
             canonical_row["OCCLocation__boundary_description"] = ""
             canonical_row["OCCLocation__locality"] = None
@@ -193,9 +195,7 @@ class OccurrenceTpflAdapter(SourceAdapter):
             canonical_row["occurrence_name"] = occ_name if occ_name else None
 
             # Set TPFL-specific defaults on canonical row
-            canonical_row["group_type_id"] = get_group_type_id(
-                GroupType.GROUP_TYPE_FLORA
-            )
+            canonical_row["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
             canonical_row["occurrence_source"] = Occurrence.OCCURRENCE_CHOICE_OCR
             canonical_row["locked"] = True
             canonical_row["lodgment_date"] = canonical_row.get("datetime_created")
@@ -213,9 +213,7 @@ class OccurrenceTpflAdapter(SourceAdapter):
                 dd = _format_date_ddmmyyyy(DEACTIVATED_DATE)
                 parts.append(f"Date Deactivated: {dd}")
             # Set using canonical field name 'comment' (POP_COMMENTS maps to 'comment' in COLUMN_MAP)
-            canonical_row["comment"] = (
-                "; ".join(parts) if parts else canonical_row.get("comment")
-            )
+            canonical_row["comment"] = "; ".join(parts) if parts else canonical_row.get("comment")
             LAND_MGR_ADDRESS = raw.get("LAND_MGR_ADDRESS", "")
             LAND_MGR_PHONE = raw.get("LAND_MGR_PHONE", "")
             contact = LAND_MGR_ADDRESS

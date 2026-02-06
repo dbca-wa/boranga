@@ -69,7 +69,6 @@ class ListMeetingSerializer(BaseModelSerializer):
 
 
 class CreateMeetingSerializer(BaseModelSerializer):
-
     class Meta:
         model = Meeting
         fields = ("id",)
@@ -81,9 +80,7 @@ class ListAgendaItemSerializer(BaseModelSerializer):
     conservation_status_number = serializers.SerializerMethodField(read_only=True)
     scientific_name = serializers.SerializerMethodField(read_only=True)
     community_name = serializers.SerializerMethodField(read_only=True)
-    change_code = serializers.CharField(
-        source="conservation_status.change_code.code", allow_null=True, read_only=True
-    )
+    change_code = serializers.CharField(source="conservation_status.change_code.code", allow_null=True, read_only=True)
 
     class Meta:
         model = AgendaItem
@@ -151,12 +148,8 @@ class MeetingSerializer(BaseModelSerializer):
     can_user_complete = serializers.SerializerMethodField()
     can_user_reinstate = serializers.SerializerMethodField()
     can_add_log = serializers.SerializerMethodField()
-    location = serializers.CharField(
-        source="location.room_name", read_only=True, allow_null=True
-    )
-    committee = serializers.CharField(
-        source="committee.name", read_only=True, allow_null=True
-    )
+    location = serializers.CharField(source="location.room_name", read_only=True, allow_null=True)
+    committee = serializers.CharField(source="committee.name", read_only=True, allow_null=True)
 
     class Meta:
         model = Meeting
@@ -265,12 +258,8 @@ class MeetingSerializer(BaseModelSerializer):
 
 
 class SaveMeetingSerializer(BaseModelSerializer):
-    location_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
-    committee_id = serializers.IntegerField(
-        required=False, allow_null=True, write_only=True
-    )
+    location_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
+    committee_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
     start_date = serializers.DateTimeField(required=False, allow_null=True)
     end_date = serializers.DateTimeField(required=False, allow_null=True)
 
@@ -293,7 +282,6 @@ class SaveMeetingSerializer(BaseModelSerializer):
 
 
 class EditMeetingSerializer(BaseModelSerializer):
-
     class Meta:
         model = Meeting
         fields = (
@@ -395,17 +383,13 @@ class SaveMinutesSerializer(BaseModelSerializer):
             instance = Minutes()
             validated_data = self.run_validation(self.initial_data)
             for field_name in self.Meta.fields:
-                if (
-                    field_name in validated_data
-                    and field_name not in self.Meta.read_only_fields
-                ):
+                if field_name in validated_data and field_name not in self.Meta.read_only_fields:
                     setattr(instance, field_name, validated_data[field_name])
             instance.save(*args, **kwargs)
             return instance
 
 
 class CommitteeMembersSerializer(BaseModelSerializer):
-
     class Meta:
         model = CommitteeMembers
         fields = ("id", "first_name", "last_name", "email", "archived")
@@ -413,7 +397,6 @@ class CommitteeMembersSerializer(BaseModelSerializer):
 
 
 class CommitteeSerializer(BaseModelSerializer):
-
     class Meta:
         model = Committee
         fields = (

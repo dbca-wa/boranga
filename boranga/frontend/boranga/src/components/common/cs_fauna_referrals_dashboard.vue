@@ -432,7 +432,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFaunaScientificName_cache,
@@ -443,7 +443,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFaunaCommonName_cache,
@@ -454,7 +454,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFaunaPhylogeneticGroup_cache,
@@ -465,7 +465,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFaunaFamily_cache,
@@ -476,7 +476,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFaunaGenus_cache,
@@ -487,7 +487,7 @@ export default {
             let vm = this;
             vm.$refs.fauna_cs_ref_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
-                false
+                true
             ); // This calls ajax() backend call.
             sessionStorage.setItem(
                 vm.filterCSRefFaunaApplicationStatus_cache,
