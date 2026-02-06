@@ -418,9 +418,9 @@ class SpeciesConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         ):
             return qs
         if is_conservation_status_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id))
+            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id)).distinct()
         elif is_conservation_status_referee(self.request):
-            qs = qs.filter(referrals__referral=self.request.user.id)
+            qs = qs.filter(referrals__referral=self.request.user.id).distinct()
         elif is_contributor(self.request):
             qs = qs.filter(submitter=self.request.user.id)
         return qs
@@ -694,9 +694,9 @@ class CommunityConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet)
             return qs
 
         if is_conservation_status_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id))
+            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id)).distinct()
         elif is_conservation_status_referee(self.request):
-            qs = qs.filter(referrals__referral=self.request.user.id)
+            qs = qs.filter(referrals__referral=self.request.user.id).distinct()
         elif is_contributor(self.request):
             qs = qs.filter(submitter=self.request.user.id)
         return qs
@@ -970,11 +970,11 @@ class ConservationStatusViewSet(CheckUpdatedActionMixin, viewsets.GenericViewSet
         ):
             return qs
         if is_contributor(self.request) and is_conservation_status_referee(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id))
+            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id)).distinct()
         if is_contributor(self.request):
             qs = qs.filter(submitter=self.request.user.id)
         if is_conservation_status_referee(self.request):
-            qs = qs.filter(referrals__referral=self.request.user.id)
+            qs = qs.filter(referrals__referral=self.request.user.id).distinct()
         return qs
 
     def get_serializer_class(self):
