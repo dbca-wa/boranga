@@ -11,7 +11,7 @@ python3 scripts/partition_migration_data.py \
  --output private-media/legacy_data/TPFL/species-profiles-partitioned.csv \
  --report private-media/legacy_data/TPFL/species-profiles-partitioned-report.csv \
  --max-cardinality 100 \
- --heaviest-first
+ --heaviest-last
 
 Once the business users have done their data verification, run the full migration of species with the --wipe-targets flag and then move on to the next migration run.
 
@@ -23,7 +23,7 @@ python3 scripts/partition_migration_data.py \
  --output private-media/legacy_data/TPFL/occurrences-partitioned.csv \
  --report private-media/legacy_data/TPFL/occurrences-report.csv \
  --max-cardinality 100 \
- --heaviest-first
+ --heaviest-last
 
 python3 scripts/partition_migration_data.py \
  --adapter boranga.components.data_migration.adapters.occurrence_report.tpfl.OccurrenceReportTpflAdapter \
@@ -31,4 +31,4 @@ python3 scripts/partition_migration_data.py \
  --output private-media/legacy_data/TPFL/occurrence-reports-partitioned.csv \
  --report private-media/legacy_data/TPFL/occurrence-reports-report.csv \
  --max-cardinality 100 \
- --heaviest-first
+ --heaviest-last
