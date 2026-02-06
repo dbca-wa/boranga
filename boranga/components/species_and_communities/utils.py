@@ -22,6 +22,7 @@ from boranga.components.species_and_communities.models import (
     CommunityUserAction,
     ConservationThreat,
     District,
+    GroupType,
     Region,
     Species,
     SpeciesConservationAttributes,
@@ -38,6 +39,9 @@ def species_form_submit(species_instance, request, split=False, rename=False):
     if not split and not rename:
         if not species_instance.can_user_edit:
             raise ValidationError("You can't submit this species at this moment")
+
+    if species_instance.group_type.name == GroupType.GROUP_TYPE_FAUNA and not species_instance.fauna_group:
+        raise ValidationError("Fauna Group is required before activating.")
 
     species_instance.submitter = request.user.id
     species_instance.lodgement_date = timezone.now()

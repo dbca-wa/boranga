@@ -1303,6 +1303,14 @@ export default {
                 }
             }
             if (check_action == 'submit') {
+                if (vm.species_community.group_type == 'fauna') {
+                    if (
+                        vm.species_community.fauna_group == null ||
+                        vm.species_community.fauna_group == ''
+                    ) {
+                        blank_fields.push(' Fauna Group is required');
+                    }
+                }
                 if (vm.species_community.group_type == 'community') {
                     if (
                         vm.species_community.taxonomy_details.community_name ==
