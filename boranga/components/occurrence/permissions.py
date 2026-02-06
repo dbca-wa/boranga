@@ -231,7 +231,9 @@ class OccurrenceReportObjectPermission(BasePermission):
                     return False
             elif view.basename == "occurrencereportdocument":
                 # Allow for referees to upload documents
-                if not is_occurrence_report_referee(request, occurrence_report=occurrence_report):
+                if is_occurrence_report_referee(request, occurrence_report=occurrence_report):
+                    pass
+                elif not self.is_authorised_to_update(request, occurrence_report):
                     return False
             elif not self.is_authorised_to_update(request, occurrence_report):
                 return False
