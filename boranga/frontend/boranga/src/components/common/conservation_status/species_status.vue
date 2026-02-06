@@ -102,7 +102,7 @@
                         <input
                             id="previous_name"
                             v-model="taxon_previous_name"
-                            readonly
+                            disabled
                             type="text"
                             class="form-control"
                             placeholder=""
