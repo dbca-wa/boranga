@@ -9,7 +9,7 @@ from boranga.components.data_migration.adapters.schema_base import Schema
 COLUMN_MAP = {
     # TPFL format (species conservation status)
     "migrated_from_id": "migrated_from_id",
-    "species": "species_name",
+    "species": "species_id",
     "community": "community_migrated_from_id",
     "wa_legislative_category": "wa_legislative_category",
     "wa_legislative_list": "wa_legislative_list",
