@@ -512,6 +512,76 @@ def date_from_datetime_iso_local_factory(default_tz: str | None = None) -> str:
     return name
 
 
+@registry.register("smart_date_parse")
+def t_smart_date_parse(value, ctx):
+    """
+    Convert various date formats to Python date objects or None.
+    Handles:
+    - None or empty strings -> None
+    - Python date/datetime objects -> date object
+    - ISO 8601 datetime strings (e.g., '2008-08-12T00:00:00+0000') -> date object
+    - YYYY-MM-DD strings -> date object
+    - dd/mm/YYYY strings -> date object
+    """
+    from datetime import date, datetime
+
+    if value is None or value == "":
+        return _result(None)
+
+    # If already a date object, return as-is
+    if isinstance(value, date):
+        return _result(value)
+
+    # If it's a datetime object, extract the date
+    if isinstance(value, datetime):
+        return _result(value.date())
+
+    # Try parsing as string
+    value_str = str(value).strip()
+    if not value_str:
+        return _result(None)
+
+    # Correction for legacy data with incorrect UTC offsets (e.g. +0000)
+    # If the string assumes +0000 but the time is actually local Perth time,
+    # we strip the offset so we can parse as naive (Perth) and extract the date.
+    if value_str.endswith("+0000") or value_str.endswith("Z"):
+        s_clean = value_str[:-5] if value_str.endswith("+0000") else value_str[:-1]
+        try:
+            # parse as naive (Perth/Local)
+            dt = datetime.fromisoformat(s_clean)
+            return _result(dt.date())
+        except ValueError:
+            pass
+
+    # Try ISO 8601 format with timezone (TEC format)
+    # e.g., '2008-08-12T00:00:00+0000' or '2008-08-12T00:00:00Z'
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S%z",  # With timezone offset like +0000
+        "%Y-%m-%dT%H:%M:%SZ",  # With Z suffix
+        "%Y-%m-%d %H:%M:%S",  # Datetime without timezone
+        "%Y-%m-%d",  # Date only
+    ):
+        try:
+            dt = datetime.strptime(value_str, fmt)
+            return _result(dt.date() if isinstance(dt, datetime) else dt)
+        except ValueError:
+            pass
+
+    # TPFL format (already parsed to date by adapter sometimes?)
+    for fmt in (
+        "%d/%m/%Y %H:%M",  # With time
+        "%d/%m/%Y",  # Date only
+    ):
+        try:
+            dt = datetime.strptime(value_str, fmt)
+            return _result(dt.date())
+        except ValueError:
+            pass
+
+    # If nothing worked, warning
+    return _result(None, TransformIssue("warning", f"Could not parse date value: {value!r}"))
+
+
 @registry.register("ocr_comments_transform")
 def t_ocr_comments_transform(value, ctx):
     PURPOSE1 = (ctx.row.get("PURPOSE1") or "").strip()
