@@ -65,6 +65,10 @@ python scripts/combine_csvs.py \
 ./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv --sources TPFL --wipe-targets
 ./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/ADDITIONAL_PROFILES_FROM_OLD_NAMES_OCC_NAMES.csv --sources TPFL
 
+or, if combined into one file:
+
+./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/species-profiles-combined.csv --sources TPFL --wipe-targets
+
 ## Conservation Status
 
 ./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TPFL/SAMPLE_CS_Data_Dec2025.csv --sources TPFL
