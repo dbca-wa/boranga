@@ -8,6 +8,9 @@ from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.conservation_status.models import ConservationStatus
 from boranga.components.data_migration.mappings import get_group_type_id
+from boranga.components.data_migration.registry import (
+    taxonomy_lookup_legacy_mapping_species,
+)
 from boranga.components.species_and_communities.models import GroupType
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
@@ -50,10 +53,31 @@ def _load_user_map():
 
 
 # TPFL-specific transforms and pipelines
+SPECIES_LOOKUP = taxonomy_lookup_legacy_mapping_species("TPFL")
+
 PROCESSING_STATUS_MAP = {
     "Approved": ConservationStatus.PROCESSING_STATUS_APPROVED,
     "Closed": ConservationStatus.PROCESSING_STATUS_CLOSED,
     "Delisted": ConservationStatus.PROCESSING_STATUS_DELISTED,
+}
+
+PIPELINES = {
+    "migrated_from_id": ["strip", "required"],
+    "species_id": ["strip", "blank_to_none", "required", SPECIES_LOOKUP],
+    "review_due_date": ["strip", "smart_date_parse"],
+    "community_migrated_from_id": ["strip", "blank_to_none"],
+    "wa_legislative_category": ["strip", "blank_to_none"],
+    "wa_legislative_list": ["strip", "blank_to_none"],
+    "wa_priority_category": ["strip", "blank_to_none"],
+    "wa_priority_list": ["strip", "blank_to_none"],
+    "approved_by": ["strip", "blank_to_none"],
+    "processing_status": ["strip", "blank_to_none"],
+    "effective_from_date": ["strip", "smart_date_parse"],
+    "submitter": ["strip", "blank_to_none"],
+    "comment": ["strip", "blank_to_none"],
+    "customer_status": ["strip", "blank_to_none"],
+    "internal_application": ["strip", "blank_to_none"],
+    "locked": ["strip", "blank_to_none"],
 }
 
 
@@ -70,8 +94,18 @@ class ConservationStatusTpflAdapter(SourceAdapter):
         raw_rows, read_warnings = self.read_table(path, encoding="utf-8-sig")
         warnings.extend(read_warnings)
 
+        migrated_id_counts = {}
+
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
+
+            # Handle duplicate migrated_from_id - append sequence suffix
+            m_id = canonical.get("migrated_from_id")
+            if m_id:
+                m_id = str(m_id).strip()
+                count = migrated_id_counts.get(m_id, 0) + 1
+                migrated_id_counts[m_id] = count
+                canonical["migrated_from_id"] = f"{m_id}-{count:02d}"
 
             # 1. Group Type
             canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
@@ -166,3 +200,7 @@ class ConservationStatusTpflAdapter(SourceAdapter):
             rows.append(canonical)
 
         return ExtractionResult(rows=rows, warnings=warnings)
+
+
+# Attach to adapter class so handlers/registry can detect adapter-specific pipelines
+ConservationStatusTpflAdapter.PIPELINES = PIPELINES

@@ -11,6 +11,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from boranga.components.data_migration.adapters.conservation_status import schema
 from boranga.components.data_migration.adapters.conservation_status.tec import (
     ConservationStatusTecAdapter,
 )
@@ -21,7 +22,9 @@ from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
+    TransformContext,
     register,
+    run_pipeline,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,75 +139,6 @@ class ConservationStatusImporter(BaseSheetImporter):
             out[k] = v
         return out
 
-    def _clean_date_field(self, value):
-        """
-        Convert various date formats to Python date objects or None.
-        Handles:
-        - None or empty strings -> None
-        - Python date/datetime objects -> date object
-        - ISO 8601 datetime strings (e.g., '2008-08-12T00:00:00+0000') -> date object
-        - YYYY-MM-DD strings -> date object
-        """
-        from datetime import date, datetime
-
-        if value is None or value == "":
-            return None
-
-        # If already a date object, return as-is
-        if isinstance(value, date):
-            return value
-
-        # If it's a datetime object, extract the date
-        if isinstance(value, datetime):
-            return value.date()
-
-        # Try parsing as string
-        value_str = str(value).strip()
-        if not value_str:
-            return None
-
-        # Correction for legacy data with incorrect UTC offsets (e.g. +0000)
-        # If the string assumes +0000 but the time is actually local Perth time,
-        # we strip the offset so we can parse as naive (Perth) and extract the date.
-        if value_str.endswith("+0000") or value_str.endswith("Z"):
-            s_clean = value_str[:-5] if value_str.endswith("+0000") else value_str[:-1]
-            try:
-                # parse as naive (Perth/Local)
-                # This works for '2008-08-12T00:00:00'
-                dt = datetime.fromisoformat(s_clean)
-                return dt.date()
-            except ValueError:
-                pass
-
-        # Try ISO 8601 format with timezone (TEC format)
-        # e.g., '2008-08-12T00:00:00+0000' or '2008-08-12T00:00:00Z'
-        for fmt in (
-            "%Y-%m-%dT%H:%M:%S%z",  # With timezone offset like +0000
-            "%Y-%m-%dT%H:%M:%SZ",  # With Z suffix
-            "%Y-%m-%d %H:%M:%S",  # Datetime without timezone
-            "%Y-%m-%d",  # Date only
-        ):
-            try:
-                dt = datetime.strptime(value_str, fmt)
-                return dt.date() if isinstance(dt, datetime) else dt
-            except ValueError:
-                pass
-
-        # TPFL format (already parsed to date by adapter)
-        for fmt in (
-            "%d/%m/%Y %H:%M",  # With time
-            "%d/%m/%Y",  # Date only
-        ):
-            try:
-                dt = datetime.strptime(value_str, fmt)
-                return dt.date()
-            except ValueError:
-                pass
-
-        # If nothing worked, log and return None
-        logger.warning(f"Could not parse date value: {value!r}")
-        return None
-
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
         sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
@@ -229,6 +163,24 @@ class ConservationStatusImporter(BaseSheetImporter):
             stats["extracted"] += len(res.rows)
             warnings.extend(res.warnings)
             all_rows.extend(res.rows)
+
+        # 2. Build pipelines per source
+        from boranga.components.data_migration.registry import (
+            registry as transform_registry,
+        )
+
+        base_column_names = schema.COLUMN_PIPELINES or {}
+        pipelines_by_source: dict[str, dict] = {}
+        for src_key, adapter in SOURCE_ADAPTERS.items():
+            src_column_names = dict(base_column_names)
+            adapter_pipes = getattr(adapter, "PIPELINES", None)
+            if adapter_pipes:
+                src_column_names.update(adapter_pipes)
+
+            built: dict[str, list] = {}
+            for col, names in src_column_names.items():
+                built[col] = transform_registry.build_pipeline(names)
+            pipelines_by_source[src_key] = built
 
         if ctx.dry_run:
             logger.info(f"[DRY RUN] Would import {len(all_rows)} rows.")
@@ -260,6 +212,9 @@ class ConservationStatusImporter(BaseSheetImporter):
         # Community lookup by migrated_from_id
         Community = apps.get_model("boranga", "Community")
         community_map = {c.migrated_from_id: c for c in Community.objects.filter(migrated_from_id__isnull=False)}
+
+        # Map Species ID -> Taxonomy ID for direct lookup when species_id is known
+        species_taxonomy_map = dict(Species.objects.filter(taxonomy__isnull=False).values_list("id", "taxonomy_id"))
 
         # Load legacy name map (TPFL only - used for species name lookup)
         legacy_name_map = {}
@@ -304,6 +259,37 @@ class ConservationStatusImporter(BaseSheetImporter):
         # First pass: Prepare SubmitterInformation and ConservationStatus objects
         valid_rows = []
         for row in all_rows:
+            # Run pipeline transformations
+            pipelines = pipelines_by_source.get(row.get("_source"), [])
+
+            tcx = TransformContext(row=row, user_id=ctx.user_id)
+            has_error = False
+            for col, pipeline in pipelines.items():
+                raw_val = row.get(col)
+                res = run_pipeline(pipeline, raw_val, tcx)
+                row[col] = res.value
+
+                if res.errors:
+                    has_error = True
+                    stats["errors"] += 1
+                    for err in res.errors:
+                        errors_details.append(
+                            {
+                                "migrated_from_id": row.get("migrated_from_id"),
+                                "column": col,
+                                "level": "error",
+                                "message": err.message,
+                                "raw_value": raw_val,
+                                "reason": "Pipeline error",
+                                "row_json": json.dumps(row, default=str),
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+
+            if has_error:
+                stats["skipped"] += 1
+                continue
+
             # Prepend source prefix to migrated_from_id if present
             _src = row.get("_source")
             if _src and row.get("migrated_from_id"):
@@ -335,45 +321,14 @@ class ConservationStatusImporter(BaseSheetImporter):
                     continue
 
                 # Resolve Species or Community
-                species_name = row.get("species_name")
+                species_id = row.get("species_id")
+                species_taxonomy_id = species_taxonomy_map.get(species_id) if species_id else None
+
                 community_mig_id = row.get("community_migrated_from_id")
                 species_obj = None
-                taxonomy_obj = None
                 community_obj = None
 
-                if species_name:
-                    clean_name = species_name.strip().lower()
-                    species_obj = species_map.get(clean_name)
-
-                    # Try legacy map if not found
-                    if not species_obj and clean_name in legacy_name_map:
-                        mapped_name = legacy_name_map[clean_name]
-                        species_obj = species_map.get(mapped_name.lower())
-                        if species_obj:
-                            # logger.info(f"Mapped legacy name '{species_name}' to '{mapped_name}'")
-                            pass
-
-                    if species_obj:
-                        taxonomy_obj = species_obj.taxonomy
-                    else:
-                        msg = f"Species not found for name: {species_name}"
-                        logger.warning(msg)
-                        stats["skipped"] += 1
-                        stats["errors"] += 1
-                        errors_details.append(
-                            {
-                                "migrated_from_id": row.get("migrated_from_id"),
-                                "column": "species_name",
-                                "level": "error",
-                                "message": msg,
-                                "raw_value": species_name,
-                                "reason": "Species lookup failed",
-                                "row_json": json.dumps(row, default=str),
-                                "timestamp": timezone.now().isoformat(),
-                            }
-                        )
-                        continue
-                elif community_mig_id:
+                if community_mig_id:
                     community_obj = community_map.get(community_mig_id)
                     # Fallback: if source is TEC and ID is raw, try prefixing "tec-"
                     if not community_obj and _src == Source.TEC.value:
@@ -464,15 +419,17 @@ class ConservationStatusImporter(BaseSheetImporter):
                     migrated_from_id=row.get("migrated_from_id"),
                     processing_status=row.get("processing_status"),
                     customer_status=row.get("customer_status"),
-                    species=species_obj,
-                    species_taxonomy=taxonomy_obj,
+                    species_id=species_id if species_id else (species_obj.id if species_obj else None),
+                    species_taxonomy_id=species_taxonomy_id
+                    if species_taxonomy_id
+                    else (species_obj.taxonomy_id if species_obj else None),
                     community=community_obj,
                     wa_priority_list=wa_pl_obj,
                     wa_priority_category=wa_pc_obj,
                     wa_legislative_list=wa_ll_obj,
                     wa_legislative_category=wa_lc_obj,
-                    review_due_date=self._clean_date_field(row.get("review_due_date")),
-                    effective_from=self._clean_date_field(row.get("effective_from_date")),
+                    review_due_date=row.get("review_due_date"),
+                    effective_from=row.get("effective_from_date"),
                     submitter=row.get("submitter"),  # ID
                     assigned_approver=row.get("assigned_approver"),  # ID
                     approved_by=row.get("approved_by"),  # ID
