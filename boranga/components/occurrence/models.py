@@ -1036,6 +1036,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         if new_occurrence_name:
             # Check for existing Occurrences with the same name for the same Species/Community
             qs_occurrence = Occurrence.objects.filter(occurrence_name=new_occurrence_name)
+            group_type_text = "Species" if self.species else "Community"
             if self.species:
                 qs_occurrence = qs_occurrence.filter(species=self.species)
             elif self.community:
@@ -1043,7 +1044,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
             if qs_occurrence.exists():
                 raise ValidationError(
-                    f'Occurrence with name "{new_occurrence_name}" already exists for this Species/Community'
+                    f"Occurrence with name {new_occurrence_name} already exists for this {group_type_text}"
                 )
 
             # Check for pending proposals (with approver) with the same name for the same Species/Community
