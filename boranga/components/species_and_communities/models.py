@@ -936,7 +936,7 @@ class Species(RevisionedMixin):
         if check_parents:
             parent_filter = None
             if filter_type == "all":
-                parent_filter = "all_except_parent_species"
+                parent_filter = "all"
             elif filter_type == "for_occurrence":
                 parent_filter = "conservation_status_and_occurrences"
             elif filter_type == "parent_species":
@@ -958,6 +958,14 @@ class Species(RevisionedMixin):
                     items = parent_species.get_related_items(
                         parent_filter, check_parents=False, search_value=search_value
                     )
+                    items = [
+                        i
+                        for i in items
+                        if not (
+                            getattr(i, "identifier", None) == self.species_number
+                            and getattr(i, "model_name", None) == "Species"
+                        )
+                    ]
                     return_list.extend(items)
 
         # Sort
@@ -1868,7 +1876,7 @@ class Community(RevisionedMixin):
         if check_parents:
             parent_filter = None
             if filter_type == "all":
-                parent_filter = "all_except_renamed_community"
+                parent_filter = "all"
             elif filter_type == "for_occurrence":
                 parent_filter = "conservation_status_and_occurrences"
             elif filter_type in ["renamed_from", "renamed_to"]:
@@ -1887,6 +1895,14 @@ class Community(RevisionedMixin):
                 # Add renamed from related items to the list (limited to one degree of separation)
                 if self.renamed_from:
                     items = self.renamed_from.get_related_items(parent_filter, check_parents=False)
+                    items = [
+                        i
+                        for i in items
+                        if not (
+                            getattr(i, "identifier", None) == self.community_number
+                            and getattr(i, "model_name", None) == "Community"
+                        )
+                    ]
                     count = len(items)
                     start, end = get_slice_range(count)
                     if start < end:
@@ -1897,6 +1913,14 @@ class Community(RevisionedMixin):
                 if self.renamed_to.exists():
                     for community in self.renamed_to.select_related("taxonomy").all():
                         items = community.get_related_items(parent_filter, check_parents=False)
+                        items = [
+                            i
+                            for i in items
+                            if not (
+                                getattr(i, "identifier", None) == self.community_number
+                                and getattr(i, "model_name", None) == "Community"
+                            )
+                        ]
                         count = len(items)
                         start, end = get_slice_range(count)
                         if start < end:
