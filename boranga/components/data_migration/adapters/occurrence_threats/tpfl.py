@@ -3,7 +3,7 @@ from boranga.components.data_migration.registry import (
     TransformResult,
     _result,
     build_legacy_map_transform,
-    date_from_datetime_iso_factory,
+    date_from_datetime_iso_local_factory,
     registry,
     static_value_factory,
 )
@@ -14,7 +14,7 @@ from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 from . import schema
 
-DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_local_factory("Australia/Perth")
 
 
 @registry.register("current_impact_fallback")

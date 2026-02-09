@@ -4,7 +4,7 @@ from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
     conditional_transform_factory,
     csv_lookup_factory,
-    date_from_datetime_iso_factory,
+    date_from_datetime_iso_local_factory,
     datetime_iso_factory,
     dependent_from_column_factory,
     emailuser_by_legacy_username_factory,
@@ -42,7 +42,7 @@ OCCURRENCE_NUMBER_FROM_POP_ID = occurrence_number_from_pop_id_factory("TPFL")
 # Create factory transform that maps SHEETNO to POP_ID directly
 POP_ID_FROM_SHEETNO = pop_id_from_sheetno_factory("TPFL")
 
-DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_local_factory("Australia/Perth")
 
 # Create factory transform for geometry from coordinates
 GEOMETRY_FROM_COORDS = geometry_from_coords_factory(

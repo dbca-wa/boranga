@@ -10,7 +10,7 @@ from boranga.components.data_migration.adapters.base import (
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
-    date_from_datetime_iso_factory,
+    date_from_datetime_iso_local_factory,
     lookup_model_value_factory,
     static_value_factory,
 )
@@ -24,7 +24,7 @@ CURRENT_IMPACT_FALLBACK = lookup_model_value_factory("CurrentImpact", "name", "U
 
 POTENTIAL_IMPACT_FALLBACK = lookup_model_value_factory("PotentialImpact", "name", "Unknown")
 
-DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_local_factory("Australia/Perth")
 
 
 class OccurrenceReportTecSurveyThreatsAdapter(SourceAdapter):
