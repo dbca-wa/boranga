@@ -1,14 +1,10 @@
-import csv
 import logging
 from datetime import datetime, timedelta
-from pathlib import Path
-
-from django.conf import settings
-from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.conservation_status.models import ConservationStatus
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
+    emailuser_by_legacy_username_factory,
     taxonomy_lookup_legacy_mapping_species,
 )
 from boranga.components.species_and_communities.models import GroupType
@@ -20,40 +16,9 @@ from . import schema
 logger = logging.getLogger(__name__)
 
 
-def _load_user_map():
-    user_map = {}
-    try:
-        # Path to the user map CSV
-        csv_path = (
-            Path(settings.BASE_DIR)
-            / "private-media"
-            / "legacy_data"
-            / "TPFL"
-            / "legacy-username-emailuser-map-TPFL.csv"
-        )
-        if csv_path.exists():
-            with open(csv_path, encoding="utf-8-sig") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    legacy_username = row.get("legacy_username")
-                    email = row.get("email")
-
-                    if legacy_username and email:
-                        try:
-                            user = EmailUserRO.objects.get(email__iexact=email.strip())
-                            user_map[legacy_username.strip()] = user.id
-                        except EmailUserRO.DoesNotExist:
-                            # logger.warning(f"User with email {email} not found in DB.")
-                            pass
-        else:
-            logger.warning(f"User map CSV not found at {csv_path}")
-    except Exception as e:
-        logger.warning(f"Could not load user map: {e}")
-    return user_map
-
-
 # TPFL-specific transforms and pipelines
 SPECIES_LOOKUP = taxonomy_lookup_legacy_mapping_species("TPFL")
+EMAIL_USER_TPFL = emailuser_by_legacy_username_factory("TPFL")
 
 PROCESSING_STATUS_MAP = {
     "Approved": ConservationStatus.PROCESSING_STATUS_APPROVED,
@@ -70,10 +35,13 @@ PIPELINES = {
     "wa_legislative_list": ["strip", "blank_to_none"],
     "wa_priority_category": ["strip", "blank_to_none"],
     "wa_priority_list": ["strip", "blank_to_none"],
-    "approved_by": ["strip", "blank_to_none"],
+    "approved_by": ["strip", "blank_to_none", EMAIL_USER_TPFL],
     "processing_status": ["strip", "blank_to_none"],
     "effective_from_date": ["strip", "smart_date_parse"],
-    "submitter": ["strip", "blank_to_none"],
+    "effective_to_date": ["strip", "smart_date_parse"],
+    "listing_date": ["strip", "smart_date_parse"],
+    "lodgement_date": ["strip", "smart_date_parse"],
+    "submitter": ["strip", "blank_to_none", EMAIL_USER_TPFL],
     "comment": ["strip", "blank_to_none"],
     "customer_status": ["strip", "blank_to_none"],
     "internal_application": ["strip", "blank_to_none"],
@@ -86,7 +54,6 @@ class ConservationStatusTpflAdapter(SourceAdapter):
     domain = "conservation_status"
 
     def extract(self, path: str, **options) -> ExtractionResult:
-        user_map = _load_user_map()
         rows = []
         warnings: list[ExtractionWarning] = []
 
@@ -131,17 +98,7 @@ class ConservationStatusTpflAdapter(SourceAdapter):
                     except ValueError:
                         canonical["effective_from_date"] = None
 
-            # 4. Users
-            sub = canonical.get("submitter")
-            appr = canonical.get("approved_by")
-            if sub:
-                # Get user id for submitter and approver from user_map
-                user_id = user_map.get(sub.strip())
-                canonical["submitter"] = user_id
-
-            if appr:
-                appr_user_id = user_map.get(appr.strip())
-                canonical["approved_by"] = appr_user_id
+            # 4. Users (moved to pipeline)
 
             # 5. Calculated fields
             raw_leg_list = canonical.get("wa_legislative_list")

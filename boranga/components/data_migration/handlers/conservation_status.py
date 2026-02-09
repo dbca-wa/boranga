@@ -4,11 +4,8 @@ import csv
 import json
 import logging
 import os
-from pathlib import Path
 
 from django.apps import apps
-from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.conservation_status import schema
@@ -186,11 +183,24 @@ class ConservationStatusImporter(BaseSheetImporter):
             logger.info(f"[DRY RUN] Would import {len(all_rows)} rows.")
             return
 
-        # Load TEC user if TEC source is being imported
-        tec_user = None
-        if Source.TEC.value in sources:
-            User = get_user_model()
-            tec_user = User.objects.filter(email="boranga.tec@dbca.wa.gov.au").first()
+        # Optimize: Collect IDs for filtering to avoid loading full tables
+        target_community_ids = set()
+
+        # NOTE: We cannot easily collect target_species_ids here because row['species_id']
+        # contains the raw species NAME string at this stage (before pipeline transformation).
+        # We would need to duplicate the taxonomy lookup logic to find the IDs.
+        # Given the Species table is reasonable in size, we will load the full ID->TaxonomyID map.
+
+        for row in all_rows:
+            src = row.get("_source")
+
+            if src == Source.TEC.value:
+                c_id = row.get("community_migrated_from_id")
+                if c_id:
+                    val = str(c_id).strip()
+                    target_community_ids.add(val)
+                    # TEC fallback logic might use "tec-{id}"
+                    target_community_ids.add(f"tec-{val}")
 
         # 2. Load dependencies
         Species = apps.get_model("boranga", "Species")
@@ -202,41 +212,19 @@ class ConservationStatusImporter(BaseSheetImporter):
         SubmitterCategory = apps.get_model("boranga", "SubmitterCategory")
 
         # Cache lookups
-        # Species lookup by name (via taxonomy)
-        species_map = {}
-        qs = Species.objects.filter(group_type__name="flora").select_related("taxonomy")
-        for s in qs:
-            if s.taxonomy and s.taxonomy.scientific_name:
-                species_map[s.taxonomy.scientific_name.strip().lower()] = s
-
         # Community lookup by migrated_from_id
         Community = apps.get_model("boranga", "Community")
-        community_map = {c.migrated_from_id: c for c in Community.objects.filter(migrated_from_id__isnull=False)}
+        community_map = {}
+        if target_community_ids:
+            community_qs = Community.objects.filter(migrated_from_id__isnull=False)
+            community_qs = community_qs.filter(migrated_from_id__in=target_community_ids)
+            community_map = {c.migrated_from_id: c for c in community_qs}
 
         # Map Species ID -> Taxonomy ID for direct lookup when species_id is known
-        species_taxonomy_map = dict(Species.objects.filter(taxonomy__isnull=False).values_list("id", "taxonomy_id"))
-
-        # Load legacy name map (TPFL only - used for species name lookup)
-        legacy_name_map = {}
-        if Source.TPFL.value in sources:
-            try:
-                map_path = (
-                    Path(settings.BASE_DIR)
-                    / "private-media"
-                    / "legacy_data"
-                    / "TPFL"
-                    / "tpfl-legacy-name-to-taxon-name-id.csv"
-                )
-                if map_path.exists():
-                    with open(map_path, encoding="utf-8-sig") as f:
-                        reader = csv.DictReader(f)
-                        for row in reader:
-                            if row.get("NAME") and row.get("nomos_canonical_name"):
-                                legacy_name_map[row["NAME"].strip().lower()] = row["nomos_canonical_name"].strip()
-                else:
-                    logger.warning(f"Legacy name map not found at {map_path}")
-            except Exception as e:
-                logger.warning(f"Failed to load legacy name map: {e}")
+        species_taxonomy_map = {}
+        # Load all mapped species since pre-filtering is difficult (raw data has names, not IDs)
+        species_qs = Species.objects.filter(taxonomy__isnull=False)
+        species_taxonomy_map = dict(species_qs.values_list("id", "taxonomy_id"))
 
         # Lists and Categories Caches
         wa_priority_list_map = {pl.code.strip().upper(): pl for pl in WAPriorityList.objects.all()}
@@ -321,74 +309,49 @@ class ConservationStatusImporter(BaseSheetImporter):
                     continue
 
                 # Resolve Species or Community
-                species_id = row.get("species_id")
-                species_taxonomy_id = species_taxonomy_map.get(species_id) if species_id else None
-
-                community_mig_id = row.get("community_migrated_from_id")
-                species_obj = None
+                species_id = None
+                species_taxonomy_id = None
                 community_obj = None
 
-                if community_mig_id:
-                    community_obj = community_map.get(community_mig_id)
-                    # Fallback: if source is TEC and ID is raw, try prefixing "tec-"
-                    if not community_obj and _src == Source.TEC.value:
-                        if not str(community_mig_id).lower().startswith("tec-"):
-                            community_obj = community_map.get(f"tec-{community_mig_id}")
+                if _src == Source.TPFL.value:
+                    species_id = row.get("species_id")
+                    if species_id:
+                        species_taxonomy_id = species_taxonomy_map.get(species_id)
 
-                    if not community_obj:
-                        msg = f"Community not found for migrated_from_id: {community_mig_id}"
-                        logger.warning(msg)
-                        stats["skipped"] += 1
-                        stats["errors"] += 1
-                        errors_details.append(
-                            {
-                                "migrated_from_id": row.get("migrated_from_id"),
-                                "column": "community_migrated_from_id",
-                                "level": "error",
-                                "message": msg,
-                                "raw_value": community_mig_id,
-                                "reason": "Community lookup failed",
-                                "row_json": json.dumps(row, default=str),
-                                "timestamp": timezone.now().isoformat(),
-                            }
-                        )
-                        continue
+                if _src == Source.TEC.value:
+                    community_mig_id = row.get("community_migrated_from_id")
+                    if community_mig_id:
+                        community_obj = community_map.get(community_mig_id)
+                        # Fallback: if source is TEC and ID is raw, try prefixing "tec-"
+                        if not community_obj:
+                            if not str(community_mig_id).lower().startswith("tec-"):
+                                community_obj = community_map.get(f"tec-{community_mig_id}")
+
+                        if not community_obj:
+                            msg = f"Community not found for migrated_from_id: {community_mig_id}"
+                            logger.warning(msg)
+                            stats["skipped"] += 1
+                            stats["errors"] += 1
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": row.get("migrated_from_id"),
+                                    "column": "community_migrated_from_id",
+                                    "level": "error",
+                                    "message": msg,
+                                    "raw_value": community_mig_id,
+                                    "reason": "Community lookup failed",
+                                    "row_json": json.dumps(row, default=str),
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+                            continue
 
                 # Resolve Lists and Categories
                 wa_pl_code = row.get("wa_priority_list")
                 wa_pl_obj = None
                 if wa_pl_code:
-                    # Handle "community" static value mapping to list name
                     if wa_pl_code == "community":
-                        # Find list with name='community' or similar?
-                        # Task says: Apply static value wa_priority_list_id where name = 'community'
-                        # But WAPriorityList has 'code' and 'label'.
-                        # Assuming there is a list with code='COMMUNITY' or label='Community'?
-                        # Let's try to find by code first, then label.
-                        # Or maybe the user meant GroupType? No, field is wa_priority_list.
-                        # Let's assume there is a WAPriorityList with code 'P1', 'P2' etc.
-                        # If the value is "community", maybe it means the list applies to communities?
-                        # Wait, Task 12071 says: "Apply static value wa_priority_list_id where name = 'community'"
-                        # WAPriorityList model has 'code' and 'label'. It doesn't have 'name'.
-                        # Maybe it means GroupType? But the field is wa_priority_list.
-                        # Let's check WAPriorityList model again.
-                        # It inherits AbstractConservationList which has code, label.
-                        # Maybe the user means the list instance that is for communities?
-                        # But usually lists are P1, P2, etc.
-                        # Let's look for a list with code="COMMUNITY" or label="Community".
-                        # If not found, maybe log warning.
-                        # For now, let's try to find a list where code="COMMUNITY".
                         wa_pl_obj = wa_priority_list_map.get("COMMUNITY")
-                        if not wa_pl_obj:
-                            # Try finding by label?
-                            # Or maybe the user meant the list associated with the community group type?
-                            # But priority lists are specific (e.g. P1).
-                            # If the legacy data has "wa_priority_list" column, we should use that.
-                            # But the task says "Apply static value...".
-                            # If the static value is "community", it's weird.
-                            # Maybe they mean the list named "Priority List"?
-                            # Let's assume for now we look up by code "COMMUNITY".
-                            pass
                     else:
                         wa_pl_obj = wa_priority_list_map.get(wa_pl_code.strip().upper())
 
@@ -403,8 +366,6 @@ class ConservationStatusImporter(BaseSheetImporter):
 
                 # Determine submitter for SubmitterInformation
                 si_email_user = row.get("submitter")
-                if community_mig_id and tec_user:
-                    si_email_user = tec_user.id
 
                 # Create SubmitterInformation instance (do not save yet)
                 sub_info = SubmitterInformation(
@@ -419,10 +380,8 @@ class ConservationStatusImporter(BaseSheetImporter):
                     migrated_from_id=row.get("migrated_from_id"),
                     processing_status=row.get("processing_status"),
                     customer_status=row.get("customer_status"),
-                    species_id=species_id if species_id else (species_obj.id if species_obj else None),
-                    species_taxonomy_id=species_taxonomy_id
-                    if species_taxonomy_id
-                    else (species_obj.taxonomy_id if species_obj else None),
+                    species_id=species_id,
+                    species_taxonomy_id=species_taxonomy_id,
                     community=community_obj,
                     wa_priority_list=wa_pl_obj,
                     wa_priority_category=wa_pc_obj,
@@ -430,6 +389,9 @@ class ConservationStatusImporter(BaseSheetImporter):
                     wa_legislative_category=wa_lc_obj,
                     review_due_date=row.get("review_due_date"),
                     effective_from=row.get("effective_from_date"),
+                    effective_to=row.get("effective_to_date"),
+                    listing_date=row.get("listing_date"),
+                    lodgement_date=row.get("lodgement_date"),
                     submitter=row.get("submitter"),  # ID
                     assigned_approver=row.get("assigned_approver"),  # ID
                     approved_by=row.get("approved_by"),  # ID
