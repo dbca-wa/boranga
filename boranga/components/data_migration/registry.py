@@ -467,6 +467,51 @@ def date_from_datetime_iso_factory(default_tz: str | None = None) -> str:
     return name
 
 
+def date_from_datetime_iso_local_factory(default_tz: str | None = None) -> str:
+    """
+    Return a registered transform name that parses datetimes (ISO or legacy)
+    and returns a DATE object representing the date in the specified timezone.
+    This differs from date_from_datetime_iso_factory (which returns the UTC date).
+
+    See datetime_iso_factory for details on default_tz.
+
+    Usage:
+      PERTH_DATE = date_from_datetime_iso_local_factory('Australia/Perth')
+    """
+    key = f"date_from_datetime_iso_local_{default_tz or 'UTC'}"
+    name = "date_from_datetime_iso_local_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    @registry.register(name)
+    def inner(value, ctx):
+        # res.value is a UTC aware datetime
+        res = _parse_datetime_iso(value, default_tz=default_tz)
+        if res.errors:
+            return res
+        if res.value:
+            # Resolve the target timezone again to convert back from UTC
+            tz_obj = stdlib_timezone.utc
+            if default_tz:
+                if isinstance(default_tz, str):
+                    try:
+                        from zoneinfo import ZoneInfo
+
+                        tz_obj = ZoneInfo(default_tz)
+                    except ImportError:
+                        import pytz
+
+                        tz_obj = pytz.timezone(default_tz)
+                else:
+                    tz_obj = default_tz
+
+            # Convert UTC datetime to local/target timezone datetime, then extract date
+            res.value = res.value.astimezone(tz_obj).date()
+        return res
+
+    return name
+
+
 @registry.register("ocr_comments_transform")
 def t_ocr_comments_transform(value, ctx):
     PURPOSE1 = (ctx.row.get("PURPOSE1") or "").strip()

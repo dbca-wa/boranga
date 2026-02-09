@@ -480,6 +480,8 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
         ("species", "Species"),
         ("community", "Community"),
         ("agendaitem", "Meeting Agenda Item"),
+        ("occurrences", "Occurrence"),
+        ("occurrence_report", "Occurrence Report"),
     ]
 
     # group_type of application

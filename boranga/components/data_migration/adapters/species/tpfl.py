@@ -1,7 +1,7 @@
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     choices_transform,
-    date_from_datetime_iso_factory,
+    date_from_datetime_iso_local_factory,
     datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     registry,
@@ -22,7 +22,7 @@ TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_id_mapping("TPFL")
 
 EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM = emailuser_by_legacy_username_factory("TPFL")
 
-DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_factory("Australia/Perth")
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_local_factory("Australia/Perth")
 
 DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 

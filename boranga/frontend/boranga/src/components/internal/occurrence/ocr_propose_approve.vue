@@ -455,7 +455,6 @@ export default {
             $(vm.$refs.occurrence_name_lookup_propose_approve)
                 .select2({
                     width: '100%',
-                    minimumInputLength: 2,
                     dropdownParent: $(
                         '#occurrence_name_lookup_propose_approve_form_group_id'
                     ),

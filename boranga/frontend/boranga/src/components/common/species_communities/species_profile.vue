@@ -241,8 +241,12 @@
                 <template v-if="species_community.group_type === 'fauna'">
                     <div class="row mb-3">
                         <div class="col-sm-3">
-                            <label for="fauna_group" class="control-label"
-                                >Fauna Group</label
+                            <label
+                                for="fauna_group"
+                                class="control-label fw-bold"
+                                >Fauna Group<span class="text-danger"
+                                    >*</span
+                                ></label
                             >
                         </div>
                         <div class="col-sm-9">
