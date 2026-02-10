@@ -45,7 +45,9 @@ from boranga.components.occurrence.models import (
     OccurrenceReport,
     OccurrenceReportDocument,
     OccurrenceReportGeometry,
+    OccurrenceReportUserAction,
     OCCVegetationStructure,
+    OCRAnimalObservation,
     OCRAssociatedSpecies,
     OCRFireHistory,
     OCRHabitatComposition,
@@ -82,6 +84,9 @@ SOURCE_ADAPTERS = {
     ),
     Source.TEC_SURVEYS.value: (
         "boranga.components.data_migration.adapters.occurrence_report.tec_surveys.OccurrenceReportTecSurveysAdapter"
+    ),
+    Source.TFAUNA.value: (
+        "boranga.components.data_migration.adapters.occurrence_report.tfauna.OccurrenceReportTfaunaAdapter"
     ),
     # add other adapters when available
 }
@@ -706,6 +711,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             observation_detail_data = {}
             geometry_data = {}
             plant_count_data = {}
+            animal_observation_data = {}
             vegetation_structure_data = {}
             fire_history_data = {}
 
@@ -742,6 +748,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OCRPlantCount__"):
                     short = k.split("OCRPlantCount__", 1)[1]
                     plant_count_data[short] = extract_value(v)
+                if k.startswith("OCRAnimalObservation__"):
+                    short = k.split("OCRAnimalObservation__", 1)[1]
+                    animal_observation_data[short] = extract_value(v)
                 if k.startswith("OCRVegetationStructure__"):
                     short = k.split("OCRVegetationStructure__", 1)[1]
                     vegetation_structure_data[short] = extract_value(v)
@@ -763,6 +772,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "observation_detail_data": observation_detail_data,
                     "geometry_data": geometry_data,
                     "plant_count_data": plant_count_data,
+                    "animal_observation_data": animal_observation_data,
                     "vegetation_structure_data": vegetation_structure_data,
                     "fire_history_data": fire_history_data,
                 }
@@ -2286,6 +2296,25 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         except Exception:
                             logger.exception("Failed to create legacy photo document for %s", mid)
 
+                # TFAUNA document description (Map/MudMap/Photo/Notes flags)
+                doc_desc = op["merged"].get("temp_document_description")
+                if doc_desc:
+                    ocr = target_map[mid]
+                    if not OccurrenceReportDocument.objects.filter(
+                        occurrence_report=ocr, description=doc_desc
+                    ).exists():
+                        try:
+                            doc = OccurrenceReportDocument(
+                                occurrence_report=ocr,
+                                description=doc_desc,
+                                document_category=doc_cat_photo,
+                                document_sub_category=doc_sub_photo,
+                                can_submitter_access=False,
+                            )
+                            doc.save()
+                        except Exception:
+                            logger.exception("Failed to create TFAUNA document for %s", mid)
+
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report
         want_obs_create = []
         existing_obs = set(
@@ -2304,11 +2333,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # lookup merged data from op_map to populate name and role
             observer_name = None
             observer_role = None
+            observer_contact = None
+            observer_organisation = None
             op = op_map.get(mig)
             if op:
                 merged = op.get("merged") or {}
                 observer_name = merged.get("OCRObserverDetail__observer_name")
                 observer_role = merged.get("OCRObserverDetail__role")
+                observer_contact = merged.get("OCRObserverDetail__contact")
+                observer_organisation = merged.get("OCRObserverDetail__organisation")
 
             # create observer instance after searching ops so the variables
             # `observer_name` and `observer_role` are defined regardless of
@@ -2320,6 +2353,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
             )
             apply_value_to_instance(ocr_observer_detail_instance, "observer_name", observer_name)
             apply_value_to_instance(ocr_observer_detail_instance, "role", observer_role)
+            apply_value_to_instance(ocr_observer_detail_instance, "contact", observer_contact)
+            apply_value_to_instance(ocr_observer_detail_instance, "organisation", observer_organisation)
 
             want_obs_create.append(ocr_observer_detail_instance)
 
@@ -2375,6 +2410,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         existing_plant_counts = {
             pc.occurrence_report_id: pc for pc in OCRPlantCount.objects.filter(occurrence_report__in=target_occs)
         }
+        existing_animal_observations = {
+            ao.occurrence_report_id: ao for ao in OCRAnimalObservation.objects.filter(occurrence_report__in=target_occs)
+        }
         existing_vegetation_structures = {
             vs.occurrence_report_id: vs
             for vs in OCRVegetationStructure.objects.filter(occurrence_report__in=target_occs)
@@ -2396,6 +2434,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
         obs_to_update = []
         plant_counts_to_create = []
         plant_counts_to_update = []
+        animal_obs_to_create = []
+        animal_obs_to_update = []
         vegetation_structures_to_create = []
         vegetation_structures_to_update = []
         fire_history_to_create = []
@@ -2577,6 +2617,34 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         pc_create[field_name] = val
                 if len(pcd) > 0:
                     plant_counts_to_create.append(OCRPlantCount(**normalize_create_kwargs(OCRPlantCount, pc_create)))
+
+            # OCRAnimalObservation handling for updates
+            ao_data = {}
+            if mig_key:
+                op = op_map.get(mig_key)
+                if op:
+                    ao_data = op.get("animal_observation_data") or {}
+            if hid in existing_animal_observations:
+                ao_obj = existing_animal_observations[hid]
+                valid_ao_fields = {f.name for f in OCRAnimalObservation._meta.fields}
+                for field_name, val in ao_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_ao_fields:
+                        apply_value_to_instance(ao_obj, field_name, val)
+                animal_obs_to_update.append(ao_obj)
+            else:
+                ao_create = {"occurrence_report": inst}
+                valid_ao_fields = {f.name for f in OCRAnimalObservation._meta.fields}
+                for field_name, val in ao_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_ao_fields:
+                        ao_create[field_name] = val
+                if len(ao_data) > 0:
+                    animal_obs_to_create.append(
+                        OCRAnimalObservation(**normalize_create_kwargs(OCRAnimalObservation, ao_create))
+                    )
 
             # OCRVegetationStructure handling for updates
             vsd = vegetation_structure_data or {}
@@ -2855,6 +2923,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         pc_create[field_name] = val
                 if len(pcd) > 0:
                     plant_counts_to_create.append(OCRPlantCount(**normalize_create_kwargs(OCRPlantCount, pc_create)))
+
+            # OCRAnimalObservation handling for newly created ocr
+            ao_data = op_map.get(mig, {}).get("animal_observation_data") or {}
+            if ocr.pk in existing_animal_observations:
+                ao_obj = existing_animal_observations[ocr.pk]
+                valid_ao_fields = {f.name for f in OCRAnimalObservation._meta.fields}
+                for field_name, val in ao_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_ao_fields:
+                        apply_value_to_instance(ao_obj, field_name, val)
+                animal_obs_to_update.append(ao_obj)
+            else:
+                ao_create = {"occurrence_report": ocr}
+                valid_ao_fields = {f.name for f in OCRAnimalObservation._meta.fields}
+                for field_name, val in ao_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_ao_fields:
+                        ao_create[field_name] = val
+                if len(ao_data) > 0:
+                    animal_obs_to_create.append(
+                        OCRAnimalObservation(**normalize_create_kwargs(OCRAnimalObservation, ao_create))
+                    )
 
             # OCRVegetationStructure handling for newly created ocr
             vsd = vegetation_structure_data or {}
@@ -3391,6 +3483,68 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                         errors += 1
 
+        # OCRAnimalObservation: OneToOne - create or update animal observation records
+        if animal_obs_to_create:
+            try:
+                OCRAnimalObservation.objects.bulk_create(animal_obs_to_create, batch_size=BATCH)
+            except Exception:
+                logger.exception("Failed to bulk_create OCRAnimalObservation; falling back to individual creates")
+                for ao in animal_obs_to_create:
+                    try:
+                        ao.save()
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create OCRAnimalObservation for occurrence_report %s",
+                            getattr(ao.occurrence_report, "pk", None),
+                        )
+                        ocr_ref = getattr(ao, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
+                                "column": "OCRAnimalObservation",
+                                "level": "error",
+                                "message": f"Failed to create animal observation: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
+
+        if animal_obs_to_update:
+            try:
+                ao_fields = set()
+                for inst in animal_obs_to_update:
+                    ao_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
+                ao_fields = {f for f in ao_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
+                if ao_fields:
+                    OCRAnimalObservation.objects.bulk_update(animal_obs_to_update, list(ao_fields), batch_size=BATCH)
+            except Exception:
+                logger.exception("Failed to bulk_update OCRAnimalObservation; falling back to individual saves")
+                for ao in animal_obs_to_update:
+                    try:
+                        ao.save()
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to save OCRAnimalObservation %s",
+                            getattr(ao, "pk", None),
+                        )
+                        ocr_ref = getattr(ao, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
+                                "column": "OCRAnimalObservation",
+                                "level": "error",
+                                "message": f"Failed to update animal observation: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(ao, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
+
         # OCRVegetationStructure: OneToOne - create or update vegetation structure records
         if vegetation_structures_to_create:
             try:
@@ -3528,6 +3682,91 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)
         updated += len(to_update)
+
+        # OccurrenceReportUserAction: TFAUNA-only — record ChDate/ChName as an action log
+        user_actions_to_create = []
+        for mid in target_mig_ids:
+            if not mid.startswith("tfauna-"):
+                continue
+            op = op_map.get(mid)
+            if not op:
+                continue
+            merged = op.get("merged") or {}
+            ch_date = merged.get("ChDate")
+            ch_name = merged.get("ChName")
+            # Only create if we have a ChDate (the meaningful trigger)
+            if not ch_date:
+                continue
+            ocr = target_map.get(mid)
+            if not ocr:
+                continue
+            # Skip if action already exists for this OCR
+            if OccurrenceReportUserAction.objects.filter(occurrence_report=ocr).exists():
+                continue
+            # Resolve user: use submitter id as fallback if ChName lookup fails
+            who_id = None
+            if ch_name:
+                # The ChName may have been resolved to an email user id via approved_by pipeline
+                # Try to resolve via the same lookup
+                try:
+                    from boranga.components.main.models import LegacyUsernameEmailuserMapping
+
+                    mapping = LegacyUsernameEmailuserMapping.objects.filter(
+                        legacy_system="TFAUNA", legacy_username=ch_name
+                    ).first()
+                    if mapping:
+                        who_id = mapping.emailuser_id
+                except Exception:
+                    pass
+            if not who_id:
+                # Fallback: use the submitter from the OccurrenceReport
+                who_id = ocr.submitter
+            if not who_id:
+                # Last resort: use a dummy value (0)
+                who_id = 0
+
+            # Parse ChDate
+            when_dt = None
+            try:
+                from boranga.components.data_migration import utils as dm_utils
+
+                when_dt = dm_utils.parse_date_iso(ch_date)
+                # Ensure timezone-aware (assume Perth if naive)
+                if when_dt and when_dt.tzinfo is None:
+                    import zoneinfo
+
+                    when_dt = when_dt.replace(tzinfo=zoneinfo.ZoneInfo("Australia/Perth"))
+            except Exception:
+                pass
+
+            action_text = f"Legacy record checked by {ch_name or 'unknown'}"
+            ua = OccurrenceReportUserAction(
+                occurrence_report=ocr,
+                who=who_id,
+                what=action_text,
+            )
+            if when_dt:
+                ua.when = when_dt
+            user_actions_to_create.append(ua)
+
+        if user_actions_to_create:
+            try:
+                OccurrenceReportUserAction.objects.bulk_create(user_actions_to_create, batch_size=BATCH)
+                logger.info(
+                    "Created %d OccurrenceReportUserAction records (TFAUNA)",
+                    len(user_actions_to_create),
+                )
+            except Exception:
+                logger.exception("Failed to bulk_create OccurrenceReportUserAction; falling back to individual creates")
+                for ua in user_actions_to_create:
+                    try:
+                        ua.save()
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create OccurrenceReportUserAction for OCR %s: %s",
+                            getattr(ua.occurrence_report, "pk", None),
+                            exc,
+                        )
 
         # ---------------------------------------------------------------------
         # Populate Occurrence 1-to-1 objects by cloning from OccurrenceReport
