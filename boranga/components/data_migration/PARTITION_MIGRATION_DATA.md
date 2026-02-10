@@ -22,7 +22,7 @@ python3 scripts/partition_migration_data.py \
  --input private-media/legacy_data/TPFL/SAMPLE_CS_Data_Dec2025.csv \
  --output private-media/legacy_data/TPFL/conservation-status-partitioned.csv \
  --report private-media/legacy_data/TPFL/conservation-status-partitioned-report.csv \
- --max-cardinality 100 \
+ --max-cardinality 50 \
  --heaviest-last
 
 python3 scripts/partition_migration_data.py \
