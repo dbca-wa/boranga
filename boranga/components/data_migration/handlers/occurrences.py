@@ -693,7 +693,7 @@ class OccurrenceImporter(BaseSheetImporter):
             orf_document_category = DocumentCategory.objects.get(document_category_name="ORF Document")
         except DocumentCategory.DoesNotExist:
             logger.warning(
-                "DocumentCategory 'ORF Document' not found. " "OccurrenceDocuments will be created without category."
+                "DocumentCategory 'ORF Document' not found. OccurrenceDocuments will be created without category."
             )
             orf_document_category = None
 
@@ -1061,6 +1061,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         "geometry": mapped_site.get("OccurrenceSite__geometry")
                         or tec_site_geometry_transform(mapped_site, None),
                         "updated_date": mapped_site.get("OccurrenceSite__updated_date"),
+                        "drawn_by": mapped_site.get("OccurrenceSite__drawn_by"),
+                        "last_updated_by": mapped_site.get("OccurrenceSite__drawn_by"),
                     }
 
                     if site_name in existing_sites[occ.pk]:
@@ -1077,6 +1079,8 @@ class OccurrenceImporter(BaseSheetImporter):
                             site_name=site_name,
                             comments=defaults["comments"],
                             geometry=defaults["geometry"],
+                            drawn_by=defaults["drawn_by"],
+                            last_updated_by=defaults["last_updated_by"],
                         )
                         if defaults["updated_date"]:
                             s.updated_date = defaults["updated_date"]
@@ -1087,7 +1091,13 @@ class OccurrenceImporter(BaseSheetImporter):
             if site_update:
                 OccurrenceSite.objects.bulk_update(
                     site_update,
-                    ["comments", "geometry", "updated_date"],
+                    [
+                        "comments",
+                        "geometry",
+                        "updated_date",
+                        "drawn_by",
+                        "last_updated_by",
+                    ],
                     batch_size=BATCH,
                 )
 

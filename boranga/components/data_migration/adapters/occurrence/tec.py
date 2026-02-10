@@ -10,6 +10,7 @@ from boranga.components.data_migration.adapters.base import (
 )
 from boranga.components.data_migration.adapters.occurrence.schema import SCHEMA
 from boranga.components.data_migration.mappings import get_group_type_id
+from boranga.components.data_migration.registry import emailuser_by_legacy_username_factory
 from boranga.components.species_and_communities.models import GroupType
 
 
@@ -147,6 +148,25 @@ def val_to_none(val, ctx):
     return None
 
 
+_tec_user_id_cache = None
+
+
+def default_to_tec_user(val, ctx):
+    global _tec_user_id_cache
+    if val is not None:
+        return val
+
+    if _tec_user_id_cache is None:
+        try:
+            from ledger_api_client.ledger_models import EmailUserRO
+
+            tec_user = EmailUserRO.objects.get(email="boranga.tec@dbca.wa.gov.au")
+            _tec_user_id_cache = tec_user.id
+        except Exception:
+            pass
+    return _tec_user_id_cache
+
+
 PIPELINES = {
     "occurrence_name": ["strip", "blank_to_none", "required"],
     "community_id": ["community_id_from_legacy"],
@@ -175,6 +195,12 @@ PIPELINES = {
     "OccurrenceSite__longitude": [],
     "OccurrenceSite__site_name": [],
     "OccurrenceSite__updated_date": ["blank_to_none"],
+    "OccurrenceSite__drawn_by": [
+        "strip",
+        "blank_to_none",
+        emailuser_by_legacy_username_factory("TEC"),
+        default_to_tec_user,
+    ],
     # Pass-through fields
     "migrated_from_id": [],
     "processing_status": [],

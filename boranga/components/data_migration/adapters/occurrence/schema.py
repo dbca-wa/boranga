@@ -52,6 +52,7 @@ COLUMN_MAP = {
     "S_LONGITUDE_PREF": "OccurrenceSite__longitude",
     "S_ID": "OccurrenceSite__site_name",
     "S_DATE_EDITED": "OccurrenceSite__updated_date",
+    "USERNAME": "OccurrenceSite__drawn_by",
     # OCCObservationDetail
     "OCC_BR_CODE": "OCCObservationDetail__comments",
     # OCCHabitatComposition
@@ -139,6 +140,7 @@ class OccurrenceRow:
     OccurrenceSite__longitude: float | None = None
     OccurrenceSite__site_name: str | None = None
     OccurrenceSite__updated_date: datetime | None = None
+    OccurrenceSite__drawn_by: int | None = None
     OccurrenceSite__geometry: Any | None = None
 
     OCCObservationDetail__comments: str | None = None
@@ -204,6 +206,7 @@ class OccurrenceRow:
             OccurrenceSite__longitude=utils.to_float_maybe(d.get("OccurrenceSite__longitude")),
             OccurrenceSite__site_name=utils.safe_strip(d.get("OccurrenceSite__site_name")),
             OccurrenceSite__updated_date=d.get("OccurrenceSite__updated_date"),
+            OccurrenceSite__drawn_by=utils.to_int_maybe(d.get("OccurrenceSite__drawn_by")),
             OccurrenceSite__geometry=d.get("OccurrenceSite__geometry"),
             OCCObservationDetail__comments=utils.safe_strip(d.get("OCCObservationDetail__comments")),
             OCCHabitatComposition__water_quality=utils.safe_strip(d.get("OCCHabitatComposition__water_quality")),
