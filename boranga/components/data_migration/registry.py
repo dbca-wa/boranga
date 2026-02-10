@@ -2933,6 +2933,7 @@ def geometry_from_coords_factory(
     longitude_field: str = "GDA94LONG",
     datum_field: str | None = None,
     radius_m: float = 1.0,
+    point_only: bool = False,
 ):
     """
     Factory that returns a registered transform name for creating WGS84 geometries from lat/lon coordinates.
@@ -2940,6 +2941,10 @@ def geometry_from_coords_factory(
     This transform reads latitude and longitude from the row context and creates a small buffered
     polygon (default 1m radius) around the point. It handles coordinate transformation from the
     source datum (GDA94, AGD84, WGS84, GPS, etc.) to WGS84 (EPSG:4326).
+
+    When ``point_only=True`` the raw Point is returned instead of a buffered
+    polygon.  Fauna OccurrenceReportGeometry records reject polygons, so use
+    ``point_only=True`` for fauna adapters.
 
     Usage:
       GEOMETRY_FROM_COORDS = geometry_from_coords_factory("GDA94LAT", "GDA94LONG", "DATUM", radius_m=1.0)
@@ -2950,9 +2955,10 @@ def geometry_from_coords_factory(
         longitude_field: The row column name containing longitude (default: GDA94LONG)
         datum_field: The row column name containing datum/CRS info (optional, default: None)
         radius_m: Buffer radius in meters (default: 1.0m)
+        point_only: If True, return a Point instead of a buffered Polygon (default: False)
 
     Returns:
-        A registered transform name that converts point coordinates to WGS84 polygon geometry
+        A registered transform name that converts point coordinates to WGS84 geometry
     """
     from django.contrib.gis.geos import Point
     from pyproj import Transformer
@@ -2966,7 +2972,7 @@ def geometry_from_coords_factory(
         "UNKNOWN": "EPSG:4326",  # Default to WGS84 when datum is unknown
     }
 
-    key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}"
+    key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}_{point_only}"
     name = "geometry_from_coords_" + hashlib.sha1(key.encode()).hexdigest()[:8]
 
     if name in registry._fns:
@@ -3006,6 +3012,9 @@ def geometry_from_coords_factory(
 
             # Create a point from the coordinates
             point = Point(lng, lat, srid=4326)
+
+            if point_only:
+                return _result(point)
 
             # Create a small buffer. Convert radius in meters to degrees (approximate):
             # 1 degree ≈ 111,320 meters at the equator
