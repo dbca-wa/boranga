@@ -435,7 +435,7 @@ class SpeciesImporter(BaseSheetImporter):
                 "group_type_id": merged.get("group_type_id"),
                 "taxonomy_id": merged.get("taxonomy_id"),
                 "comment": merged.get("comment"),
-                "conservation_plan_exists": merged.get("conservation_plan_exists"),
+                "conservation_plan_exists": merged.get("conservation_plan_exists") or False,
                 "conservation_plan_reference": merged.get("conservation_plan_reference"),
                 "department_file_numbers": merged.get("department_file_numbers"),
                 "processing_status": merged.get("processing_status"),
@@ -647,7 +647,8 @@ class SpeciesImporter(BaseSheetImporter):
 
             # prepare distribution update/create
             distribution = merged.get("distribution", None)
-            dist_to_update.append((obj.pk, distribution))
+            noo_auto_val = merged.get("noo_auto", True)
+            dist_to_update.append((obj.pk, distribution, noo_auto_val))
 
             processing_status_is_active = merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
             publish_to_update.append((obj.pk, processing_status_is_active))
@@ -680,8 +681,11 @@ class SpeciesImporter(BaseSheetImporter):
                 created += 1
                 created_species_ids.append(obj.pk)
                 distribution = merged.get("distribution", None)
+                noo_auto_val = merged.get("noo_auto", True)
                 dist_to_create.append(
-                    SpeciesDistribution(species=obj, aoo_actual_auto=False, distribution=distribution)
+                    SpeciesDistribution(
+                        species=obj, aoo_actual_auto=False, noo_auto=noo_auto_val, distribution=distribution
+                    )
                 )
 
                 processing_status_is_active = merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
@@ -768,15 +772,16 @@ class SpeciesImporter(BaseSheetImporter):
         # Handle updates for SpeciesDistribution and SpeciesPublishingStatus in bulk
         # Distributions: fetch existing for updated species and update or create as needed
         if dist_to_update:
-            species_ids = [sid for sid, _ in dist_to_update]
+            species_ids = [sid for sid, _, _ in dist_to_update]
             existing_dists = {d.species_id: d for d in SpeciesDistribution.objects.filter(species_id__in=species_ids)}
             to_create_dists = []
             to_update_dists = []
-            for sid, distribution in dist_to_update:
+            for sid, distribution, noo_auto_val in dist_to_update:
                 if sid in existing_dists:
                     inst = existing_dists[sid]
                     inst.distribution = distribution
                     inst.aoo_actual_auto = False
+                    inst.noo_auto = noo_auto_val
                     to_update_dists.append(inst)
                 else:
                     # species instance available in DB
@@ -784,6 +789,7 @@ class SpeciesImporter(BaseSheetImporter):
                         SpeciesDistribution(
                             species_id=sid,
                             aoo_actual_auto=False,
+                            noo_auto=noo_auto_val,
                             distribution=distribution,
                         )
                     )
@@ -792,7 +798,7 @@ class SpeciesImporter(BaseSheetImporter):
                 try:
                     SpeciesDistribution.objects.bulk_update(
                         to_update_dists,
-                        ["distribution", "aoo_actual_auto"],
+                        ["distribution", "aoo_actual_auto", "noo_auto"],
                         batch_size=BATCH,
                     )
                 except Exception:
