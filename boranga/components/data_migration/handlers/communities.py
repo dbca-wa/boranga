@@ -420,6 +420,7 @@ class CommunityImporter(BaseSheetImporter):
                 "comment": canonical.get("comment"),
                 "lodgement_date": timezone.now(),
                 "processing_status": "active",
+                "submitter": canonical.get("submitter"),
             }
 
             if migrated_id in communities_cache:
