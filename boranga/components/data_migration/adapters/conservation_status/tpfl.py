@@ -74,33 +74,16 @@ class ConservationStatusTpflAdapter(SourceAdapter):
                 migrated_id_counts[m_id] = count
                 canonical["migrated_from_id"] = f"{m_id}-{count:02d}"
 
-            # 1. Group Type
+            # Group Type
             canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
 
-            # 2. Processing Status
+            # Processing Status
             p_status = canonical.get("processing_status")
             if p_status:
                 p_status = p_status.strip()
                 canonical["processing_status"] = PROCESSING_STATUS_MAP.get(p_status, p_status.lower())
 
-            # 3. Dates
-            eff_date = canonical.get("effective_from_date")
-            if eff_date:
-                try:
-                    # Try parsing with time
-                    dt = datetime.strptime(eff_date, "%d/%m/%Y %H:%M")
-                    canonical["effective_from_date"] = dt.date()
-                except ValueError:
-                    try:
-                        # Try parsing without time just in case
-                        dt = datetime.strptime(eff_date, "%d/%m/%Y")
-                        canonical["effective_from_date"] = dt.date()
-                    except ValueError:
-                        canonical["effective_from_date"] = None
-
-            # 4. Users (moved to pipeline)
-
-            # 5. Calculated fields
+            # Calculated fields
             raw_leg_list = canonical.get("wa_legislative_list")
             raw_leg_cat = canonical.get("wa_legislative_category")
             raw_prio_cat = canonical.get("wa_priority_category")
@@ -136,12 +119,22 @@ class ConservationStatusTpflAdapter(SourceAdapter):
                 and wa_leg_cat in ["CR", "EN", "VU"]
                 and canonical.get("effective_from_date")
             ):
-                dt = canonical["effective_from_date"]
-                try:
-                    new_date = dt.replace(year=dt.year + 10)
-                except ValueError:  # Feb 29
-                    new_date = dt + timedelta(days=365 * 10 + 2)
-                canonical["review_due_date"] = new_date
+                dt_str = canonical["effective_from_date"]
+                dt = None
+                if isinstance(dt_str, str):
+                    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+                        try:
+                            dt = datetime.strptime(dt_str.strip(), fmt).date()
+                            break
+                        except ValueError:
+                            pass
+
+                if dt:
+                    try:
+                        new_date = dt.replace(year=dt.year + 10)
+                    except ValueError:  # Feb 29
+                        new_date = dt + timedelta(days=365 * 10 + 2)
+                    canonical["review_due_date"] = new_date
 
             # approval_level
             if not wa_leg_cat:
