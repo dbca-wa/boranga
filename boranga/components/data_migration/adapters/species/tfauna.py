@@ -14,7 +14,7 @@ class SpeciesTfaunaAdapter(SourceAdapter):
         "group_type": [static_value_factory(get_group_type_id("fauna"))],
         "noo_auto": [static_value_factory(True)],
         "distribution": [static_value_factory(None)],
-        "submitter": [static_value_factory(None)],
+        "submitter": ["default_user_for_source"],
         "lodgement_date": [static_value_factory(None)],  # or migrate date?
         "processing_status": [
             # If "Condition" (mapped to something?) is TRUE -> Active, False -> Historical
