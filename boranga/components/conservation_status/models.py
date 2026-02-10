@@ -1495,7 +1495,7 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
             },
         )
 
-        if self.change_code and self.change_code.code == settings.CONSERVATION_CHANGE_CODE_DELIST:
+        if self.change_code and self.change_code.code.lower() == settings.CONSERVATION_CHANGE_CODE_DELIST.lower():
             self.processing_status = ConservationStatus.PROCESSING_STATUS_DELISTED
             self.customer_status = ConservationStatus.CUSTOMER_STATUS_CLOSED
         else:

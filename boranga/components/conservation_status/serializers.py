@@ -1121,7 +1121,7 @@ class SaveConservationStatusValidationMixin:
         elif self.instance.change_code:
             change_code = self.instance.change_code
 
-        if change_code and change_code.code == CONSERVATION_CHANGE_CODE_DELIST:
+        if change_code and change_code.code.lower() == CONSERVATION_CHANGE_CODE_DELIST.lower():
             # Check for approved CS
             has_approved = False
             if self.instance.species:

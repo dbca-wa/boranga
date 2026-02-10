@@ -1828,7 +1828,7 @@ export default {
     },
     methods: {
         isOptionDisabled: function (option) {
-            if (option.code === 'DeList') {
+            if (option.code && option.code.toLowerCase() === 'delist') {
                 return !this.conservation_status_obj
                     .current_conservation_status;
             }
@@ -1836,7 +1836,11 @@ export default {
         },
         getOptionLabel: function (option) {
             let label = option.code;
-            if (this.isOptionDisabled(option) && option.code === 'DeList') {
+            if (
+                this.isOptionDisabled(option) &&
+                option.code &&
+                option.code.toLowerCase() === 'delist'
+            ) {
                 label += ' (Disabled: No Active Conservation Status Found)';
             }
             return label;

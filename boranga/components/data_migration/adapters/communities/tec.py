@@ -30,6 +30,15 @@ class CommunityTecAdapter(SourceAdapter):
         rows = []
         warnings: list[ExtractionWarning] = []
 
+        tec_submitter_id = None
+        try:
+            from ledger_api_client.ledger_models import EmailUserRO
+
+            tec_user = EmailUserRO.objects.get(email="boranga.tec@dbca.wa.gov.au")
+            tec_submitter_id = tec_user.id
+        except Exception:
+            pass
+
         raw_rows, read_warnings = self.read_table(path)
         warnings.extend(read_warnings)
 
@@ -51,6 +60,9 @@ class CommunityTecAdapter(SourceAdapter):
 
             if comment_parts:
                 canonical["comment"] = "; ".join(comment_parts)
+
+            if not canonical.get("submitter") and tec_submitter_id:
+                canonical["submitter"] = tec_submitter_id
 
             rows.append(canonical)
         return ExtractionResult(rows=rows, warnings=warnings)

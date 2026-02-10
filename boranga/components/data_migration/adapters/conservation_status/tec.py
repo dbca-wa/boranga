@@ -58,8 +58,12 @@ PIPELINES = {
     "approval_level": ["cs_approval_level_transform"],
     "internal_application": ["static_value_True"],
     "locked": ["static_value_True"],
-    "community_migrated_from_id": ["strip", "required"],
-    "effective_from_date": ["strip", "date_iso"],
+    "community_migrated_from_id": ["strip", "required", "community_id_from_legacy"],
+    "effective_from_date": ["strip", "smart_date_parse"],
+    "wa_priority_list": ["wa_priority_list_from_code"],
+    "wa_priority_category": ["strip", "blank_to_none", "wa_priority_category_from_code"],
+    "wa_legislative_list": ["strip", "blank_to_none", "wa_legislative_list_from_code"],
+    "wa_legislative_category": ["strip", "blank_to_none", "wa_legislative_category_from_code"],
 }
 
 

@@ -601,8 +601,9 @@
                                                 @click.prevent="issueProposal()"
                                             >
                                                 {{
-                                                    conservation_status_obj.change_code ===
-                                                    'DeList'
+                                                    conservation_status_obj.change_code &&
+                                                    conservation_status_obj.change_code.toLowerCase() ===
+                                                        'delist'
                                                         ? 'Delist'
                                                         : 'Approve'
                                                 }}</button
@@ -639,8 +640,9 @@
                                                 @click.prevent="issueProposal()"
                                             >
                                                 {{
-                                                    conservation_status_obj.change_code ===
-                                                    'DeList'
+                                                    conservation_status_obj.change_code &&
+                                                    conservation_status_obj.change_code.toLowerCase() ===
+                                                        'delist'
                                                         ? 'Delist'
                                                         : 'Approve'
                                                 }}</button
