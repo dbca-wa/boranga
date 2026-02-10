@@ -3156,7 +3156,7 @@ def t_wa_priority_list_from_code(value, ctx):
 
     # Use cache to avoid DB hits
     if not hasattr(t_wa_priority_list_from_code, "cache"):
-        from boranga.components.species_and_communities.models import WAPriorityList
+        from boranga.components.conservation_status.models import WAPriorityList
 
         t_wa_priority_list_from_code.cache = {pl.code.strip().upper(): pl for pl in WAPriorityList.objects.all()}
 
@@ -3179,7 +3179,7 @@ def t_wa_priority_category_from_code(value, ctx):
     code = str(value).strip().upper()
 
     if not hasattr(t_wa_priority_category_from_code, "cache"):
-        from boranga.components.species_and_communities.models import WAPriorityCategory
+        from boranga.components.conservation_status.models import WAPriorityCategory
 
         t_wa_priority_category_from_code.cache = {
             pc.code.strip().upper(): pc for pc in WAPriorityCategory.objects.all()
@@ -3198,7 +3198,7 @@ def t_wa_legislative_list_from_code(value, ctx):
     code = str(value).strip().upper()
 
     if not hasattr(t_wa_legislative_list_from_code, "cache"):
-        from boranga.components.species_and_communities.models import WALegislativeList
+        from boranga.components.conservation_status.models import WALegislativeList
 
         t_wa_legislative_list_from_code.cache = {ll.code.strip().upper(): ll for ll in WALegislativeList.objects.all()}
 
@@ -3215,7 +3215,7 @@ def t_wa_legislative_category_from_code(value, ctx):
     code = str(value).strip().upper()
 
     if not hasattr(t_wa_legislative_category_from_code, "cache"):
-        from boranga.components.species_and_communities.models import WALegislativeCategory
+        from boranga.components.conservation_status.models import WALegislativeCategory
 
         t_wa_legislative_category_from_code.cache = {
             lc.code.strip().upper(): lc for lc in WALegislativeCategory.objects.all()
