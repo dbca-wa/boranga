@@ -302,6 +302,10 @@ class ConservationStatusImporter(BaseSheetImporter):
                     wa_priority_category=row.get("wa_priority_category"),  # Transformed to object
                     wa_legislative_list=row.get("wa_legislative_list"),  # Transformed to object
                     wa_legislative_category=row.get("wa_legislative_category"),  # Transformed to object
+                    commonwealth_conservation_category_id=row.get("commonwealth_conservation_category"),
+                    iucn_version_id=row.get("iucn_version"),
+                    change_code_id=row.get("change_code"),
+                    conservation_criteria=row.get("conservation_criteria"),
                     review_due_date=row.get("review_due_date"),
                     effective_from=row.get("effective_from_date"),
                     effective_to=row.get("effective_to_date"),

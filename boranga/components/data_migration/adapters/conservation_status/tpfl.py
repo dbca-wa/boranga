@@ -1,10 +1,16 @@
 import logging
 from datetime import datetime, timedelta
 
-from boranga.components.conservation_status.models import ConservationStatus
+from boranga.components.conservation_status.models import (
+    CommonwealthConservationList,
+    ConservationChangeCode,
+    ConservationStatus,
+    IUCNVersion,
+)
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     emailuser_by_legacy_username_factory,
+    fk_lookup,
     taxonomy_lookup_legacy_mapping_species,
 )
 from boranga.components.species_and_communities.models import GroupType
@@ -19,6 +25,10 @@ logger = logging.getLogger(__name__)
 # TPFL-specific transforms and pipelines
 SPECIES_LOOKUP = taxonomy_lookup_legacy_mapping_species("TPFL", return_field="taxonomy_id")
 EMAIL_USER_TPFL = emailuser_by_legacy_username_factory("TPFL")
+
+COMMONWEALTH_LOOKUP = fk_lookup(CommonwealthConservationList, "code")
+IUCN_LOOKUP = fk_lookup(IUCNVersion, "code")
+CHANGE_CODE_LOOKUP = fk_lookup(ConservationChangeCode, "code")
 
 PROCESSING_STATUS_MAP = {
     "Approved": ConservationStatus.PROCESSING_STATUS_APPROVED,
@@ -35,6 +45,10 @@ PIPELINES = {
     "wa_legislative_list": ["strip", "blank_to_none", "wa_legislative_list_from_code"],
     "wa_priority_category": ["strip", "blank_to_none", "wa_priority_category_from_code"],
     "wa_priority_list": ["strip", "blank_to_none", "wa_priority_list_from_code"],
+    "commonwealth_conservation_category": ["strip", "blank_to_none", COMMONWEALTH_LOOKUP],
+    "iucn_version": ["strip", "blank_to_none", IUCN_LOOKUP],
+    "change_code": ["strip", "blank_to_none", CHANGE_CODE_LOOKUP],
+    "conservation_criteria": ["strip", "blank_to_none"],
     "approved_by": ["strip", "blank_to_none", EMAIL_USER_TPFL],
     "processing_status": ["strip", "blank_to_none"],
     "effective_from_date": ["strip", "smart_date_parse"],

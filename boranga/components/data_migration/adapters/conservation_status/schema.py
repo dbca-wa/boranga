@@ -15,6 +15,11 @@ COLUMN_MAP = {
     "wa_legislative_list": "wa_legislative_list",
     "wa_priority_category": "wa_priority_category",
     "wa_priority_list": "wa_priority_list",
+    # Task 11709, 11711, 11708, 11729
+    "commonwealth_conservation_category": "commonwealth_conservation_category",
+    "iucn_version": "iucn_version",
+    "change_code": "change_code",
+    "conservation_criteria": "conservation_criteria",
     "approved_by": "approved_by",
     "processing_status": "processing_status",
     "effective_from": "effective_from_date",
