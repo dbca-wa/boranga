@@ -284,7 +284,7 @@ class ConservationStatusImporter(BaseSheetImporter):
 
                 # Create SubmitterInformation instance (do not save yet)
                 sub_info = SubmitterInformation(
-                    email_user_id=si_email_user_id,
+                    email_user=si_email_user_id,
                     organisation="DBCA",
                     submitter_category=submitter_category_dbca,
                 )
