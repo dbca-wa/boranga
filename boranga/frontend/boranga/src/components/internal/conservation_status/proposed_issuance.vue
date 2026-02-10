@@ -236,14 +236,20 @@ export default {
             }
         },
         ok_button_text: function () {
-            let action = this.change_code === 'DeList' ? 'Delist' : 'Approve';
+            let action =
+                this.change_code && this.change_code.toLowerCase() === 'delist'
+                    ? 'Delist'
+                    : 'Approve';
             if (this.state == 'proposed_approval') {
                 return `Propose to ${action}`;
             }
             return action;
         },
         title: function () {
-            let action = this.change_code === 'DeList' ? 'Delist' : 'Approve';
+            let action =
+                this.change_code && this.change_code.toLowerCase() === 'delist'
+                    ? 'Delist'
+                    : 'Approve';
             if (this.state == 'proposed_approval') {
                 return `Propose to ${action} Conservation Status CS${this.conservation_status_id}`;
             }
