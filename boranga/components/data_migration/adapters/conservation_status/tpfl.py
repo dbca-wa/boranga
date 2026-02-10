@@ -9,6 +9,7 @@ from boranga.components.conservation_status.models import (
 )
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
+    datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     fk_lookup,
     taxonomy_lookup_legacy_mapping_species,
@@ -29,6 +30,7 @@ EMAIL_USER_TPFL = emailuser_by_legacy_username_factory("TPFL")
 COMMONWEALTH_LOOKUP = fk_lookup(CommonwealthConservationList, "code")
 IUCN_LOOKUP = fk_lookup(IUCNVersion, "code")
 CHANGE_CODE_LOOKUP = fk_lookup(ConservationChangeCode, "code")
+DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 
 PROCESSING_STATUS_MAP = {
     "Approved": ConservationStatus.PROCESSING_STATUS_APPROVED,
@@ -54,7 +56,7 @@ PIPELINES = {
     "effective_from_date": ["strip", "smart_date_parse"],
     "effective_to_date": ["strip", "smart_date_parse"],
     "listing_date": ["strip", "smart_date_parse"],
-    "lodgement_date": ["strip", "smart_date_parse"],
+    "lodgement_date": ["strip", DATETIME_ISO_PERTH],
     "submitter": ["strip", "blank_to_none", EMAIL_USER_TPFL],
     "comment": ["strip", "blank_to_none"],
     "customer_status": ["strip", "blank_to_none"],
