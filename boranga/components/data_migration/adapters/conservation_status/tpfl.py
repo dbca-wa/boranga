@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 # TPFL-specific transforms and pipelines
-SPECIES_LOOKUP = taxonomy_lookup_legacy_mapping_species("TPFL")
+SPECIES_LOOKUP = taxonomy_lookup_legacy_mapping_species("TPFL", return_field="taxonomy_id")
 EMAIL_USER_TPFL = emailuser_by_legacy_username_factory("TPFL")
 
 PROCESSING_STATUS_MAP = {
