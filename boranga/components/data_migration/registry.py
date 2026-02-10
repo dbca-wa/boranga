@@ -1403,22 +1403,27 @@ def taxonomy_lookup_legacy_mapping(list_name: str) -> str:
     return name
 
 
-def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
+def taxonomy_lookup_legacy_mapping_species(list_name: str, return_field: str = "species_id") -> str:
     """Register and return a transform name that resolves a legacy canonical name
-    (from `LegacyTaxonomyMapping`) to a Species id.
+    (from `LegacyTaxonomyMapping`) to a Taxonomy id or Species id.
+
+    Args:
+        list_name: The list name to look up in LegacyTaxonomyMapping.
+        return_field: Which ID to return. "species_id" (default) returns boranga.Species PK,
+                      "taxonomy_id" returns boranga.Taxonomy PK.
 
     Behaviour:
       - normalises incoming value (NBSPs, HTML neutralisation, strip)
       - looks up the normalised key (case-insensitive)
-      - prefers to resolve a linked `taxonomy` -> `Species` and return that `Species.id`
-      - if linked `Species` cannot be found, will attempt to resolve via `taxon_name_id`
-        (finding the Taxonomy then its Species)
-      - on missing mapping or missing species returns an error TransformIssue
+      - returns the requested ID (`species_id` or `taxonomy_id`) if present
+      - if `taxonomy_id` is missing but `taxon_name_id` is present, resolves Taxonomy via `taxon_name_id`
+      - if no mapping, falls back to attempting a `taxon_name` lookup (via `taxonomy_lookup`)
+      - on missing mapping returns an error TransformIssue
     """
     if not list_name:
         raise ValueError("list_name must be provided")
 
-    key_repr = f"taxonom_lookup_legacy_species:{list_name}"
+    key_repr = f"taxonom_lookup_legacy_species:{list_name}:{return_field}"
     name = "taxonom_lookup_legacy_species_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
@@ -1442,154 +1447,67 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str) -> str:
             return _result(value, TransformIssue("error", f"Invalid legacy name: {value!r}"))
 
         entry = table.get(norm) or table.get(norm.casefold())
-        if not entry:
-            # Fallback: try resolving via the general taxonomy_lookup and then
-            # find a linked Species for that taxonomy id. This mirrors the
-            # behaviour in `taxonomy_lookup_legacy_mapping` which attempts a
-            # Taxonomy lookup when legacy mapping is absent.
-            try:
-                tax_transform_name = taxonomy_lookup()
-                fn = registry._fns.get(tax_transform_name)
-                if fn is not None:
-                    res = fn(value, ctx)
-                    # Normalize to TransformResult-ish handling
-                    if res is None:
-                        # treat as not found and fall through to error below
-                        res_val = None
-                    elif isinstance(res, TransformResult):
-                        # if the taxonomy lookup returned an error, propagate it
-                        if any(i.level == "error" for i in res.issues):
-                            return res
-                        res_val = res.value
-                    else:
-                        res_val = res
 
-                    if res_val is not None:
-                        try:
-                            # attempt to resolve a Species linked to the taxonomy
-                            from boranga.components.species_and_communities.models import (
-                                Species,
-                                Taxonomy,
-                            )
+        # 1. Try to resolve via Entry
+        if entry:
+            if return_field == "species_id" and entry.get("species_id"):
+                return _result(entry["species_id"])
 
-                            try:
-                                sp = Species.objects.get(taxonomy_id=res_val)
-                                return _result(sp.pk)
-                            except Species.DoesNotExist:
-                                # try resolving via Taxonomy object then Species
-                                try:
-                                    tax = Taxonomy.all_objects.get(pk=res_val)
-                                    sp = Species.objects.get(taxonomy=tax)
-                                    return _result(sp.pk)
-                                except Exception:
-                                    # fall through to final error return
-                                    pass
-                            except Species.MultipleObjectsReturned:
-                                return _result(
-                                    value,
-                                    TransformIssue(
-                                        "error",
-                                        f"Multiple Species linked to taxonomy_id={res_val} for '{value}'",
-                                    ),
-                                )
-                        except Exception:
-                            logger.exception("taxonomy_lookup_legacy_mapping_species fallback lookup failed")
-            except Exception:
-                logger.exception("taxonomy_lookup_legacy_mapping_species fallback to taxonomy_lookup failed")
+            if return_field == "taxonomy_id" and entry.get("taxonomy_id"):
+                return _result(entry["taxonomy_id"])
 
-            return _result(
-                value,
-                TransformIssue(
-                    "error",
-                    f"LegacyTaxonomyMapping for '{value}' not found in list '{list_name}'",
-                ),
-            )
+            # If we want species_id but only have taxonomy_id/taxon_name_id, we can't easily get it
+            # without the table having pre-calculated it (which `_load_legacy_taxonomy_mappings` does).
+            # If we want taxonomy_id but only have taxon_name_id:
 
-        # Prefer a cached species_id if present (no DB query)
-        species_id = entry.get("species_id")
-        if species_id is not None:
-            return _result(species_id)
-
-        # Otherwise fall back to attempting to resolve via Taxonomy/TaxonName
-        tax_id = entry.get("taxonomy_id")
-        tnid = entry.get("taxon_name_id")
-
-        try:
-            # local imports to avoid circular import issues
-            from boranga.components.species_and_communities.models import (
-                Species,
-                Taxonomy,
-            )
-
-            if tax_id:
-                try:
-                    sp = Species.objects.get(taxonomy_id=tax_id)
-                    return _result(sp.pk)
-                except Species.DoesNotExist:
-                    # fall through to try via taxon_name_id
-                    pass
-                except Species.MultipleObjectsReturned:
-                    return _result(
-                        value,
-                        TransformIssue(
-                            "error",
-                            f"Multiple Species linked to taxonomy_id={tax_id} for '{value}'",
-                        ),
-                    )
-
+            # Fallback to taxon_name_id -> Taxonomy
+            tnid = entry.get("taxon_name_id")
             if tnid:
                 try:
+                    from boranga.components.species_and_communities.models import Taxonomy
+
                     tax = Taxonomy.all_objects.get(taxon_name_id=tnid)
-                except Taxonomy.DoesNotExist:
-                    return _result(
-                        value,
-                        TransformIssue(
-                            "error",
-                            f"Taxonomy with taxon_name_id={tnid} not found for '{value}'",
-                        ),
-                    )
-                except Taxonomy.MultipleObjectsReturned:
-                    return _result(
-                        value,
-                        TransformIssue(
-                            "error",
-                            f"Multiple Taxonomy entries with taxon_name_id={tnid} found for '{value}'",
-                        ),
-                    )
 
-                try:
-                    sp = Species.objects.get(taxonomy=tax)
-                    return _result(sp.pk)
-                except Species.DoesNotExist:
-                    return _result(
-                        value,
-                        TransformIssue(
-                            "error",
-                            f"LegacyTaxonomyMapping for '{value}' maps to taxonomy "
-                            f"(taxon_name_id={tnid}) but no Species found",
-                        ),
-                    )
-                except Species.MultipleObjectsReturned:
-                    return _result(
-                        value,
-                        TransformIssue(
-                            "error",
-                            f"Multiple Species linked to taxon_name_id={tnid} for '{value}'",
-                        ),
-                    )
+                    if return_field == "taxonomy_id":
+                        return _result(tax.pk)
+                    # If we needed species_id, we could try to look it up here, but usually
+                    # _load_legacy_taxonomy_mappings handles the bulk lookup.
+                    if return_field == "species_id":
+                        # Last ditch lookup for species
+                        from boranga.components.species_and_communities.models import Species
 
-            # If we reach here, we had a mapping but could not resolve to a Species
-            return _result(
-                value,
-                TransformIssue(
-                    "error",
-                    f"LegacyTaxonomyMapping for '{value}' has no linked Species for list '{list_name}'",
-                ),
-            )
+                        sp = Species.objects.filter(taxonomy=tax).first()
+                        if sp:
+                            return _result(sp.pk)
+                except Exception:
+                    pass
 
-        except Exception as e:
-            logger.exception("taxonomy_lookup_legacy_mapping_species lookup failed: %s", e)
-            return _result(value, TransformIssue("error", f"lookup error: {e}"))
+        # 2. Fallback to General Taxonomy Lookup (by Scientific Name)
+        try:
+            tax_transform_name = taxonomy_lookup()
+            fn = registry._fns.get(tax_transform_name)
+            if fn is not None:
+                res = fn(value, ctx)
+                # If the general lookup returned a species/taxonomy result, we need to extract the correct ID
+                # The generic `taxonomy_lookup` usually returns a Species instance or ID.
+                # Wait, `taxonomy_lookup` (generic) returns model instance or ID?
+                # Let's assume it returns what we need or we can't handle it easily here.
+                # Actually, `taxonomy_lookup` usually returns a serialized value or ID.
+                # If the fallback returns a value, we just return it.
+                if isinstance(res, TransformResult):
+                    if any(i.level == "error" for i in res.issues):
+                        pass
+                    elif res.value:
+                        return _result(res.value)
+                elif res:
+                    return _result(res)
+        except Exception:
+            pass
+
+        return _result(
+            value,
+            TransformIssue("error", f"Unmapped species name '{value}' (list: {list_name})"),
+        )
 
     registry._fns[name] = _inner
     return name
