@@ -3146,3 +3146,82 @@ def wkt_to_geometry_factory(source_srid: int = 4326, target_srid: int = 4326) ->
 
     registry._fns[name] = inner
     return name
+
+
+@registry.register("wa_priority_list_from_code")
+def t_wa_priority_list_from_code(value, ctx):
+    if not value:
+        return _result(None)
+    code = str(value).strip().upper()
+
+    # Use cache to avoid DB hits
+    if not hasattr(t_wa_priority_list_from_code, "cache"):
+        from boranga.components.species_and_communities.models import WAPriorityList
+
+        t_wa_priority_list_from_code.cache = {pl.code.strip().upper(): pl for pl in WAPriorityList.objects.all()}
+
+    cache = t_wa_priority_list_from_code.cache
+    if code == "COMMUNITY":
+        obj = cache.get("COMMUNITY")
+    else:
+        obj = cache.get(code)
+
+    if not obj:
+        return _result(None, TransformIssue("warning", f"WAPriorityList not found for code: {code}"))
+
+    return _result(obj)
+
+
+@registry.register("wa_priority_category_from_code")
+def t_wa_priority_category_from_code(value, ctx):
+    if not value:
+        return _result(None)
+    code = str(value).strip().upper()
+
+    if not hasattr(t_wa_priority_category_from_code, "cache"):
+        from boranga.components.species_and_communities.models import WAPriorityCategory
+
+        t_wa_priority_category_from_code.cache = {
+            pc.code.strip().upper(): pc for pc in WAPriorityCategory.objects.all()
+        }
+
+    obj = t_wa_priority_category_from_code.cache.get(code)
+    if not obj:
+        return _result(None, TransformIssue("warning", f"WAPriorityCategory not found for code: {code}"))
+    return _result(obj)
+
+
+@registry.register("wa_legislative_list_from_code")
+def t_wa_legislative_list_from_code(value, ctx):
+    if not value:
+        return _result(None)
+    code = str(value).strip().upper()
+
+    if not hasattr(t_wa_legislative_list_from_code, "cache"):
+        from boranga.components.species_and_communities.models import WALegislativeList
+
+        t_wa_legislative_list_from_code.cache = {ll.code.strip().upper(): ll for ll in WALegislativeList.objects.all()}
+
+    obj = t_wa_legislative_list_from_code.cache.get(code)
+    if not obj:
+        return _result(None, TransformIssue("warning", f"WALegislativeList not found for code: {code}"))
+    return _result(obj)
+
+
+@registry.register("wa_legislative_category_from_code")
+def t_wa_legislative_category_from_code(value, ctx):
+    if not value:
+        return _result(None)
+    code = str(value).strip().upper()
+
+    if not hasattr(t_wa_legislative_category_from_code, "cache"):
+        from boranga.components.species_and_communities.models import WALegislativeCategory
+
+        t_wa_legislative_category_from_code.cache = {
+            lc.code.strip().upper(): lc for lc in WALegislativeCategory.objects.all()
+        }
+
+    obj = t_wa_legislative_category_from_code.cache.get(code)
+    if not obj:
+        return _result(None, TransformIssue("warning", f"WALegislativeCategory not found for code: {code}"))
+    return _result(obj)
