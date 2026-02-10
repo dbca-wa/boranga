@@ -183,69 +183,25 @@ class ConservationStatusImporter(BaseSheetImporter):
             logger.info(f"[DRY RUN] Would import {len(all_rows)} rows.")
             return
 
-        # Optimize: Collect IDs for filtering to avoid loading full tables
-        target_community_ids = set()
-
-        # NOTE: We cannot easily collect target_species_ids here because row['species_id']
-        # contains the raw species NAME string at this stage (before pipeline transformation).
-        # We would need to duplicate the taxonomy lookup logic to find the IDs.
-        # Given the Species table is reasonable in size, we will load the full ID->TaxonomyID map.
-
-        for row in all_rows:
-            src = row.get("_source")
-
-            if src == Source.TEC.value:
-                c_id = row.get("community_migrated_from_id")
-                if c_id:
-                    val = str(c_id).strip()
-                    target_community_ids.add(val)
-                    # TEC fallback logic might use "tec-{id}"
-                    target_community_ids.add(f"tec-{val}")
-
-        # 2. Load dependencies
+        # 3. Load dependencies
         Species = apps.get_model("boranga", "Species")
-        WAPriorityList = apps.get_model("boranga", "WAPriorityList")
-        WAPriorityCategory = apps.get_model("boranga", "WAPriorityCategory")
-        WALegislativeList = apps.get_model("boranga", "WALegislativeList")
-        WALegislativeCategory = apps.get_model("boranga", "WALegislativeCategory")
         SubmitterInformation = apps.get_model("boranga", "SubmitterInformation")
         SubmitterCategory = apps.get_model("boranga", "SubmitterCategory")
+        ConservationStatus = apps.get_model("boranga", "ConservationStatus")
 
-        # Cache lookups
-        # Community lookup by migrated_from_id
-        Community = apps.get_model("boranga", "Community")
-        community_map = {}
-        if target_community_ids:
-            community_qs = Community.objects.filter(migrated_from_id__isnull=False)
-            community_qs = community_qs.filter(migrated_from_id__in=target_community_ids)
-            community_map = {c.migrated_from_id: c for c in community_qs}
-
-        # Map Species ID -> Taxonomy ID for direct lookup when species_id is known
-        species_taxonomy_map = {}
-        # Load all mapped species since pre-filtering is difficult (raw data has names, not IDs)
+        # Map Taxonomy ID -> Species PK (since pipeline returns Taxonomy PK)
         species_qs = Species.objects.filter(taxonomy__isnull=False)
-        species_taxonomy_map = dict(species_qs.values_list("id", "taxonomy_id"))
-
-        # Lists and Categories Caches
-        wa_priority_list_map = {pl.code.strip().upper(): pl for pl in WAPriorityList.objects.all()}
-        wa_priority_category_map = {pc.code.strip().upper(): pc for pc in WAPriorityCategory.objects.all()}
-        wa_legislative_list_map = {ll.code.strip().upper(): ll for ll in WALegislativeList.objects.all()}
-        wa_legislative_category_map = {lc.code.strip().upper(): lc for lc in WALegislativeCategory.objects.all()}
+        tax_to_species_pk_map = dict(species_qs.values_list("taxonomy_id", "id"))
 
         # Submitter Category 'DBCA'
         submitter_category_dbca = SubmitterCategory.objects.filter(name="DBCA").first()
         if not submitter_category_dbca:
             logger.warning("SubmitterCategory 'DBCA' not found. SubmitterInformation records may be incomplete.")
 
-        # 3. Create objects
-        ConservationStatus = apps.get_model("boranga", "ConservationStatus")
-
         # Prepare lists for bulk operations
         submitter_infos = []
         cs_objects = []
 
-        # First pass: Prepare SubmitterInformation and ConservationStatus objects
-        valid_rows = []
         for row in all_rows:
             # Run pipeline transformations
             pipelines = pipelines_by_source.get(row.get("_source"), [])
@@ -290,7 +246,7 @@ class ConservationStatusImporter(BaseSheetImporter):
                 mig_from_id = row.get("migrated_from_id")
                 if not mig_from_id:
                     src_key = row.get("_source")
-                    msg = f"Missing migrated_from_id for {src_key} source. Business analyst input needed for TEC data."
+                    msg = f"Missing migrated_from_id for {src_key} source."
                     logger.warning(msg)
                     stats["skipped"] += 1
                     stats["errors"] += 1
@@ -308,68 +264,27 @@ class ConservationStatusImporter(BaseSheetImporter):
                     )
                     continue
 
-                # Resolve Species or Community
-                species_id = None
+                # Resolve Species PK (for TPFL)
+                # row["species_id"] now holds the canonical Taxonomy PK (from SPECIES_LOOKUP pipeline)
+                # We need to map this Taxonomy PK to the Species internal PK
+                species_pk = None
                 species_taxonomy_id = None
-                community_obj = None
 
-                if _src == Source.TPFL.value:
-                    species_id = row.get("species_id")
-                    if species_id:
-                        species_taxonomy_id = species_taxonomy_map.get(species_id)
+                if row.get("species_id"):
+                    # Pipeline transformed species_id to Taxonomy PK
+                    species_taxonomy_id = row["species_id"]
+                    species_pk = tax_to_species_pk_map.get(species_taxonomy_id)
 
-                if _src == Source.TEC.value:
-                    community_mig_id = row.get("community_migrated_from_id")
-                    if community_mig_id:
-                        community_obj = community_map.get(community_mig_id)
-                        # Fallback: if source is TEC and ID is raw, try prefixing "tec-"
-                        if not community_obj:
-                            if not str(community_mig_id).lower().startswith("tec-"):
-                                community_obj = community_map.get(f"tec-{community_mig_id}")
-
-                        if not community_obj:
-                            msg = f"Community not found for migrated_from_id: {community_mig_id}"
-                            logger.warning(msg)
-                            stats["skipped"] += 1
-                            stats["errors"] += 1
-                            errors_details.append(
-                                {
-                                    "migrated_from_id": row.get("migrated_from_id"),
-                                    "column": "community_migrated_from_id",
-                                    "level": "error",
-                                    "message": msg,
-                                    "raw_value": community_mig_id,
-                                    "reason": "Community lookup failed",
-                                    "row_json": json.dumps(row, default=str),
-                                    "timestamp": timezone.now().isoformat(),
-                                }
-                            )
-                            continue
-
-                # Resolve Lists and Categories
-                wa_pl_code = row.get("wa_priority_list")
-                wa_pl_obj = None
-                if wa_pl_code:
-                    if wa_pl_code == "community":
-                        wa_pl_obj = wa_priority_list_map.get("COMMUNITY")
-                    else:
-                        wa_pl_obj = wa_priority_list_map.get(wa_pl_code.strip().upper())
-
-                wa_pc_code = row.get("wa_priority_category")
-                wa_pc_obj = wa_priority_category_map.get(wa_pc_code.strip().upper()) if wa_pc_code else None
-
-                wa_ll_code = row.get("wa_legislative_list")
-                wa_ll_obj = wa_legislative_list_map.get(wa_ll_code.strip().upper()) if wa_ll_code else None
-
-                wa_lc_code = row.get("wa_legislative_category")
-                wa_lc_obj = wa_legislative_category_map.get(wa_lc_code.strip().upper()) if wa_lc_code else None
+                # community_migrated_from_id pipeline should return Community PK or None
+                community_pk = row.get("community_migrated_from_id")
 
                 # Determine submitter for SubmitterInformation
-                si_email_user = row.get("submitter")
+                # Pipeline returns ID for 'submitter'
+                si_email_user_id = row.get("submitter")
 
                 # Create SubmitterInformation instance (do not save yet)
                 sub_info = SubmitterInformation(
-                    email_user=si_email_user,
+                    email_user_id=si_email_user_id,
                     organisation="DBCA",
                     submitter_category=submitter_category_dbca,
                 )
@@ -380,13 +295,13 @@ class ConservationStatusImporter(BaseSheetImporter):
                     migrated_from_id=row.get("migrated_from_id"),
                     processing_status=row.get("processing_status"),
                     customer_status=row.get("customer_status"),
-                    species_id=species_id,
+                    species_id=species_pk,
                     species_taxonomy_id=species_taxonomy_id,
-                    community=community_obj,
-                    wa_priority_list=wa_pl_obj,
-                    wa_priority_category=wa_pc_obj,
-                    wa_legislative_list=wa_ll_obj,
-                    wa_legislative_category=wa_lc_obj,
+                    community_id=community_pk,
+                    wa_priority_list=row.get("wa_priority_list"),  # Transformed to object
+                    wa_priority_category=row.get("wa_priority_category"),  # Transformed to object
+                    wa_legislative_list=row.get("wa_legislative_list"),  # Transformed to object
+                    wa_legislative_category=row.get("wa_legislative_category"),  # Transformed to object
                     review_due_date=row.get("review_due_date"),
                     effective_from=row.get("effective_from_date"),
                     effective_to=row.get("effective_to_date"),
@@ -402,7 +317,6 @@ class ConservationStatusImporter(BaseSheetImporter):
                     approval_level=row.get("approval_level"),
                 )
                 cs_objects.append(cs)
-                valid_rows.append(row)
 
             except Exception as e:
                 logger.error(f"Error preparing row {row.get('migrated_from_id')}: {e}")
