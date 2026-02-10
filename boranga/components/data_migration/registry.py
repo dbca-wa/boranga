@@ -109,6 +109,71 @@ def t_static_value_boranga_tec(value, ctx):
     return _result("boranga.tec@dbca.wa.gov.au")
 
 
+# Mapping from source key -> default/dummy user email
+_SOURCE_DEFAULT_USER_MAP = {
+    "TEC": "boranga.tec@dbca.wa.gov.au",
+    "TEC_SITE_VISITS": "boranga.tec@dbca.wa.gov.au",
+    "TEC_SITE_SPECIES": "boranga.tec@dbca.wa.gov.au",
+    "TEC_SURVEYS": "boranga.tec@dbca.wa.gov.au",
+    "TEC_SURVEY_THREATS": "boranga.tec@dbca.wa.gov.au",
+    "TEC_BOUNDARIES": "boranga.tec@dbca.wa.gov.au",
+    "TPFL": "boranga.ptfl@dbca.wa.gov.au",
+    "TFAUNA": "boranga.tfauna@dbca.wa.gov.au",
+}
+
+
+@registry.register("default_user_for_source")
+def t_default_user_for_source(value, ctx):
+    """Return the EmailUser ID for the default/dummy user based on the row's _source key.
+
+    Source mapping:
+      TEC / TEC_*  -> boranga.tec@dbca.wa.gov.au
+      TPFL         -> boranga.ptfl@dbca.wa.gov.au
+      TFAUNA       -> boranga.tfauna@dbca.wa.gov.au
+
+    The email is resolved to an EmailUserRO.id via DB lookup (cached after first hit).
+    """
+    source = None
+    if ctx and hasattr(ctx, "row") and isinstance(ctx.row, dict):
+        source = ctx.row.get("_source")
+    if not source:
+        return _result(
+            value,
+            TransformIssue("error", "No _source key found on row; cannot determine default user"),
+        )
+
+    email = _SOURCE_DEFAULT_USER_MAP.get(source.upper())
+    if not email:
+        return _result(
+            value,
+            TransformIssue("error", f"No default user mapping for source '{source}'"),
+        )
+
+    # Resolve email -> EmailUserRO.id (cached)
+    if email in _SOURCE_DEFAULT_USER_CACHE:
+        cached = _SOURCE_DEFAULT_USER_CACHE[email]
+        if isinstance(cached, TransformIssue):
+            return _result(value, cached)
+        return _result(cached)
+
+    try:
+        user = EmailUserRO.objects.get(email__iexact=email)
+        _SOURCE_DEFAULT_USER_CACHE[email] = user.id
+        return _result(user.id)
+    except EmailUserRO.DoesNotExist:
+        err = TransformIssue("error", f"Default user '{email}' not found in EmailUserRO")
+        _SOURCE_DEFAULT_USER_CACHE[email] = err
+        return _result(value, err)
+    except EmailUserRO.MultipleObjectsReturned:
+        err = TransformIssue("error", f"Multiple EmailUserRO entries for '{email}'")
+        _SOURCE_DEFAULT_USER_CACHE[email] = err
+        return _result(value, err)
+
+
+# Cache: email -> EmailUserRO.id or TransformIssue on failure
+_SOURCE_DEFAULT_USER_CACHE: dict = {}
+
+
 @registry.register("static_value_community")
 def t_static_value_community(value, ctx):
     return _result("community")
