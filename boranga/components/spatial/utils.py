@@ -78,7 +78,7 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
         # seems to except singleton lists
         # (https://www.tsusiatsoftware.net/jts/javadoc/com/vividsolutions/jts/io/WKTReader.html)
         logger.warning(f"Converting MultiPoint geometry {wfs_geom} to double-bracket notation")
-        test_geom_wkt = f'MULTIPOINT ({", ".join([f"({c[0]} {c[1]})" for c in wfs_geom.coords])})'
+        test_geom_wkt = f"MULTIPOINT ({', '.join([f'({c[0]} {c[1]})' for c in wfs_geom.coords])})"
     else:
         test_geom_wkt = wfs_geom.wkt
 
@@ -859,7 +859,8 @@ def buffer_geos_geometry(geometry, buffer_radius, unit="m"):
 
 
 def convex_hull(geoms, *args, **kwargs):
-    convex_hull = shp.MultiPoint(geoms).convex_hull
+    shapely_geoms = [wkt.loads(g.wkt) for g in geoms]
+    convex_hull = shp.GeometryCollection(shapely_geoms).convex_hull
     geom = GEOSGeometry(convex_hull.wkt)
 
     return json.dumps(feature_collection([geom]))
