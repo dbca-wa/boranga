@@ -135,6 +135,60 @@ COLUMN_MAP = {
     "SV_PHOTO": "temp_sv_photo",
     # Task 12499
     "SV_OBSERVATION_TYPE": "OCRAssociatedSpecies__species_list_relates_to",
+    # ── TFAUNA raw-field mappings (Fauna Records.csv) ──
+    "DBNo": "migrated_from_id",
+    "SpCode": "species_id",
+    "Date": "observation_date",
+    "Observer": "OCRObserverDetail__observer_name",
+    "OrgRole": "OCRObserverDetail__organisation",
+    "Address": "Address",
+    "Phone": "Phone",
+    "Certainty": "Certainty",
+    "NumSeen": "NumSeen",
+    "Features": "OCRAnimalObservation__distinctive_feature",
+    "AdultM": "AdultM",
+    "AdultF": "AdultF",
+    "AdultU": "AdultU",
+    "JuvM": "JuvM",
+    "JuvF": "JuvF",
+    "JuvU": "JuvU",
+    "LocName": "OCRLocation__locality",
+    "TenCode": "TenCode",
+    "DistrictNo": "DistrictNo",
+    "Site": "OCRLocation__location_description",
+    "Lat": "Lat",
+    "Long": "Long",
+    "Datum": "DATUM",
+    "Resolution": "OCRLocation__location_accuracy",
+    "Landform": "Landform",
+    "VegType": "VegType",
+    "Fire": "OCRFireHistory__comment",
+    "Sp1": "Sp1",
+    "Sp2": "Sp2",
+    "Sp3": "Sp3",
+    "Sp4": "Sp4",
+    "Sp5": "Sp5",
+    "Sp6": "Sp6",
+    "ObservMethod": "ObservMethod",
+    "ObservType": "ObservType",
+    "SecSign": "SecSign",
+    "Observation": "OCRAnimalObservation__animal_observation_detail_comment",
+    "Breeding": "Breeding",
+    "Identification": "OCRIdentification__id_confirmed_by",
+    "SpHeld": "OCRIdentification__identification_comment",
+    "SpCatNum": "OCRIdentification__barcode_number",
+    "Map": "Map",
+    "MudMap": "MudMap",
+    "Photo": "Photo",
+    "Notes": "Notes_flag",
+    "Comments": "comments",
+    "EnName": "submitter",
+    "EnDate": "lodgement_date",
+    "ChName": "ChName",
+    "ChDate": "ChDate",
+    "ReportTitle": "ReportTitle",
+    "Author": "Author",
+    "SpVoucher": "SpVoucher",
 }
 
 REQUIRED_COLUMNS = [
@@ -266,6 +320,43 @@ class OccurrenceReportRow:
     OCRPlantCount__vegetative_state_present: bool | None = None
     OCRPlantCount__obs_date: date | None = None
 
+    # OCRAnimalObservation fields
+    OCRAnimalObservation__distinctive_feature: str | None = None
+    OCRAnimalObservation__animal_observation_detail_comment: str | None = None
+    OCRAnimalObservation__count_status: str | None = None
+    OCRAnimalObservation__alive_adult_male: int | None = None
+    OCRAnimalObservation__dead_adult_male: int | None = None
+    OCRAnimalObservation__alive_adult_female: int | None = None
+    OCRAnimalObservation__dead_adult_female: int | None = None
+    OCRAnimalObservation__alive_adult_unknown: int | None = None
+    OCRAnimalObservation__dead_adult_unknown: int | None = None
+    OCRAnimalObservation__alive_juvenile_male: int | None = None
+    OCRAnimalObservation__dead_juvenile_male: int | None = None
+    OCRAnimalObservation__alive_juvenile_female: int | None = None
+    OCRAnimalObservation__dead_juvenile_female: int | None = None
+    OCRAnimalObservation__alive_juvenile_unknown: int | None = None
+    OCRAnimalObservation__dead_juvenile_unknown: int | None = None
+    OCRAnimalObservation__alive_unsure_male: int | None = None
+    OCRAnimalObservation__dead_unsure_male: int | None = None
+    OCRAnimalObservation__alive_unsure_female: int | None = None
+    OCRAnimalObservation__dead_unsure_female: int | None = None
+    OCRAnimalObservation__alive_unsure_unknown: int | None = None
+    OCRAnimalObservation__dead_unsure_unknown: int | None = None
+    OCRAnimalObservation__simple_alive: int | None = None
+    OCRAnimalObservation__simple_dead: int | None = None
+    OCRAnimalObservation__obs_date: date | None = None
+
+    # OCRObserverDetail extra fields (TFAUNA)
+    OCRObserverDetail__contact: str | None = None
+    OCRObserverDetail__observer_name: str | None = None
+    OCRObserverDetail__organisation: str | None = None
+
+    # OCRObservationDetail extra fields
+    OCRObservationDetail__comments: str | None = None
+
+    # OCRIdentification extra fields (TFAUNA)
+    OCRIdentification__id_confirmed_by: str | None = None
+
     # OCRVegetationStructure fields
     OCRVegetationStructure__vegetation_structure_layer_one: str | None = None
     OCRVegetationStructure__vegetation_structure_layer_two: str | None = None
@@ -384,6 +475,73 @@ class OccurrenceReportRow:
             OCRPlantCount__total_quadrat_area=utils.to_decimal_maybe(d.get("OCRPlantCount__total_quadrat_area")),
             OCRPlantCount__vegetative_state_present=d.get("OCRPlantCount__vegetative_state_present"),
             OCRPlantCount__obs_date=obs_date,
+            # OCRAnimalObservation
+            OCRAnimalObservation__distinctive_feature=utils.safe_strip(
+                d.get("OCRAnimalObservation__distinctive_feature")
+            ),
+            OCRAnimalObservation__animal_observation_detail_comment=utils.safe_strip(
+                d.get("OCRAnimalObservation__animal_observation_detail_comment")
+            ),
+            OCRAnimalObservation__count_status=utils.safe_strip(d.get("OCRAnimalObservation__count_status")),
+            OCRAnimalObservation__alive_adult_male=utils.to_int_maybe(d.get("OCRAnimalObservation__alive_adult_male")),
+            OCRAnimalObservation__dead_adult_male=utils.to_int_maybe(d.get("OCRAnimalObservation__dead_adult_male")),
+            OCRAnimalObservation__alive_adult_female=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__alive_adult_female")
+            ),
+            OCRAnimalObservation__dead_adult_female=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__dead_adult_female")
+            ),
+            OCRAnimalObservation__alive_adult_unknown=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__alive_adult_unknown")
+            ),
+            OCRAnimalObservation__dead_adult_unknown=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__dead_adult_unknown")
+            ),
+            OCRAnimalObservation__alive_juvenile_male=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__alive_juvenile_male")
+            ),
+            OCRAnimalObservation__dead_juvenile_male=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__dead_juvenile_male")
+            ),
+            OCRAnimalObservation__alive_juvenile_female=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__alive_juvenile_female")
+            ),
+            OCRAnimalObservation__dead_juvenile_female=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__dead_juvenile_female")
+            ),
+            OCRAnimalObservation__alive_juvenile_unknown=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__alive_juvenile_unknown")
+            ),
+            OCRAnimalObservation__dead_juvenile_unknown=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__dead_juvenile_unknown")
+            ),
+            OCRAnimalObservation__alive_unsure_male=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__alive_unsure_male")
+            ),
+            OCRAnimalObservation__dead_unsure_male=utils.to_int_maybe(d.get("OCRAnimalObservation__dead_unsure_male")),
+            OCRAnimalObservation__alive_unsure_female=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__alive_unsure_female")
+            ),
+            OCRAnimalObservation__dead_unsure_female=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__dead_unsure_female")
+            ),
+            OCRAnimalObservation__alive_unsure_unknown=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__alive_unsure_unknown")
+            ),
+            OCRAnimalObservation__dead_unsure_unknown=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__dead_unsure_unknown")
+            ),
+            OCRAnimalObservation__simple_alive=utils.to_int_maybe(d.get("OCRAnimalObservation__simple_alive")),
+            OCRAnimalObservation__simple_dead=utils.to_int_maybe(d.get("OCRAnimalObservation__simple_dead")),
+            OCRAnimalObservation__obs_date=obs_date,
+            # OCRObserverDetail extras
+            OCRObserverDetail__contact=utils.safe_strip(d.get("OCRObserverDetail__contact")),
+            OCRObserverDetail__observer_name=utils.safe_strip(d.get("OCRObserverDetail__observer_name")),
+            OCRObserverDetail__organisation=utils.safe_strip(d.get("OCRObserverDetail__organisation")),
+            # OCRObservationDetail extras
+            OCRObservationDetail__comments=utils.safe_strip(d.get("OCRObservationDetail__comments")),
+            # OCRIdentification extras
+            OCRIdentification__id_confirmed_by=utils.safe_strip(d.get("OCRIdentification__id_confirmed_by")),
             OCRVegetationStructure__vegetation_structure_layer_one=utils.safe_strip(
                 d.get("OCRVegetationStructure__vegetation_structure_layer_one")
             ),
