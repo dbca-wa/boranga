@@ -755,7 +755,10 @@
                     </div>
                     <!-- </div> -->
                     <!-- Toggle measure tool between active and not active -->
-                    <div class="optional-layers-button-wrapper">
+                    <div
+                        v-if="measurementToolAvailable"
+                        class="optional-layers-button-wrapper"
+                    >
                         <div
                             :title="
                                 mode == 'measure'
@@ -1944,6 +1947,14 @@ export default {
             },
         },
         /**
+         * Whether the measurement tool is available
+         */
+        measurementToolAvailable: {
+            type: Boolean,
+            required: false,
+            default: false,
+        },
+        /**
          * Whether to validate the feature before saving it
          * If set to true, the `validate-feature` event is emitted before saving the feature
          * and the parent component needs to call finishDrawing on the map component
@@ -2685,6 +2696,9 @@ export default {
         },
         clearMeasurementLayer: function () {
             let vm = this;
+            if (!vm.measurementLayer) {
+                return;
+            }
             let features = vm.measurementLayer.getSource().getFeatures();
             features.forEach((feature) => {
                 vm.measurementLayer.getSource().removeFeature(feature);
@@ -2896,7 +2910,9 @@ export default {
             let fullScreenControl = new FullScreenControl();
             vm.map.addControl(fullScreenControl);
 
-            vm.initialiseMeasurementLayer();
+            if (vm.measurementToolAvailable) {
+                vm.initialiseMeasurementLayer();
+            }
             // Init vector layers
             vm.initialiseQueryLayer();
             vm.initialiseProcessingLayer();
@@ -2906,10 +2922,11 @@ export default {
 
             vm.initialiseDrawLayer();
 
-            vm.initialiseLayerSwitcher([
-                vm.measurementLayer,
-                ...vm.vectorLayersArray,
-            ]);
+            vm.initialiseLayerSwitcher(
+                [vm.measurementLayer, ...vm.vectorLayersArray].filter(
+                    (l) => !!l
+                )
+            );
 
             vm.initialiseLayerEvents();
 
