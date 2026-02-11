@@ -331,7 +331,7 @@
                     <label
                         for="occurrence_report_for_occurrence_name"
                         class="col-sm-3 col-form-label"
-                        >Occurrence Name:
+                        >Suggested Occurrence Name:
                         <HelpText
                             section_id="occurrence_report_for_occurrence_name"
                         />
@@ -342,6 +342,31 @@
                             v-model="occurrence_report_obj.ocr_for_occ_name"
                             type="text"
                             :disabled="isReadOnly"
+                            class="form-control"
+                            autocomplete="new-password"
+                        />
+                    </div>
+                </div>
+                <div
+                    v-if="
+                        occurrence_report_obj.occurrence &&
+                        occurrence_report_obj.occurrence.occurrence_name
+                    "
+                    class="row mb-3"
+                >
+                    <label
+                        for="assigned_occurrence_name"
+                        class="col-sm-3 col-form-label"
+                        >Assigned Occurrence Name:
+                    </label>
+                    <div class="col-sm-9">
+                        <input
+                            id="assigned_occurrence_name"
+                            v-model="
+                                occurrence_report_obj.occurrence.occurrence_name
+                            "
+                            type="text"
+                            :disabled="true"
                             class="form-control"
                             autocomplete="new-password"
                         />
