@@ -3769,6 +3769,230 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
 
         # ---------------------------------------------------------------------
+        # TFAUNA: Create Occurrence records from approved OccurrenceReports
+        # ---------------------------------------------------------------------
+        # For each approved TFAUNA OCR, create (or update) a corresponding
+        # Occurrence, copy geometry, and link the OCR back to it.  We derive the
+        # Occurrence's migrated_from_id by replacing the "tfauna-" prefix with
+        # "tfauna-orf-" so that e.g. tfauna-42 → tfauna-orf-42.
+        # This must run BEFORE the pop_section_map clone step so that newly
+        # created Occurrences are available for 1-to-1 section cloning.
+
+        tfauna_approved_ocrs = [
+            ocr for mid, ocr in target_map.items() if mid.startswith("tfauna-") and ocr.processing_status == "approved"
+        ]
+
+        if tfauna_approved_ocrs:
+            logger.info(
+                "TFAUNA: Creating/updating Occurrences from %d approved OCRs ...",
+                len(tfauna_approved_ocrs),
+            )
+
+            from django.contrib.contenttypes.models import ContentType
+
+            occ_ct = ContentType.objects.get_for_model(Occurrence)
+
+            # Build migrated_from_id mapping: OCR.migrated_from_id → Occurrence.migrated_from_id
+            occ_mig_id_map = {}  # ocr.migrated_from_id → occ migrated_from_id
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = ocr.migrated_from_id.replace("tfauna-", "tfauna-orf-", 1)
+                occ_mig_id_map[ocr.migrated_from_id] = occ_mid
+
+            # Prefetch existing Occurrences by migrated_from_id for idempotency
+            all_occ_mids = set(occ_mig_id_map.values())
+            existing_occs = {
+                o.migrated_from_id: o for o in Occurrence.objects.filter(migrated_from_id__in=all_occ_mids)
+            }
+
+            new_occs = []
+            update_occs = []
+
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = occ_mig_id_map[ocr.migrated_from_id]
+                occ = existing_occs.get(occ_mid)
+
+                defaults = {
+                    "occurrence_name": ocr.ocr_for_occ_name or "",
+                    "group_type_id": ocr.group_type_id,
+                    "species_id": ocr.species_id,
+                    "processing_status": Occurrence.PROCESSING_STATUS_ACTIVE,
+                }
+                if getattr(ctx, "migration_run", None) is not None:
+                    defaults["migration_run"] = ctx.migration_run
+
+                if occ:
+                    # Update existing
+                    changed = False
+                    for attr, val in defaults.items():
+                        if getattr(occ, attr) != val:
+                            setattr(occ, attr, val)
+                            changed = True
+                    if changed:
+                        update_occs.append(occ)
+                else:
+                    # Create new
+                    occ = Occurrence(migrated_from_id=occ_mid, **defaults)
+                    new_occs.append(occ)
+
+            # Bulk-create new Occurrences (cannot use bulk_create because the
+            # model's save() performs a double-save to set occurrence_number).
+            occ_created = 0
+            for i in range(0, len(new_occs), BATCH):
+                batch = new_occs[i : i + BATCH]
+                for occ in batch:
+                    try:
+                        occ.save()  # triggers double-save for occurrence_number
+                        occ_created += 1
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create Occurrence for migrated_from_id=%s: %s",
+                            occ.migrated_from_id,
+                            exc,
+                        )
+                        errors += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": occ.migrated_from_id,
+                                "column": "Occurrence",
+                                "level": "error",
+                                "message": f"Failed to create Occurrence: {exc}",
+                                "raw_value": "",
+                            }
+                        )
+                if (i + BATCH) % 5000 < BATCH:
+                    logger.info(
+                        "TFAUNA Occurrence create progress: %d/%d",
+                        min(i + BATCH, len(new_occs)),
+                        len(new_occs),
+                    )
+
+            # Bulk-update changed Occurrences
+            occ_updated = 0
+            if update_occs:
+                update_fields = [
+                    "occurrence_name",
+                    "group_type_id",
+                    "species_id",
+                    "processing_status",
+                ]
+                if getattr(ctx, "migration_run", None) is not None:
+                    update_fields.append("migration_run_id")
+                try:
+                    Occurrence.objects.bulk_update(update_occs, update_fields, batch_size=BATCH)
+                    occ_updated = len(update_occs)
+                except Exception:
+                    logger.exception("Failed to bulk_update Occurrences; falling back to individual saves")
+                    for occ in update_occs:
+                        try:
+                            occ.save()
+                            occ_updated += 1
+                        except Exception as exc:
+                            logger.exception(
+                                "Failed to update Occurrence %s: %s",
+                                occ.migrated_from_id,
+                                exc,
+                            )
+
+            # Merge new + existing into a single lookup for linking & geometry
+            all_occ_by_mid = {**existing_occs}
+            for occ in new_occs:
+                if occ.pk:
+                    all_occ_by_mid[occ.migrated_from_id] = occ
+
+            # Link OCRs to their Occurrences and copy geometry
+            ocrs_to_link = []
+            geom_to_create = []
+
+            # Prefetch existing OccurrenceGeometries for idempotency
+            occ_ids_with_geom = set(
+                OccurrenceGeometry.objects.filter(
+                    occurrence_id__in=[o.pk for o in all_occ_by_mid.values()]
+                ).values_list("occurrence_id", flat=True)
+            )
+
+            # Prefetch OCR geometries
+            ocr_pks = [ocr.pk for ocr in tfauna_approved_ocrs]
+            ocr_geom_map = {}
+            for g in OccurrenceReportGeometry.objects.filter(occurrence_report_id__in=ocr_pks):
+                if g.occurrence_report_id not in ocr_geom_map:
+                    ocr_geom_map[g.occurrence_report_id] = g
+
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = occ_mig_id_map[ocr.migrated_from_id]
+                occ = all_occ_by_mid.get(occ_mid)
+                if not occ or not occ.pk:
+                    continue
+
+                # Link OCR → Occurrence
+                if ocr.occurrence_id != occ.pk:
+                    ocr.occurrence_id = occ.pk
+                    # Also sync display fields
+                    if not ocr.ocr_for_occ_number:
+                        ocr.ocr_for_occ_number = occ.occurrence_number
+                    ocrs_to_link.append(ocr)
+
+                # Copy geometry if the Occurrence doesn't have one yet
+                if occ.pk not in occ_ids_with_geom:
+                    src_geom = ocr_geom_map.get(ocr.pk)
+                    if src_geom and src_geom.geometry:
+                        occ_geom = OccurrenceGeometry(
+                            occurrence=occ,
+                            geometry=src_geom.geometry,
+                            content_type=occ_ct,
+                            object_id=occ.pk,
+                            locked=src_geom.locked,
+                            buffer_radius=getattr(src_geom, "buffer_radius", None),
+                        )
+                        geom_to_create.append(occ_geom)
+                        occ_ids_with_geom.add(occ.pk)  # prevent duplicates in same batch
+
+            # Bulk-update OCR ↔ Occurrence links
+            if ocrs_to_link:
+                try:
+                    OccurrenceReport.objects.bulk_update(
+                        ocrs_to_link,
+                        ["occurrence_id", "ocr_for_occ_number"],
+                        batch_size=BATCH,
+                    )
+                    logger.info("Linked %d OCRs to their new Occurrences", len(ocrs_to_link))
+                except Exception:
+                    logger.exception("Failed to bulk_update OCR→Occurrence links; falling back")
+                    for ocr in ocrs_to_link:
+                        try:
+                            ocr.save(update_fields=["occurrence_id", "ocr_for_occ_number"])
+                        except Exception as exc:
+                            logger.exception("Failed to link OCR %s: %s", ocr.migrated_from_id, exc)
+
+            # Bulk-create OccurrenceGeometry records
+            geom_created = 0
+            if geom_to_create:
+                # OccurrenceGeometry.save() rejects polygons for fauna — our data
+                # is point-only, so we can bypass save() and use bulk_create.
+                try:
+                    OccurrenceGeometry.objects.bulk_create(geom_to_create, batch_size=BATCH)
+                    geom_created = len(geom_to_create)
+                except Exception:
+                    logger.exception("Failed to bulk_create OccurrenceGeometry; falling back to individual saves")
+                    for g in geom_to_create:
+                        try:
+                            g.save()
+                            geom_created += 1
+                        except Exception as exc:
+                            logger.exception(
+                                "Failed to create OccurrenceGeometry for OCC %s: %s",
+                                g.occurrence_id,
+                                exc,
+                            )
+
+            logger.info(
+                "TFAUNA Occurrence creation complete: %d created, %d updated, %d geometry copied, %d OCRs linked",
+                occ_created,
+                occ_updated,
+                geom_created,
+                len(ocrs_to_link),
+            )
+
+        # ---------------------------------------------------------------------
         # Populate Occurrence 1-to-1 objects by cloning from OccurrenceReport
         # based on DRF_POP_SECTION_MAP.csv
         # ---------------------------------------------------------------------
