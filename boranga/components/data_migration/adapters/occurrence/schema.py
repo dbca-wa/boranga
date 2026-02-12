@@ -70,9 +70,16 @@ COLUMN_MAP = {
     "OCC_SPECIES_DESC": "OCCAssociatedSpecies__comment",
     # AssociatedSpeciesTaxonomy
     "SPEC_SP_ROLE_CODE": "AssociatedSpeciesTaxonomy__species_role_id",
+    # OCCIdentification
+    "OCC_STATUS_CODE": "OCCIdentification__identification_certainty_id",
+    # OCCVegetationStructure
+    "OCC_COM_STRUCTURE": "OCCVegetationStructure__vegetation_structure_layer_one",
+    # OCCLocation district/region (from TEC_DISTRICT_REGION or DISTRICTS.csv)
+    "DIST_CALM_DIST_CODE": "OCCLocation__district_id",
     # OccurrenceDocument
     "ADD_ITEM_CODE": "OccurrenceDocument__document_sub_category_id",
     "ADD_DESC": "OccurrenceDocument__description",
+    "ADD_USERNAME": "OccurrenceDocument__uploaded_by",
 }
 
 REQUIRED_COLUMNS = [
@@ -162,8 +169,16 @@ class OccurrenceRow:
 
     AssociatedSpeciesTaxonomy__species_role_id: int | None = None
 
+    OCCIdentification__identification_certainty_id: int | None = None
+
+    OCCVegetationStructure__vegetation_structure_layer_one: str | None = None
+
+    OCCLocation__district_id: int | None = None
+    OCCLocation__region_id: int | None = None
+
     OccurrenceDocument__document_sub_category_id: int | None = None
     OccurrenceDocument__description: str | None = None
+    OccurrenceDocument__uploaded_by: int | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceRow:
@@ -216,10 +231,19 @@ class OccurrenceRow:
             AssociatedSpeciesTaxonomy__species_role_id=utils.to_int_maybe(
                 d.get("AssociatedSpeciesTaxonomy__species_role_id")
             ),
+            OCCIdentification__identification_certainty_id=utils.to_int_maybe(
+                d.get("OCCIdentification__identification_certainty_id")
+            ),
+            OCCVegetationStructure__vegetation_structure_layer_one=utils.safe_strip(
+                d.get("OCCVegetationStructure__vegetation_structure_layer_one")
+            ),
+            OCCLocation__district_id=utils.to_int_maybe(d.get("OCCLocation__district_id")),
+            OCCLocation__region_id=utils.to_int_maybe(d.get("OCCLocation__region_id")),
             OccurrenceDocument__document_sub_category_id=utils.to_int_maybe(
                 d.get("OccurrenceDocument__document_sub_category_id")
             ),
             OccurrenceDocument__description=utils.safe_strip(d.get("OccurrenceDocument__description")),
+            OccurrenceDocument__uploaded_by=utils.to_int_maybe(d.get("OccurrenceDocument__uploaded_by")),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:
