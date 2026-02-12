@@ -10,8 +10,16 @@ from boranga.components.data_migration.adapters.base import (
 )
 from boranga.components.data_migration.adapters.occurrence.schema import SCHEMA
 from boranga.components.data_migration.mappings import get_group_type_id
-from boranga.components.data_migration.registry import emailuser_by_legacy_username_factory
-from boranga.components.species_and_communities.models import GroupType
+from boranga.components.data_migration.registry import (
+    build_legacy_map_transform,
+    emailuser_by_legacy_username_factory,
+    fk_lookup,
+    static_value_factory,
+)
+from boranga.components.species_and_communities.models import (
+    DocumentSubCategory,
+    GroupType,
+)
 
 
 def tec_comment_transform(val, ctx):
@@ -123,29 +131,16 @@ def tec_site_geometry_transform(val, ctx):
     return None
 
 
-_sub_category_cache = {}
+# Use standard fk_lookup for DocumentSubCategory
+# Note: Assumes document_sub_category_name values in DB are consistently cased.
+# If case-insensitive lookup is needed, the custom transform should be restored.
+DOCUMENT_SUB_CATEGORY_TRANSFORM = fk_lookup(
+    model=DocumentSubCategory,
+    lookup_field="document_sub_category_name",
+)
 
-
-def tec_document_sub_category_transform(val, ctx):
-    if not val:
-        return None
-    val = str(val).strip()
-    if not val:
-        return None
-
-    if not _sub_category_cache:
-        from boranga.components.species_and_communities.models import (
-            DocumentSubCategory,
-        )
-
-        for obj in DocumentSubCategory.objects.all():
-            _sub_category_cache[obj.document_sub_category_name.lower()] = obj.id
-
-    return _sub_category_cache.get(val.lower())
-
-
-def val_to_none(val, ctx):
-    return None
+# Use static_value_factory for explicit None assignments
+STATIC_NONE = static_value_factory(None)
 
 
 _tec_user_id_cache = None
@@ -167,6 +162,16 @@ def default_to_tec_user(val, ctx):
     return _tec_user_id_cache
 
 
+# TODO Task 12225: Uses LegacyValueMap with legacy_system="TEC", list_name="OCC_STATUS_CODE (STATUS)"
+# to map legacy status codes (e.g., "Identified", "Believed") to IdentificationCertainty IDs.
+# Verify list_name format and that LegacyValueMap is populated with correct mappings.
+IDENTIFICATION_CERTAINTY_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TEC",
+    list_name="OCC_STATUS_CODE (STATUS)",
+    required=False,
+    return_type="id",
+)
+
 PIPELINES = {
     "occurrence_name": ["strip", "blank_to_none", "required"],
     "community_id": ["community_id_from_legacy"],
@@ -178,23 +183,31 @@ PIPELINES = {
         lambda v, ctx: v if v else "",
     ],
     # TODO: Implement lookups for these fields
-    "OCCLocation__coordinate_source_id": [val_to_none],
+    "OCCLocation__coordinate_source_id": [STATIC_NONE],
     "OCCLocation__locality": [
         tec_location_locality_transform,
         # lambda v, ctx: v if v else "(Not specified)",
     ],
     "OCCLocation__location_description": ["strip"],
     "OCCLocation__boundary_description": ["strip"],
-    "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
-    "OccurrenceDocument__document_sub_category_id": [tec_document_sub_category_transform],
+    "AssociatedSpeciesTaxonomy__species_role_id": [STATIC_NONE],
+    "OccurrenceDocument__document_sub_category_id": [
+        "strip",
+        "blank_to_none",
+        DOCUMENT_SUB_CATEGORY_TRANSFORM,
+    ],
     "OccurrenceDocument__uploaded_by": [
         "strip",
         "blank_to_none",
         emailuser_by_legacy_username_factory("TEC"),
         default_to_tec_user,
     ],
-    # OCCIdentification - identification_certainty is pre-resolved by S&C in the CSV
-    "OCCIdentification__identification_certainty_id": ["strip", "blank_to_none"],
+    # OCCIdentification - transform OCC_STATUS_CODE to IdentificationCertainty FK via LegacyValueMap
+    "OCCIdentification__identification_certainty_id": [
+        "strip",
+        "blank_to_none",
+        IDENTIFICATION_CERTAINTY_TRANSFORM,
+    ],
     # OCCVegetationStructure
     "OCCVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none"],
     # OCCLocation district/region - resolved via DISTRICTS.csv lookup
@@ -217,7 +230,7 @@ PIPELINES = {
     # Pass-through fields
     "migrated_from_id": [],
     "processing_status": [],
-    "species_id": [val_to_none],
+    "species_id": [STATIC_NONE],  # TEC is community-based, not species
     "wild_status_id": [],
     "datetime_created": ["blank_to_none"],
     "datetime_updated": ["blank_to_none"],
@@ -545,16 +558,6 @@ class OccurrenceTecAdapter(SourceAdapter):
             district_pk_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="District")
             region_pk_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="Region")
 
-        # Load identification certainty lookup for OCC_STATUS_CODE resolution
-        id_certainty_map = {}  # certainty name (e.g. "High") -> pk
-        try:
-            from boranga.components.occurrence.models import IdentificationCertainty
-
-            for ic in IdentificationCertainty.objects.all():
-                id_certainty_map[ic.name.lower()] = ic.id
-        except Exception:
-            pass
-
         # Index auxiliary data by OCC_UNIQUE_ID
         sites_by_occ = defaultdict(list)
         for s in site_rows:
@@ -635,27 +638,6 @@ class OccurrenceTecAdapter(SourceAdapter):
                 if reg_pk:
                     row["_resolved_region_id"] = reg_pk
 
-            # TODO Task 12225: Verify identification certainty mapping
-            # Currently mapping OCC_STATUS_CODE values:
-            #   "Identified" -> IdentificationCertainty "High"
-            #   "Believed" -> IdentificationCertainty "Medium"
-            # This mapping is assumed based on field names but needs confirmation from S&C team.
-            # Confirm the complete list of OCC_STATUS_CODE values and their correct mappings.
-            status_code = row.get("OCC_STATUS_CODE", "").strip()
-            if status_code and id_certainty_map:
-                certainty_name = None
-                status_lower = status_code.lower()
-                if status_lower == "identified":
-                    certainty_name = "high"
-                elif status_lower == "believed":
-                    certainty_name = "medium"
-                else:
-                    # Try direct match (S&C may have already set it to High/Medium/Low)
-                    certainty_name = status_lower
-
-                if certainty_name and certainty_name in id_certainty_map:
-                    row["_resolved_identification_certainty_id"] = id_certainty_map[certainty_name]
-
             # Map raw row to canonical keys
             canonical_row = SCHEMA.map_raw_row(row)
             # Preserve internal keys (starting with _)
@@ -674,12 +656,6 @@ class OccurrenceTecAdapter(SourceAdapter):
                 canonical_row["OCCLocation__district_id"] = row["_resolved_district_id"]
             if row.get("_resolved_region_id"):
                 canonical_row["OCCLocation__region_id"] = row["_resolved_region_id"]
-
-            # Apply resolved identification certainty ID
-            if row.get("_resolved_identification_certainty_id"):
-                canonical_row["OCCIdentification__identification_certainty_id"] = row[
-                    "_resolved_identification_certainty_id"
-                ]
 
             joined_rows.append(canonical_row)
 
