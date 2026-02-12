@@ -874,7 +874,8 @@ def intersect_geometries(geoms, *args, **kwargs):
     if not geoms[0].intersects(geoms[1]):
         raise serializers.ValidationError("Intersection operation requires intersecting geometries")
 
-    intersection = unary_union(shp.MultiPolygon([a.intersection(b) for a, b in combinations(geoms, 2)]))
+    shapely_geoms = [wkt.loads(g.wkt) for g in geoms]
+    intersection = unary_union(shp.MultiPolygon([a.intersection(b) for a, b in combinations(shapely_geoms, 2)]))
 
     geom = GEOSGeometry(intersection.wkt)
 
@@ -884,7 +885,8 @@ def intersect_geometries(geoms, *args, **kwargs):
 def union_geometries(geoms, *args, **kwargs):
     """Calculates the union of the input geometries."""
 
-    mp = shp.MultiPolygon(geoms)
+    shapely_geoms = [wkt.loads(g.wkt) for g in geoms]
+    mp = shp.MultiPolygon(shapely_geoms)
     unary_union_geoms = unary_union(mp)
     union_geom = GEOSGeometry(unary_union_geoms.wkt)
 
@@ -894,7 +896,8 @@ def union_geometries(geoms, *args, **kwargs):
 def voronoi(geoms, *args, **kwargs):
     """Calculates the Voronoi diagram of the input geometries."""
 
-    mp = shp.MultiPoint(geoms)
+    shapely_geoms = [wkt.loads(g.wkt) for g in geoms]
+    mp = shp.MultiPoint(shapely_geoms)
     voronoi = voronoi_diagram(mp)
     voronoi_geom = GEOSGeometry(shp.MultiPolygon(voronoi).wkt)
 
@@ -906,10 +909,11 @@ def centroid(geoms, *args, **kwargs):
 
     polygons = []
     for geom in geoms:
+        shapely_geom = wkt.loads(geom.wkt)
         if geom.geom_type == "MultiPolygon":
-            polygons += list(geom)
+            polygons += list(shapely_geom.geoms)
         elif geom.geom_type == "Polygon":
-            polygons.append(geom)
+            polygons.append(shapely_geom)
         else:
             raise serializers.ValidationError("Centroid operation requires Polygon or MultiPolygon geometries")
 
@@ -921,7 +925,8 @@ def centroid(geoms, *args, **kwargs):
 
 def mean_center_point(geoms):
     # the mean of the input coordinates (see: https://shapely.readthedocs.io/en/stable/reference/shapely.centroid.html)
-    return shp.MultiPoint(geoms).centroid
+    shapely_geoms = [wkt.loads(g.wkt) for g in geoms]
+    return shp.MultiPoint(shapely_geoms).centroid
 
 
 def mean_center(geoms, *args, **kwargs):
@@ -939,11 +944,12 @@ def standard_distance(geoms, *args, **kwargs):
     indicating the compactness of the input geometries.
     """
 
+    shapely_geoms = [wkt.loads(g.wkt) for g in geoms]
     mean = mean_center_point(geoms)
     n = len(geoms)
 
-    X = [np.power(p.x - mean.x, 2) for p in geoms]
-    Y = [np.power(p.y - mean.y, 2) for p in geoms]
+    X = [np.power(p.x - mean.x, 2) for p in shapely_geoms]
+    Y = [np.power(p.y - mean.y, 2) for p in shapely_geoms]
 
     std = np.sqrt(np.sum(X) / n + np.sum(Y) / n)
 
