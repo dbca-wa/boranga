@@ -74,8 +74,8 @@ COLUMN_MAP = {
     "OCC_STATUS_CODE": "OCCIdentification__identification_certainty_id",
     # OCCVegetationStructure
     "OCC_COM_STRUCTURE": "OCCVegetationStructure__vegetation_structure_layer_one",
-    # OCCLocation district/region (from TEC_DISTRICT_REGION or DISTRICTS.csv)
-    "DIST_CALM_DIST_CODE": "OCCLocation__district_id",
+    # OCCLocation district/region - see TODO in tec.py for data source details
+    "DIST_CALM_DIST_CODE": "OCCLocation__district_id",  # Resolved via DISTRICTS.csv lookup chain
     # OccurrenceDocument
     "ADD_ITEM_CODE": "OccurrenceDocument__document_sub_category_id",
     "ADD_DESC": "OccurrenceDocument__description",
