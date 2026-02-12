@@ -52,6 +52,7 @@ from boranga.components.occurrence.models import (
     OccurrenceReport,
     OccurrenceSite,
     OccurrenceUserAction,
+    OCCVegetationStructure,
     SpeciesRole,
 )
 from boranga.components.species_and_communities.models import Taxonomy
@@ -76,6 +77,14 @@ class OccurrenceImporter(BaseSheetImporter):
         ./manage.py migrate_data run occurrence_legacy \
             private-media/legacy_data/TEC/ --sources TEC \
             --wipe-targets
+
+    IMPLEMENTATION NOTES / TODOs:
+    - Task 12177/12180 (OCCLocation.district/region): Uses DISTRICTS.csv + CALM_DISTRICTS.csv +
+      CALM_REGIONS.csv chain. Requires LegacyValueMap pre-populated. Verify with S&C team.
+    - Task 12225 (OCCIdentification.identification_certainty): Maps OCC_STATUS_CODE
+      "Identified"→"High", "Believed"→"Medium". Confirm complete mapping with S&C team.
+    - Task 12287 (OccurrenceDocument.uploaded_by): USERNAME column renamed to ADD_USERNAME
+      in ADDITIONAL_DATA to avoid collision with SITES USERNAME. Review if better approach exists.
     """
 
     slug = "occurrence_legacy"
@@ -156,6 +165,7 @@ class OccurrenceImporter(BaseSheetImporter):
                     OccurrenceDocument,
                     OCCIdentification,
                     OCCHabitatCondition,
+                    OCCVegetationStructure,
                     OccurrenceGeometry,
                 ]
                 for model in relations:
@@ -697,6 +707,15 @@ class OccurrenceImporter(BaseSheetImporter):
             )
             orf_document_category = None
 
+        # Load ContentType for Occurrence (used by OccurrenceGeometry.content_type)
+        from django.contrib.contenttypes.models import ContentType
+
+        try:
+            occ_content_type = ContentType.objects.get_for_model(Occurrence)
+        except Exception:
+            logger.warning("Could not resolve ContentType for Occurrence model")
+            occ_content_type = None
+
         # community_group_type_id = get_group_type_id(GroupType.GROUP_TYPE_COMMUNITY)
 
         logger.info(
@@ -818,6 +837,8 @@ class OccurrenceImporter(BaseSheetImporter):
             assoc_create, assoc_update = [], []
             doc_create, doc_update = [], []
             geo_create, geo_update = [], []
+            ident_create, ident_update = [], []
+            veg_create, veg_update = [], []
 
             existing_locs = {}
             existing_obs = {}
@@ -826,6 +847,8 @@ class OccurrenceImporter(BaseSheetImporter):
             existing_assoc = {}
             existing_docs = {}
             existing_geo = {}
+            existing_ident = {}
+            existing_veg = {}
 
             if not getattr(ctx, "wipe_targets", False):
                 existing_locs = {
@@ -849,6 +872,12 @@ class OccurrenceImporter(BaseSheetImporter):
                 existing_geo = {
                     g.occurrence_id: g for g in OccurrenceGeometry.objects.filter(occurrence_id__in=chunk_occ_ids)
                 }
+                existing_ident = {
+                    i.occurrence_id: i for i in OCCIdentification.objects.filter(occurrence_id__in=chunk_occ_ids)
+                }
+                existing_veg = {
+                    v.occurrence_id: v for v in OCCVegetationStructure.objects.filter(occurrence_id__in=chunk_occ_ids)
+                }
 
             for op in chunk_ops:
                 mig = op["migrated_from_id"]
@@ -864,6 +893,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         "boundary_description": merged.get("OCCLocation__boundary_description"),
                         "locality": merged.get("OCCLocation__locality"),
                         "location_description": merged.get("OCCLocation__location_description"),
+                        "district_id": merged.get("OCCLocation__district_id"),
+                        "region_id": merged.get("OCCLocation__region_id"),
                     }
                     apply_model_defaults(OCCLocation, defaults)
                     if occ.pk in existing_locs:
@@ -926,11 +957,14 @@ class OccurrenceImporter(BaseSheetImporter):
                         assoc_create.append(new_obj)
 
                 # OccurrenceGeometry
-                if src != Source.TPFL.value and any(k.startswith("OccurrenceGeometry__") for k in merged):
+                geo_src = merged.get("_source")
+                if geo_src != Source.TPFL.value and any(k.startswith("OccurrenceGeometry__") for k in merged):
                     defaults = {
                         "geometry": merged.get("OccurrenceGeometry__geometry"),
                         "locked": merged.get("OccurrenceGeometry__locked"),
                     }
+                    if occ_content_type:
+                        defaults["content_type"] = occ_content_type
                     apply_model_defaults(OccurrenceGeometry, defaults)
                     if occ.pk in existing_geo:
                         obj = existing_geo[occ.pk]
@@ -946,10 +980,12 @@ class OccurrenceImporter(BaseSheetImporter):
                 doc_desc = merged.get("OccurrenceDocument__description")
 
                 if doc_sub is not None or doc_desc:
+                    doc_uploaded_by = merged.get("OccurrenceDocument__uploaded_by")
                     defaults = {
                         "document_sub_category_id": doc_sub,
                         "description": doc_desc or "",
                         "document_category": orf_document_category,
+                        "uploaded_by": doc_uploaded_by,
                     }
                     if occ.pk in existing_docs:
                         obj = existing_docs[occ.pk]
@@ -958,6 +994,32 @@ class OccurrenceImporter(BaseSheetImporter):
                         doc_update.append(obj)
                     else:
                         doc_create.append(OccurrenceDocument(occurrence=occ, **defaults))
+
+                # OCCIdentification
+                id_certainty = merged.get("OCCIdentification__identification_certainty_id")
+                if id_certainty is not None:
+                    defaults = {"identification_certainty_id": id_certainty}
+                    apply_model_defaults(OCCIdentification, defaults)
+                    if occ.pk in existing_ident:
+                        obj = existing_ident[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        ident_update.append(obj)
+                    else:
+                        ident_create.append(OCCIdentification(occurrence=occ, **defaults))
+
+                # OCCVegetationStructure
+                veg_layer_one = merged.get("OCCVegetationStructure__vegetation_structure_layer_one")
+                if veg_layer_one:
+                    defaults = {"vegetation_structure_layer_one": veg_layer_one}
+                    apply_model_defaults(OCCVegetationStructure, defaults)
+                    if occ.pk in existing_veg:
+                        obj = existing_veg[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        veg_update.append(obj)
+                    else:
+                        veg_create.append(OCCVegetationStructure(occurrence=occ, **defaults))
 
             # Execution
             if loc_create:
@@ -970,6 +1032,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         "boundary_description",
                         "locality",
                         "location_description",
+                        "district_id",
+                        "region_id",
                     ],
                     batch_size=BATCH,
                 )
@@ -1005,6 +1069,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         "document_sub_category_id",
                         "description",
                         "document_category",
+                        "uploaded_by",
                     ],
                     batch_size=BATCH,
                 )
@@ -1012,7 +1077,21 @@ class OccurrenceImporter(BaseSheetImporter):
             if geo_create:
                 OccurrenceGeometry.objects.bulk_create(geo_create, batch_size=BATCH)
             if geo_update:
-                OccurrenceGeometry.objects.bulk_update(geo_update, ["geometry", "locked"], batch_size=BATCH)
+                OccurrenceGeometry.objects.bulk_update(
+                    geo_update, ["geometry", "locked", "content_type"], batch_size=BATCH
+                )
+
+            if ident_create:
+                OCCIdentification.objects.bulk_create(ident_create, batch_size=BATCH)
+            if ident_update:
+                OCCIdentification.objects.bulk_update(ident_update, ["identification_certainty_id"], batch_size=BATCH)
+
+            if veg_create:
+                OCCVegetationStructure.objects.bulk_create(veg_create, batch_size=BATCH)
+            if veg_update:
+                OCCVegetationStructure.objects.bulk_update(
+                    veg_update, ["vegetation_structure_layer_one"], batch_size=BATCH
+                )
 
             # Re-fetch OCCAssociatedSpecies for current chunk to get PKs
             if assoc_create:
@@ -1157,12 +1236,14 @@ class OccurrenceImporter(BaseSheetImporter):
                                         break
 
                             if not is_duplicate:
+                                doc_uploaded = transformed_doc.get("OccurrenceDocument__uploaded_by")
                                 nested_doc_create.append(
                                     OccurrenceDocument(
                                         occurrence=occ,
                                         document_category=orf_document_category,
                                         document_sub_category_id=sub_cat_id,
                                         description=desc,
+                                        uploaded_by=doc_uploaded,
                                     )
                                 )
 
@@ -1211,6 +1292,7 @@ class OccurrenceImporter(BaseSheetImporter):
                     existing_asts[(ast.taxonomy_id, ast.species_role_id)].append(ast)
 
                 missing_keys = set()
+                voucher_by_key = {}  # (taxonomy_id, role_id) -> first non-empty voucher comment
                 for occ_pk, taxon_id, role_name, voucher, mig in species_ops:
                     tax = tax_map.get(taxon_id)
                     if not tax:
@@ -1231,10 +1313,17 @@ class OccurrenceImporter(BaseSheetImporter):
                     key = (tax.id, role_id)
                     if not existing_asts.get(key):
                         missing_keys.add(key)
+                    # Track voucher comments (first non-empty wins)
+                    if voucher and key not in voucher_by_key:
+                        voucher_by_key[key] = str(voucher).strip()
 
                 if missing_keys:
                     new_asts = [
-                        AssociatedSpeciesTaxonomy(taxonomy_id=tid, species_role_id=rid, comments="")
+                        AssociatedSpeciesTaxonomy(
+                            taxonomy_id=tid,
+                            species_role_id=rid,
+                            comments=voucher_by_key.get((tid, rid), ""),
+                        )
                         for tid, rid in missing_keys
                     ]
                     AssociatedSpeciesTaxonomy.objects.bulk_create(new_asts, batch_size=BATCH)
