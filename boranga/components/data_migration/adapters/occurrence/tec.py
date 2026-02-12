@@ -187,6 +187,19 @@ PIPELINES = {
     "OCCLocation__boundary_description": ["strip"],
     "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
     "OccurrenceDocument__document_sub_category_id": [tec_document_sub_category_transform],
+    "OccurrenceDocument__uploaded_by": [
+        "strip",
+        "blank_to_none",
+        emailuser_by_legacy_username_factory("TEC"),
+        default_to_tec_user,
+    ],
+    # OCCIdentification - identification_certainty is pre-resolved by S&C in the CSV
+    "OCCIdentification__identification_certainty_id": ["strip", "blank_to_none"],
+    # OCCVegetationStructure
+    "OCCVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none"],
+    # OCCLocation district/region - resolved via DISTRICTS.csv lookup
+    "OCCLocation__district_id": [],
+    "OCCLocation__region_id": [],
     # Geometry transform for OccurrenceSite
     "OccurrenceSite__geometry": [tec_site_geometry_transform],
     # Pass-through fields for OccurrenceSite
@@ -242,6 +255,9 @@ class OccurrenceTecAdapter(SourceAdapter):
         reliability_path = None
         dola_path = None
         species_role_path = None
+        districts_path = None
+        calm_districts_path = None
+        calm_regions_path = None
 
         warnings = []
 
@@ -313,6 +329,27 @@ class OccurrenceTecAdapter(SourceAdapter):
                 if os.path.exists(p):
                     species_role_path = p
                     break
+
+            # Find DISTRICTS.csv (OCC_UNIQUE_ID -> DIST_CALM_DIST_CODE)
+            for name in ["DISTRICTS.csv", "districts.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    districts_path = p
+                    break
+
+            # Find CALM_DISTRICTS.csv (CALM_DIST_CODE -> CALM_DIST_NAME, CALM_REG_CODE)
+            for name in ["CALM_DISTRICTS.csv", "calm_districts.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    calm_districts_path = p
+                    break
+
+            # Find CALM_REGIONS.csv (CALM_REG_CODE -> CALM_REG_NAME)
+            for name in ["CALM_REGIONS.csv", "calm_regions.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    calm_regions_path = p
+                    break
         else:
             # Path is the occurrences file
             dirname = os.path.dirname(path)
@@ -362,6 +399,24 @@ class OccurrenceTecAdapter(SourceAdapter):
                 p = os.path.join(dirname, name)
                 if os.path.exists(p):
                     species_role_path = p
+                    break
+
+            for name in ["DISTRICTS.csv", "districts.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    districts_path = p
+                    break
+
+            for name in ["CALM_DISTRICTS.csv", "calm_districts.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    calm_districts_path = p
+                    break
+
+            for name in ["CALM_REGIONS.csv", "calm_regions.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    calm_regions_path = p
                     break
 
         # Read occurrences
@@ -433,6 +488,73 @@ class OccurrenceTecAdapter(SourceAdapter):
             for r in role_rows:
                 role_map[r["SP_ROLE_CODE"]] = r["SP_ROLE_DESC"]
 
+        # TODO Task 12177/12180: Verify district/region resolution approach
+        # Original task mentions "TEC_DISTRICT_REGION table" but that doesn't exist as a single CSV.
+        # Currently using DISTRICTS.csv + CALM_DISTRICTS.csv + CALM_REGIONS.csv chain.
+        # This requires LegacyValueMap to be pre-populated with mappings from district/region names to PKs.
+        # Data source structure:
+        #   DISTRICTS.csv: OCC_UNIQUE_ID -> DIST_CALM_DIST_CODE
+        #   CALM_DISTRICTS.csv: CALM_DIST_CODE -> CALM_DIST_NAME, CALM_REG_CODE
+        #   CALM_REGIONS.csv: CALM_REG_CODE -> CALM_REG_NAME
+        # Confirm with S&C team if this is the correct approach.
+        district_by_occ = {}  # occ_id -> district_name
+        region_by_occ = {}  # occ_id -> region_name
+        if districts_path:
+            # Build CALM lookup tables
+            calm_dist_to_name = {}  # code -> name
+            calm_dist_to_reg = {}  # dist_code -> reg_code
+            if calm_districts_path:
+                cd_rows, cd_warns = self.read_table(calm_districts_path, **options)
+                warnings.extend(cd_warns)
+                for r in cd_rows:
+                    code = r.get("CALM_DIST_CODE", "").strip()
+                    if code:
+                        calm_dist_to_name[code] = r.get("CALM_DIST_NAME", "").strip()
+                        calm_dist_to_reg[code] = r.get("CALM_REG_CODE", "").strip()
+
+            calm_reg_to_name = {}
+            if calm_regions_path:
+                cr_rows, cr_warns = self.read_table(calm_regions_path, **options)
+                warnings.extend(cr_warns)
+                for r in cr_rows:
+                    code = r.get("CALM_REG_CODE", "").strip()
+                    if code:
+                        calm_reg_to_name[code] = r.get("CALM_REG_NAME", "").strip()
+
+            dist_options = {k: v for k, v in options.items() if k != "limit"}
+            dist_options["limit"] = 0
+            dist_rows, dist_warns = self.read_table(districts_path, **dist_options)
+            warnings.extend(dist_warns)
+            for r in dist_rows:
+                occ_uid = r.get("OCC_UNIQUE_ID")
+                dist_code = r.get("DIST_CALM_DIST_CODE", "").strip()
+                if occ_uid and dist_code:
+                    dist_name = calm_dist_to_name.get(dist_code, dist_code)
+                    district_by_occ[occ_uid] = dist_name
+                    reg_code = calm_dist_to_reg.get(dist_code)
+                    if reg_code:
+                        reg_name = calm_reg_to_name.get(reg_code, reg_code)
+                        region_by_occ[occ_uid] = reg_name
+
+        # Load legacy value maps for district/region FK resolution
+        district_pk_map = {}  # district_name -> pk
+        region_pk_map = {}  # region_name -> pk
+        if district_by_occ or region_by_occ:
+            from boranga.components.data_migration.mappings import load_legacy_to_pk_map
+
+            district_pk_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="District")
+            region_pk_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="Region")
+
+        # Load identification certainty lookup for OCC_STATUS_CODE resolution
+        id_certainty_map = {}  # certainty name (e.g. "High") -> pk
+        try:
+            from boranga.components.occurrence.models import IdentificationCertainty
+
+            for ic in IdentificationCertainty.objects.all():
+                id_certainty_map[ic.name.lower()] = ic.id
+        except Exception:
+            pass
+
         # Index auxiliary data by OCC_UNIQUE_ID
         sites_by_occ = defaultdict(list)
         for s in site_rows:
@@ -446,6 +568,14 @@ class OccurrenceTecAdapter(SourceAdapter):
 
         additional_by_occ = defaultdict(list)
         for row in additional_rows:
+            # TODO Task 12287: Review USERNAME column disambiguation approach
+            # ADDITIONAL_DATA.csv and SITES.csv both have USERNAME columns but for different purposes:
+            #   - SITES.csv USERNAME -> OccurrenceSite.drawn_by
+            #   - ADDITIONAL_DATA.csv USERNAME -> OccurrenceDocument.uploaded_by
+            # Currently renaming ADDITIONAL_DATA USERNAME to ADD_USERNAME to avoid collision.
+            # Verify this is the cleanest approach or if schema should handle this differently.
+            if "USERNAME" in row and "ADD_USERNAME" not in row:
+                row["ADD_USERNAME"] = row["USERNAME"]
             additional_by_occ[row["OCC_UNIQUE_ID"]].append(row)
 
         species_by_occ = defaultdict(list)
@@ -493,6 +623,39 @@ class OccurrenceTecAdapter(SourceAdapter):
             if dola_ref and dola_ref in dola_map:
                 row["_resolved_dola"] = dola_map[dola_ref]
 
+            # District/Region resolution
+            if occ_id and occ_id in district_by_occ:
+                dist_name = district_by_occ[occ_id]
+                dist_pk = district_pk_map.get(dist_name)
+                if dist_pk:
+                    row["_resolved_district_id"] = dist_pk
+            if occ_id and occ_id in region_by_occ:
+                reg_name = region_by_occ[occ_id]
+                reg_pk = region_pk_map.get(reg_name)
+                if reg_pk:
+                    row["_resolved_region_id"] = reg_pk
+
+            # TODO Task 12225: Verify identification certainty mapping
+            # Currently mapping OCC_STATUS_CODE values:
+            #   "Identified" -> IdentificationCertainty "High"
+            #   "Believed" -> IdentificationCertainty "Medium"
+            # This mapping is assumed based on field names but needs confirmation from S&C team.
+            # Confirm the complete list of OCC_STATUS_CODE values and their correct mappings.
+            status_code = row.get("OCC_STATUS_CODE", "").strip()
+            if status_code and id_certainty_map:
+                certainty_name = None
+                status_lower = status_code.lower()
+                if status_lower == "identified":
+                    certainty_name = "high"
+                elif status_lower == "believed":
+                    certainty_name = "medium"
+                else:
+                    # Try direct match (S&C may have already set it to High/Medium/Low)
+                    certainty_name = status_lower
+
+                if certainty_name and certainty_name in id_certainty_map:
+                    row["_resolved_identification_certainty_id"] = id_certainty_map[certainty_name]
+
             # Map raw row to canonical keys
             canonical_row = SCHEMA.map_raw_row(row)
             # Preserve internal keys (starting with _)
@@ -505,6 +668,18 @@ class OccurrenceTecAdapter(SourceAdapter):
             canonical_row["locked"] = True
             if not canonical_row.get("submitter") and tec_submitter_id:
                 canonical_row["submitter"] = tec_submitter_id
+
+            # Apply resolved district/region IDs
+            if row.get("_resolved_district_id"):
+                canonical_row["OCCLocation__district_id"] = row["_resolved_district_id"]
+            if row.get("_resolved_region_id"):
+                canonical_row["OCCLocation__region_id"] = row["_resolved_region_id"]
+
+            # Apply resolved identification certainty ID
+            if row.get("_resolved_identification_certainty_id"):
+                canonical_row["OCCIdentification__identification_certainty_id"] = row[
+                    "_resolved_identification_certainty_id"
+                ]
 
             joined_rows.append(canonical_row)
 
