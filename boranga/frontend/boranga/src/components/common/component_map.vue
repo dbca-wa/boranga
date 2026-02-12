@@ -1354,10 +1354,10 @@
                 >
                     <div class="d-flex">
                         <div
-                            class="toast-body d-flex align-items-center text-warning m-0 p-0 mx-2"
+                            class="toast-body d-flex align-items-center text-white m-0 p-0 mx-2"
                         >
                             <i
-                                class="bi bi-exclamation-circle-fill text-warning me-2"
+                                class="bi bi-exclamation-circle-fill me-2 text-white"
                             ></i>
                             Unsaved changes
                         </div>
