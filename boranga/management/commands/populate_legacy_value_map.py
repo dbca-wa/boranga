@@ -44,6 +44,13 @@ class Command(BaseCommand):
         except ContentType.DoesNotExist:
             return None
 
+    # Preferred lookup field names for specific models
+    PREFERRED_LOOKUP_FIELDS = {
+        "documentsubcategory": ["document_sub_category_name", "name"],
+        "documentcategory": ["document_category_name", "name"],
+        # Add more model-specific fields here as needed
+    }
+
     def handle(self, *args, **options):
         csvfile = options["csvfile"]
         legacy_system = options["legacy_system"]
@@ -92,11 +99,23 @@ class Command(BaseCommand):
 
                 # Only perform model lookup if target_model is specified
                 if target_model:
-                    # default lookup field to "name" when the CSV cell is empty
-                    # Do not lower() the field name: keep original case for model field
+                    # default lookup field to preferred list for model, fallback to "name"
                     lookup_field = (r.get("target_lookup_field_name") or "").strip()
+                    # No automatic remapping; require correct field names in CSV
                     if not lookup_field:
-                        lookup_field = "name"
+                        model_key = target_model.strip().lower()
+                        preferred_fields = self.PREFERRED_LOOKUP_FIELDS.get(model_key, ["name"])
+                        # Try each preferred field in order, use the first that exists
+                        for pf in preferred_fields:
+                            try:
+                                model_cls = apps.get_model(APP_LABEL, model_key)
+                                model_cls._meta.get_field(pf)
+                                lookup_field = pf
+                                break
+                            except Exception:
+                                continue
+                        else:
+                            lookup_field = "name"
                     lookup_value = (r.get("target_lookup_field_value") or "").strip() or None
 
                     # optional second lookup pair to further filter the target (parent/related)
@@ -105,6 +124,7 @@ class Command(BaseCommand):
                     lookup_field_2 = (
                         r.get("target_lookup_field_name_2") or r.get("lookup_field_2") or ""
                     ).strip() or None
+                    # No automatic remapping; require correct field names in CSV
                     lookup_value_2 = (
                         r.get("target_lookup_field_value_2") or r.get("lookup_value_2") or ""
                     ).strip() or None
@@ -132,21 +152,15 @@ class Command(BaseCommand):
                         # unless an explicit lookup (iexact, icontains, etc.) is already provided.
                         from django.db.models import ForeignKey
 
-                        def _ci_lookup_key(field_name: str) -> str:
+                        def _ci_lookup_key(field_name: str, model_for_field=None) -> str:
                             # Check if the field is a ForeignKey - they don't support iexact
                             try:
                                 field = model_cls._meta.get_field(field_name)
                                 if isinstance(field, ForeignKey):
-                                    # ForeignKey doesn't support case-insensitive lookups
                                     return field_name + "__exact"
                             except Exception:
                                 pass
-
                             # For other fields, use case-insensitive exact match
-                            # Always perform a case-insensitive exact match for CSV-provided
-                            # field names by appending '__iexact'. This keeps behavior
-                            # simple because CSVs in this project never include lookup
-                            # suffixes.
                             if field_name.endswith("__iexact"):
                                 return field_name
                             return field_name + "__iexact"
@@ -155,34 +169,37 @@ class Command(BaseCommand):
                         try:
                             primary_field = model_cls._meta.get_field(lookup_field)
                             if isinstance(primary_field, ForeignKey):
-                                # For ForeignKey fields, need to look up the related object first
                                 related_model = primary_field.related_model
+                                # Use preferred lookup field for related model
+                                related_model_key = related_model.__name__.lower()
+                                preferred_fields = self.PREFERRED_LOOKUP_FIELDS.get(related_model_key, ["name"])
+                                rel_lookup_field = preferred_fields[0]
                                 try:
-                                    related_obj = related_model._default_manager.get(name__iexact=lookup_value)
+                                    related_obj = related_model._default_manager.get(
+                                        **{rel_lookup_field + "__iexact": lookup_value}
+                                    )
                                     query_kwargs = {lookup_field + "_id": related_obj.pk}
                                     create_kwargs = {lookup_field + "_id": related_obj.pk}
                                 except related_model.DoesNotExist:
                                     self.stderr.write(
-                                        f"Related {related_model.__name__} with name='{lookup_value}' "
+                                        f"Related {related_model.__name__} with {rel_lookup_field}='{lookup_value}' "
                                         f"not found; skipping row '{legacy_value}'"
                                     )
                                     skipped += 1
                                     continue
                                 except related_model.MultipleObjectsReturned:
                                     self.stderr.write(
-                                        f"Multiple {related_model.__name__} with name='{lookup_value}'; "
+                                        f"Multiple {related_model.__name__} with {rel_lookup_field}='{lookup_value}'; "
                                         f"skipping row '{legacy_value}'"
                                     )
                                     skipped += 1
                                     continue
                             else:
-                                # Non-ForeignKey field, use regular lookup
                                 query_kwargs = {_ci_lookup_key(lookup_field): lookup_value}
                                 create_kwargs = {lookup_field: lookup_value}
                         except Exception as e:
                             self.stderr.write(
-                                f"Error determining field type for '{lookup_field}': {e}; "
-                                f"skipping row '{legacy_value}'"
+                                f"Error determining field type for '{lookup_field}': {e}; skipping row '{legacy_value}'"
                             )
                             skipped += 1
                             continue
@@ -192,30 +209,31 @@ class Command(BaseCommand):
                             try:
                                 field_2 = model_cls._meta.get_field(lookup_field_2)
                                 if isinstance(field_2, ForeignKey):
-                                    # Need to look up the related object and use its ID
                                     related_model = field_2.related_model
-                                    # Try to find by name with case-insensitive match
+                                    related_model_key = related_model.__name__.lower()
+                                    preferred_fields_2 = self.PREFERRED_LOOKUP_FIELDS.get(related_model_key, ["name"])
+                                    rel_lookup_field_2 = preferred_fields_2[0]
                                     try:
-                                        related_obj = related_model._default_manager.get(name__iexact=lookup_value_2)
-                                        # Use the ID in the query
+                                        related_obj = related_model._default_manager.get(
+                                            **{rel_lookup_field_2 + "__iexact": lookup_value_2}
+                                        )
                                         query_kwargs[lookup_field_2 + "_id"] = related_obj.pk
                                         create_kwargs[lookup_field_2 + "_id"] = related_obj.pk
                                     except related_model.DoesNotExist:
                                         self.stderr.write(
-                                            f"Related {related_model.__name__} with name='{lookup_value_2}' "
+                                            f"Related {related_model.__name__} with {rel_lookup_field_2}='{lookup_value_2}' "
                                             f"not found; skipping row '{legacy_value}'"
                                         )
                                         skipped += 1
                                         continue
                                     except related_model.MultipleObjectsReturned:
                                         self.stderr.write(
-                                            f"Multiple {related_model.__name__} with name='{lookup_value_2}'; "
+                                            f"Multiple {related_model.__name__} with {rel_lookup_field_2}='{lookup_value_2}'; "
                                             f"skipping row '{legacy_value}'"
                                         )
                                         skipped += 1
                                         continue
                                 else:
-                                    # Regular field, use lookup as-is
                                     query_kwargs[_ci_lookup_key(lookup_field_2)] = lookup_value_2
                                     create_kwargs[lookup_field_2] = lookup_value_2
                             except Exception as e:
