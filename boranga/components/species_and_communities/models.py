@@ -2441,7 +2441,6 @@ class DocumentSubCategory(OrderedModel, ArchivableModel):
     )
     document_sub_category_name = models.CharField(
         max_length=128,
-        unique=True,
         validators=[no_commas_validator],
     )
     order_with_respect_to = "document_category"
@@ -2450,6 +2449,7 @@ class DocumentSubCategory(OrderedModel, ArchivableModel):
         app_label = "boranga"
         verbose_name = "Document Sub Category"
         verbose_name_plural = "Document Sub Categories"
+        unique_together = ("document_category", "document_sub_category_name")
 
     def __str__(self):
         return str(self.document_sub_category_name)
