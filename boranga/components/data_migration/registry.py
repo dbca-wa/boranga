@@ -1738,13 +1738,9 @@ def emailuser_by_legacy_username_factory(legacy_system: str) -> str:
             _lookup_cache[value] = (res_val, res_issues)
             return _result(res_val, *res_issues)
         except LegacyUsernameEmailuserMapping.MultipleObjectsReturned:
-            res_val = value
-            res_issues = [
-                TransformIssue(
-                    "error",
-                    f"Multiple users with legacy username='{value}' for system='{legacy_system}'",
-                )
-            ]
+            # Use the first match if multiple exist (case-insensitive duplicates)
+            mapping = qs.first()
+            res_val, res_issues = mapping.emailuser_id, []
             _lookup_cache[value] = (res_val, res_issues)
             return _result(res_val, *res_issues)
 
