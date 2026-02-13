@@ -13,11 +13,9 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
     emailuser_by_legacy_username_factory,
-    fk_lookup,
     static_value_factory,
 )
 from boranga.components.species_and_communities.models import (
-    DocumentSubCategory,
     GroupType,
 )
 
@@ -131,12 +129,11 @@ def tec_site_geometry_transform(val, ctx):
     return None
 
 
-# Use standard fk_lookup for DocumentSubCategory
-# Note: Assumes document_sub_category_name values in DB are consistently cased.
-# If case-insensitive lookup is needed, the custom transform should be restored.
-DOCUMENT_SUB_CATEGORY_TRANSFORM = fk_lookup(
-    model=DocumentSubCategory,
-    lookup_field="document_sub_category_name",
+DOCUMENT_SUB_CATEGORY_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TEC",
+    list_name="ADD_ITEM_CODE (ITEMS)",
+    required=False,
+    return_type="id",
 )
 
 # Use static_value_factory for explicit None assignments
