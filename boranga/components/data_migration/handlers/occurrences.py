@@ -965,6 +965,14 @@ class OccurrenceImporter(BaseSheetImporter):
                     }
                     if occ_content_type:
                         defaults["content_type"] = occ_content_type
+                    # Patch: Populate original_geometry_ewkb for TEC_BOUNDARIES
+                    if geo_src == Source.TEC_BOUNDARIES.value:
+                        from django.contrib.gis.geos import GEOSGeometry
+
+                        wkt = merged.get("OccurrenceGeometry__geometry")
+                        if wkt:
+                            geom = GEOSGeometry(wkt)
+                            defaults["original_geometry_ewkb"] = geom.ewkb
                     apply_model_defaults(OccurrenceGeometry, defaults)
                     if occ.pk in existing_geo:
                         obj = existing_geo[occ.pk]
