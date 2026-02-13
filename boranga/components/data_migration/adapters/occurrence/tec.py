@@ -14,6 +14,7 @@ from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
     emailuser_by_legacy_username_factory,
     static_value_factory,
+    t_smart_date_parse,
 )
 from boranga.components.species_and_communities.models import (
     GroupType,
@@ -67,24 +68,48 @@ def tec_habitat_notes_transform(val, ctx):
     return "; ".join(parts)
 
 
+def parse_fire_history_sort_date(value):
+    """Parse a fire-history date value into a comparable date for sorting.
+
+    Uses the registry's `t_smart_date_parse` to leverage existing parsing
+    heuristics. Returns a `datetime.date` on success or `date.min` on failure
+    so that entries without a date sort last when sorting descending.
+    """
+    from datetime import date as _date
+
+    try:
+        res = t_smart_date_parse(value, None)
+        d = getattr(res, "value", None)
+        if isinstance(d, _date):
+            return d
+    except Exception:
+        pass
+    return _date.min
+
+
 def tec_fire_history_comment_transform(val, ctx):
     row = ctx.row
-    parts = []
-
-    # Handle nested fire history
     nested = row.get("_nested_fire_history", [])
-    for item in nested:
-        date = item.get("FIRE_DATE")
-        comment = item.get("FIRE_COMMENT")
-        p = []
-        if date:
-            p.append(f"Date: {date}")
-        if comment:
-            p.append(comment)
-        if p:
-            parts.append(" - ".join(p))
 
-    return "; ".join(parts)
+    # Build list of formatted fire history entries
+    entries = []
+    for item in nested:
+        date = item.get("FIRE_DATE", "").strip()
+        comment = item.get("FIRE_COMMENT", "").strip()
+        if date:
+            entry = f"Fire Date: {date}"
+            if comment:
+                entry += f", {comment}"
+        elif comment:
+            entry = f"{comment}"
+        else:
+            continue  # skip blank
+        entries.append((parse_fire_history_sort_date(date), entry))
+
+    # Sort by date descending (most recent first)
+    entries.sort(key=lambda x: x[0], reverse=True)
+    formatted = [e[1] for e in entries]
+    return "; ".join(formatted)
 
 
 def tec_observation_detail_comments_transform(val, ctx):
