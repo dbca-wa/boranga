@@ -1206,6 +1206,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         mapped_doc = schema.SCHEMA.map_raw_row(raw_doc)
                         tcx = TransformContext(row=mapped_doc, model=None, user_id=ctx.user_id)
                         transformed_doc = dict(mapped_doc)
+                        doc_has_error = False
+                        doc_issues = []
 
                         # Apply pipelines for relevant columns
                         for col, pipeline in pipeline_map.items():
@@ -1213,6 +1215,26 @@ class OccurrenceImporter(BaseSheetImporter):
                                 raw_val = mapped_doc.get(col)
                                 res = run_pipeline(pipeline, raw_val, tcx)
                                 transformed_doc[col] = res.value
+                                for issue in res.issues:
+                                    doc_issues.append((col, issue))
+                                    level = getattr(issue, "level", "error")
+                                    record = {
+                                        "migrated_from_id": op["migrated_from_id"],
+                                        "column": col,
+                                        "level": level,
+                                        "message": getattr(issue, "message", str(issue)),
+                                        "raw_value": raw_val,
+                                    }
+                                    if level == "error":
+                                        doc_has_error = True
+                                        errors += 1
+                                        errors_details.append(record)
+                                    else:
+                                        warn_count += 1
+                                        warnings_details.append(record)
+
+                        if doc_has_error:
+                            continue  # Skip this document row if any error
 
                         sub_cat_id = transformed_doc.get("OccurrenceDocument__document_sub_category_id")
                         desc = transformed_doc.get("OccurrenceDocument__description") or ""
