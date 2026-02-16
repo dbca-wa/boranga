@@ -1320,10 +1320,10 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 existing_asts = defaultdict(list)
                 for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=relevant_tax_ids):
-                    existing_asts[(ast.taxonomy_id, ast.species_role_id)].append(ast)
+                    # Key by (taxonomy, role, comments) to preserve distinct voucher values
+                    existing_asts[(ast.taxonomy_id, ast.species_role_id, ast.comments)].append(ast)
 
                 missing_keys = set()
-                voucher_by_key = {}  # (taxonomy_id, role_id) -> first non-empty voucher comment
                 for occ_pk, taxon_id, role_name, voucher, mig in species_ops:
                     tax = tax_map.get(taxon_id)
                     if not tax:
@@ -1341,27 +1341,26 @@ class OccurrenceImporter(BaseSheetImporter):
                         continue
                     role = role_map.get(role_name)
                     role_id = role.id if role else None
-                    key = (tax.id, role_id)
+                    # Key by (taxonomy, role, voucher) to preserve distinct voucher values
+                    voucher_normalized = str(voucher).strip() if voucher else ""
+                    key = (tax.id, role_id, voucher_normalized)
                     if not existing_asts.get(key):
                         missing_keys.add(key)
-                    # Track voucher comments (first non-empty wins)
-                    if voucher and key not in voucher_by_key:
-                        voucher_by_key[key] = str(voucher).strip()
 
                 if missing_keys:
                     new_asts = [
                         AssociatedSpeciesTaxonomy(
                             taxonomy_id=tid,
                             species_role_id=rid,
-                            comments=voucher_by_key.get((tid, rid), ""),
+                            comments=voucher,
                         )
-                        for tid, rid in missing_keys
+                        for tid, rid, voucher in missing_keys
                     ]
                     AssociatedSpeciesTaxonomy.objects.bulk_create(new_asts, batch_size=BATCH)
 
                     existing_asts = defaultdict(list)
                     for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=relevant_tax_ids):
-                        existing_asts[(ast.taxonomy_id, ast.species_role_id)].append(ast)
+                        existing_asts[(ast.taxonomy_id, ast.species_role_id, ast.comments)].append(ast)
 
                 occ_assoc_ids = [a.id for a in existing_assoc.values()]
                 if occ_assoc_ids:
@@ -1382,8 +1381,9 @@ class OccurrenceImporter(BaseSheetImporter):
                             continue
                         role = role_map.get(role_name)
                         role_id = role.id if role else None
+                        voucher_normalized = str(voucher).strip() if voucher else ""
 
-                        asts = existing_asts.get((tax.id, role_id))
+                        asts = existing_asts.get((tax.id, role_id, voucher_normalized))
                         if not asts:
                             continue
                         ast = asts[0]
