@@ -7,6 +7,10 @@ from django.utils import timezone
 from boranga.components.data_migration.adapters.occurrence_report.document import (
     OccurrenceReportDocumentAdapter,
 )
+from boranga.components.data_migration.adapters.occurrence_report.document_tec import (
+    OccurrenceReportDocumentTecAdapter,
+)
+from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
@@ -18,11 +22,42 @@ from boranga.components.occurrence.models import OccurrenceReportDocument
 
 logger = logging.getLogger(__name__)
 
+# Support multiple sources
+SOURCE_ADAPTERS = {
+    Source.TPFL.value: OccurrenceReportDocumentAdapter(),
+    Source.TEC_SITE_VISITS.value: OccurrenceReportDocumentTecAdapter(),
+}
+
 
 @register
 class OccurrenceReportDocumentImporter(BaseSheetImporter):
     slug = "occurrence_report_documents_legacy"
-    description = "Import occurrence report documents from DRF_RFR_FORMS"
+    description = "Import occurrence report documents from DRF_RFR_FORMS (TPFL) and SITE_VISITS (TEC)"
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--sources",
+            nargs="+",
+            choices=list(SOURCE_ADAPTERS.keys()),
+            help="Subset of sources (default: all implemented)",
+        )
+        parser.add_argument(
+            "--path-map",
+            nargs="+",
+            metavar="SRC=PATH",
+            help="Per-source path overrides (e.g. TPFL=/tmp/tpfl.xlsx). If omitted, --path is reused.",
+        )
+
+    def _parse_path_map(self, pairs):
+        out = {}
+        if not pairs:
+            return out
+        for p in pairs:
+            if "=" not in p:
+                raise ValueError(f"Invalid path-map entry: {p}")
+            k, v = p.split("=", 1)
+            out[k] = v
+        return out
 
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
@@ -32,24 +67,44 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
             ctx.dry_run,
         )
 
-        adapter = OccurrenceReportDocumentAdapter()
-        result = adapter.extract(path, **options)
+        sources = options.get("sources") or list(SOURCE_ADAPTERS.keys())
+        path_map = self._parse_path_map(options.get("path_map"))
+
+        all_rows: list[dict] = []
+        warnings = []
+
+        # Extract from all sources
+        for src in sources:
+            adapter = SOURCE_ADAPTERS[src]
+            src_path = path_map.get(src, path)
+            logger.info(f"Extracting documents from source {src} at {src_path}")
+            result = adapter.extract(src_path, **options)
+
+            for w in result.warnings:
+                warnings.append(f"{src}: {w.message}")
+
+            for r in result.rows:
+                r["_source"] = src
+                all_rows.append(r)
 
         logger.info(
-            "Extracted %d rows from %s",
-            len(result.rows),
-            path,
+            "Extracted %d total document rows from %d sources",
+            len(all_rows),
+            len(sources),
         )
 
-        # Build pipelines
+        # Build pipelines per-source
         from boranga.components.data_migration.registry import (
             registry as transform_registry,
         )
 
-        pipelines = {}
-        if hasattr(adapter, "PIPELINES"):
-            for col, names in adapter.PIPELINES.items():
-                pipelines[col] = transform_registry.build_pipeline(names)
+        pipelines_by_source: dict[str, dict] = {}
+        for src_key, adapter in SOURCE_ADAPTERS.items():
+            built: dict[str, list] = {}
+            if hasattr(adapter, "PIPELINES"):
+                for col, names in adapter.PIPELINES.items():
+                    built[col] = transform_registry.build_pipeline(names)
+            pipelines_by_source[src_key] = built
 
         processed = 0
         created = 0
@@ -60,14 +115,18 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
 
         to_create = []
 
-        for row in result.rows:
+        for row in all_rows:
             processed += 1
             tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
 
             transformed = {}
             has_error = False
 
-            for col, pipeline in pipelines.items():
+            # Get pipeline map for this row's source
+            src = row.get("_source")
+            pipeline_map = pipelines_by_source.get(src, {})
+
+            for col, pipeline in pipeline_map.items():
                 # Some fields might not be in the row if they are purely synthetic (like document_category_id)
                 # But run_pipeline handles None input if the first transform handles it.
                 # However, usually we iterate over the PIPELINES keys.
@@ -79,7 +138,7 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
                 if any(i.level == "error" for i in res.issues):
                     has_error = True
                     # Log error
-                    msg = f"Error transforming {col} for row {row.get('SHEETNO')}: " f"{res.issues}"
+                    msg = f"Error transforming {col} for row {row.get('SHEETNO')}: {res.issues}"
                     logger.error(msg)
                     for issue in res.issues:
                         if issue.level == "error":
