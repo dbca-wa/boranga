@@ -5,8 +5,11 @@ This module provides efficient bulk deletion of django-reversion Version records
 when clearing target data with `--wipe-targets`, particularly when filtering by
 group_type (flora, fauna, community).
 
+Note: This module is in 'history_cleanup' package to avoid shadowing the main
+      'utils.py' module that contains general utility functions.
+
 Usage:
-    from boranga.components.data_migration.utils.reversion_cleanup import ReversionHistoryCleaner
+    from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
 
     cleaner = ReversionHistoryCleaner(batch_size=2000)
     cleaner.clear_species_and_related({'group_type__name__in': ['flora']})

@@ -140,7 +140,7 @@ class OccurrenceImporter(BaseSheetImporter):
             logger.warning("OccurrenceImporter: deleting ALL Occurrence and related data...")
 
         # Delete reversion history first (more efficient than waiting for cascade)
-        from boranga.components.data_migration.utils.reversion_cleanup import ReversionHistoryCleaner
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
 
         cleaner = ReversionHistoryCleaner(batch_size=2000)
         cleaner.clear_occurrence_and_related(occ_filter if is_filtered else {})

@@ -164,7 +164,7 @@ class CommunityImporter(BaseSheetImporter):
             report_filter = {}
 
         # Delete reversion history first (more efficient than waiting for cascade)
-        from boranga.components.data_migration.utils.reversion_cleanup import ReversionHistoryCleaner
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
 
         cleaner = ReversionHistoryCleaner(batch_size=2000)
         cleaner.clear_community_and_related(comm_filter)

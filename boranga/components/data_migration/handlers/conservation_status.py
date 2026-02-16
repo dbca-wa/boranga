@@ -73,7 +73,7 @@ class ConservationStatusImporter(BaseSheetImporter):
 
         # Delete reversion history first (ConservationStatus and ConservationStatusDocument)
         from boranga.components.conservation_status.models import ConservationStatus, ConservationStatusDocument
-        from boranga.components.data_migration.utils.reversion_cleanup import ReversionHistoryCleaner
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
 
         cleaner = ReversionHistoryCleaner(batch_size=2000)
         cleaner.clear_for_model(ConservationStatus, cs_filter)
