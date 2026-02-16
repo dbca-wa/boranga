@@ -5,6 +5,7 @@ from boranga.components.data_migration.registry import (
     datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     registry,
+    static_value_factory,
     taxonomy_lookup_legacy_id_mapping,
 )
 from boranga.components.species_and_communities.models import GroupType, Species
@@ -27,6 +28,8 @@ DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_local_factory("Australia/P
 DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 
 PROCESSING_STATUS = choices_transform([c[0] for c in Species.PROCESSING_STATUS_CHOICES])
+
+NOO_AUTO_TRUE = static_value_factory(True)
 
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
@@ -55,6 +58,7 @@ PIPELINES = {
     "distribution": ["strip", "blank_to_none"],
     "modified_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
     "datetime_updated": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
+    "noo_auto": [NOO_AUTO_TRUE],
 }
 
 
