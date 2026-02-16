@@ -13,6 +13,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.occurrence_report import schema
+from boranga.components.data_migration.adapters.occurrence_report.tec_shared import (
+    build_site_species_comments,
+)
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.handlers.helpers import (
     apply_value_to_instance,
@@ -290,23 +293,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     # Extract fields
                     taxon_id = row.get("taxon_name_id", "").strip()
-                    # Comments construction: SSP_NOTES + SSP_HEIGHT + SSP_COLLECTOR_CODE + SSP_COLLECTION_NUMBER
-                    notes = row.get("SSP_NOTES", "").strip()
-                    height = row.get("SSP_HEIGHT", "").strip()
-                    coll_code = row.get("SSP_COLLECTOR_CODE", "").strip()
-                    coll_num = row.get("SSP_COLLECTION_NUMBER", "").strip()
-
-                    parts = []
-                    if notes:
-                        parts.append(notes)
-                    if height:
-                        parts.append(f"Height: {height}")
-                    if coll_code:
-                        parts.append(f"Collector Code: {coll_code}")
-                    if coll_num:
-                        parts.append(f"Collector Number: {coll_num}")
-
-                    comments = "; ".join(parts)
+                    # Build comments from SSP_ fields using shared function
+                    comments = build_site_species_comments(row)
 
                     mapping[visit_id].append({"taxon_name_id": taxon_id, "comments": comments})
 
