@@ -102,7 +102,11 @@ or, if combined into one file:
 ## Occurrences
 
 ./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/ --sources TEC --wipe-targets
-./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES --wipe-targets
+
+# Don't wiping targets for the boundaries run as the Occurrence Geometry records are created in the previous run and contain important data (it's disabled in the handler anyway as a precaution)
+
+./manage.py migrate_data run occurrence_legacy private-media/
+legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES
 
 ## Occurrence Reports
 
