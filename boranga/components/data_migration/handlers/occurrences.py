@@ -123,8 +123,10 @@ class OccurrenceImporter(BaseSheetImporter):
                 return
 
             if len(sources) == 1 and sources[0] == Source.TEC_BOUNDARIES.value:
-                logger.warning("OccurrenceImporter: wiping targets for TEC_BOUNDARIES (OccurrenceGeometry only)...")
-                OccurrenceGeometry.objects.filter(occurrence__group_type__name__in=target_group_types).delete()
+                logger.warning(
+                    "OccurrenceImporter: TEC_BOUNDARIES with --wipe-targets: skipping delete to preserve "
+                    "existing buffer_radius and other OccurrenceGeometry fields. Will use update path instead."
+                )
                 return
 
             logger.warning(
@@ -977,7 +979,12 @@ class OccurrenceImporter(BaseSheetImporter):
                     apply_model_defaults(OccurrenceGeometry, defaults)
                     if occ.pk in existing_geo:
                         obj = existing_geo[occ.pk]
+                        # For updates, only set fields that are actually provided (non-None after defaults applied)
+                        # This preserves existing values for fields not in the source (e.g., buffer_radius from TEC when updating via TEC_BOUNDARIES)
                         for k, v in defaults.items():
+                            # Skip buffer_radius if TEC_BOUNDARIES didn't provide it (preserve existing value)
+                            if k == "buffer_radius" and v in (None, 0) and geo_src == Source.TEC_BOUNDARIES.value:
+                                continue
                             setattr(obj, k, v)
                         geo_update.append(obj)
                     else:
@@ -1087,7 +1094,7 @@ class OccurrenceImporter(BaseSheetImporter):
                 OccurrenceGeometry.objects.bulk_create(geo_create, batch_size=BATCH)
             if geo_update:
                 OccurrenceGeometry.objects.bulk_update(
-                    geo_update, ["geometry", "locked", "content_type"], batch_size=BATCH
+                    geo_update, ["geometry", "locked", "content_type", "original_geometry_ewkb"], batch_size=BATCH
                 )
 
             if ident_create:
