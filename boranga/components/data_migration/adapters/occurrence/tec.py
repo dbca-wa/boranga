@@ -263,6 +263,7 @@ PIPELINES = {
     "OCCAssociatedSpecies__comment": [],
     "OCCHabitatComposition__water_quality": [],
     "_nested_species": [],
+    "OccurrenceGeometry__buffer_radius": ["strip", "blank_to_none", "to_float"],
 }
 
 

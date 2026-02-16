@@ -402,7 +402,7 @@ class OccurrenceImporter(BaseSheetImporter):
             """
             entries_sorted = sorted(
                 entries,
-                key=lambda e: (source_priority.index(e[1]) if e[1] in source_priority else len(source_priority)),
+                key=lambda e: source_priority.index(e[1]) if e[1] in source_priority else len(source_priority),
             )
             merged = {}
             combined_issues = []
@@ -962,6 +962,7 @@ class OccurrenceImporter(BaseSheetImporter):
                     defaults = {
                         "geometry": merged.get("OccurrenceGeometry__geometry"),
                         "locked": merged.get("OccurrenceGeometry__locked"),
+                        "buffer_radius": merged.get("OccurrenceGeometry__buffer_radius"),
                     }
                     if occ_content_type:
                         defaults["content_type"] = occ_content_type

@@ -80,6 +80,8 @@ COLUMN_MAP = {
     "ADD_ITEM_CODE": "OccurrenceDocument__document_sub_category_id",
     "ADD_DESC": "OccurrenceDocument__description",
     "ADD_USERNAME": "OccurrenceDocument__uploaded_by",
+    # OccurrenceGeometry
+    "OCC_BUFFER_RADIUS": "OccurrenceGeometry__buffer_radius",
 }
 
 REQUIRED_COLUMNS = [
