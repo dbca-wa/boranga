@@ -750,6 +750,7 @@ class SpeciesImporter(BaseSheetImporter):
                             species=d.species,
                             defaults={
                                 "aoo_actual_auto": d.aoo_actual_auto,
+                                "noo_auto": d.noo_auto,
                                 "distribution": d.distribution,
                             },
                         )
