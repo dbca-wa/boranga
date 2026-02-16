@@ -287,7 +287,6 @@ class OccurrenceTecAdapter(SourceAdapter):
         fire_path = None
         additional_path = None
         species_path = None
-        fauna_path = None
         reliability_path = None
         dola_path = None
         species_role_path = None
@@ -331,18 +330,11 @@ class OccurrenceTecAdapter(SourceAdapter):
                     additional_path = p
                     break
 
-            # Find OCCURRENCE_SPECIES.csv
-            for name in ["OCCURRENCE_SPECIES.csv", "occurrence_species.csv"]:
+            # Find OCCURRENCE_SPECIES_COMBINE.csv (consolidates flora and fauna)
+            for name in ["OCCURRENCE_SPECIES_COMBINE.csv", "occurrence_species_combine.csv"]:
                 p = os.path.join(path, name)
                 if os.path.exists(p):
                     species_path = p
-                    break
-
-            # Find OCCURRENCE_FAUNA.csv
-            for name in ["OCCURRENCE_FAUNA.csv", "occurrence_fauna.csv"]:
-                p = os.path.join(path, name)
-                if os.path.exists(p):
-                    fauna_path = p
                     break
 
             # Find RELIABILITY.csv
@@ -407,16 +399,10 @@ class OccurrenceTecAdapter(SourceAdapter):
                     additional_path = p
                     break
 
-            for name in ["OCCURRENCE_SPECIES.csv", "occurrence_species.csv"]:
+            for name in ["OCCURRENCE_SPECIES_COMBINE.csv", "occurrence_species_combine.csv"]:
                 p = os.path.join(dirname, name)
                 if os.path.exists(p):
                     species_path = p
-                    break
-
-            for name in ["OCCURRENCE_FAUNA.csv", "occurrence_fauna.csv"]:
-                p = os.path.join(dirname, name)
-                if os.path.exists(p):
-                    fauna_path = p
                     break
 
             for name in ["RELIABILITY.csv", "reliability.csv"]:
@@ -486,21 +472,19 @@ class OccurrenceTecAdapter(SourceAdapter):
             additional_rows, add_warns = self.read_table(additional_path, **add_options)
             warnings.extend(add_warns)
 
-        # Read Species
+        # Read Species (OCCURRENCE_SPECIES_COMBINE contains both flora and fauna)
         species_rows = []
         if species_path:
             sp_options = {k: v for k, v in options.items() if k != "limit"}
             sp_options["limit"] = 0  # 0 means no limit - read all rows
             species_rows, sp_warns = self.read_table(species_path, **sp_options)
             warnings.extend(sp_warns)
+        else:
+            warnings.append(
+                ExtractionWarning(f"Missing OCCURRENCE_SPECIES_COMBINE.csv near {occ_path}, proceeding without species")
+            )
 
-        # Read Fauna
-        fauna_rows = []
-        if fauna_path:
-            fauna_options = {k: v for k, v in options.items() if k != "limit"}
-            fauna_options["limit"] = 0  # 0 means no limit - read all rows
-            fauna_rows, fauna_warns = self.read_table(fauna_path, **fauna_options)
-            warnings.extend(fauna_warns)
+        # Note: OCCURRENCE_SPECIES_COMBINE.csv replaces both OCCURRENCE_SPECIES.csv and OCCURRENCE_FAUNA.csv
 
         # Read Lookups
         reliability_map = {}
@@ -606,14 +590,10 @@ class OccurrenceTecAdapter(SourceAdapter):
 
         species_by_occ = defaultdict(list)
         for row in species_rows:
-            species_by_occ[row["OCC_UNIQUE_ID"]].append(row)
-
-        for row in fauna_rows:
-            # Normalize fauna fields to match SPEC_ naming expected by handler
-            if "OF_TAXON_ID" in row:
-                row["SPEC_TAXON_ID"] = row["OF_TAXON_ID"]
-            if "OF_VOUCHER_NO" in row:
-                row["SPEC_VOUCHER_NO"] = row["OF_VOUCHER_NO"]
+            # Map taxon_name_id (Nomos ID) to SPEC_TAXON_ID for handler compatibility
+            # OCCURRENCE_SPECIES_COMBINE.csv has taxon_name_id which is the Nomos ID
+            if "taxon_name_id" in row and row["taxon_name_id"]:
+                row["SPEC_TAXON_ID"] = row["taxon_name_id"]
             species_by_occ[row["OCC_UNIQUE_ID"]].append(row)
 
         # Join
