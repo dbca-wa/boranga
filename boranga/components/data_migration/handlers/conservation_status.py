@@ -71,6 +71,15 @@ class ConservationStatusImporter(BaseSheetImporter):
             logger.warning("ConservationStatusImporter: deleting ConservationStatus data...")
             cs_filter = {"migrated_from_id__isnull": False}
 
+        # Delete reversion history first (ConservationStatus and ConservationStatusDocument)
+        from boranga.components.conservation_status.models import ConservationStatus, ConservationStatusDocument
+        from boranga.components.data_migration.utils.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_for_model(ConservationStatus, cs_filter)
+        cleaner.clear_for_related_model(ConservationStatusDocument, "conservation_status", cs_filter)
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
+
         from django.apps import apps
         from django.db import connections
 

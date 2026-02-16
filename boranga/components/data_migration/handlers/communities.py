@@ -163,6 +163,13 @@ class CommunityImporter(BaseSheetImporter):
             occ_filter = {}
             report_filter = {}
 
+        # Delete reversion history first (more efficient than waiting for cascade)
+        from boranga.components.data_migration.utils.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_community_and_related(comm_filter)
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
+
         # Perform deletes in an autocommit block so they are committed immediately.
         from django.db import connections
 

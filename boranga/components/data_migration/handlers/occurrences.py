@@ -139,6 +139,13 @@ class OccurrenceImporter(BaseSheetImporter):
         else:
             logger.warning("OccurrenceImporter: deleting ALL Occurrence and related data...")
 
+        # Delete reversion history first (more efficient than waiting for cascade)
+        from boranga.components.data_migration.utils.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_occurrence_and_related(occ_filter if is_filtered else {})
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
+
         # Perform deletes in an autocommit block so they are committed
         # immediately. This avoids the case where clear_targets runs inside a
         # larger transaction that later rolls back leaving the wipe undone.
