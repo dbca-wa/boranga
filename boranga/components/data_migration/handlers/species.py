@@ -365,7 +365,7 @@ class SpeciesImporter(BaseSheetImporter):
         def merge_group(entries, source_priority):
             entries_sorted = sorted(
                 entries,
-                key=lambda e: (source_priority.index(e[1]) if e[1] in source_priority else len(source_priority)),
+                key=lambda e: source_priority.index(e[1]) if e[1] in source_priority else len(source_priority),
             )
             merged = {}
             combined_issues = []
@@ -495,24 +495,16 @@ class SpeciesImporter(BaseSheetImporter):
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
-                # update existing
+                # update existing (re-import of same record)
                 for k, v in defaults.items():
                     setattr(obj, k, v)
                 to_update.append((obj, merged, districts_raw))
                 continue
 
             taxonomy_id = defaults.get("taxonomy_id")
-            existing = None
-            if taxonomy_id:
-                existing = existing_by_taxonomy.get(taxonomy_id)
 
-            if existing:
-                # update existing species rather than creating new
-                for k, v in defaults.items():
-                    setattr(existing, k, v)
-                existing.migrated_from_id = migrated_from_id
-                to_update.append((existing, merged, districts_raw))
-            elif taxonomy_id and taxonomy_id in tax_seen:
+            # Check if this taxonomy_id was already processed in this batch
+            if taxonomy_id and taxonomy_id in tax_seen:
                 # Another op in this run has already claimed this taxonomy_id.
                 # Skip this record to avoid duplicate taxonomy entries.
                 canonical = tax_seen[taxonomy_id]
@@ -525,6 +517,31 @@ class SpeciesImporter(BaseSheetImporter):
                 )
                 tax_collisions[taxonomy_id].append(migrated_from_id)
                 skipped += 1
+                continue
+
+            # Check if species with this taxonomy exists in DB with a different migrated_from_id
+            existing = None
+            if taxonomy_id:
+                existing = existing_by_taxonomy.get(taxonomy_id)
+
+            if existing:
+                # Taxonomy collision: species with this taxonomy_id already exists in DB
+                # Skip this duplicate to preserve the original record
+                logger.info(
+                    "SpeciesImporter: taxonomy collision detected for taxonomy_id=%s; "
+                    "species already exists in DB (species_id=%s, migrated_from_id=%s); "
+                    "skipping duplicate migrated_from_id=%s",
+                    taxonomy_id,
+                    existing.id,
+                    existing.migrated_from_id,
+                    migrated_from_id,
+                )
+                # Track this collision consistent with batch collisions
+                if taxonomy_id not in tax_seen:
+                    tax_seen[taxonomy_id] = existing.migrated_from_id
+                tax_collisions[taxonomy_id].append(migrated_from_id)
+                skipped += 1
+                continue
             elif taxonomy_id:
                 # First time we see this taxonomy_id and it doesn't exist in DB.
                 # Claim it as canonical and create one instance for it.
