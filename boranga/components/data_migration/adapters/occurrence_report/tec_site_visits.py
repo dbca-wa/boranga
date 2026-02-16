@@ -151,9 +151,11 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         "OccurrenceReportGeometry__content_type": [lambda val, ctx: _result(get_occurrence_report_content_type_id())],
         # OCRHabitatComposition transformation (Task 12472)
         "OCRHabitatComposition__habitat_notes": [
-            lambda val, ctx: _result(f"Vegetation Condition: {ctx.row.get('SV_VEGETATION_CONDITION')}")
-            if ctx.row.get("SV_VEGETATION_CONDITION")
-            else _result(None)
+            lambda val, ctx: (
+                _result(f"Vegetation Condition: {ctx.row.get('SV_VEGETATION_CONDITION')}")
+                if ctx.row.get("SV_VEGETATION_CONDITION")
+                else _result(None)
+            )
         ],
         # OCRFireHistory transformation (Task 12495)
         "OCRFireHistory__comment": [
