@@ -2,13 +2,22 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
     dependent_from_column_factory,
+    fk_lookup_static,
     static_value_factory,
 )
+from boranga.components.users.models import SubmitterCategory
 
 from ..base import ExtractionResult, SourceAdapter
 from ..sources import Source
 from . import schema
 from .tec_shared import TEC_USER_LOOKUP
+
+# Lookup submitter category by name (not hardcoded ID)
+SUBMITTER_CATEGORY_DBCA = fk_lookup_static(
+    model=SubmitterCategory,
+    lookup_field="name",
+    static_value="DBCA",
+)
 
 _SPECIES_LIST_RELATES_TO_CACHE = {}
 
@@ -115,7 +124,7 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         "OCRObserverDetail__visible": [static_value_factory(True)],
         # SubmitterInformation defaults (Task 12570: name default "DBCA" since SITE_VISITS has no USERNAME column)
         "SubmitterInformation__name": [static_value_factory("DBCA")],
-        "SubmitterInformation__submitter_category": [static_value_factory(15)],  # DBCA
+        "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
         "SubmitterInformation__organisation": [static_value_factory("DBCA")],
         # OCRLocation defaults from Parent Occurrence
         "OCRLocation__district": [
