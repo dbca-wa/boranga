@@ -698,7 +698,7 @@ class SpeciesImporter(BaseSheetImporter):
                 created += 1
                 created_species_ids.append(obj.pk)
                 distribution = merged.get("distribution", None)
-                noo_auto_val = merged.get("noo_auto", True)
+                noo_auto_val = merged.get("noo_auto") or True
                 dist_to_create.append(
                     SpeciesDistribution(
                         species=obj, aoo_actual_auto=False, noo_auto=noo_auto_val, distribution=distribution
@@ -799,7 +799,7 @@ class SpeciesImporter(BaseSheetImporter):
                     inst = existing_dists[sid]
                     inst.distribution = distribution
                     inst.aoo_actual_auto = False
-                    inst.noo_auto = noo_auto_val
+                    inst.noo_auto = noo_auto_val or True
                     to_update_dists.append(inst)
                 else:
                     # species instance available in DB
@@ -807,7 +807,7 @@ class SpeciesImporter(BaseSheetImporter):
                         SpeciesDistribution(
                             species_id=sid,
                             aoo_actual_auto=False,
-                            noo_auto=noo_auto_val,
+                            noo_auto=noo_auto_val or True,
                             distribution=distribution,
                         )
                     )
