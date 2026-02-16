@@ -113,7 +113,8 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         # OCRObserverDetail defaults
         "OCRObserverDetail__main_observer": [static_value_factory(True)],
         "OCRObserverDetail__visible": [static_value_factory(True)],
-        # SubmitterInformation defaults
+        # SubmitterInformation defaults (Task 12570: name default "DBCA" since SITE_VISITS has no USERNAME column)
+        "SubmitterInformation__name": [static_value_factory("DBCA")],
         "SubmitterInformation__submitter_category": [static_value_factory(15)],  # DBCA
         "SubmitterInformation__organisation": [static_value_factory("DBCA")],
         # OCRLocation defaults from Parent Occurrence
