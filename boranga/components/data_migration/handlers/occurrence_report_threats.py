@@ -359,4 +359,74 @@ class OCRConservationThreatImporter(BaseSheetImporter):
             except Exception as e:
                 warnings.append(f"Failed to write error CSV: {e}")
 
+        # Task 12681: Copy OCRConservationThreat records to parent OCC as OCCConservationThreat
+        if not ctx.dry_run and created > 0:
+            logger.info("Task 12681: Duplicating OCR threats to parent Occurrences...")
+
+            try:
+                from boranga.components.occurrence.models import (
+                    OCCConservationThreat,
+                )
+
+                # Get all newly created OCR threats
+                ocr_threats = OCRConservationThreat.objects.filter(
+                    occurrence_report_id__in=[
+                        obj.occurrence_report_id for obj in to_create if hasattr(obj, "occurrence_report_id")
+                    ]
+                ).select_related("occurrence_report", "occurrence_report__occurrence")
+
+                occ_threats_to_create = []
+                duplicated_count = 0
+
+                for ocr_threat in ocr_threats:
+                    # Skip if no parent occurrence
+                    if not ocr_threat.occurrence_report or not ocr_threat.occurrence_report.occurrence:
+                        continue
+
+                    parent_occ = ocr_threat.occurrence_report.occurrence
+
+                    # Check if this threat was already duplicated (avoid re-creating on re-runs)
+                    existing = OCCConservationThreat.objects.filter(
+                        occurrence=parent_occ, occurrence_report_threat=ocr_threat
+                    ).exists()
+
+                    if existing:
+                        continue
+
+                    # Create OCC threat linked back to OCR threat
+                    occ_threat = OCCConservationThreat(
+                        occurrence=parent_occ,
+                        occurrence_report_threat=ocr_threat,
+                        threat_category_id=ocr_threat.threat_category_id,
+                        threat_agent_id=ocr_threat.threat_agent_id,
+                        current_impact_id=ocr_threat.current_impact_id,
+                        potential_impact_id=ocr_threat.potential_impact_id,
+                        potential_threat_onset_id=ocr_threat.potential_threat_onset_id,
+                        comment=ocr_threat.comment,
+                        date_observed=ocr_threat.date_observed,
+                        visible=ocr_threat.visible,
+                    )
+                    occ_threats_to_create.append(occ_threat)
+
+                if occ_threats_to_create:
+                    with transaction.atomic():
+                        created_occ_threats = OCCConservationThreat.objects.bulk_create(
+                            occ_threats_to_create, batch_size=1000
+                        )
+                        duplicated_count = len(created_occ_threats)
+
+                        # Set threat_number
+                        for obj in created_occ_threats:
+                            obj.threat_number = f"T{obj.pk}"
+
+                        OCCConservationThreat.objects.bulk_update(
+                            created_occ_threats, ["threat_number"], batch_size=1000
+                        )
+
+                        logger.info(f"Task 12681: Duplicated {duplicated_count} threats to parent Occurrences")
+
+            except Exception as e:
+                logger.exception(f"Task 12681: Failed to duplicate threats to parent Occurrences: {e}")
+                warnings.append(f"Threat duplication failed: {e}")
+
         return stats
