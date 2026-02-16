@@ -281,6 +281,16 @@ def t_to_int(value, ctx):
         return _result(value, TransformIssue("error", f"Not an integer: {value!r}"))
 
 
+@registry.register("to_float")
+def t_to_float(value, ctx):
+    if value in (None, ""):
+        return _result(None)
+    try:
+        return _result(float(value))
+    except (ValueError, TypeError):
+        return _result(value, TransformIssue("error", f"Not a float: {value!r}"))
+
+
 @registry.register("to_decimal")
 def t_to_decimal(value, ctx):
     from decimal import Decimal, InvalidOperation
