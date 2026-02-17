@@ -55,7 +55,7 @@ COLUMN_MAP = {
     "HABITAT_NOTES": "OCRHabitatComposition__habitat_notes",
     "ASPECT": "ASPECT",
     "HABITAT_CONDITION": "HABITAT_CONDITION",
-    "SV_VEGETATION_CONDITION": "OCRHabitatComposition__vegetation_condition",
+    "SV_VEGETATION_CONDITION": "SV_VEGETATION_CONDITION",  # Maps to itself, adapter reads it
     "SOIL_COLOR": "OCRHabitatComposition__soil_colour",
     "SOIL_CONDITION": "OCRHabitatComposition__soil_condition",
     "LANDFORM": "OCRHabitatComposition__land_form",
@@ -261,7 +261,6 @@ class OccurrenceReportRow:
     OCRHabitatComposition__loose_rock_percent: int | None = None
     OCRHabitatComposition__drainage: str | None = None
     OCRHabitatComposition__habitat_notes: str | None = None
-    OCRHabitatComposition__vegetation_condition: str | None = None
     OCRHabitatComposition__soil_colour: str | None = None
     OCRHabitatComposition__soil_condition: str | None = None
     OCRHabitatComposition__land_form: str | None = None
@@ -419,9 +418,6 @@ class OccurrenceReportRow:
                 d.get("OCRHabitatComposition__loose_rock_percent")
             ),
             OCRHabitatComposition__habitat_notes=utils.safe_strip(d.get("OCRHabitatComposition__habitat_notes")),
-            OCRHabitatComposition__vegetation_condition=utils.safe_strip(
-                d.get("OCRHabitatComposition__vegetation_condition")
-            ),
             OCRHabitatComposition__soil_colour=utils.safe_strip(d.get("OCRHabitatComposition__soil_colour")),
             OCRHabitatComposition__soil_condition=utils.safe_strip(d.get("OCRHabitatComposition__soil_condition")),
             OCRHabitatComposition__land_form=utils.safe_strip(d.get("OCRHabitatComposition__land_form")),

@@ -200,8 +200,8 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         # OCRHabitatComposition transformation (Task 12472)
         "OCRHabitatComposition__habitat_notes": [
             lambda val, ctx: (
-                _result(f"Vegetation Condition: {ctx.row.get('OCRHabitatComposition__vegetation_condition')}")
-                if ctx.row.get("OCRHabitatComposition__vegetation_condition")
+                _result(f"Vegetation Condition: {ctx.row.get('SV_VEGETATION_CONDITION')}")
+                if ctx.row.get("SV_VEGETATION_CONDITION")
                 else _result(None)
             )
         ],
