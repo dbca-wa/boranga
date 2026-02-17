@@ -556,11 +556,7 @@ PIPELINES = {
     "OCRHabitatComposition__rock_type": ["strip", "blank_to_none", ROCK_TYPE_TRANSFORM],
     # Habitat composition extras (apply TPFL closed-list mappings)
     "OCRHabitatComposition__habitat_notes": ["strip", "blank_to_none"],
-    "OCRHabitatComposition__vegetation_condition": [
-        "strip",
-        "blank_to_none",
-        veg_condition_prefix_transform,
-    ],
+    # TPFL builds habitat_notes from SV_VEGETATION_CONDITION in extract() instead
     "OCRHabitatComposition__soil_colour": [
         "strip",
         "blank_to_none",
