@@ -103,7 +103,7 @@ or, if combined into one file:
 
 ./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/ --sources TEC --wipe-targets
 
-# Don't wiping targets for the boundaries run as the Occurrence Geometry records are created in the previous run and contain important data (it's disabled in the handler anyway as a precaution)
+# Don't wipe targets for the boundaries run as the Occurrence Geometry records are created in the previous run and contain important data (wipe targets is disabled in the handler anyway as a precaution)
 
 ./manage.py migrate_data run occurrence_legacy private-media/
 legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES
@@ -111,7 +111,10 @@ legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES
 ## Occurrence Reports
 
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITE_VISITS.csv --sources TEC_SITE_VISITS --wipe-targets
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources TEC_SURVEYS --wipe-targets
+
+# Don't wipe targets for this one either as it would delete the site visit OCRS that were created in the prior run
+
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources TEC_SURVEYS
 
 ## Occurrence Report Documents
 
