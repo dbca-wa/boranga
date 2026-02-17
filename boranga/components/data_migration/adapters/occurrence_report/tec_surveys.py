@@ -104,6 +104,137 @@ def concatenate_survey_conditions(val, ctx):
     return _result(concatenated)
 
 
+# Shared cache for parent Occurrence objects to avoid redundant queries
+_PARENT_OCC_CACHE = {}
+
+
+def get_parent_occurrence(occ_mig_id):
+    """
+    Get parent Occurrence by migrated_from_id with caching.
+    Shared by all parent OCC helper functions to minimize DB queries.
+    """
+    if not occ_mig_id:
+        return None
+
+    global _PARENT_OCC_CACHE
+    if occ_mig_id not in _PARENT_OCC_CACHE:
+        try:
+            from boranga.components.occurrence.models import Occurrence
+
+            occ = Occurrence.objects.filter(migrated_from_id=occ_mig_id).first()
+            _PARENT_OCC_CACHE[occ_mig_id] = occ
+        except Exception:
+            _PARENT_OCC_CACHE[occ_mig_id] = None
+
+    return _PARENT_OCC_CACHE.get(occ_mig_id)
+
+
+_OCC_LOCATION_CACHE = {}
+
+
+def get_parent_occ_location_value(occ_mig_id, field_name):
+    """
+    Copy location field from parent Occurrence's OCCLocation model.
+    Used by Tasks 12573, 12575, 12578, 12583 to copy coordinate_source, district, region, location_description.
+    """
+    if not occ_mig_id:
+        return None
+
+    global _OCC_LOCATION_CACHE
+    if occ_mig_id not in _OCC_LOCATION_CACHE:
+        occ = get_parent_occurrence(occ_mig_id)
+        if occ and hasattr(occ, "location"):
+            _OCC_LOCATION_CACHE[occ_mig_id] = occ.location
+        else:
+            _OCC_LOCATION_CACHE[occ_mig_id] = None
+
+    loc = _OCC_LOCATION_CACHE.get(occ_mig_id)
+    if not loc:
+        return None
+
+    return getattr(loc, field_name, None)
+
+
+_OCC_GEOMETRY_CACHE = {}
+
+
+def get_parent_occ_geometry_value(occ_mig_id, field_name):
+    """
+    Copy geometry field from parent Occurrence's OccurrenceGeometry model.
+    Task 12594: Copy geometry from parent OCC (not from SITES table).
+    """
+    if not occ_mig_id:
+        return None
+
+    global _OCC_GEOMETRY_CACHE
+    if occ_mig_id not in _OCC_GEOMETRY_CACHE:
+        try:
+            from boranga.components.occurrence.models import OccurrenceGeometry
+
+            occ = get_parent_occurrence(occ_mig_id)
+            if occ:
+                # Get the first geometry record for this occurrence
+                geom = OccurrenceGeometry.objects.filter(occurrence=occ).first()
+                _OCC_GEOMETRY_CACHE[occ_mig_id] = geom
+            else:
+                _OCC_GEOMETRY_CACHE[occ_mig_id] = None
+        except Exception:
+            _OCC_GEOMETRY_CACHE[occ_mig_id] = None
+
+    geom = _OCC_GEOMETRY_CACHE.get(occ_mig_id)
+    if not geom:
+        return None
+
+    return getattr(geom, field_name, None)
+
+
+_OCC_IDENTIFICATION_CACHE = {}
+
+
+def get_parent_occ_identification_value(occ_mig_id, field_name):
+    """
+    Copy identification field from parent Occurrence's OCCIdentification model.
+    Used to copy identification_certainty from parent OCC to OCR.
+    """
+    if not occ_mig_id:
+        return None
+
+    global _OCC_IDENTIFICATION_CACHE
+    if occ_mig_id not in _OCC_IDENTIFICATION_CACHE:
+        occ = get_parent_occurrence(occ_mig_id)
+        if occ and hasattr(occ, "identification"):
+            _OCC_IDENTIFICATION_CACHE[occ_mig_id] = occ.identification
+        else:
+            _OCC_IDENTIFICATION_CACHE[occ_mig_id] = None
+
+    identification = _OCC_IDENTIFICATION_CACHE.get(occ_mig_id)
+    if not identification:
+        return None
+
+    return getattr(identification, field_name, None)
+
+
+_OCR_CONTENT_TYPE_ID = None
+
+
+def get_occurrence_report_content_type_id():
+    """
+    Get ContentType ID for OccurrenceReport model.
+    Task 12589: OccurrenceReportGeometry__content_type needs static value for OccurrenceReport.
+    """
+    global _OCR_CONTENT_TYPE_ID
+    if _OCR_CONTENT_TYPE_ID is None:
+        try:
+            from django.contrib.contenttypes.models import ContentType
+
+            from boranga.components.occurrence.models import OccurrenceReport
+
+            _OCR_CONTENT_TYPE_ID = ContentType.objects.get_for_model(OccurrenceReport).id
+        except Exception:
+            pass
+    return _OCR_CONTENT_TYPE_ID
+
+
 class OccurrenceReportTecSurveysAdapter(SourceAdapter):
     source_key = Source.TEC_SURVEYS.value
     domain = "occurrence_report"
@@ -149,14 +280,55 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
                 mapper=lambda val, ctx: "Approved" if val == "Approved" else None,
             )
         ],
-        # OCRObserverDetail defaults (Tasks 12563, 12566)
+        # OCRObserverDetail defaults (Tasks 12563, 12564, 12566)
         "OCRObserverDetail__main_observer": [static_value_factory(True)],
         "OCRObserverDetail__visible": [static_value_factory(True)],
+        # Task 12564: observer_name from SUR_SURVEYOR (mapped by schema, pass through)
+        # Task 12573: Copy coordinate_source from parent OCC
+        "OCRLocation__coordinate_source": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "coordinate_source_id")
+            )
+        ],
+        # Task 12575: Copy district from parent OCC
+        "OCRLocation__district": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "district_id")
+            )
+        ],
+        # Task 12578: Copy region from parent OCC
+        "OCRLocation__region": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "region_id")
+            )
+        ],
+        # Task 12583: Copy location_description from parent OCC
+        "OCRLocation__location_description": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "location_description")
+            )
+        ],
+        # Task 12589: OccurrenceReportGeometry content_type = OccurrenceReport
+        "OccurrenceReportGeometry__content_type": [lambda val, ctx: _result(get_occurrence_report_content_type_id())],
+        # Task 12594: Copy geometry from parent OCC's OccurrenceGeometry (not from SITES)
+        "OccurrenceReportGeometry__geometry": [
+            lambda val, ctx: _result(
+                get_parent_occ_geometry_value(ctx.row.get("Occurrence__migrated_from_id"), "geometry")
+            )
+        ],
         # Task 12599: SURVEYS geometry show_on_map = False (different from SITE_VISITS)
         "OccurrenceReportGeometry__show_on_map": [static_value_factory(False)],
         "OccurrenceReportGeometry__locked": [static_value_factory(True)],
         # Task 12623: habitat_notes from SURVEY_CONDITIONS concatenation
         "OCRHabitatComposition__habitat_notes": [concatenate_survey_conditions],
+        # Copy identification_certainty from parent Occurrence's OCC Identification
+        "OCRIdentification__identification_certainty": [
+            lambda val, ctx: _result(
+                get_parent_occ_identification_value(
+                    ctx.row.get("Occurrence__migrated_from_id"), "identification_certainty_id"
+                )
+            )
+        ],
     }
 
     def extract(self, path: str, **options) -> ExtractionResult:
