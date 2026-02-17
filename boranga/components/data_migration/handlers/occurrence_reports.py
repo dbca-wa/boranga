@@ -535,7 +535,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         def merge_group(entries, source_priority):
             entries_sorted = sorted(
                 entries,
-                key=lambda e: (source_priority.index(e[1]) if e[1] in source_priority else len(source_priority)),
+                key=lambda e: source_priority.index(e[1]) if e[1] in source_priority else len(source_priority),
             )
             merged = {}
             combined_issues = []
@@ -1465,20 +1465,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 names = sheet_to_species.get(sheetno, [])
                 resolved = [name_to_assoc[n] for n in names if n in name_to_assoc]
 
-                # Check if we have comment
+                # Check if we have comment or species_list_relates_to
                 op = op_map.get(sheetno)
                 comment = None
+                species_list_relates_to_id = None
                 if op:
                     merged = op.get("merged") or {}
                     comment = merged.get("OCRAssociatedSpecies__comment")
+                    species_list_relates_to_id = merged.get("OCRAssociatedSpecies__species_list_relates_to")
 
                 if resolved:
                     ocr_id_to_resolved[ocr.pk] = resolved
 
-                if resolved or comment:
+                if resolved or comment or species_list_relates_to_id:
                     assoc = OCRAssociatedSpecies(occurrence_report=ocr)
                     if comment:
                         assoc.comment = comment
+                    if species_list_relates_to_id:
+                        assoc.species_list_relates_to_id = species_list_relates_to_id
                     assoc_to_create.append(assoc)
 
             if assoc_to_create:
@@ -1541,7 +1545,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             )
                             errors += 1
 
-            # Update existing OCRAssociatedSpecies with comments
+            # Update existing OCRAssociatedSpecies with comments and species_list_relates_to
             assoc_to_update = []
             for sheetno, ocr in target_map.items():
                 if ocr.pk not in existing_assoc:
@@ -1549,23 +1553,32 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                 assoc = existing_assoc[ocr.pk]
                 op = op_map.get(sheetno)
+                updated = False
                 if op:
                     merged = op.get("merged") or {}
                     comment = merged.get("OCRAssociatedSpecies__comment")
+                    species_list_relates_to_id = merged.get("OCRAssociatedSpecies__species_list_relates_to")
+
                     if comment and assoc.comment != comment:
                         assoc.comment = comment
-                        assoc_to_update.append(assoc)
+                        updated = True
+                    if species_list_relates_to_id and assoc.species_list_relates_to_id != species_list_relates_to_id:
+                        assoc.species_list_relates_to_id = species_list_relates_to_id
+                        updated = True
+
+                if updated:
+                    assoc_to_update.append(assoc)
 
             if assoc_to_update:
                 try:
-                    OCRAssociatedSpecies.objects.bulk_update(assoc_to_update, ["comment"], batch_size=BATCH)
-                except Exception:
-                    logger.exception(
-                        "Failed to bulk_update OCRAssociatedSpecies comments; falling back to individual saves"
+                    OCRAssociatedSpecies.objects.bulk_update(
+                        assoc_to_update, ["comment", "species_list_relates_to_id"], batch_size=BATCH
                     )
+                except Exception:
+                    logger.exception("Failed to bulk_update OCRAssociatedSpecies; falling back to individual saves")
                 for a in assoc_to_update:
                     try:
-                        a.save(update_fields=["comment"])
+                        a.save(update_fields=["comment", "species_list_relates_to_id"])
                     except Exception as exc:
                         logger.exception(
                             "Failed to update OCRAssociatedSpecies %s",
@@ -1577,7 +1590,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRAssociatedSpecies",
                                 "level": "error",
-                                "message": f"Failed to update associated species comment: {exc}",
+                                "message": f"Failed to update associated species: {exc}",
                                 "raw_value": "",
                                 "reason": "update_error",
                                 "row": {"pk": getattr(a, "pk", "")},
