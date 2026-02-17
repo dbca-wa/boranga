@@ -42,6 +42,31 @@ def lookup_species_list_relates_to(val):
     return _SPECIES_LIST_RELATES_TO_CACHE.get(val.lower())
 
 
+# Shared cache for parent Occurrence objects to avoid redundant queries
+_PARENT_OCC_CACHE = {}
+
+
+def get_parent_occurrence(occ_mig_id):
+    """
+    Get parent Occurrence by migrated_from_id with caching.
+    Shared by all parent OCC helper functions to minimize DB queries.
+    """
+    if not occ_mig_id:
+        return None
+
+    global _PARENT_OCC_CACHE
+    if occ_mig_id not in _PARENT_OCC_CACHE:
+        try:
+            from boranga.components.occurrence.models import Occurrence
+
+            occ = Occurrence.objects.filter(migrated_from_id=occ_mig_id).first()
+            _PARENT_OCC_CACHE[occ_mig_id] = occ
+        except Exception:
+            _PARENT_OCC_CACHE[occ_mig_id] = None
+
+    return _PARENT_OCC_CACHE.get(occ_mig_id)
+
+
 _OCC_LOCATION_CACHE = {}
 
 
@@ -51,15 +76,10 @@ def get_parent_occ_location_value(occ_mig_id, field_name):
 
     global _OCC_LOCATION_CACHE
     if occ_mig_id not in _OCC_LOCATION_CACHE:
-        try:
-            from boranga.components.occurrence.models import Occurrence
-
-            occ = Occurrence.objects.filter(migrated_from_id=occ_mig_id).first()
-            if occ and hasattr(occ, "location"):
-                _OCC_LOCATION_CACHE[occ_mig_id] = occ.location
-            else:
-                _OCC_LOCATION_CACHE[occ_mig_id] = None
-        except Exception:
+        occ = get_parent_occurrence(occ_mig_id)
+        if occ and hasattr(occ, "location"):
+            _OCC_LOCATION_CACHE[occ_mig_id] = occ.location
+        else:
             _OCC_LOCATION_CACHE[occ_mig_id] = None
 
     loc = _OCC_LOCATION_CACHE.get(occ_mig_id)
@@ -67,6 +87,28 @@ def get_parent_occ_location_value(occ_mig_id, field_name):
         return None
 
     return getattr(loc, field_name, None)
+
+
+_OCC_IDENTIFICATION_CACHE = {}
+
+
+def get_parent_occ_identification_value(occ_mig_id, field_name):
+    if not occ_mig_id:
+        return None
+
+    global _OCC_IDENTIFICATION_CACHE
+    if occ_mig_id not in _OCC_IDENTIFICATION_CACHE:
+        occ = get_parent_occurrence(occ_mig_id)
+        if occ and hasattr(occ, "identification"):
+            _OCC_IDENTIFICATION_CACHE[occ_mig_id] = occ.identification
+        else:
+            _OCC_IDENTIFICATION_CACHE[occ_mig_id] = None
+
+    identification = _OCC_IDENTIFICATION_CACHE.get(occ_mig_id)
+    if not identification:
+        return None
+
+    return getattr(identification, field_name, None)
 
 
 def make_geometry(lat, lon):
@@ -119,14 +161,20 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
                 mapper=lambda val, ctx: "Approved" if val == "Approved" else None,
             )
         ],
-        # OCRObserverDetail defaults
+        # OCRObserverDetail defaults (Tasks 12333, 12334, 12336)
         "OCRObserverDetail__main_observer": [static_value_factory(True)],
         "OCRObserverDetail__visible": [static_value_factory(True)],
+        # Task 12334: observer_name from SV_DESCRIBED_BY (mapped by schema, pass through)
         # SubmitterInformation defaults (Task 12570: name default "DBCA" since SITE_VISITS has no USERNAME column)
         "SubmitterInformation__name": [static_value_factory("DBCA")],
         "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
         "SubmitterInformation__organisation": [static_value_factory("DBCA")],
         # OCRLocation defaults from Parent Occurrence
+        "OCRLocation__coordinate_source": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "coordinate_source_id")
+            )
+        ],
         "OCRLocation__district": [
             lambda val, ctx: _result(
                 get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "district_id")
@@ -171,9 +219,17 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
                 )
             )
         ],
-        # Task 12499
+        # Task 12499: species_list_relates_to from SV_OBSERVATION_TYPE
         "OCRAssociatedSpecies__species_list_relates_to": [
             lambda val, ctx: _result(lookup_species_list_relates_to(val))
+        ],
+        # Copy identification_certainty from parent Occurrence's OCC Identification
+        "OCRIdentification__identification_certainty": [
+            lambda val, ctx: _result(
+                get_parent_occ_identification_value(
+                    ctx.row.get("Occurrence__migrated_from_id"), "identification_certainty_id"
+                )
+            )
         ],
     }
 
