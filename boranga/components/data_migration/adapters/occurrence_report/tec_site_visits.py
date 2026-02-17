@@ -1,6 +1,7 @@
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
+    build_legacy_map_transform,
     dependent_from_column_factory,
     fk_lookup_static,
     static_value_factory,
@@ -19,27 +20,13 @@ SUBMITTER_CATEGORY_DBCA = fk_lookup_static(
     static_value="DBCA",
 )
 
-_SPECIES_LIST_RELATES_TO_CACHE = {}
-
-
-def lookup_species_list_relates_to(val):
-    if not val:
-        return None
-    val = str(val).strip()
-    if not val or val.lower() == "nan":
-        return None
-
-    global _SPECIES_LIST_RELATES_TO_CACHE
-    if not _SPECIES_LIST_RELATES_TO_CACHE:
-        try:
-            from boranga.components.occurrence.models import SpeciesListRelatesTo
-
-            for obj in SpeciesListRelatesTo.objects.all():
-                _SPECIES_LIST_RELATES_TO_CACHE[str(obj.name).lower()] = obj.id
-        except Exception:
-            pass
-
-    return _SPECIES_LIST_RELATES_TO_CACHE.get(val.lower())
+# Task 12499: Map SV_OBSERVATION_TYPE codes (Q, R, T) to SpeciesListRelatesTo via legacy map
+SPECIES_LIST_RELATES_TO_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TEC",
+    list_name="SV_OBSERVATION_TYPE (SITE_VISITS)",
+    required=False,
+    return_type="id",
+)
 
 
 # Shared cache for parent Occurrence objects to avoid redundant queries
@@ -220,9 +207,7 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
             )
         ],
         # Task 12499: species_list_relates_to from SV_OBSERVATION_TYPE
-        "OCRAssociatedSpecies__species_list_relates_to": [
-            lambda val, ctx: _result(lookup_species_list_relates_to(val))
-        ],
+        "OCRAssociatedSpecies__species_list_relates_to": [SPECIES_LIST_RELATES_TO_TRANSFORM],
         # Copy identification_certainty from parent Occurrence's OCC Identification
         "OCRIdentification__identification_certainty": [
             lambda val, ctx: _result(
