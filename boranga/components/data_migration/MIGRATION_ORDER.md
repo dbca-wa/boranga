@@ -113,6 +113,10 @@ legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITE_VISITS.csv --sources TEC_SITE_VISITS --wipe-targets
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources TEC_SURVEYS --wipe-targets
 
+## Occurrence Report Documents
+
+./manage.py migrate_data run occurrence_report_documents_legacy private-media/legacy_data/TEC/SITE_VISITS.csv --sources TEC_SITE_VISITS --wipe-targets
+
 ## Occurrence Report Threats
 
 ./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TEC/SURVEY_THREATS.csv --sources TEC_SURVEY_THREATS --wipe-targets
