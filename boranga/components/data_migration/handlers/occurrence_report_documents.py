@@ -233,6 +233,40 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
             # Store tuple of (instance, original_row) to allow fallback error logging
             to_create.append((OccurrenceReportDocument(**defaults), row))
 
+        # Handle wipe_targets before creating new documents
+        if options.get("wipe_targets"):
+            # Collect occurrence_report IDs from our extracted data to limit deletion scope
+            report_ids = {inst.occurrence_report_id for inst, row in to_create}
+            report_ids.discard(None)
+
+            if report_ids:
+                # Determine group_type from the sources being imported
+                # TPFL = flora/fauna, TEC = community
+
+                group_type_names = set()
+                for src in sources:
+                    if src == Source.TPFL.value:
+                        group_type_names.add("flora")
+                    elif src == Source.TEC_SITE_VISITS.value:
+                        group_type_names.add("community")
+
+                if not group_type_names:
+                    logger.warning("Could not determine group_type for wipe_targets, skipping wipe")
+                else:
+                    # Only wipe documents for OccurrenceReports matching both report_ids AND group_type
+                    wipe_filter = OccurrenceReportDocument.objects.filter(
+                        occurrence_report_id__in=report_ids,
+                        occurrence_report__group_type__name__in=group_type_names,
+                    )
+                    wipe_count = wipe_filter.count()
+                    logger.info(
+                        f"Wiping {wipe_count} existing documents for {len(report_ids)} occurrence reports "
+                        f"(group_type: {', '.join(group_type_names)})..."
+                    )
+                    wipe_filter.delete()
+            else:
+                logger.info("No occurrence reports to wipe documents for")
+
         if ctx.dry_run:
             logger.info(f"Dry run: would create {len(to_create)} documents")
             return
