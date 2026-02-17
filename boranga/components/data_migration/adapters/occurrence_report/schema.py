@@ -56,6 +56,9 @@ COLUMN_MAP = {
     "ASPECT": "ASPECT",
     "HABITAT_CONDITION": "HABITAT_CONDITION",
     "SV_VEGETATION_CONDITION": "SV_VEGETATION_CONDITION",  # Maps to itself, adapter reads it
+    "SV_FIRE_NOTES": "SV_FIRE_NOTES",  # Maps to itself, adapter reads it
+    "SV_FIRE_AGE": "SV_FIRE_AGE",  # Maps to itself, adapter reads it
+    "SCON_COMMENTS": "SCON_COMMENTS",  # Survey conditions comments, used by TPFL
     "SOIL_COLOR": "OCRHabitatComposition__soil_colour",
     "SOIL_CONDITION": "OCRHabitatComposition__soil_condition",
     "LANDFORM": "OCRHabitatComposition__land_form",
