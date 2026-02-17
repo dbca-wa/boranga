@@ -194,6 +194,14 @@ IDENTIFICATION_CERTAINTY_TRANSFORM = build_legacy_map_transform(
     return_type="id",
 )
 
+# Task: Map OCC_SOURCE_CODE from OCCURRENCES table to CoordinateSource via SOURCES lookup
+COORDINATE_SOURCE_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TEC",
+    list_name="OCC_SOURCE_CODE (SOURCES)",
+    required=False,
+    return_type="id",
+)
+
 PIPELINES = {
     "occurrence_name": ["strip", "blank_to_none", "required"],
     "community_id": ["community_id_from_legacy"],
@@ -204,8 +212,12 @@ PIPELINES = {
         tec_observation_detail_comments_transform,
         lambda v, ctx: v if v else "",
     ],
-    # TODO: Implement lookups for these fields
-    "OCCLocation__coordinate_source_id": [STATIC_NONE],
+    "OCCLocation__coordinate_source_id": [
+        "strip",
+        "blank_to_none",
+        COORDINATE_SOURCE_TRANSFORM,
+        "to_int",
+    ],
     "OCCLocation__locality": [
         tec_location_locality_transform,
         # lambda v, ctx: v if v else "(Not specified)",
