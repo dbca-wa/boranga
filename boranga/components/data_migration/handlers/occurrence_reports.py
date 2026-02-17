@@ -2387,7 +2387,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                         errors += 1
 
-        # OCRHabitatComposition: OneToOne - create or update loose_rock_percent
+        # OCRHabitatComposition: OneToOne - create or update all fields
         # Fetch existing habitat comps
         existing_habs = {
             h.occurrence_report_id: h for h in OCRHabitatComposition.objects.filter(occurrence_report__in=target_occs)
@@ -3142,7 +3142,19 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         if habs_to_update:
             try:
-                OCRHabitatComposition.objects.bulk_update(habs_to_update, ["loose_rock_percent"], batch_size=BATCH)
+                # Update all OCRHabitatComposition fields (not just loose_rock_percent)
+                updateable_fields = [
+                    "land_form",
+                    "rock_type",
+                    "loose_rock_percent",
+                    "soil_type",
+                    "soil_colour",
+                    "soil_condition",
+                    "drainage",
+                    "water_quality",
+                    "habitat_notes",
+                ]
+                OCRHabitatComposition.objects.bulk_update(habs_to_update, updateable_fields, batch_size=BATCH)
             except Exception:
                 logger.exception("Failed to bulk_update OCRHabitatComposition; falling back to individual saves")
                 for h in habs_to_update:
