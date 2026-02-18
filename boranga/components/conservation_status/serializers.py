@@ -933,6 +933,7 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
             "datetime_updated",
             "editing_window_minutes",
             "common_names",
+            "migrated_from_id",
             "approved_by_name",
         )
 

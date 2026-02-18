@@ -1463,6 +1463,25 @@
                         </div>
                     </div>
                 </template>
+                <div
+                    v-if="conservation_status_obj.migrated_from_id"
+                    class="row border-top pt-3 pb-3"
+                >
+                    <label
+                        for="migrated_from_id"
+                        class="col-sm-5 col-form-label"
+                        >Migrated From ID:</label
+                    >
+                    <div class="col-sm-7">
+                        <input
+                            id="migrated_from_id"
+                            type="text"
+                            class="form-control"
+                            :value="conservation_status_obj.migrated_from_id"
+                            disabled
+                        />
+                    </div>
+                </div>
                 <template
                     v-if="
                         !is_external && !conservation_status_obj.can_user_edit
