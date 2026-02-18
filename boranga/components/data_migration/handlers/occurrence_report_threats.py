@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 from typing import Any
 
@@ -23,6 +24,8 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
+
+logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OCRConservationThreatAdapter(),
@@ -52,8 +55,6 @@ class OCRConservationThreatImporter(BaseSheetImporter):
                     target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
 
         is_filtered = bool(sources)
-
-        logger = __import__("logging").getLogger(__name__)
 
         if is_filtered:
             if not target_group_types:
@@ -291,7 +292,6 @@ class OCRConservationThreatImporter(BaseSheetImporter):
                     OCRConservationThreat.objects.bulk_update(created_objs, ["threat_number"], batch_size=1000)
 
             except Exception as e:
-                logger = __import__("logging").getLogger(__name__)
                 logger.exception("Bulk create failed")
                 skipped += len(to_create)
                 errors += len(to_create)
