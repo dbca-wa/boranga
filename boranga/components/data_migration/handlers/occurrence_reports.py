@@ -1990,7 +1990,26 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     ocr_id = target_map[mid].pk
                     visit_id = mid[len("tec-site-") :]
                     if visit_id in tec_site_species_map and ocr_id not in existing_assocs:
-                        new_assocs.append(OCRAssociatedSpecies(occurrence_report_id=ocr_id))
+                        # Extract species_list_relates_to_id from merged data
+                        op = op_map.get(mid)
+                        species_list_relates_to_id = None
+                        if op:
+                            merged = op.get("merged") or {}
+                            from boranga.components.data_migration.registry import TransformResult
+
+                            def extract_value(v):
+                                if isinstance(v, TransformResult):
+                                    return v.value
+                                return v
+
+                            species_list_relates_to_id = extract_value(
+                                merged.get("OCRAssociatedSpecies__species_list_relates_to")
+                            )
+
+                        assoc = OCRAssociatedSpecies(occurrence_report_id=ocr_id)
+                        if species_list_relates_to_id:
+                            assoc.species_list_relates_to_id = species_list_relates_to_id
+                        new_assocs.append(assoc)
 
             if new_assocs:
                 OCRAssociatedSpecies.objects.bulk_create(new_assocs)
