@@ -401,13 +401,15 @@ def ocr_plant_count_comment_transform(value, ctx):
     """Concatenate fields for OCRPlantCount comment."""
     parts = []
 
-    # 1. POPULATION_NOTES
-    if value and str(value).strip():
-        parts.append(str(value).strip())
-
     row = getattr(ctx, "row", None) if ctx is not None else None
     if row is None and isinstance(ctx, dict):
         row = ctx.get("row") or ctx
+
+    # 1. POPULATION_NOTES — the pipeline key (OCRPlantCount__comment) has no direct
+    # schema column mapping, so `value` is always None.  Read from ctx.row instead.
+    population_notes = (row.get("POPULATION_NOTES") if isinstance(row, dict) else None) or value
+    if population_notes and str(population_notes).strip():
+        parts.append(str(population_notes).strip())
 
     if not isinstance(row, dict):
         return _result("; ".join(parts) if parts else "")
@@ -819,8 +821,10 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             canonical["OCRObserverDetail__main_observer"] = True
             canonical["internal_application"] = True
             # Build habitat_notes by combining habitat notes, aspect and vegetation condition
+            # NOTE: schema maps HABITAT_NOTES -> OCRHabitatComposition__habitat_notes, so read
+            # from the mapped key (not the raw column name).
             hab_notes_parts: list[str] = []
-            HAB_NOTES = canonical.get("HABITAT_NOTES", "")
+            HAB_NOTES = canonical.get("OCRHabitatComposition__habitat_notes", "")
             if HAB_NOTES:
                 hab_notes_parts.append(HAB_NOTES.strip())
             ASPECT = canonical.get("ASPECT", "")
