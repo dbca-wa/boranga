@@ -1563,19 +1563,56 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str, return_field: str = "
             fn = registry._fns.get(tax_transform_name)
             if fn is not None:
                 res = fn(value, ctx)
-                # If the general lookup returned a species/taxonomy result, we need to extract the correct ID
-                # The generic `taxonomy_lookup` usually returns a Species instance or ID.
-                # Wait, `taxonomy_lookup` (generic) returns model instance or ID?
-                # Let's assume it returns what we need or we can't handle it easily here.
-                # Actually, `taxonomy_lookup` usually returns a serialized value or ID.
-                # If the fallback returns a value, we just return it.
+                # taxonomy_lookup returns a Taxonomy ID. We need to convert to Species ID if requested.
                 if isinstance(res, TransformResult):
                     if any(i.level == "error" for i in res.issues):
-                        pass
+                        pass  # Let error fall through to final error return
                     elif res.value:
-                        return _result(res.value)
+                        # res.value is a taxonomy_id. Convert to species_id if needed.
+                        if return_field == "species_id":
+                            try:
+                                from boranga.components.species_and_communities.models import Species, Taxonomy
+
+                                tax = Taxonomy.all_objects.get(pk=res.value)
+                                sp = Species.objects.filter(taxonomy=tax).first()
+                                if sp:
+                                    return _result(sp.pk)
+                                else:
+                                    # Taxonomy exists but no Species - this is the error case
+                                    return _result(
+                                        value,
+                                        TransformIssue(
+                                            "error",
+                                            f"Taxonomy '{value}' found (taxonomy_id={tax.pk}) but no Species record exists",
+                                        ),
+                                    )
+                            except Exception:
+                                pass  # Fall through to error
+                        else:
+                            # Return taxonomy_id as-is
+                            return _result(res.value)
                 elif res:
-                    return _result(res)
+                    # Same logic for non-TransformResult
+                    if return_field == "species_id":
+                        try:
+                            from boranga.components.species_and_communities.models import Species, Taxonomy
+
+                            tax = Taxonomy.all_objects.get(pk=res)
+                            sp = Species.objects.filter(taxonomy=tax).first()
+                            if sp:
+                                return _result(sp.pk)
+                            else:
+                                return _result(
+                                    value,
+                                    TransformIssue(
+                                        "error",
+                                        f"Taxonomy '{value}' found (taxonomy_id={tax.pk}) but no Species record exists",
+                                    ),
+                                )
+                        except Exception:
+                            pass
+                    else:
+                        return _result(res)
         except Exception:
             pass
 
