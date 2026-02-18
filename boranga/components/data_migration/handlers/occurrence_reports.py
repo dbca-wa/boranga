@@ -2424,22 +2424,19 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         except Exception:
                             logger.exception("Failed to create TFAUNA document for %s", mid)
 
-        # OCRObserverDetail: ensure a main observer exists for each occurrence_report
+        # OCRObserverDetail: ensure a main observer exists for each occurrence_report;
+        # also update organisation on existing observers when it is missing.
         want_obs_create = []
-        existing_obs = set(
-            OCRObserverDetail.objects.filter(occurrence_report__in=target_occs, main_observer=True).values_list(
-                "occurrence_report_id", flat=True
-            )
-        )
+        want_obs_update = []
+        existing_obs = {
+            obs.occurrence_report_id: obs
+            for obs in OCRObserverDetail.objects.filter(occurrence_report__in=target_occs, main_observer=True)
+        }
         for mig in target_mig_ids:
             ocr = target_map.get(mig)
             if not ocr:
                 continue
-            if ocr.pk in existing_obs:
-                # already has main observer
-                continue
-            # find merged data for this migrated id to populate name and role
-            # lookup merged data from op_map to populate name and role
+            # find merged data for this migrated id to populate name, role and organisation
             observer_name = None
             observer_role = None
             observer_contact = None
@@ -2451,6 +2448,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 observer_role = merged.get("OCRObserverDetail__role")
                 observer_contact = merged.get("OCRObserverDetail__contact")
                 observer_organisation = merged.get("OCRObserverDetail__organisation")
+
+            if ocr.pk in existing_obs:
+                # Observer already exists — update organisation if it is currently blank
+                # and the source now has a value.
+                existing = existing_obs[ocr.pk]
+                if not existing.organisation and observer_organisation:
+                    existing.organisation = observer_organisation
+                    want_obs_update.append(existing)
+                continue
 
             # create observer instance after searching ops so the variables
             # `observer_name` and `observer_role` are defined regardless of
@@ -2466,6 +2472,20 @@ class OccurrenceReportImporter(BaseSheetImporter):
             apply_value_to_instance(ocr_observer_detail_instance, "organisation", observer_organisation)
 
             want_obs_create.append(ocr_observer_detail_instance)
+
+        if want_obs_update:
+            try:
+                OCRObserverDetail.objects.bulk_update(want_obs_update, ["organisation"], batch_size=BATCH)
+            except Exception:
+                logger.exception("Failed to bulk_update OCRObserverDetail organisation")
+                for obs in want_obs_update:
+                    try:
+                        obs.save(update_fields=["organisation"])
+                    except Exception:
+                        logger.exception(
+                            "Failed to update OCRObserverDetail organisation for occurrence_report %s",
+                            getattr(obs.occurrence_report, "pk", None),
+                        )
 
         if want_obs_create:
             try:
