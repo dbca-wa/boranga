@@ -2598,12 +2598,14 @@ def conditional_transform_factory(
 ) -> str:
     """
     Return a registered transform name that applies conditional logic:
-    - If condition_column equals condition_value, apply true_transform to true_column value
+    - If condition_column equals condition_value (or is in condition_value when a
+      list/tuple is passed), apply true_transform to true_column value
     - Otherwise return false_value
 
     Parameters:
       - condition_column: column name to check in the row
-      - condition_value: value to compare against (uses == comparison)
+      - condition_value: value to compare against (uses == comparison), or a
+        list/tuple of values to match against (uses `in` check)
       - true_column: column name to use when condition is true
       - true_transform: registered transform name to apply to true_column value (optional)
       - false_value: value to return when condition is false (default None)
@@ -2611,7 +2613,7 @@ def conditional_transform_factory(
     Usage:
       APPROVED_BY_IF_ACCEPTED = conditional_transform_factory(
           condition_column="processing_status",
-          condition_value="PROCESSING_STATUS_APPROVED",
+          condition_value=["ACCEPTED", "REJECTED"],
           true_column="modified_by",
           true_transform="emailuser_by_legacy_username_tpfl"
       )
@@ -2620,7 +2622,10 @@ def conditional_transform_factory(
     if not condition_column or not true_column:
         raise ValueError("condition_column and true_column must be provided")
 
-    key_repr = f"conditional:{condition_column}:{condition_value}:{true_column}:{true_transform or ''}:{false_value!r}"
+    # Normalise condition_value to a hashable form for the cache key
+    condition_values = tuple(condition_value) if isinstance(condition_value, (list | tuple)) else (condition_value,)
+
+    key_repr = f"conditional:{condition_column}:{condition_values}:{true_column}:{true_transform or ''}:{false_value!r}"
     name = "conditional_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
@@ -2631,8 +2636,8 @@ def conditional_transform_factory(
         condition_val = row.get(condition_column)
         true_val = row.get(true_column)
 
-        # Check condition
-        if condition_val != condition_value:
+        # Check condition (single value or set membership)
+        if condition_val not in condition_values:
             return _result(false_value)
 
         # If no true_column value, return false_value
