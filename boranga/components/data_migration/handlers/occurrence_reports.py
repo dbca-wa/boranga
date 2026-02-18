@@ -1471,8 +1471,19 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 species_list_relates_to_id = None
                 if op:
                     merged = op.get("merged") or {}
-                    comment = merged.get("OCRAssociatedSpecies__comment")
-                    species_list_relates_to_id = merged.get("OCRAssociatedSpecies__species_list_relates_to")
+
+                    # Helper to extract .value from TransformResult if needed
+                    def extract_value(v):
+                        from boranga.components.data_migration.registry import TransformResult
+
+                        if isinstance(v, TransformResult):
+                            return v.value
+                        return v
+
+                    comment = extract_value(merged.get("OCRAssociatedSpecies__comment"))
+                    species_list_relates_to_id = extract_value(
+                        merged.get("OCRAssociatedSpecies__species_list_relates_to")
+                    )
 
                 if resolved:
                     ocr_id_to_resolved[ocr.pk] = resolved
@@ -1547,6 +1558,22 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             # Update existing OCRAssociatedSpecies with comments and species_list_relates_to
             assoc_to_update = []
+
+            # Helper to extract .value from TransformResult if needed
+            def extract_value(v):
+                from boranga.components.data_migration.registry import TransformResult
+
+                if isinstance(v, TransformResult):
+                    return v.value
+                return v
+
+            # DEBUG: Check what we're working with
+            tec_site_in_target = sum(1 for k in target_map if k.startswith("tec-site-"))
+            tec_site_in_op = sum(1 for k in op_map if k.startswith("tec-site-"))
+            logger.info(
+                f"DEBUG Update: target_map={len(target_map)}, existing_assoc={len(existing_assoc)}, op_map={len(op_map)}, tec-site in target={tec_site_in_target}, tec-site in op={tec_site_in_op}"
+            )
+
             for sheetno, ocr in target_map.items():
                 if ocr.pk not in existing_assoc:
                     continue
@@ -1556,8 +1583,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 updated = False
                 if op:
                     merged = op.get("merged") or {}
-                    comment = merged.get("OCRAssociatedSpecies__comment")
-                    species_list_relates_to_id = merged.get("OCRAssociatedSpecies__species_list_relates_to")
+                    comment = extract_value(merged.get("OCRAssociatedSpecies__comment"))
+                    species_list_relates_to_id = extract_value(
+                        merged.get("OCRAssociatedSpecies__species_list_relates_to")
+                    )
+
+                    # DEBUG: Log what we found
+                    if sheetno.startswith("tec-site-") and species_list_relates_to_id:
+                        logger.info(
+                            f"DEBUG: Found species_list_relates_to_id={species_list_relates_to_id} for {sheetno}"
+                        )
 
                     if comment and assoc.comment != comment:
                         assoc.comment = comment
@@ -1862,6 +1897,60 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                                 )
                 except Exception:
                     logger.exception("Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences")
+
+        # Update OCRAssociatedSpecies.species_list_relates_to from transformed data
+        # This handles fields like SV_OBSERVATION_TYPE that map to species_list_relates_to
+        # and runs independently of sheet_to_species logic above.
+        logger.info("Updating OCRAssociatedSpecies.species_list_relates_to from migration data...")
+        from boranga.components.data_migration.registry import TransformResult
+
+        def extract_value(v):
+            if isinstance(v, TransformResult):
+                return v.value
+            return v
+
+        # Build target map: migrated_from_id -> OccurrenceReport
+        target_mig_ids = [op["migrated_from_id"] for op in ops]
+        target_ocrs_for_update = {
+            o.migrated_from_id: o for o in OccurrenceReport.objects.filter(migrated_from_id__in=target_mig_ids)
+        }
+
+        # Get existing OCRAssociatedSpecies
+        existing_assoc_for_update = {
+            a.occurrence_report_id: a
+            for a in OCRAssociatedSpecies.objects.filter(occurrence_report__in=list(target_ocrs_for_update.values()))
+        }
+
+        assoc_to_update_species_list = []
+        for op in ops:
+            mig_id = op["migrated_from_id"]
+            ocr = target_ocrs_for_update.get(mig_id)
+            if not ocr or ocr.pk not in existing_assoc_for_update:
+                continue
+
+            assoc = existing_assoc_for_update[ocr.pk]
+            merged = op.get("merged") or {}
+            species_list_relates_to_id = extract_value(merged.get("OCRAssociatedSpecies__species_list_relates_to"))
+
+            if species_list_relates_to_id and assoc.species_list_relates_to_id != species_list_relates_to_id:
+                assoc.species_list_relates_to_id = species_list_relates_to_id
+                assoc_to_update_species_list.append(assoc)
+
+        if assoc_to_update_species_list:
+            logger.info(
+                f"Updating {len(assoc_to_update_species_list)} OCRAssociatedSpecies with species_list_relates_to"
+            )
+            try:
+                OCRAssociatedSpecies.objects.bulk_update(
+                    assoc_to_update_species_list, ["species_list_relates_to_id"], batch_size=BATCH
+                )
+            except Exception:
+                logger.exception("Failed bulk_update for species_list_relates_to; falling back to individual saves")
+                for a in assoc_to_update_species_list:
+                    try:
+                        a.save(update_fields=["species_list_relates_to_id"])
+                    except Exception:
+                        logger.exception("Failed to update species_list_relates_to for OCRAssociatedSpecies %s", a.pk)
 
         # Process TEC Associated Species (with comments)
         if tec_site_species_map:
