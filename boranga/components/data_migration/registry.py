@@ -659,6 +659,7 @@ def t_smart_date_parse(value, ctx):
 
 @registry.register("ocr_comments_transform")
 def t_ocr_comments_transform(value, ctx):
+    OTHER_COMMENTS = (ctx.row.get("OTHER_COMMENTS") or "").strip()
     PURPOSE1 = (ctx.row.get("PURPOSE1") or "").strip()
     PURPOSE2 = (ctx.row.get("PURPOSE2") or "").strip()
     VESTING = (ctx.row.get("VESTING") or "").strip()
@@ -679,6 +680,9 @@ def t_ocr_comments_transform(value, ctx):
             comments += ", " + part
         else:
             comments = part
+
+    # OTHER_COMMENTS: plain text, no prefix
+    _append_part(OTHER_COMMENTS if OTHER_COMMENTS else None)
 
     if PURPOSE1:
         purpose1 = LegacyValueMap.get_target(
@@ -718,12 +722,12 @@ def t_ocr_comments_transform(value, ctx):
         if not vesting:
             transform_issues.append(TransformIssue("error", f"No Vesting found that maps to legacy value: {VESTING!r}"))
         else:
-            _append_part(f"Vesting: {vesting}")
+            _append_part(vesting)
 
     _append_part(f"Fencing Status: {FENCING_STATUS}" if FENCING_STATUS else None)
     _append_part(f"Fencing Comments: {FENCING_COMMENTS}" if FENCING_COMMENTS else None)
-    _append_part(f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}" if ROADSIDE_MARKER_STATUS else None)
-    _append_part(f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}" if RDSIDE_MKR_COMMENTS else None)
+    _append_part(f"Road Marker Status: {ROADSIDE_MARKER_STATUS}" if ROADSIDE_MARKER_STATUS else None)
+    _append_part(f"Road Marker Comments: {RDSIDE_MKR_COMMENTS}" if RDSIDE_MKR_COMMENTS else None)
 
     return _result(comments, *transform_issues)
 
