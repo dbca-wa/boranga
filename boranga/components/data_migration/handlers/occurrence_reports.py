@@ -3804,6 +3804,101 @@ class OccurrenceReportImporter(BaseSheetImporter):
         created += len(created_map)
         updated += len(to_update)
 
+        # OccurrenceReportUserAction: TPFL-only — record MODIFIED_BY/MODIFIED_DATE as an action log
+        # Tasks 14837, 14838, 14839
+        # Only create when both MODIFIED_BY (modified_by) and MODIFIED_DATE are present.
+        tpfl_user_actions_to_create = []
+        for mid in target_mig_ids:
+            if not mid.startswith("tpfl-"):
+                continue
+            op = op_map.get(mid)
+            if not op:
+                continue
+            merged = op.get("merged") or {}
+            modified_by = merged.get("modified_by")
+            modified_date = merged.get("modified_date")
+            # Condition: both must be present
+            if not modified_by or not modified_date:
+                continue
+            ocr = target_map.get(mid)
+            if not ocr:
+                continue
+            # Skip if a legacy action already exists for this OCR
+            if OccurrenceReportUserAction.objects.filter(
+                occurrence_report=ocr,
+                what__startswith="Edited in TPFL;",
+            ).exists():
+                continue
+            # Resolve who: look up legacy username -> emailuser id
+            who_id = None
+            try:
+                from boranga.components.main.models import LegacyUsernameEmailuserMapping
+
+                mapping = LegacyUsernameEmailuserMapping.objects.filter(
+                    legacy_system="TPFL", legacy_username=str(modified_by).strip()
+                ).first()
+                if mapping:
+                    who_id = mapping.emailuser_id
+            except Exception:
+                pass
+            if not who_id:
+                who_id = ocr.submitter or 0
+            # Build what: map transformed processing_status back to label
+            _status_label_map = {
+                "draft": "DRAFT",
+                "with_assessor": "WITH ASSESSOR",
+                "approved": "APPROVED",
+                "declined": "DECLINED",
+            }
+            status_label = _status_label_map.get(
+                (merged.get("processing_status") or "").lower(), merged.get("processing_status") or ""
+            )
+            what_text = f"Edited in TPFL; {status_label}"
+            # Parse when: MODIFIED_DATE as datetime.
+            # The data export has a known bad offset: +00:00 was written where +08:00
+            # (Australia/Perth) was intended.  Strip any parsed tzinfo and always
+            # re-attach Perth so the stored value is correct.
+            when_dt = None
+            try:
+                import zoneinfo
+
+                from boranga.components.data_migration import utils as dm_utils
+
+                when_dt = dm_utils.parse_date_iso(str(modified_date).strip())
+                if when_dt:
+                    # Drop whatever offset was parsed (it may be a corrupt +00:00)
+                    # and treat the wall-clock time as Perth local time.
+                    when_dt = when_dt.replace(tzinfo=None).replace(tzinfo=zoneinfo.ZoneInfo("Australia/Perth"))
+            except Exception:
+                pass
+            ua = OccurrenceReportUserAction(
+                occurrence_report=ocr,
+                who=who_id,
+                what=what_text,
+            )
+            if when_dt:
+                ua.when = when_dt
+            tpfl_user_actions_to_create.append(ua)
+
+        if tpfl_user_actions_to_create:
+            try:
+                OccurrenceReportUserAction.objects.bulk_create(tpfl_user_actions_to_create, batch_size=BATCH)
+                logger.info(
+                    "Created %d OccurrenceReportUserAction records (TPFL)",
+                    len(tpfl_user_actions_to_create),
+                )
+            except Exception:
+                logger.exception("Failed to bulk_create OccurrenceReportUserAction (TPFL); falling back")
+                for ua in tpfl_user_actions_to_create:
+                    try:
+                        ua.save()
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create OccurrenceReportUserAction for OCR %s: %s",
+                            getattr(ua.occurrence_report, "pk", None),
+                            exc,
+                        )
+
         # OccurrenceReportUserAction: TFAUNA-only — record ChDate/ChName as an action log
         user_actions_to_create = []
         for mid in target_mig_ids:
