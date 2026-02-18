@@ -141,11 +141,11 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         "approved_by": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
         # Also populate SubmitterInformation with the same user
         "SubmitterInformation__email_user": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
-        "processing_status": [lambda val, ctx: _result("Approved") if not val else _result(val)],
+        "processing_status": [lambda val, ctx: _result("approved") if not val else _result(val)],
         "customer_status": [
             dependent_from_column_factory(
                 "processing_status",
-                mapper=lambda val, ctx: "Approved" if val == "Approved" else None,
+                mapper=lambda val, ctx: "approved" if val == "approved" else None,
             )
         ],
         # OCRObserverDetail defaults (Tasks 12333, 12334, 12336)
