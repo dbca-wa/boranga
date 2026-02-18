@@ -141,6 +141,13 @@ SOIL_TYPE_TRANSFORM = build_legacy_map_transform("TPFL", "SOIL_TYPE (DRF_LOV_SOI
 # Identification closed-list / default transforms
 SAMPLE_DEST_TRANSFORM = build_legacy_map_transform("TPFL", "VOUCHER_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)", required=False)
 
+# identification_certainty: always "High Certainty" (static)
+IDENTIFICATION_CERTAINTY_HIGH = fk_lookup_static(
+    model=IdentificationCertainty,
+    lookup_field="name",
+    static_value="High Certainty",
+)
+
 
 def observer_name_fallback_transform(value: str, ctx=None):
     """If observer name is missing, try to use OBSERVER_CODE from the raw row.
@@ -581,11 +588,7 @@ PIPELINES = {
         "blank_to_none",
         SAMPLE_DEST_TRANSFORM,
     ],
-    "OCRIdentification__identification_certainty": [
-        "strip",
-        "blank_to_none",
-        identification_certainty_default_transform,
-    ],
+    "OCRIdentification__identification_certainty": [IDENTIFICATION_CERTAINTY_HIGH],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
     # SubmitterInformation pipelines (Task 11302-11306)
     "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DEFAULT_TRANSFORM],
