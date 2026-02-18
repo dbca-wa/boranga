@@ -36,6 +36,7 @@ COLUMN_MAP = {
     "CREATED_BY": "submitter",
     "USERNAME": "submitter",  # Map Survey USERNAME to submitter as well
     "MODIFIED_BY": "modified_by",  # used in tpfl adapter to derive submitter
+    "MODIFIED_DATE": "modified_date",  # used in tpfl adapter to create user action log
     # OCRObserverDetail fields
     "OBS_ROLE_CODE": "OCRObserverDetail__role",
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
