@@ -274,12 +274,7 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
         "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
         "SubmitterInformation__organisation": [static_value_factory("DBCA")],
         "processing_status": [lambda val, ctx: _result("approved") if not val else _result(val)],
-        "customer_status": [
-            dependent_from_column_factory(
-                "processing_status",
-                mapper=lambda val, ctx: "approved" if val == "approved" else None,
-            )
-        ],
+        "customer_status": [static_value_factory("approved")],
         # OCRObserverDetail defaults (Tasks 12563, 12564, 12566)
         "OCRObserverDetail__main_observer": [static_value_factory(True)],
         "OCRObserverDetail__visible": [static_value_factory(True)],
