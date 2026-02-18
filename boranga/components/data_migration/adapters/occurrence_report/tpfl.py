@@ -233,11 +233,12 @@ def submitter_name_from_emailuser(value, ctx=None):
         return _result(None)
 
 
-# Transform for approved_by: if processing_status is 'ACCEPTED', use modified_by and resolve to EmailUser id
-# The condiion_value is the raw CSV value before transformation
+# Transform for approved_by: if processing_status is 'ACCEPTED' or 'REJECTED',
+# use modified_by and resolve to EmailUser id.
+# condition_value is the raw CSV value before transformation.
 APPROVED_BY_TRANSFORM = conditional_transform_factory(
     condition_column="processing_status",
-    condition_value="ACCEPTED",  # Raw CSV value before transformation
+    condition_value=["ACCEPTED", "REJECTED"],  # Raw CSV values before transformation
     true_column="modified_by",
     true_transform=EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM,
     false_value=None,
