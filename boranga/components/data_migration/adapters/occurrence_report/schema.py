@@ -92,6 +92,7 @@ COLUMN_MAP = {
     "GDA94LONG": "GDA94LONG",
     "DATUM": "DATUM",
     # TPFL raw fields (preserve these so TPFL-specific transforms can read them)
+    "OTHER_COMMENTS": "OTHER_COMMENTS",
     "PURPOSE1": "PURPOSE1",
     "PURPOSE2": "PURPOSE2",
     "VESTING": "VESTING",
