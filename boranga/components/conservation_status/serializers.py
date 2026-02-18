@@ -835,6 +835,7 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
     scientific_name = serializers.CharField(source="species_taxonomy.scientific_name", allow_null=True)
     community_name = serializers.CharField(source="community.taxonomy.community_name", allow_null=True)
     most_recent_meeting = MeetingSerializer(read_only=True, allow_null=True)
+    approved_by_name = serializers.SerializerMethodField(read_only=True)
 
     def get_allowed_assessors(self, obj):
         if obj.processing_status == ConservationStatus.PROCESSING_STATUS_DEFERRED:
@@ -932,6 +933,7 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
             "datetime_updated",
             "editing_window_minutes",
             "common_names",
+            "approved_by_name",
         )
 
     def get_submitter(self, obj):
@@ -1013,6 +1015,12 @@ class InternalConservationStatusSerializer(BaseConservationStatusSerializer):
     def get_approver_process(self, obj):
         request = self.context["request"]
         return obj.can_approver_process and is_conservation_status_approver(request)
+
+    def get_approved_by_name(self, obj):
+        if obj.approved_by:
+            email_user = retrieve_email_user(obj.approved_by)
+            return email_user.get_full_name()
+        return None
 
 
 class InternalSpeciesConservationStatusSerializer(BaseConservationStatusSerializer):
