@@ -2478,6 +2478,7 @@ export default {
             $('#map-spinner').css('left', '50%');
             $('#map-spinner').css('zIndex', 9999);
             vm.featureToast = new bootstrap.Toast(toastEl, { autohide: false });
+            document.addEventListener('keydown', vm.handleKeyDown);
             if (vm.refreshMapOnMounted) {
                 vm.forceToRefreshMap();
             } else {
@@ -2487,6 +2488,7 @@ export default {
     },
     beforeUnmount() {
         // Clean up listeners if needed
+        document.removeEventListener('keydown', this.handleKeyDown);
         this.editableFeatureCollection.un('add', this.onFeatureChanged);
         this.editableFeatureCollection.un('remove', this.onFeatureChanged);
         this.editableFeatureCollection.forEach((feature) => {
@@ -2494,6 +2496,33 @@ export default {
         });
     },
     methods: {
+        handleKeyDown(evt) {
+            if (evt.key !== 'Escape') {
+                return;
+            }
+            if (this.drawing) {
+                // Cancel any in-progress polygon drawing
+                if (
+                    this.drawPolygonsForModel &&
+                    this.drawPolygonsForModel.getActive()
+                ) {
+                    this.drawPolygonsForModel.abortDrawing();
+                    this.sketchCoordinates = [[]];
+                    this.lastPoint = null;
+                    this.errorMessage = null;
+                    if (this.undoredo_forSketch) {
+                        this.undoredo_forSketch.clear();
+                    }
+                    console.log('Polygon drawing cancelled via Escape');
+                }
+            } else if (this.measuring) {
+                // Cancel any in-progress measurement drawing
+                if (this.drawForMeasure && this.drawForMeasure.getActive()) {
+                    this.drawForMeasure.abortDrawing();
+                    console.log('Measurement drawing cancelled via Escape');
+                }
+            }
+        },
         takeSnapshot() {
             const format = new GeoJSON();
             const features = this.editableFeatureCollection.getArray();
