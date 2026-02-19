@@ -41,5 +41,7 @@
   "files.associations": {
     "**/*.geojson": "plaintext"
   },
-  "editor.largeFileOptimizations": true
+  "editor.largeFileOptimizations": true,
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python-envs.pythonProjects": []
 }
