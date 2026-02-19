@@ -583,6 +583,9 @@ export default {
             );
         },
         assessor_comment_readonly: function () {
+            if (!this.occurrence_report_obj?.assessor_mode) {
+                return true;
+            }
             return !this.is_external &&
                 !this.occurrence_report_obj.can_user_edit &&
                 this.occurrence_report_obj.assessor_mode.assessor_level ==
@@ -1020,6 +1023,9 @@ export default {
             return has_value;
         },
         generateReferralCommentBoxes: function () {
+            if (!this.occurrence_report_obj?.assessor_mode) {
+                return;
+            }
             var box_visibility =
                 this.occurrence_report_obj.assessor_mode.assessor_box_view;
             var assessor_mode =
