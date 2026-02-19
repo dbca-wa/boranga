@@ -3843,11 +3843,11 @@ export default {
                         // Don't alter style of click-selected features
                         console.log('ignoring hover on selected feature');
                         if (vm.drawing) {
-                            // Enable modify polygon the hovered polygon is selected and drawing mode is active
+                            // Enable modify when the hovered polygon is selected and drawing mode is active
                             vm.modifySetActive(true);
                             vm.transformSetActive(false);
                         } else {
-                            // Disable modify polygon when drawing mode is not active
+                            // Disable modify when drawing mode is not active
                             vm.modifySetActive(false);
                         }
                     } else {
@@ -4168,13 +4168,12 @@ export default {
             // When the map mode changes between draw and anything else, update the style of the selected features
             selectSingleClick.addEventListener('map:modeChanged', (evt) => {
                 console.log('map mode changed', evt);
-                if (
-                    evt.details.new_mode === 'draw' &&
-                    evt.details.new_subMode === 'Point'
-                ) {
+                if (evt.details.new_mode === 'draw') {
                     vm.setStyleForUnAndSelectedFeatures(vm.modifySelectStyle);
+                    vm.modifySetActive(true);
                 } else {
                     vm.setStyleForUnAndSelectedFeatures();
+                    vm.modifySetActive(false);
                 }
             });
 
@@ -4202,7 +4201,12 @@ export default {
                     }
 
                     // Get the selected features that are also editable
-                    const features = vm.editableSelectedFeatures();
+                    // In draw mode, allow deleting vertices on any selected feature
+                    const features = vm.drawing
+                        ? vm.selectedFeatureCollection
+                              .getArray()
+                              .filter((f) => f.getGeometry && f.getGeometry())
+                        : vm.editableSelectedFeatures();
 
                     features.forEach((feature) => {
                         let coords = feature.getGeometry().getCoordinates();
@@ -4240,6 +4244,12 @@ export default {
                 },
                 // A filter that takes a feature and return true if it can be modified
                 filter: function (feature) {
+                    // In draw mode, allow modifying any selected feature
+                    if (vm.drawing) {
+                        return vm.selectedFeatureCollection
+                            .getArray()
+                            .includes(feature);
+                    }
                     return vm.editableSelectedFeatures().includes(feature);
                 },
                 insertVertexCondition: function (evt) {
@@ -4252,11 +4262,14 @@ export default {
                         return false;
                     }
 
-                    const features = vm
-                        .editableSelectedFeatures()
-                        .filter((feature) => {
-                            return f.includes(feature);
-                        });
+                    // In draw mode, allow inserting vertices on any selected feature
+                    const modifiableFeatures = vm.drawing
+                        ? vm.selectedFeatureCollection.getArray()
+                        : vm.editableSelectedFeatures();
+
+                    const features = modifiableFeatures.filter((feature) => {
+                        return f.includes(feature);
+                    });
 
                     if (features.length > 0) {
                         return true;
