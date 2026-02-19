@@ -848,6 +848,10 @@ def buffer_geometries(geoms, distance, unit):
 
 
 def buffer_geos_geometry(geometry, buffer_radius, unit="m"):
+    # Convert Decimal to float for numpy/shapely operations
+    if buffer_radius is not None:
+        buffer_radius = float(buffer_radius)
+
     buffer_geometry_json = buffer_geometries([geometry], buffer_radius, unit)
     geosgeometries_list = features_json_to_geosgeometry(json.loads(buffer_geometry_json).get("features"))
     if len(geosgeometries_list) == 1:
