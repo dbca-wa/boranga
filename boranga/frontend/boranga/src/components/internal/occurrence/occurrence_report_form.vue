@@ -810,6 +810,15 @@ export default {
     beforeRouteEnter: function (to, from, next) {
         fetch(`/api/occurrence_report/${to.params.occurrence_report_id}/`).then(
             async (response) => {
+                if (!response.ok) {
+                    console.error(
+                        `Occurrence report ${to.params.occurrence_report_id} not found (HTTP ${response.status})`
+                    );
+                    next((vm) => {
+                        vm.$router.push({ name: 'internal-occurrence-dash' });
+                    });
+                    return;
+                }
                 next(async (vm) => {
                     vm.occurrence_report = await response.json();
                 });
@@ -2305,6 +2314,13 @@ export default {
             let vm = this;
             fetch(`/api/occurrence_report/${id}/`).then(
                 async (response) => {
+                    if (!response.ok) {
+                        console.error(
+                            `Occurrence report ${id} not found (HTTP ${response.status})`
+                        );
+                        vm.$router.push({ name: 'internal-occurrence-dash' });
+                        return;
+                    }
                     vm.occurrence_report = await response.json();
                 },
                 (err) => {

@@ -2123,6 +2123,7 @@ class Community(RevisionedMixin):
             resulting_community.pk = None
             resulting_community.community_number = ""
             resulting_community.processing_status = Community.PROCESSING_STATUS_ACTIVE
+            resulting_community.submitter = request.user.id
 
         resulting_community.renamed_from_id = self.id
         resulting_community.save(version_user=request.user)
@@ -2152,20 +2153,21 @@ class Community(RevisionedMixin):
             resulting_community.taxonomy.community_description = self.taxonomy.community_description
             resulting_community.taxonomy.name_authority = self.taxonomy.name_authority
             resulting_community.taxonomy.name_comments = self.taxonomy.name_comments
+            resulting_community.taxonomy.save()
         else:
-            resulting_community.taxonomy.previous_name = self.taxonomy.community_name
-
-        resulting_community.taxonomy.save()
+            # Use community_taxonomy directly to avoid stale Django ORM cache
+            community_taxonomy.previous_name = self.taxonomy.community_name
+            community_taxonomy.save()
 
         if not existing_community:
             # Copy the community publishing status and leave all values as is
-            try:
+            if hasattr(self, "community_publishing_status") and self.community_publishing_status:
                 publishing_status = CommunityPublishingStatus.objects.get(id=self.community_publishing_status.id)
                 publishing_status.pk = None
                 publishing_status.community = resulting_community
                 publishing_status.save()
-            except CommunityPublishingStatus.DoesNotExist:
-                CommunityPublishingStatus.objects.get_or_create(community=self)
+            else:
+                CommunityPublishingStatus.objects.get_or_create(community=resulting_community)
 
         resulting_community.species.set(self.species.all())
         resulting_community.regions.set(self.regions.all())
@@ -2439,7 +2441,6 @@ class DocumentSubCategory(OrderedModel, ArchivableModel):
     )
     document_sub_category_name = models.CharField(
         max_length=128,
-        unique=True,
         validators=[no_commas_validator],
     )
     order_with_respect_to = "document_category"
@@ -2448,6 +2449,7 @@ class DocumentSubCategory(OrderedModel, ArchivableModel):
         app_label = "boranga"
         verbose_name = "Document Sub Category"
         verbose_name_plural = "Document Sub Categories"
+        unique_together = ("document_category", "document_sub_category_name")
 
     def __str__(self):
         return str(self.document_sub_category_name)

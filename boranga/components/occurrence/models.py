@@ -4858,7 +4858,7 @@ class OccurrenceGeometry(GeometryBase, DrawnByGeometry):
         related_name="occ_geometry",
     )
     locked = models.BooleanField(default=False)
-    buffer_radius = models.FloatField(null=True, blank=True, default=0)
+    buffer_radius = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
 
     color = ColorField(default="#3333FF")  # Light blue
     stroke = ColorField(default="#0033CC")  # Dark blue

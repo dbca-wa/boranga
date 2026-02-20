@@ -307,7 +307,7 @@ class ListCommunitiesSerializer(BaseModelSerializer):
             return ""
 
     def get_community_common_id(self, obj):
-        if not obj.taxonomy:
+        if not hasattr(obj, "taxonomy") or obj.taxonomy is None:
             return ""
         return obj.taxonomy.community_common_id
 

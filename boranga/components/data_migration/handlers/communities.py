@@ -163,6 +163,13 @@ class CommunityImporter(BaseSheetImporter):
             occ_filter = {}
             report_filter = {}
 
+        # Delete reversion history first (more efficient than waiting for cascade)
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_community_and_related(comm_filter)
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
+
         # Perform deletes in an autocommit block so they are committed immediately.
         from django.db import connections
 
@@ -358,6 +365,14 @@ class CommunityImporter(BaseSheetImporter):
         dirty_communities = set()
         valid_rows = []  # Store canonical rows for subsequent processing
 
+        # Pre-build seen_names set for duplicate detection (must happen before community creation)
+        # Include existing taxonomy names from database
+        seen_names = set()
+        for tax in CommunityTaxonomy.objects.filter(community_name__isnull=False).values_list(
+            "community_name", flat=True
+        ):
+            seen_names.add(tax.lower())
+
         # Fields to update if record exists
         update_fields = [
             "group_type",
@@ -411,6 +426,28 @@ class CommunityImporter(BaseSheetImporter):
             if not migrated_id:
                 # Should be caught by 'required' pipeline, but just in case
                 continue
+
+            # Check for duplicate community_name before creating community
+            community_name = canonical.get("community_name")
+            if community_name:
+                name_lower = community_name.lower()
+                if name_lower in seen_names:
+                    error_msg = f"Duplicate community_name '{community_name}'; skipping community creation"
+                    logger.error(f"{error_msg} for migrated_from_id={migrated_id}")
+                    errors += 1
+                    errors_details.append(
+                        {
+                            "migrated_from_id": migrated_id,
+                            "column": "community_name",
+                            "level": "ERROR",
+                            "message": error_msg,
+                            "raw_value": community_name,
+                            "reason": "Unique constraint violation",
+                            "row": canonical,
+                        }
+                    )
+                    continue
+                seen_names.add(name_lower)
 
             valid_rows.append(canonical)
 
@@ -485,12 +522,6 @@ class CommunityImporter(BaseSheetImporter):
                 "community_description",
             ]
 
-            # Track unique names we've seen to handle duplicates
-            seen_names = set()
-            for existing_tax in existing_taxonomies.values():
-                if existing_tax.community_name:
-                    seen_names.add(existing_tax.community_name.lower())
-
             for canonical in valid_rows:
                 migrated_id = canonical.get("migrated_from_id")
                 community = all_communities.get(migrated_id)
@@ -502,29 +533,6 @@ class CommunityImporter(BaseSheetImporter):
                     "community_name": canonical.get("community_name"),
                     "community_description": canonical.get("community_description"),
                 }
-
-                # Check for duplicate community names
-                original_name = tax_defaults.get("community_name")
-                if original_name:
-                    name_lower = original_name.lower()
-                    if name_lower in seen_names:
-                        # Duplicate found - log as error and skip
-                        error_msg = f"Duplicate community_name '{original_name}'; skipping taxonomy creation"
-                        logger.error(f"{error_msg} for migrated_from_id={migrated_id}")
-                        errors += 1
-                        errors_details.append(
-                            {
-                                "migrated_from_id": migrated_id,
-                                "column": "community_name",
-                                "level": "ERROR",
-                                "message": error_msg,
-                                "raw_value": original_name,
-                                "reason": "Unique constraint violation",
-                                "row": canonical,
-                            }
-                        )
-                        continue
-                    seen_names.add(name_lower)
 
                 if community.id in existing_taxonomies:
                     tax_obj = existing_taxonomies[community.id]

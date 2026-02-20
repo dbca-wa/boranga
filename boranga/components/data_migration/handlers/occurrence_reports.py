@@ -13,6 +13,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.occurrence_report import schema
+from boranga.components.data_migration.adapters.occurrence_report.tec_shared import (
+    build_site_species_comments,
+)
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.handlers.helpers import (
     apply_value_to_instance,
@@ -45,7 +48,9 @@ from boranga.components.occurrence.models import (
     OccurrenceReport,
     OccurrenceReportDocument,
     OccurrenceReportGeometry,
+    OccurrenceReportUserAction,
     OCCVegetationStructure,
+    OCRAnimalObservation,
     OCRAssociatedSpecies,
     OCRFireHistory,
     OCRHabitatComposition,
@@ -82,6 +87,9 @@ SOURCE_ADAPTERS = {
     ),
     Source.TEC_SURVEYS.value: (
         "boranga.components.data_migration.adapters.occurrence_report.tec_surveys.OccurrenceReportTecSurveysAdapter"
+    ),
+    Source.TFAUNA.value: (
+        "boranga.components.data_migration.adapters.occurrence_report.tfauna.OccurrenceReportTfaunaAdapter"
     ),
     # add other adapters when available
 }
@@ -285,23 +293,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     # Extract fields
                     taxon_id = row.get("taxon_name_id", "").strip()
-                    # Comments construction: SSP_NOTES + SSP_HEIGHT + SSP_COLLECTOR_CODE + SSP_COLLECTION_NUMBER
-                    notes = row.get("SSP_NOTES", "").strip()
-                    height = row.get("SSP_HEIGHT", "").strip()
-                    coll_code = row.get("SSP_COLLECTOR_CODE", "").strip()
-                    coll_num = row.get("SSP_COLLECTION_NUMBER", "").strip()
-
-                    parts = []
-                    if notes:
-                        parts.append(notes)
-                    if height:
-                        parts.append(f"Height: {height}")
-                    if coll_code:
-                        parts.append(f"Collector Code: {coll_code}")
-                    if coll_num:
-                        parts.append(f"Collector Number: {coll_num}")
-
-                    comments = "; ".join(parts)
+                    # Build comments from SSP_ fields using shared function
+                    comments = build_site_species_comments(row)
 
                     mapping[visit_id].append({"taxon_name_id": taxon_id, "comments": comments})
 
@@ -542,7 +535,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         def merge_group(entries, source_priority):
             entries_sorted = sorted(
                 entries,
-                key=lambda e: (source_priority.index(e[1]) if e[1] in source_priority else len(source_priority)),
+                key=lambda e: source_priority.index(e[1]) if e[1] in source_priority else len(source_priority),
             )
             merged = {}
             combined_issues = []
@@ -706,6 +699,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             observation_detail_data = {}
             geometry_data = {}
             plant_count_data = {}
+            animal_observation_data = {}
             vegetation_structure_data = {}
             fire_history_data = {}
 
@@ -742,6 +736,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if k.startswith("OCRPlantCount__"):
                     short = k.split("OCRPlantCount__", 1)[1]
                     plant_count_data[short] = extract_value(v)
+                if k.startswith("OCRAnimalObservation__"):
+                    short = k.split("OCRAnimalObservation__", 1)[1]
+                    animal_observation_data[short] = extract_value(v)
                 if k.startswith("OCRVegetationStructure__"):
                     short = k.split("OCRVegetationStructure__", 1)[1]
                     vegetation_structure_data[short] = extract_value(v)
@@ -763,6 +760,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "observation_detail_data": observation_detail_data,
                     "geometry_data": geometry_data,
                     "plant_count_data": plant_count_data,
+                    "animal_observation_data": animal_observation_data,
                     "vegetation_structure_data": vegetation_structure_data,
                     "fire_history_data": fire_history_data,
                 }
@@ -1467,20 +1465,35 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 names = sheet_to_species.get(sheetno, [])
                 resolved = [name_to_assoc[n] for n in names if n in name_to_assoc]
 
-                # Check if we have comment
+                # Check if we have comment or species_list_relates_to
                 op = op_map.get(sheetno)
                 comment = None
+                species_list_relates_to_id = None
                 if op:
                     merged = op.get("merged") or {}
-                    comment = merged.get("OCRAssociatedSpecies__comment")
+
+                    # Helper to extract .value from TransformResult if needed
+                    def extract_value(v):
+                        from boranga.components.data_migration.registry import TransformResult
+
+                        if isinstance(v, TransformResult):
+                            return v.value
+                        return v
+
+                    comment = extract_value(merged.get("OCRAssociatedSpecies__comment"))
+                    species_list_relates_to_id = extract_value(
+                        merged.get("OCRAssociatedSpecies__species_list_relates_to")
+                    )
 
                 if resolved:
                     ocr_id_to_resolved[ocr.pk] = resolved
 
-                if resolved or comment:
+                if resolved or comment or species_list_relates_to_id:
                     assoc = OCRAssociatedSpecies(occurrence_report=ocr)
                     if comment:
                         assoc.comment = comment
+                    if species_list_relates_to_id:
+                        assoc.species_list_relates_to_id = species_list_relates_to_id
                     assoc_to_create.append(assoc)
 
             if assoc_to_create:
@@ -1543,31 +1556,64 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             )
                             errors += 1
 
-            # Update existing OCRAssociatedSpecies with comments
+            # Update existing OCRAssociatedSpecies with comments and species_list_relates_to
             assoc_to_update = []
+
+            # Helper to extract .value from TransformResult if needed
+            def extract_value(v):
+                from boranga.components.data_migration.registry import TransformResult
+
+                if isinstance(v, TransformResult):
+                    return v.value
+                return v
+
+            # DEBUG: Check what we're working with
+            tec_site_in_target = sum(1 for k in target_map if k.startswith("tec-site-"))
+            tec_site_in_op = sum(1 for k in op_map if k.startswith("tec-site-"))
+            logger.info(
+                f"DEBUG Update: target_map={len(target_map)}, existing_assoc={len(existing_assoc)}, op_map={len(op_map)}, tec-site in target={tec_site_in_target}, tec-site in op={tec_site_in_op}"
+            )
+
             for sheetno, ocr in target_map.items():
                 if ocr.pk not in existing_assoc:
                     continue
 
                 assoc = existing_assoc[ocr.pk]
                 op = op_map.get(sheetno)
+                updated = False
                 if op:
                     merged = op.get("merged") or {}
-                    comment = merged.get("OCRAssociatedSpecies__comment")
+                    comment = extract_value(merged.get("OCRAssociatedSpecies__comment"))
+                    species_list_relates_to_id = extract_value(
+                        merged.get("OCRAssociatedSpecies__species_list_relates_to")
+                    )
+
+                    # DEBUG: Log what we found
+                    if sheetno.startswith("tec-site-") and species_list_relates_to_id:
+                        logger.info(
+                            f"DEBUG: Found species_list_relates_to_id={species_list_relates_to_id} for {sheetno}"
+                        )
+
                     if comment and assoc.comment != comment:
                         assoc.comment = comment
-                        assoc_to_update.append(assoc)
+                        updated = True
+                    if species_list_relates_to_id and assoc.species_list_relates_to_id != species_list_relates_to_id:
+                        assoc.species_list_relates_to_id = species_list_relates_to_id
+                        updated = True
+
+                if updated:
+                    assoc_to_update.append(assoc)
 
             if assoc_to_update:
                 try:
-                    OCRAssociatedSpecies.objects.bulk_update(assoc_to_update, ["comment"], batch_size=BATCH)
-                except Exception:
-                    logger.exception(
-                        "Failed to bulk_update OCRAssociatedSpecies comments; falling back to individual saves"
+                    OCRAssociatedSpecies.objects.bulk_update(
+                        assoc_to_update, ["comment", "species_list_relates_to_id"], batch_size=BATCH
                     )
+                except Exception:
+                    logger.exception("Failed to bulk_update OCRAssociatedSpecies; falling back to individual saves")
                 for a in assoc_to_update:
                     try:
-                        a.save(update_fields=["comment"])
+                        a.save(update_fields=["comment", "species_list_relates_to_id"])
                     except Exception as exc:
                         logger.exception(
                             "Failed to update OCRAssociatedSpecies %s",
@@ -1579,7 +1625,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
                                 "column": "OCRAssociatedSpecies",
                                 "level": "error",
-                                "message": f"Failed to update associated species comment: {exc}",
+                                "message": f"Failed to update associated species: {exc}",
                                 "raw_value": "",
                                 "reason": "update_error",
                                 "row": {"pk": getattr(a, "pk", "")},
@@ -1852,6 +1898,60 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 except Exception:
                     logger.exception("Error duplicating AssociatedSpeciesTaxonomy for linked Occurrences")
 
+        # Update OCRAssociatedSpecies.species_list_relates_to from transformed data
+        # This handles fields like SV_OBSERVATION_TYPE that map to species_list_relates_to
+        # and runs independently of sheet_to_species logic above.
+        logger.info("Updating OCRAssociatedSpecies.species_list_relates_to from migration data...")
+        from boranga.components.data_migration.registry import TransformResult
+
+        def extract_value(v):
+            if isinstance(v, TransformResult):
+                return v.value
+            return v
+
+        # Build target map: migrated_from_id -> OccurrenceReport
+        target_mig_ids = [op["migrated_from_id"] for op in ops]
+        target_ocrs_for_update = {
+            o.migrated_from_id: o for o in OccurrenceReport.objects.filter(migrated_from_id__in=target_mig_ids)
+        }
+
+        # Get existing OCRAssociatedSpecies
+        existing_assoc_for_update = {
+            a.occurrence_report_id: a
+            for a in OCRAssociatedSpecies.objects.filter(occurrence_report__in=list(target_ocrs_for_update.values()))
+        }
+
+        assoc_to_update_species_list = []
+        for op in ops:
+            mig_id = op["migrated_from_id"]
+            ocr = target_ocrs_for_update.get(mig_id)
+            if not ocr or ocr.pk not in existing_assoc_for_update:
+                continue
+
+            assoc = existing_assoc_for_update[ocr.pk]
+            merged = op.get("merged") or {}
+            species_list_relates_to_id = extract_value(merged.get("OCRAssociatedSpecies__species_list_relates_to"))
+
+            if species_list_relates_to_id and assoc.species_list_relates_to_id != species_list_relates_to_id:
+                assoc.species_list_relates_to_id = species_list_relates_to_id
+                assoc_to_update_species_list.append(assoc)
+
+        if assoc_to_update_species_list:
+            logger.info(
+                f"Updating {len(assoc_to_update_species_list)} OCRAssociatedSpecies with species_list_relates_to"
+            )
+            try:
+                OCRAssociatedSpecies.objects.bulk_update(
+                    assoc_to_update_species_list, ["species_list_relates_to_id"], batch_size=BATCH
+                )
+            except Exception:
+                logger.exception("Failed bulk_update for species_list_relates_to; falling back to individual saves")
+                for a in assoc_to_update_species_list:
+                    try:
+                        a.save(update_fields=["species_list_relates_to_id"])
+                    except Exception:
+                        logger.exception("Failed to update species_list_relates_to for OCRAssociatedSpecies %s", a.pk)
+
         # Process TEC Associated Species (with comments)
         if tec_site_species_map:
             logger.info("Processing TEC Associated Species with comments...")
@@ -1890,7 +1990,26 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     ocr_id = target_map[mid].pk
                     visit_id = mid[len("tec-site-") :]
                     if visit_id in tec_site_species_map and ocr_id not in existing_assocs:
-                        new_assocs.append(OCRAssociatedSpecies(occurrence_report_id=ocr_id))
+                        # Extract species_list_relates_to_id from merged data
+                        op = op_map.get(mid)
+                        species_list_relates_to_id = None
+                        if op:
+                            merged = op.get("merged") or {}
+                            from boranga.components.data_migration.registry import TransformResult
+
+                            def extract_value(v):
+                                if isinstance(v, TransformResult):
+                                    return v.value
+                                return v
+
+                            species_list_relates_to_id = extract_value(
+                                merged.get("OCRAssociatedSpecies__species_list_relates_to")
+                            )
+
+                        assoc = OCRAssociatedSpecies(occurrence_report_id=ocr_id)
+                        if species_list_relates_to_id:
+                            assoc.species_list_relates_to_id = species_list_relates_to_id
+                        new_assocs.append(assoc)
 
             if new_assocs:
                 OCRAssociatedSpecies.objects.bulk_create(new_assocs)
@@ -2286,29 +2405,58 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         except Exception:
                             logger.exception("Failed to create legacy photo document for %s", mid)
 
-        # OCRObserverDetail: ensure a main observer exists for each occurrence_report
+                # TFAUNA document description (Map/MudMap/Photo/Notes flags)
+                doc_desc = op["merged"].get("temp_document_description")
+                if doc_desc:
+                    ocr = target_map[mid]
+                    if not OccurrenceReportDocument.objects.filter(
+                        occurrence_report=ocr, description=doc_desc
+                    ).exists():
+                        try:
+                            doc = OccurrenceReportDocument(
+                                occurrence_report=ocr,
+                                description=doc_desc,
+                                document_category=doc_cat_photo,
+                                document_sub_category=doc_sub_photo,
+                                can_submitter_access=False,
+                            )
+                            doc.save()
+                        except Exception:
+                            logger.exception("Failed to create TFAUNA document for %s", mid)
+
+        # OCRObserverDetail: ensure a main observer exists for each occurrence_report;
+        # also update organisation on existing observers when it is missing.
         want_obs_create = []
-        existing_obs = set(
-            OCRObserverDetail.objects.filter(occurrence_report__in=target_occs, main_observer=True).values_list(
-                "occurrence_report_id", flat=True
-            )
-        )
+        want_obs_update = []
+        existing_obs = {
+            obs.occurrence_report_id: obs
+            for obs in OCRObserverDetail.objects.filter(occurrence_report__in=target_occs, main_observer=True)
+        }
         for mig in target_mig_ids:
             ocr = target_map.get(mig)
             if not ocr:
                 continue
-            if ocr.pk in existing_obs:
-                # already has main observer
-                continue
-            # find merged data for this migrated id to populate name and role
-            # lookup merged data from op_map to populate name and role
+            # find merged data for this migrated id to populate name, role and organisation
             observer_name = None
             observer_role = None
+            observer_contact = None
+            observer_organisation = None
             op = op_map.get(mig)
             if op:
                 merged = op.get("merged") or {}
                 observer_name = merged.get("OCRObserverDetail__observer_name")
                 observer_role = merged.get("OCRObserverDetail__role")
+                observer_contact = merged.get("OCRObserverDetail__contact")
+                observer_organisation = merged.get("OCRObserverDetail__organisation")
+
+            if ocr.pk in existing_obs:
+                # Observer already exists — update organisation if it is currently blank
+                # and the source now has a value.
+                existing = existing_obs[ocr.pk]
+                if not existing.organisation and observer_organisation:
+                    existing.organisation = observer_organisation
+                    want_obs_update.append(existing)
+                continue
 
             # create observer instance after searching ops so the variables
             # `observer_name` and `observer_role` are defined regardless of
@@ -2320,8 +2468,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
             )
             apply_value_to_instance(ocr_observer_detail_instance, "observer_name", observer_name)
             apply_value_to_instance(ocr_observer_detail_instance, "role", observer_role)
+            apply_value_to_instance(ocr_observer_detail_instance, "contact", observer_contact)
+            apply_value_to_instance(ocr_observer_detail_instance, "organisation", observer_organisation)
 
             want_obs_create.append(ocr_observer_detail_instance)
+
+        if want_obs_update:
+            try:
+                OCRObserverDetail.objects.bulk_update(want_obs_update, ["organisation"], batch_size=BATCH)
+            except Exception:
+                logger.exception("Failed to bulk_update OCRObserverDetail organisation")
+                for obs in want_obs_update:
+                    try:
+                        obs.save(update_fields=["organisation"])
+                    except Exception:
+                        logger.exception(
+                            "Failed to update OCRObserverDetail organisation for occurrence_report %s",
+                            getattr(obs.occurrence_report, "pk", None),
+                        )
 
         if want_obs_create:
             try:
@@ -2351,7 +2515,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                         errors += 1
 
-        # OCRHabitatComposition: OneToOne - create or update loose_rock_percent
+        # OCRHabitatComposition: OneToOne - create or update all fields
         # Fetch existing habitat comps
         existing_habs = {
             h.occurrence_report_id: h for h in OCRHabitatComposition.objects.filter(occurrence_report__in=target_occs)
@@ -2375,6 +2539,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         existing_plant_counts = {
             pc.occurrence_report_id: pc for pc in OCRPlantCount.objects.filter(occurrence_report__in=target_occs)
         }
+        existing_animal_observations = {
+            ao.occurrence_report_id: ao for ao in OCRAnimalObservation.objects.filter(occurrence_report__in=target_occs)
+        }
         existing_vegetation_structures = {
             vs.occurrence_report_id: vs
             for vs in OCRVegetationStructure.objects.filter(occurrence_report__in=target_occs)
@@ -2396,6 +2563,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
         obs_to_update = []
         plant_counts_to_create = []
         plant_counts_to_update = []
+        animal_obs_to_create = []
+        animal_obs_to_update = []
         vegetation_structures_to_create = []
         vegetation_structures_to_update = []
         fire_history_to_create = []
@@ -2577,6 +2746,34 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         pc_create[field_name] = val
                 if len(pcd) > 0:
                     plant_counts_to_create.append(OCRPlantCount(**normalize_create_kwargs(OCRPlantCount, pc_create)))
+
+            # OCRAnimalObservation handling for updates
+            ao_data = {}
+            if mig_key:
+                op = op_map.get(mig_key)
+                if op:
+                    ao_data = op.get("animal_observation_data") or {}
+            if hid in existing_animal_observations:
+                ao_obj = existing_animal_observations[hid]
+                valid_ao_fields = {f.name for f in OCRAnimalObservation._meta.fields}
+                for field_name, val in ao_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_ao_fields:
+                        apply_value_to_instance(ao_obj, field_name, val)
+                animal_obs_to_update.append(ao_obj)
+            else:
+                ao_create = {"occurrence_report": inst}
+                valid_ao_fields = {f.name for f in OCRAnimalObservation._meta.fields}
+                for field_name, val in ao_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_ao_fields:
+                        ao_create[field_name] = val
+                if len(ao_data) > 0:
+                    animal_obs_to_create.append(
+                        OCRAnimalObservation(**normalize_create_kwargs(OCRAnimalObservation, ao_create))
+                    )
 
             # OCRVegetationStructure handling for updates
             vsd = vegetation_structure_data or {}
@@ -2856,6 +3053,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if len(pcd) > 0:
                     plant_counts_to_create.append(OCRPlantCount(**normalize_create_kwargs(OCRPlantCount, pc_create)))
 
+            # OCRAnimalObservation handling for newly created ocr
+            ao_data = op_map.get(mig, {}).get("animal_observation_data") or {}
+            if ocr.pk in existing_animal_observations:
+                ao_obj = existing_animal_observations[ocr.pk]
+                valid_ao_fields = {f.name for f in OCRAnimalObservation._meta.fields}
+                for field_name, val in ao_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_ao_fields:
+                        apply_value_to_instance(ao_obj, field_name, val)
+                animal_obs_to_update.append(ao_obj)
+            else:
+                ao_create = {"occurrence_report": ocr}
+                valid_ao_fields = {f.name for f in OCRAnimalObservation._meta.fields}
+                for field_name, val in ao_data.items():
+                    if field_name == "occurrence_report":
+                        continue
+                    if val is not None and field_name in valid_ao_fields:
+                        ao_create[field_name] = val
+                if len(ao_data) > 0:
+                    animal_obs_to_create.append(
+                        OCRAnimalObservation(**normalize_create_kwargs(OCRAnimalObservation, ao_create))
+                    )
+
             # OCRVegetationStructure handling for newly created ocr
             vsd = vegetation_structure_data or {}
             # Note: existing_vegetation_structures is keyed by occurrence_report_id
@@ -3049,7 +3270,19 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         if habs_to_update:
             try:
-                OCRHabitatComposition.objects.bulk_update(habs_to_update, ["loose_rock_percent"], batch_size=BATCH)
+                # Update all OCRHabitatComposition fields (not just loose_rock_percent)
+                updateable_fields = [
+                    "land_form",
+                    "rock_type",
+                    "loose_rock_percent",
+                    "soil_type",
+                    "soil_colour",
+                    "soil_condition",
+                    "drainage",
+                    "water_quality",
+                    "habitat_notes",
+                ]
+                OCRHabitatComposition.objects.bulk_update(habs_to_update, updateable_fields, batch_size=BATCH)
             except Exception:
                 logger.exception("Failed to bulk_update OCRHabitatComposition; falling back to individual saves")
                 for h in habs_to_update:
@@ -3391,6 +3624,68 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                         errors += 1
 
+        # OCRAnimalObservation: OneToOne - create or update animal observation records
+        if animal_obs_to_create:
+            try:
+                OCRAnimalObservation.objects.bulk_create(animal_obs_to_create, batch_size=BATCH)
+            except Exception:
+                logger.exception("Failed to bulk_create OCRAnimalObservation; falling back to individual creates")
+                for ao in animal_obs_to_create:
+                    try:
+                        ao.save()
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create OCRAnimalObservation for occurrence_report %s",
+                            getattr(ao.occurrence_report, "pk", None),
+                        )
+                        ocr_ref = getattr(ao, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
+                                "column": "OCRAnimalObservation",
+                                "level": "error",
+                                "message": f"Failed to create animal observation: {exc}",
+                                "raw_value": "",
+                                "reason": "create_error",
+                                "row": {"pk": getattr(ocr_ref, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
+
+        if animal_obs_to_update:
+            try:
+                ao_fields = set()
+                for inst in animal_obs_to_update:
+                    ao_fields.update([f.name for f in inst._meta.fields if getattr(inst, f.name, None) is not None])
+                ao_fields = {f for f in ao_fields if f not in ("id", "occurrence_report", "occurrence_report_id")}
+                if ao_fields:
+                    OCRAnimalObservation.objects.bulk_update(animal_obs_to_update, list(ao_fields), batch_size=BATCH)
+            except Exception:
+                logger.exception("Failed to bulk_update OCRAnimalObservation; falling back to individual saves")
+                for ao in animal_obs_to_update:
+                    try:
+                        ao.save()
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to save OCRAnimalObservation %s",
+                            getattr(ao, "pk", None),
+                        )
+                        ocr_ref = getattr(ao, "occurrence_report", None)
+                        errors_details.append(
+                            {
+                                "migrated_from_id": getattr(ocr_ref, "migrated_from_id", ""),
+                                "column": "OCRAnimalObservation",
+                                "level": "error",
+                                "message": f"Failed to update animal observation: {exc}",
+                                "raw_value": "",
+                                "reason": "update_error",
+                                "row": {"pk": getattr(ao, "pk", "")},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
+
         # OCRVegetationStructure: OneToOne - create or update vegetation structure records
         if vegetation_structures_to_create:
             try:
@@ -3528,6 +3823,410 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)
         updated += len(to_update)
+
+        # OccurrenceReportUserAction: TPFL-only — record MODIFIED_BY/MODIFIED_DATE as an action log
+        # Tasks 14837, 14838, 14839
+        # Only create when both MODIFIED_BY (modified_by) and MODIFIED_DATE are present.
+        tpfl_user_actions_to_create = []
+        for mid in target_mig_ids:
+            if not mid.startswith("tpfl-"):
+                continue
+            op = op_map.get(mid)
+            if not op:
+                continue
+            merged = op.get("merged") or {}
+            modified_by = merged.get("modified_by")
+            modified_date = merged.get("modified_date")
+            # Condition: both must be present
+            if not modified_by or not modified_date:
+                continue
+            ocr = target_map.get(mid)
+            if not ocr:
+                continue
+            # Skip if a legacy action already exists for this OCR
+            if OccurrenceReportUserAction.objects.filter(
+                occurrence_report=ocr,
+                what__startswith="Edited in TPFL;",
+            ).exists():
+                continue
+            # Resolve who: look up legacy username -> emailuser id
+            who_id = None
+            try:
+                from boranga.components.main.models import LegacyUsernameEmailuserMapping
+
+                mapping = LegacyUsernameEmailuserMapping.objects.filter(
+                    legacy_system="TPFL", legacy_username=str(modified_by).strip()
+                ).first()
+                if mapping:
+                    who_id = mapping.emailuser_id
+            except Exception:
+                pass
+            if not who_id:
+                who_id = ocr.submitter or 0
+            # Build what: map transformed processing_status back to label
+            _status_label_map = {
+                "draft": "DRAFT",
+                "with_assessor": "WITH ASSESSOR",
+                "approved": "APPROVED",
+                "declined": "DECLINED",
+            }
+            status_label = _status_label_map.get(
+                (merged.get("processing_status") or "").lower(), merged.get("processing_status") or ""
+            )
+            what_text = f"Edited in TPFL; {status_label}"
+            # Parse when: MODIFIED_DATE as datetime.
+            # The data export has a known bad offset: +00:00 was written where +08:00
+            # (Australia/Perth) was intended.  Strip any parsed tzinfo and always
+            # re-attach Perth so the stored value is correct.
+            when_dt = None
+            try:
+                import zoneinfo
+
+                from boranga.components.data_migration import utils as dm_utils
+
+                when_dt = dm_utils.parse_date_iso(str(modified_date).strip())
+                if when_dt:
+                    # Drop whatever offset was parsed (it may be a corrupt +00:00)
+                    # and treat the wall-clock time as Perth local time.
+                    when_dt = when_dt.replace(tzinfo=None).replace(tzinfo=zoneinfo.ZoneInfo("Australia/Perth"))
+            except Exception:
+                pass
+            ua = OccurrenceReportUserAction(
+                occurrence_report=ocr,
+                who=who_id,
+                what=what_text,
+            )
+            if when_dt:
+                ua.when = when_dt
+            tpfl_user_actions_to_create.append(ua)
+
+        if tpfl_user_actions_to_create:
+            try:
+                OccurrenceReportUserAction.objects.bulk_create(tpfl_user_actions_to_create, batch_size=BATCH)
+                logger.info(
+                    "Created %d OccurrenceReportUserAction records (TPFL)",
+                    len(tpfl_user_actions_to_create),
+                )
+            except Exception:
+                logger.exception("Failed to bulk_create OccurrenceReportUserAction (TPFL); falling back")
+                for ua in tpfl_user_actions_to_create:
+                    try:
+                        ua.save()
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create OccurrenceReportUserAction for OCR %s: %s",
+                            getattr(ua.occurrence_report, "pk", None),
+                            exc,
+                        )
+
+        # OccurrenceReportUserAction: TFAUNA-only — record ChDate/ChName as an action log
+        user_actions_to_create = []
+        for mid in target_mig_ids:
+            if not mid.startswith("tfauna-"):
+                continue
+            op = op_map.get(mid)
+            if not op:
+                continue
+            merged = op.get("merged") or {}
+            ch_date = merged.get("ChDate")
+            ch_name = merged.get("ChName")
+            # Only create if we have a ChDate (the meaningful trigger)
+            if not ch_date:
+                continue
+            ocr = target_map.get(mid)
+            if not ocr:
+                continue
+            # Skip if action already exists for this OCR
+            if OccurrenceReportUserAction.objects.filter(occurrence_report=ocr).exists():
+                continue
+            # Resolve user: use submitter id as fallback if ChName lookup fails
+            who_id = None
+            if ch_name:
+                # The ChName may have been resolved to an email user id via approved_by pipeline
+                # Try to resolve via the same lookup
+                try:
+                    from boranga.components.main.models import LegacyUsernameEmailuserMapping
+
+                    mapping = LegacyUsernameEmailuserMapping.objects.filter(
+                        legacy_system="TFAUNA", legacy_username=ch_name
+                    ).first()
+                    if mapping:
+                        who_id = mapping.emailuser_id
+                except Exception:
+                    pass
+            if not who_id:
+                # Fallback: use the submitter from the OccurrenceReport
+                who_id = ocr.submitter
+            if not who_id:
+                # Last resort: use a dummy value (0)
+                who_id = 0
+
+            # Parse ChDate
+            when_dt = None
+            try:
+                from boranga.components.data_migration import utils as dm_utils
+
+                when_dt = dm_utils.parse_date_iso(ch_date)
+                # Ensure timezone-aware (assume Perth if naive)
+                if when_dt and when_dt.tzinfo is None:
+                    import zoneinfo
+
+                    when_dt = when_dt.replace(tzinfo=zoneinfo.ZoneInfo("Australia/Perth"))
+            except Exception:
+                pass
+
+            action_text = f"Legacy record checked by {ch_name or 'unknown'}"
+            ua = OccurrenceReportUserAction(
+                occurrence_report=ocr,
+                who=who_id,
+                what=action_text,
+            )
+            if when_dt:
+                ua.when = when_dt
+            user_actions_to_create.append(ua)
+
+        if user_actions_to_create:
+            try:
+                OccurrenceReportUserAction.objects.bulk_create(user_actions_to_create, batch_size=BATCH)
+                logger.info(
+                    "Created %d OccurrenceReportUserAction records (TFAUNA)",
+                    len(user_actions_to_create),
+                )
+            except Exception:
+                logger.exception("Failed to bulk_create OccurrenceReportUserAction; falling back to individual creates")
+                for ua in user_actions_to_create:
+                    try:
+                        ua.save()
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create OccurrenceReportUserAction for OCR %s: %s",
+                            getattr(ua.occurrence_report, "pk", None),
+                            exc,
+                        )
+
+        # ---------------------------------------------------------------------
+        # TFAUNA: Create Occurrence records from approved OccurrenceReports
+        # ---------------------------------------------------------------------
+        # For each approved TFAUNA OCR, create (or update) a corresponding
+        # Occurrence, copy geometry, and link the OCR back to it.  We derive the
+        # Occurrence's migrated_from_id by replacing the "tfauna-" prefix with
+        # "tfauna-orf-" so that e.g. tfauna-42 → tfauna-orf-42.
+        # This must run BEFORE the pop_section_map clone step so that newly
+        # created Occurrences are available for 1-to-1 section cloning.
+
+        tfauna_approved_ocrs = [
+            ocr for mid, ocr in target_map.items() if mid.startswith("tfauna-") and ocr.processing_status == "approved"
+        ]
+
+        if tfauna_approved_ocrs:
+            logger.info(
+                "TFAUNA: Creating/updating Occurrences from %d approved OCRs ...",
+                len(tfauna_approved_ocrs),
+            )
+
+            from django.contrib.contenttypes.models import ContentType
+
+            occ_ct = ContentType.objects.get_for_model(Occurrence)
+
+            # Build migrated_from_id mapping: OCR.migrated_from_id → Occurrence.migrated_from_id
+            occ_mig_id_map = {}  # ocr.migrated_from_id → occ migrated_from_id
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = ocr.migrated_from_id.replace("tfauna-", "tfauna-orf-", 1)
+                occ_mig_id_map[ocr.migrated_from_id] = occ_mid
+
+            # Prefetch existing Occurrences by migrated_from_id for idempotency
+            all_occ_mids = set(occ_mig_id_map.values())
+            existing_occs = {
+                o.migrated_from_id: o for o in Occurrence.objects.filter(migrated_from_id__in=all_occ_mids)
+            }
+
+            new_occs = []
+            update_occs = []
+
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = occ_mig_id_map[ocr.migrated_from_id]
+                occ = existing_occs.get(occ_mid)
+
+                defaults = {
+                    "occurrence_name": ocr.ocr_for_occ_name or "",
+                    "group_type_id": ocr.group_type_id,
+                    "species_id": ocr.species_id,
+                    "processing_status": Occurrence.PROCESSING_STATUS_ACTIVE,
+                }
+                if getattr(ctx, "migration_run", None) is not None:
+                    defaults["migration_run"] = ctx.migration_run
+
+                if occ:
+                    # Update existing
+                    changed = False
+                    for attr, val in defaults.items():
+                        if getattr(occ, attr) != val:
+                            setattr(occ, attr, val)
+                            changed = True
+                    if changed:
+                        update_occs.append(occ)
+                else:
+                    # Create new
+                    occ = Occurrence(migrated_from_id=occ_mid, **defaults)
+                    new_occs.append(occ)
+
+            # Bulk-create new Occurrences (cannot use bulk_create because the
+            # model's save() performs a double-save to set occurrence_number).
+            occ_created = 0
+            for i in range(0, len(new_occs), BATCH):
+                batch = new_occs[i : i + BATCH]
+                for occ in batch:
+                    try:
+                        occ.save()  # triggers double-save for occurrence_number
+                        occ_created += 1
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create Occurrence for migrated_from_id=%s: %s",
+                            occ.migrated_from_id,
+                            exc,
+                        )
+                        errors += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": occ.migrated_from_id,
+                                "column": "Occurrence",
+                                "level": "error",
+                                "message": f"Failed to create Occurrence: {exc}",
+                                "raw_value": "",
+                            }
+                        )
+                if (i + BATCH) % 5000 < BATCH:
+                    logger.info(
+                        "TFAUNA Occurrence create progress: %d/%d",
+                        min(i + BATCH, len(new_occs)),
+                        len(new_occs),
+                    )
+
+            # Bulk-update changed Occurrences
+            occ_updated = 0
+            if update_occs:
+                update_fields = [
+                    "occurrence_name",
+                    "group_type_id",
+                    "species_id",
+                    "processing_status",
+                ]
+                if getattr(ctx, "migration_run", None) is not None:
+                    update_fields.append("migration_run_id")
+                try:
+                    Occurrence.objects.bulk_update(update_occs, update_fields, batch_size=BATCH)
+                    occ_updated = len(update_occs)
+                except Exception:
+                    logger.exception("Failed to bulk_update Occurrences; falling back to individual saves")
+                    for occ in update_occs:
+                        try:
+                            occ.save()
+                            occ_updated += 1
+                        except Exception as exc:
+                            logger.exception(
+                                "Failed to update Occurrence %s: %s",
+                                occ.migrated_from_id,
+                                exc,
+                            )
+
+            # Merge new + existing into a single lookup for linking & geometry
+            all_occ_by_mid = {**existing_occs}
+            for occ in new_occs:
+                if occ.pk:
+                    all_occ_by_mid[occ.migrated_from_id] = occ
+
+            # Link OCRs to their Occurrences and copy geometry
+            ocrs_to_link = []
+            geom_to_create = []
+
+            # Prefetch existing OccurrenceGeometries for idempotency
+            occ_ids_with_geom = set(
+                OccurrenceGeometry.objects.filter(
+                    occurrence_id__in=[o.pk for o in all_occ_by_mid.values()]
+                ).values_list("occurrence_id", flat=True)
+            )
+
+            # Prefetch OCR geometries
+            ocr_pks = [ocr.pk for ocr in tfauna_approved_ocrs]
+            ocr_geom_map = {}
+            for g in OccurrenceReportGeometry.objects.filter(occurrence_report_id__in=ocr_pks):
+                if g.occurrence_report_id not in ocr_geom_map:
+                    ocr_geom_map[g.occurrence_report_id] = g
+
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = occ_mig_id_map[ocr.migrated_from_id]
+                occ = all_occ_by_mid.get(occ_mid)
+                if not occ or not occ.pk:
+                    continue
+
+                # Link OCR → Occurrence
+                if ocr.occurrence_id != occ.pk:
+                    ocr.occurrence_id = occ.pk
+                    # Also sync display fields
+                    if not ocr.ocr_for_occ_number:
+                        ocr.ocr_for_occ_number = occ.occurrence_number
+                    ocrs_to_link.append(ocr)
+
+                # Copy geometry if the Occurrence doesn't have one yet
+                if occ.pk not in occ_ids_with_geom:
+                    src_geom = ocr_geom_map.get(ocr.pk)
+                    if src_geom and src_geom.geometry:
+                        occ_geom = OccurrenceGeometry(
+                            occurrence=occ,
+                            geometry=src_geom.geometry,
+                            content_type=occ_ct,
+                            object_id=occ.pk,
+                            locked=src_geom.locked,
+                            buffer_radius=getattr(src_geom, "buffer_radius", None),
+                        )
+                        geom_to_create.append(occ_geom)
+                        occ_ids_with_geom.add(occ.pk)  # prevent duplicates in same batch
+
+            # Bulk-update OCR ↔ Occurrence links
+            if ocrs_to_link:
+                try:
+                    OccurrenceReport.objects.bulk_update(
+                        ocrs_to_link,
+                        ["occurrence_id", "ocr_for_occ_number"],
+                        batch_size=BATCH,
+                    )
+                    logger.info("Linked %d OCRs to their new Occurrences", len(ocrs_to_link))
+                except Exception:
+                    logger.exception("Failed to bulk_update OCR→Occurrence links; falling back")
+                    for ocr in ocrs_to_link:
+                        try:
+                            ocr.save(update_fields=["occurrence_id", "ocr_for_occ_number"])
+                        except Exception as exc:
+                            logger.exception("Failed to link OCR %s: %s", ocr.migrated_from_id, exc)
+
+            # Bulk-create OccurrenceGeometry records
+            geom_created = 0
+            if geom_to_create:
+                # OccurrenceGeometry.save() rejects polygons for fauna — our data
+                # is point-only, so we can bypass save() and use bulk_create.
+                try:
+                    OccurrenceGeometry.objects.bulk_create(geom_to_create, batch_size=BATCH)
+                    geom_created = len(geom_to_create)
+                except Exception:
+                    logger.exception("Failed to bulk_create OccurrenceGeometry; falling back to individual saves")
+                    for g in geom_to_create:
+                        try:
+                            g.save()
+                            geom_created += 1
+                        except Exception as exc:
+                            logger.exception(
+                                "Failed to create OccurrenceGeometry for OCC %s: %s",
+                                g.occurrence_id,
+                                exc,
+                            )
+
+            logger.info(
+                "TFAUNA Occurrence creation complete: %d created, %d updated, %d geometry copied, %d OCRs linked",
+                occ_created,
+                occ_updated,
+                geom_created,
+                len(ocrs_to_link),
+            )
 
         # ---------------------------------------------------------------------
         # Populate Occurrence 1-to-1 objects by cloning from OccurrenceReport

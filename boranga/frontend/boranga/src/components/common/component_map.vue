@@ -755,7 +755,10 @@
                     </div>
                     <!-- </div> -->
                     <!-- Toggle measure tool between active and not active -->
-                    <div class="optional-layers-button-wrapper">
+                    <div
+                        v-if="measurementToolAvailable"
+                        class="optional-layers-button-wrapper"
+                    >
                         <div
                             :title="
                                 mode == 'measure'
@@ -1351,10 +1354,10 @@
                 >
                     <div class="d-flex">
                         <div
-                            class="toast-body d-flex align-items-center text-warning m-0 p-0 mx-2"
+                            class="toast-body d-flex align-items-center text-white m-0 p-0 mx-2"
                         >
                             <i
-                                class="bi bi-exclamation-circle-fill text-warning me-2"
+                                class="bi bi-exclamation-circle-fill me-2 text-white"
                             ></i>
                             Unsaved changes
                         </div>
@@ -1944,6 +1947,14 @@ export default {
             },
         },
         /**
+         * Whether the measurement tool is available
+         */
+        measurementToolAvailable: {
+            type: Boolean,
+            required: false,
+            default: false,
+        },
+        /**
          * Whether to validate the feature before saving it
          * If set to true, the `validate-feature` event is emitted before saving the feature
          * and the parent component needs to call finishDrawing on the map component
@@ -2467,6 +2478,7 @@ export default {
             $('#map-spinner').css('left', '50%');
             $('#map-spinner').css('zIndex', 9999);
             vm.featureToast = new bootstrap.Toast(toastEl, { autohide: false });
+            document.addEventListener('keydown', vm.handleKeyDown);
             if (vm.refreshMapOnMounted) {
                 vm.forceToRefreshMap();
             } else {
@@ -2476,6 +2488,7 @@ export default {
     },
     beforeUnmount() {
         // Clean up listeners if needed
+        document.removeEventListener('keydown', this.handleKeyDown);
         this.editableFeatureCollection.un('add', this.onFeatureChanged);
         this.editableFeatureCollection.un('remove', this.onFeatureChanged);
         this.editableFeatureCollection.forEach((feature) => {
@@ -2483,6 +2496,33 @@ export default {
         });
     },
     methods: {
+        handleKeyDown(evt) {
+            if (evt.key !== 'Escape') {
+                return;
+            }
+            if (this.drawing) {
+                // Cancel any in-progress polygon drawing
+                if (
+                    this.drawPolygonsForModel &&
+                    this.drawPolygonsForModel.getActive()
+                ) {
+                    this.drawPolygonsForModel.abortDrawing();
+                    this.sketchCoordinates = [[]];
+                    this.lastPoint = null;
+                    this.errorMessage = null;
+                    if (this.undoredo_forSketch) {
+                        this.undoredo_forSketch.clear();
+                    }
+                    console.log('Polygon drawing cancelled via Escape');
+                }
+            } else if (this.measuring) {
+                // Cancel any in-progress measurement drawing
+                if (this.drawForMeasure && this.drawForMeasure.getActive()) {
+                    this.drawForMeasure.abortDrawing();
+                    console.log('Measurement drawing cancelled via Escape');
+                }
+            }
+        },
         takeSnapshot() {
             const format = new GeoJSON();
             const features = this.editableFeatureCollection.getArray();
@@ -2685,6 +2725,9 @@ export default {
         },
         clearMeasurementLayer: function () {
             let vm = this;
+            if (!vm.measurementLayer) {
+                return;
+            }
             let features = vm.measurementLayer.getSource().getFeatures();
             features.forEach((feature) => {
                 vm.measurementLayer.getSource().removeFeature(feature);
@@ -2896,7 +2939,9 @@ export default {
             let fullScreenControl = new FullScreenControl();
             vm.map.addControl(fullScreenControl);
 
-            vm.initialiseMeasurementLayer();
+            if (vm.measurementToolAvailable) {
+                vm.initialiseMeasurementLayer();
+            }
             // Init vector layers
             vm.initialiseQueryLayer();
             vm.initialiseProcessingLayer();
@@ -2906,10 +2951,11 @@ export default {
 
             vm.initialiseDrawLayer();
 
-            vm.initialiseLayerSwitcher([
-                vm.measurementLayer,
-                ...vm.vectorLayersArray,
-            ]);
+            vm.initialiseLayerSwitcher(
+                [vm.measurementLayer, ...vm.vectorLayersArray].filter(
+                    (l) => !!l
+                )
+            );
 
             vm.initialiseLayerEvents();
 
@@ -3825,14 +3871,6 @@ export default {
                     if (isSelectedFeature(selected)) {
                         // Don't alter style of click-selected features
                         console.log('ignoring hover on selected feature');
-                        if (vm.drawing) {
-                            // Enable modify polygon the hovered polygon is selected and drawing mode is active
-                            vm.modifySetActive(true);
-                            vm.transformSetActive(false);
-                        } else {
-                            // Disable modify polygon when drawing mode is not active
-                            vm.modifySetActive(false);
-                        }
                     } else {
                         // Turn off hover styling -> reverts to undefined, which falls back to Layer style or Feature style function (if set)
                         // Note: If feature.setStyle(undefined) is called, it removes any feature-level style.
@@ -4147,17 +4185,81 @@ export default {
                         ),
                     });
                 });
+
+                // In draw mode, disable the Draw interaction while features
+                // are selected so all clicks go to ModifyFeature (edit vertices).
+                // When no features are selected, re-enable Draw so the user can
+                // draw new polygons.
+                if (vm.drawing) {
+                    const hasSelection =
+                        vm.selectedFeatureCollection.getLength() > 0;
+                    if (hasSelection) {
+                        // Switch to modify-only: disable Draw, enable Modify,
+                        // show vertex handles on selected features
+                        if (
+                            vm.drawPolygonsForModel &&
+                            vm.subMode === 'Polygon'
+                        ) {
+                            vm.drawPolygonsForModel.setActive(false);
+                        }
+                        if (vm.drawPointsForModel && vm.subMode === 'Point') {
+                            vm.drawPointsForModel.setActive(false);
+                        }
+                        vm.modifySetActive(true);
+                        vm.setStyleForUnAndSelectedFeatures(
+                            vm.modifySelectStyle
+                        );
+                    } else {
+                        // No selection — re-enable Draw, disable Modify
+                        vm.modifySetActive(false);
+                        vm.setStyleForUnAndSelectedFeatures();
+                        if (
+                            vm.subMode === 'Polygon' &&
+                            vm.drawPolygonsForModel
+                        ) {
+                            vm.drawPolygonsForModel.setActive(true);
+                        } else if (
+                            vm.subMode === 'Point' &&
+                            vm.drawPointsForModel
+                        ) {
+                            vm.drawPointsForModel.setActive(true);
+                        }
+                    }
+                }
             });
             // When the map mode changes between draw and anything else, update the style of the selected features
             selectSingleClick.addEventListener('map:modeChanged', (evt) => {
                 console.log('map mode changed', evt);
-                if (
-                    evt.details.new_mode === 'draw' &&
-                    evt.details.new_subMode === 'Point'
-                ) {
-                    vm.setStyleForUnAndSelectedFeatures(vm.modifySelectStyle);
+                if (evt.details.new_mode === 'draw') {
+                    const hasSelection =
+                        vm.selectedFeatureCollection.getLength() > 0;
+                    if (hasSelection) {
+                        // Features already selected — enter modify-only:
+                        // disable Draw so clicks go to ModifyFeature
+                        vm.setStyleForUnAndSelectedFeatures(
+                            vm.modifySelectStyle
+                        );
+                        vm.modifySetActive(true);
+                        if (
+                            vm.drawPolygonsForModel &&
+                            evt.details.new_subMode === 'Polygon'
+                        ) {
+                            vm.drawPolygonsForModel.setActive(false);
+                        }
+                        if (
+                            vm.drawPointsForModel &&
+                            evt.details.new_subMode === 'Point'
+                        ) {
+                            vm.drawPointsForModel.setActive(false);
+                        }
+                    } else {
+                        // No selection — normal draw mode
+                        vm.setStyleForUnAndSelectedFeatures();
+                        vm.modifySetActive(false);
+                    }
                 } else {
                     vm.setStyleForUnAndSelectedFeatures();
+                    vm.modifySetActive(false);
                 }
             });
 
@@ -4185,7 +4287,12 @@ export default {
                     }
 
                     // Get the selected features that are also editable
-                    const features = vm.editableSelectedFeatures();
+                    // In draw mode, allow deleting vertices on any selected feature
+                    const features = vm.drawing
+                        ? vm.selectedFeatureCollection
+                              .getArray()
+                              .filter((f) => f.getGeometry && f.getGeometry())
+                        : vm.editableSelectedFeatures();
 
                     features.forEach((feature) => {
                         let coords = feature.getGeometry().getCoordinates();
@@ -4223,10 +4330,23 @@ export default {
                 },
                 // A filter that takes a feature and return true if it can be modified
                 filter: function (feature) {
+                    // In draw mode, allow modifying any selected feature
+                    if (vm.drawing) {
+                        return vm.selectedFeatureCollection
+                            .getArray()
+                            .includes(feature);
+                    }
                     return vm.editableSelectedFeatures().includes(feature);
                 },
                 insertVertexCondition: function (evt) {
                     evt.stopPropagation();
+
+                    // In draw mode, the filter function already restricts
+                    // modification to selected features, so we can skip the
+                    // pixel-based hit test which is unreliable on thin edges
+                    if (vm.drawing) {
+                        return true;
+                    }
 
                     const f = vm.map.getFeaturesAtPixel(evt.pixel, {
                         hitTolerance: vm.hitTolerance,
@@ -4248,23 +4368,55 @@ export default {
                 },
             });
 
+            // ol-ext's ModifyFeature uses an internal tolerance (default 1e-10)
+            // for its splitAt collinearity check when inserting vertices on edges.
+            // That tolerance is far too tight — for near-horizontal or near-vertical
+            // edges the parametric calculation amplifies floating point errors
+            // beyond 1e-10, causing vertex insertion to silently fail on those edges.
+            // Increasing it to 1e-6 fixes this while remaining precise (~11cm in
+            // EPSG:4326 map units).
+            modify.tolerance_ = 1e-6;
+
+            // The default snapDistance_ (pixelTolerance, 5px) is too tight for
+            // reliably detecting clicks on thin polygon edges.  Increasing it to
+            // 15px gives a much more forgiving hit area.  Because ModifyFeature
+            // is only active in draw mode and has higher interaction priority than
+            // Draw, this ensures edge clicks are captured by Modify before Draw
+            // can start a new polygon sketch.
+            modify.snapDistance_ = 15;
+
             modify.addEventListener('modifyend', function (evt) {
                 console.log('Modify end', evt.features);
-                const feature = evt.features[0];
-                const original_srid =
-                    feature.getProperties().original_geometry.properties.srid;
-                let coordinates = feature.getGeometry().getCoordinates();
-                if (original_srid != vm.mapSrid) {
-                    // Transform the coordinates from the map crs to the user input crs
-                    coordinates = transformCoordinates(
-                        coordinates,
-                        `EPSG:${vm.mapSrid}`,
-                        `EPSG:${original_srid}`
-                    );
-                }
+                // evt.features may contain multiple features when several
+                // are selected.  Process each one so the correct coordinates
+                // are saved for every modified feature.
+                evt.features.forEach((feature) => {
+                    const origGeom = feature.getProperties().original_geometry;
+                    const origType = origGeom && origGeom.type;
 
-                vm.userCoordinates(feature, coordinates);
-                vm.emitValidateFeature(feature);
+                    // For Point/MultiPoint features (buffer-radius circles),
+                    // the original_geometry stores the source point and must
+                    // not be overwritten with polygon ring coordinates.
+                    // We still emit validateFeature so the modified polygon
+                    // shape saves to the main geometry field.
+                    if (origType === 'Point' || origType === 'MultiPoint') {
+                        vm.emitValidateFeature(feature);
+                        return;
+                    }
+
+                    const original_srid = origGeom.properties.srid;
+                    let coordinates = feature.getGeometry().getCoordinates();
+                    if (original_srid != vm.mapSrid) {
+                        coordinates = transformCoordinates(
+                            coordinates,
+                            `EPSG:${vm.mapSrid}`,
+                            `EPSG:${original_srid}`
+                        );
+                    }
+
+                    vm.userCoordinates(feature, coordinates);
+                    vm.emitValidateFeature(feature);
+                });
             });
 
             return modify;

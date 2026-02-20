@@ -2617,7 +2617,8 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
                 .values("id", "occurrence_number")[:10]
             )
             queryset = [{"id": occurrence["id"], "text": occurrence["occurrence_number"]} for occurrence in queryset]
-        return Response({"results": queryset})
+            return Response({"results": queryset})
+        return Response({"results": []})
 
     @list_route(
         methods=[
@@ -2690,7 +2691,8 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
                 )
 
                 queryset = [{"id": occurrence["id"], "text": occurrence["occurrence_name"]} for occurrence in queryset]
-        return Response({"results": queryset})
+
+        return Response({"results": queryset}) if search_term else Response({"results": []})
 
     @list_route(
         methods=[

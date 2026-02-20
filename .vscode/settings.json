@@ -20,8 +20,16 @@
   },
   "prettier.enable": true,
   "editor.formatOnSave": true,
-  "vetur.validation": false,
-  "volar.takeOverMode": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "ruff.configuration": "${workspaceFolder}/pyproject.toml",
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
   "files.watcherExclude": {
     "**/.kb_layer_cache/**": true,
     "**/*.geojson": true
@@ -33,5 +41,7 @@
   "files.associations": {
     "**/*.geojson": "plaintext"
   },
-  "editor.largeFileOptimizations": true
+  "editor.largeFileOptimizations": true,
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python-envs.pythonProjects": []
 }

@@ -10,7 +10,15 @@ from boranga.components.data_migration.adapters.base import (
 )
 from boranga.components.data_migration.adapters.occurrence.schema import SCHEMA
 from boranga.components.data_migration.mappings import get_group_type_id
-from boranga.components.species_and_communities.models import GroupType
+from boranga.components.data_migration.registry import (
+    build_legacy_map_transform,
+    emailuser_by_legacy_username_factory,
+    static_value_factory,
+    t_smart_date_parse,
+)
+from boranga.components.species_and_communities.models import (
+    GroupType,
+)
 
 
 def tec_comment_transform(val, ctx):
@@ -60,24 +68,48 @@ def tec_habitat_notes_transform(val, ctx):
     return "; ".join(parts)
 
 
+def parse_fire_history_sort_date(value):
+    """Parse a fire-history date value into a comparable date for sorting.
+
+    Uses the registry's `t_smart_date_parse` to leverage existing parsing
+    heuristics. Returns a `datetime.date` on success or `date.min` on failure
+    so that entries without a date sort last when sorting descending.
+    """
+    from datetime import date as _date
+
+    try:
+        res = t_smart_date_parse(value, None)
+        d = getattr(res, "value", None)
+        if isinstance(d, _date):
+            return d
+    except Exception:
+        pass
+    return _date.min
+
+
 def tec_fire_history_comment_transform(val, ctx):
     row = ctx.row
-    parts = []
-
-    # Handle nested fire history
     nested = row.get("_nested_fire_history", [])
-    for item in nested:
-        date = item.get("FIRE_DATE")
-        comment = item.get("FIRE_COMMENT")
-        p = []
-        if date:
-            p.append(f"Date: {date}")
-        if comment:
-            p.append(comment)
-        if p:
-            parts.append(" - ".join(p))
 
-    return "; ".join(parts)
+    # Build list of formatted fire history entries
+    entries = []
+    for item in nested:
+        date = item.get("FIRE_DATE", "").strip()
+        comment = item.get("FIRE_COMMENT", "").strip()
+        if date:
+            entry = f"Fire Date: {date}"
+            if comment:
+                entry += f", {comment}"
+        elif comment:
+            entry = f"{comment}"
+        else:
+            continue  # skip blank
+        entries.append((parse_fire_history_sort_date(date), entry))
+
+    # Sort by date descending (most recent first)
+    entries.sort(key=lambda x: x[0], reverse=True)
+    formatted = [e[1] for e in entries]
+    return "; ".join(formatted)
 
 
 def tec_observation_detail_comments_transform(val, ctx):
@@ -122,30 +154,53 @@ def tec_site_geometry_transform(val, ctx):
     return None
 
 
-_sub_category_cache = {}
+DOCUMENT_SUB_CATEGORY_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TEC",
+    list_name="ADD_ITEM_CODE (ITEMS)",
+    required=False,
+    return_type="id",
+)
+
+# Use static_value_factory for explicit None assignments
+STATIC_NONE = static_value_factory(None)
 
 
-def tec_document_sub_category_transform(val, ctx):
-    if not val:
-        return None
-    val = str(val).strip()
-    if not val:
-        return None
-
-    if not _sub_category_cache:
-        from boranga.components.species_and_communities.models import (
-            DocumentSubCategory,
-        )
-
-        for obj in DocumentSubCategory.objects.all():
-            _sub_category_cache[obj.document_sub_category_name.lower()] = obj.id
-
-    return _sub_category_cache.get(val.lower())
+_tec_user_id_cache = None
 
 
-def val_to_none(val, ctx):
-    return None
+def default_to_tec_user(val, ctx):
+    global _tec_user_id_cache
+    if val is not None:
+        return val
 
+    if _tec_user_id_cache is None:
+        try:
+            from ledger_api_client.ledger_models import EmailUserRO
+
+            tec_user = EmailUserRO.objects.get(email="boranga.tec@dbca.wa.gov.au")
+            _tec_user_id_cache = tec_user.id
+        except Exception:
+            pass
+    return _tec_user_id_cache
+
+
+# TODO Task 12225: Uses LegacyValueMap with legacy_system="TEC", list_name="OCC_STATUS_CODE (STATUS)"
+# to map legacy status codes (e.g., "Identified", "Believed") to IdentificationCertainty IDs.
+# Verify list_name format and that LegacyValueMap is populated with correct mappings.
+IDENTIFICATION_CERTAINTY_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TEC",
+    list_name="OCC_STATUS_CODE (STATUS)",
+    required=False,
+    return_type="id",
+)
+
+# Task: Map OCC_SOURCE_CODE from OCCURRENCES table to CoordinateSource via SOURCES lookup
+COORDINATE_SOURCE_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TEC",
+    list_name="OCC_SOURCE_CODE (SOURCES)",
+    required=False,
+    return_type="id",
+)
 
 PIPELINES = {
     "occurrence_name": ["strip", "blank_to_none", "required"],
@@ -157,16 +212,41 @@ PIPELINES = {
         tec_observation_detail_comments_transform,
         lambda v, ctx: v if v else "",
     ],
-    # TODO: Implement lookups for these fields
-    "OCCLocation__coordinate_source_id": [val_to_none],
+    "OCCLocation__coordinate_source_id": [
+        "strip",
+        "blank_to_none",
+        COORDINATE_SOURCE_TRANSFORM,
+        "to_int",
+    ],
     "OCCLocation__locality": [
         tec_location_locality_transform,
         # lambda v, ctx: v if v else "(Not specified)",
     ],
     "OCCLocation__location_description": ["strip"],
     "OCCLocation__boundary_description": ["strip"],
-    "AssociatedSpeciesTaxonomy__species_role_id": [val_to_none],
-    "OccurrenceDocument__document_sub_category_id": [tec_document_sub_category_transform],
+    "AssociatedSpeciesTaxonomy__species_role_id": [STATIC_NONE],
+    "OccurrenceDocument__document_sub_category_id": [
+        "strip",
+        "blank_to_none",
+        DOCUMENT_SUB_CATEGORY_TRANSFORM,
+    ],
+    "OccurrenceDocument__uploaded_by": [
+        "strip",
+        "blank_to_none",
+        emailuser_by_legacy_username_factory("TEC"),
+        default_to_tec_user,
+    ],
+    # OCCIdentification - transform OCC_STATUS_CODE to IdentificationCertainty FK via LegacyValueMap
+    "OCCIdentification__identification_certainty_id": [
+        "strip",
+        "blank_to_none",
+        IDENTIFICATION_CERTAINTY_TRANSFORM,
+    ],
+    # OCCVegetationStructure
+    "OCCVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none"],
+    # OCCLocation district/region - resolved via DISTRICTS.csv lookup
+    "OCCLocation__district_id": [],
+    "OCCLocation__region_id": [],
     # Geometry transform for OccurrenceSite
     "OccurrenceSite__geometry": [tec_site_geometry_transform],
     # Pass-through fields for OccurrenceSite
@@ -175,10 +255,16 @@ PIPELINES = {
     "OccurrenceSite__longitude": [],
     "OccurrenceSite__site_name": [],
     "OccurrenceSite__updated_date": ["blank_to_none"],
+    "OccurrenceSite__drawn_by": [
+        "strip",
+        "blank_to_none",
+        emailuser_by_legacy_username_factory("TEC"),
+        default_to_tec_user,
+    ],
     # Pass-through fields
     "migrated_from_id": [],
     "processing_status": [],
-    "species_id": [val_to_none],
+    "species_id": [STATIC_NONE],  # TEC is community-based, not species
     "wild_status_id": [],
     "datetime_created": ["blank_to_none"],
     "datetime_updated": ["blank_to_none"],
@@ -189,6 +275,7 @@ PIPELINES = {
     "OCCAssociatedSpecies__comment": [],
     "OCCHabitatComposition__water_quality": [],
     "_nested_species": [],
+    "OccurrenceGeometry__buffer_radius": ["strip", "blank_to_none", "to_float"],
 }
 
 
@@ -212,10 +299,12 @@ class OccurrenceTecAdapter(SourceAdapter):
         fire_path = None
         additional_path = None
         species_path = None
-        fauna_path = None
         reliability_path = None
         dola_path = None
         species_role_path = None
+        districts_path = None
+        calm_districts_path = None
+        calm_regions_path = None
 
         warnings = []
 
@@ -253,18 +342,11 @@ class OccurrenceTecAdapter(SourceAdapter):
                     additional_path = p
                     break
 
-            # Find OCCURRENCE_SPECIES.csv
-            for name in ["OCCURRENCE_SPECIES.csv", "occurrence_species.csv"]:
+            # Find OCCURRENCE_SPECIES_COMBINE.csv (consolidates flora and fauna)
+            for name in ["OCCURRENCE_SPECIES_COMBINE.csv", "occurrence_species_combine.csv"]:
                 p = os.path.join(path, name)
                 if os.path.exists(p):
                     species_path = p
-                    break
-
-            # Find OCCURRENCE_FAUNA.csv
-            for name in ["OCCURRENCE_FAUNA.csv", "occurrence_fauna.csv"]:
-                p = os.path.join(path, name)
-                if os.path.exists(p):
-                    fauna_path = p
                     break
 
             # Find RELIABILITY.csv
@@ -287,6 +369,27 @@ class OccurrenceTecAdapter(SourceAdapter):
                 if os.path.exists(p):
                     species_role_path = p
                     break
+
+            # Find DISTRICTS.csv (OCC_UNIQUE_ID -> DIST_CALM_DIST_CODE)
+            for name in ["DISTRICTS.csv", "districts.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    districts_path = p
+                    break
+
+            # Find CALM_DISTRICTS.csv (CALM_DIST_CODE -> CALM_DIST_NAME, CALM_REG_CODE)
+            for name in ["CALM_DISTRICTS.csv", "calm_districts.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    calm_districts_path = p
+                    break
+
+            # Find CALM_REGIONS.csv (CALM_REG_CODE -> CALM_REG_NAME)
+            for name in ["CALM_REGIONS.csv", "calm_regions.csv"]:
+                p = os.path.join(path, name)
+                if os.path.exists(p):
+                    calm_regions_path = p
+                    break
         else:
             # Path is the occurrences file
             dirname = os.path.dirname(path)
@@ -308,16 +411,10 @@ class OccurrenceTecAdapter(SourceAdapter):
                     additional_path = p
                     break
 
-            for name in ["OCCURRENCE_SPECIES.csv", "occurrence_species.csv"]:
+            for name in ["OCCURRENCE_SPECIES_COMBINE.csv", "occurrence_species_combine.csv"]:
                 p = os.path.join(dirname, name)
                 if os.path.exists(p):
                     species_path = p
-                    break
-
-            for name in ["OCCURRENCE_FAUNA.csv", "occurrence_fauna.csv"]:
-                p = os.path.join(dirname, name)
-                if os.path.exists(p):
-                    fauna_path = p
                     break
 
             for name in ["RELIABILITY.csv", "reliability.csv"]:
@@ -336,6 +433,24 @@ class OccurrenceTecAdapter(SourceAdapter):
                 p = os.path.join(dirname, name)
                 if os.path.exists(p):
                     species_role_path = p
+                    break
+
+            for name in ["DISTRICTS.csv", "districts.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    districts_path = p
+                    break
+
+            for name in ["CALM_DISTRICTS.csv", "calm_districts.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    calm_districts_path = p
+                    break
+
+            for name in ["CALM_REGIONS.csv", "calm_regions.csv"]:
+                p = os.path.join(dirname, name)
+                if os.path.exists(p):
+                    calm_regions_path = p
                     break
 
         # Read occurrences
@@ -369,21 +484,19 @@ class OccurrenceTecAdapter(SourceAdapter):
             additional_rows, add_warns = self.read_table(additional_path, **add_options)
             warnings.extend(add_warns)
 
-        # Read Species
+        # Read Species (OCCURRENCE_SPECIES_COMBINE contains both flora and fauna)
         species_rows = []
         if species_path:
             sp_options = {k: v for k, v in options.items() if k != "limit"}
             sp_options["limit"] = 0  # 0 means no limit - read all rows
             species_rows, sp_warns = self.read_table(species_path, **sp_options)
             warnings.extend(sp_warns)
+        else:
+            warnings.append(
+                ExtractionWarning(f"Missing OCCURRENCE_SPECIES_COMBINE.csv near {occ_path}, proceeding without species")
+            )
 
-        # Read Fauna
-        fauna_rows = []
-        if fauna_path:
-            fauna_options = {k: v for k, v in options.items() if k != "limit"}
-            fauna_options["limit"] = 0  # 0 means no limit - read all rows
-            fauna_rows, fauna_warns = self.read_table(fauna_path, **fauna_options)
-            warnings.extend(fauna_warns)
+        # Note: OCCURRENCE_SPECIES_COMBINE.csv replaces both OCCURRENCE_SPECIES.csv and OCCURRENCE_FAUNA.csv
 
         # Read Lookups
         reliability_map = {}
@@ -407,6 +520,63 @@ class OccurrenceTecAdapter(SourceAdapter):
             for r in role_rows:
                 role_map[r["SP_ROLE_CODE"]] = r["SP_ROLE_DESC"]
 
+        # TODO Task 12177/12180: Verify district/region resolution approach
+        # Original task mentions "TEC_DISTRICT_REGION table" but that doesn't exist as a single CSV.
+        # Currently using DISTRICTS.csv + CALM_DISTRICTS.csv + CALM_REGIONS.csv chain.
+        # This requires LegacyValueMap to be pre-populated with mappings from district/region names to PKs.
+        # Data source structure:
+        #   DISTRICTS.csv: OCC_UNIQUE_ID -> DIST_CALM_DIST_CODE
+        #   CALM_DISTRICTS.csv: CALM_DIST_CODE -> CALM_DIST_NAME, CALM_REG_CODE
+        #   CALM_REGIONS.csv: CALM_REG_CODE -> CALM_REG_NAME
+        # Confirm with S&C team if this is the correct approach.
+        district_by_occ = {}  # occ_id -> district_name
+        region_by_occ = {}  # occ_id -> region_name
+        if districts_path:
+            # Build CALM lookup tables
+            calm_dist_to_name = {}  # code -> name
+            calm_dist_to_reg = {}  # dist_code -> reg_code
+            if calm_districts_path:
+                cd_rows, cd_warns = self.read_table(calm_districts_path, **options)
+                warnings.extend(cd_warns)
+                for r in cd_rows:
+                    code = r.get("CALM_DIST_CODE", "").strip()
+                    if code:
+                        calm_dist_to_name[code] = r.get("CALM_DIST_NAME", "").strip()
+                        calm_dist_to_reg[code] = r.get("CALM_REG_CODE", "").strip()
+
+            calm_reg_to_name = {}
+            if calm_regions_path:
+                cr_rows, cr_warns = self.read_table(calm_regions_path, **options)
+                warnings.extend(cr_warns)
+                for r in cr_rows:
+                    code = r.get("CALM_REG_CODE", "").strip()
+                    if code:
+                        calm_reg_to_name[code] = r.get("CALM_REG_NAME", "").strip()
+
+            dist_options = {k: v for k, v in options.items() if k != "limit"}
+            dist_options["limit"] = 0
+            dist_rows, dist_warns = self.read_table(districts_path, **dist_options)
+            warnings.extend(dist_warns)
+            for r in dist_rows:
+                occ_uid = r.get("OCC_UNIQUE_ID")
+                dist_code = r.get("DIST_CALM_DIST_CODE", "").strip()
+                if occ_uid and dist_code:
+                    dist_name = calm_dist_to_name.get(dist_code, dist_code)
+                    district_by_occ[occ_uid] = dist_name
+                    reg_code = calm_dist_to_reg.get(dist_code)
+                    if reg_code:
+                        reg_name = calm_reg_to_name.get(reg_code, reg_code)
+                        region_by_occ[occ_uid] = reg_name
+
+        # Load legacy value maps for district/region FK resolution
+        district_pk_map = {}  # district_name -> pk
+        region_pk_map = {}  # region_name -> pk
+        if district_by_occ or region_by_occ:
+            from boranga.components.data_migration.mappings import load_legacy_to_pk_map
+
+            district_pk_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="District")
+            region_pk_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="Region")
+
         # Index auxiliary data by OCC_UNIQUE_ID
         sites_by_occ = defaultdict(list)
         for s in site_rows:
@@ -420,18 +590,22 @@ class OccurrenceTecAdapter(SourceAdapter):
 
         additional_by_occ = defaultdict(list)
         for row in additional_rows:
+            # TODO Task 12287: Review USERNAME column disambiguation approach
+            # ADDITIONAL_DATA.csv and SITES.csv both have USERNAME columns but for different purposes:
+            #   - SITES.csv USERNAME -> OccurrenceSite.drawn_by
+            #   - ADDITIONAL_DATA.csv USERNAME -> OccurrenceDocument.uploaded_by
+            # Currently renaming ADDITIONAL_DATA USERNAME to ADD_USERNAME to avoid collision.
+            # Verify this is the cleanest approach or if schema should handle this differently.
+            if "USERNAME" in row and "ADD_USERNAME" not in row:
+                row["ADD_USERNAME"] = row["USERNAME"]
             additional_by_occ[row["OCC_UNIQUE_ID"]].append(row)
 
         species_by_occ = defaultdict(list)
         for row in species_rows:
-            species_by_occ[row["OCC_UNIQUE_ID"]].append(row)
-
-        for row in fauna_rows:
-            # Normalize fauna fields to match SPEC_ naming expected by handler
-            if "OF_TAXON_ID" in row:
-                row["SPEC_TAXON_ID"] = row["OF_TAXON_ID"]
-            if "OF_VOUCHER_NO" in row:
-                row["SPEC_VOUCHER_NO"] = row["OF_VOUCHER_NO"]
+            # Map taxon_name_id (Nomos ID) to SPEC_TAXON_ID for handler compatibility
+            # OCCURRENCE_SPECIES_COMBINE.csv has taxon_name_id which is the Nomos ID
+            if "taxon_name_id" in row and row["taxon_name_id"]:
+                row["SPEC_TAXON_ID"] = row["taxon_name_id"]
             species_by_occ[row["OCC_UNIQUE_ID"]].append(row)
 
         # Join
@@ -467,6 +641,18 @@ class OccurrenceTecAdapter(SourceAdapter):
             if dola_ref and dola_ref in dola_map:
                 row["_resolved_dola"] = dola_map[dola_ref]
 
+            # District/Region resolution
+            if occ_id and occ_id in district_by_occ:
+                dist_name = district_by_occ[occ_id]
+                dist_pk = district_pk_map.get(dist_name)
+                if dist_pk:
+                    row["_resolved_district_id"] = dist_pk
+            if occ_id and occ_id in region_by_occ:
+                reg_name = region_by_occ[occ_id]
+                reg_pk = region_pk_map.get(reg_name)
+                if reg_pk:
+                    row["_resolved_region_id"] = reg_pk
+
             # Map raw row to canonical keys
             canonical_row = SCHEMA.map_raw_row(row)
             # Preserve internal keys (starting with _)
@@ -479,6 +665,12 @@ class OccurrenceTecAdapter(SourceAdapter):
             canonical_row["locked"] = True
             if not canonical_row.get("submitter") and tec_submitter_id:
                 canonical_row["submitter"] = tec_submitter_id
+
+            # Apply resolved district/region IDs
+            if row.get("_resolved_district_id"):
+                canonical_row["OCCLocation__district_id"] = row["_resolved_district_id"]
+            if row.get("_resolved_region_id"):
+                canonical_row["OCCLocation__region_id"] = row["_resolved_region_id"]
 
             joined_rows.append(canonical_row)
 

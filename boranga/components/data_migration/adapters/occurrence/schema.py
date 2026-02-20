@@ -52,6 +52,7 @@ COLUMN_MAP = {
     "S_LONGITUDE_PREF": "OccurrenceSite__longitude",
     "S_ID": "OccurrenceSite__site_name",
     "S_DATE_EDITED": "OccurrenceSite__updated_date",
+    "USERNAME": "OccurrenceSite__drawn_by",
     # OCCObservationDetail
     "OCC_BR_CODE": "OCCObservationDetail__comments",
     # OCCHabitatComposition
@@ -69,9 +70,18 @@ COLUMN_MAP = {
     "OCC_SPECIES_DESC": "OCCAssociatedSpecies__comment",
     # AssociatedSpeciesTaxonomy
     "SPEC_SP_ROLE_CODE": "AssociatedSpeciesTaxonomy__species_role_id",
+    # OCCIdentification
+    "OCC_STATUS_CODE": "OCCIdentification__identification_certainty_id",
+    # OCCVegetationStructure
+    "OCC_COM_STRUCTURE": "OCCVegetationStructure__vegetation_structure_layer_one",
+    # OCCLocation district/region - see TODO in tec.py for data source details
+    "DIST_CALM_DIST_CODE": "OCCLocation__district_id",  # Resolved via DISTRICTS.csv lookup chain
     # OccurrenceDocument
     "ADD_ITEM_CODE": "OccurrenceDocument__document_sub_category_id",
     "ADD_DESC": "OccurrenceDocument__description",
+    "ADD_USERNAME": "OccurrenceDocument__uploaded_by",
+    # OccurrenceGeometry
+    "OCC_BUFFER_RADIUS": "OccurrenceGeometry__buffer_radius",
 }
 
 REQUIRED_COLUMNS = [
@@ -139,6 +149,7 @@ class OccurrenceRow:
     OccurrenceSite__longitude: float | None = None
     OccurrenceSite__site_name: str | None = None
     OccurrenceSite__updated_date: datetime | None = None
+    OccurrenceSite__drawn_by: int | None = None
     OccurrenceSite__geometry: Any | None = None
 
     OCCObservationDetail__comments: str | None = None
@@ -160,8 +171,16 @@ class OccurrenceRow:
 
     AssociatedSpeciesTaxonomy__species_role_id: int | None = None
 
+    OCCIdentification__identification_certainty_id: int | None = None
+
+    OCCVegetationStructure__vegetation_structure_layer_one: str | None = None
+
+    OCCLocation__district_id: int | None = None
+    OCCLocation__region_id: int | None = None
+
     OccurrenceDocument__document_sub_category_id: int | None = None
     OccurrenceDocument__description: str | None = None
+    OccurrenceDocument__uploaded_by: int | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceRow:
@@ -204,6 +223,7 @@ class OccurrenceRow:
             OccurrenceSite__longitude=utils.to_float_maybe(d.get("OccurrenceSite__longitude")),
             OccurrenceSite__site_name=utils.safe_strip(d.get("OccurrenceSite__site_name")),
             OccurrenceSite__updated_date=d.get("OccurrenceSite__updated_date"),
+            OccurrenceSite__drawn_by=utils.to_int_maybe(d.get("OccurrenceSite__drawn_by")),
             OccurrenceSite__geometry=d.get("OccurrenceSite__geometry"),
             OCCObservationDetail__comments=utils.safe_strip(d.get("OCCObservationDetail__comments")),
             OCCHabitatComposition__water_quality=utils.safe_strip(d.get("OCCHabitatComposition__water_quality")),
@@ -213,10 +233,19 @@ class OccurrenceRow:
             AssociatedSpeciesTaxonomy__species_role_id=utils.to_int_maybe(
                 d.get("AssociatedSpeciesTaxonomy__species_role_id")
             ),
+            OCCIdentification__identification_certainty_id=utils.to_int_maybe(
+                d.get("OCCIdentification__identification_certainty_id")
+            ),
+            OCCVegetationStructure__vegetation_structure_layer_one=utils.safe_strip(
+                d.get("OCCVegetationStructure__vegetation_structure_layer_one")
+            ),
+            OCCLocation__district_id=utils.to_int_maybe(d.get("OCCLocation__district_id")),
+            OCCLocation__region_id=utils.to_int_maybe(d.get("OCCLocation__region_id")),
             OccurrenceDocument__document_sub_category_id=utils.to_int_maybe(
                 d.get("OccurrenceDocument__document_sub_category_id")
             ),
             OccurrenceDocument__description=utils.safe_strip(d.get("OccurrenceDocument__description")),
+            OccurrenceDocument__uploaded_by=utils.to_int_maybe(d.get("OccurrenceDocument__uploaded_by")),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:

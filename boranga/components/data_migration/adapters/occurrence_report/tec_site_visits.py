@@ -1,36 +1,57 @@
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
+    build_legacy_map_transform,
     dependent_from_column_factory,
+    fk_lookup_static,
     static_value_factory,
 )
+from boranga.components.users.models import SubmitterCategory
 
 from ..base import ExtractionResult, SourceAdapter
 from ..sources import Source
 from . import schema
 from .tec_shared import TEC_USER_LOOKUP
 
-_SPECIES_LIST_RELATES_TO_CACHE = {}
+# Lookup submitter category by name (not hardcoded ID)
+SUBMITTER_CATEGORY_DBCA = fk_lookup_static(
+    model=SubmitterCategory,
+    lookup_field="name",
+    static_value="DBCA",
+)
+
+# Task 12499: Map SV_OBSERVATION_TYPE codes (Q, R, T) to SpeciesListRelatesTo via legacy map
+SPECIES_LIST_RELATES_TO_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TEC",
+    list_name="SV_OBSERVATION_TYPE (SITE_VISITS)",
+    required=False,
+    return_type="id",
+)
 
 
-def lookup_species_list_relates_to(val):
-    if not val:
+# Shared cache for parent Occurrence objects to avoid redundant queries
+_PARENT_OCC_CACHE = {}
+
+
+def get_parent_occurrence(occ_mig_id):
+    """
+    Get parent Occurrence by migrated_from_id with caching.
+    Shared by all parent OCC helper functions to minimize DB queries.
+    """
+    if not occ_mig_id:
         return None
-    val = str(val).strip()
-    if not val or val.lower() == "nan":
-        return None
 
-    global _SPECIES_LIST_RELATES_TO_CACHE
-    if not _SPECIES_LIST_RELATES_TO_CACHE:
+    global _PARENT_OCC_CACHE
+    if occ_mig_id not in _PARENT_OCC_CACHE:
         try:
-            from boranga.components.occurrence.models import SpeciesListRelatesTo
+            from boranga.components.occurrence.models import Occurrence
 
-            for obj in SpeciesListRelatesTo.objects.all():
-                _SPECIES_LIST_RELATES_TO_CACHE[str(obj.name).lower()] = obj.id
+            occ = Occurrence.objects.filter(migrated_from_id=occ_mig_id).first()
+            _PARENT_OCC_CACHE[occ_mig_id] = occ
         except Exception:
-            pass
+            _PARENT_OCC_CACHE[occ_mig_id] = None
 
-    return _SPECIES_LIST_RELATES_TO_CACHE.get(val.lower())
+    return _PARENT_OCC_CACHE.get(occ_mig_id)
 
 
 _OCC_LOCATION_CACHE = {}
@@ -42,15 +63,10 @@ def get_parent_occ_location_value(occ_mig_id, field_name):
 
     global _OCC_LOCATION_CACHE
     if occ_mig_id not in _OCC_LOCATION_CACHE:
-        try:
-            from boranga.components.occurrence.models import Occurrence
-
-            occ = Occurrence.objects.filter(migrated_from_id=occ_mig_id).first()
-            if occ and hasattr(occ, "location"):
-                _OCC_LOCATION_CACHE[occ_mig_id] = occ.location
-            else:
-                _OCC_LOCATION_CACHE[occ_mig_id] = None
-        except Exception:
+        occ = get_parent_occurrence(occ_mig_id)
+        if occ and hasattr(occ, "location"):
+            _OCC_LOCATION_CACHE[occ_mig_id] = occ.location
+        else:
             _OCC_LOCATION_CACHE[occ_mig_id] = None
 
     loc = _OCC_LOCATION_CACHE.get(occ_mig_id)
@@ -58,6 +74,28 @@ def get_parent_occ_location_value(occ_mig_id, field_name):
         return None
 
     return getattr(loc, field_name, None)
+
+
+_OCC_IDENTIFICATION_CACHE = {}
+
+
+def get_parent_occ_identification_value(occ_mig_id, field_name):
+    if not occ_mig_id:
+        return None
+
+    global _OCC_IDENTIFICATION_CACHE
+    if occ_mig_id not in _OCC_IDENTIFICATION_CACHE:
+        occ = get_parent_occurrence(occ_mig_id)
+        if occ and hasattr(occ, "identification"):
+            _OCC_IDENTIFICATION_CACHE[occ_mig_id] = occ.identification
+        else:
+            _OCC_IDENTIFICATION_CACHE[occ_mig_id] = None
+
+    identification = _OCC_IDENTIFICATION_CACHE.get(occ_mig_id)
+    if not identification:
+        return None
+
+    return getattr(identification, field_name, None)
 
 
 def make_geometry(lat, lon):
@@ -103,20 +141,22 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         "approved_by": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
         # Also populate SubmitterInformation with the same user
         "SubmitterInformation__email_user": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],
-        "processing_status": [lambda val, ctx: _result("Approved") if not val else _result(val)],
-        "customer_status": [
-            dependent_from_column_factory(
-                "processing_status",
-                mapper=lambda val, ctx: "Approved" if val == "Approved" else None,
-            )
-        ],
-        # OCRObserverDetail defaults
+        "processing_status": [lambda val, ctx: _result("approved") if not val else _result(val)],
+        "customer_status": [static_value_factory("approved")],
+        # OCRObserverDetail defaults (Tasks 12333, 12334, 12336)
         "OCRObserverDetail__main_observer": [static_value_factory(True)],
         "OCRObserverDetail__visible": [static_value_factory(True)],
-        # SubmitterInformation defaults
-        "SubmitterInformation__submitter_category": [static_value_factory(15)],  # DBCA
+        # Task 12334: observer_name from SV_DESCRIBED_BY (mapped by schema, pass through)
+        # SubmitterInformation defaults (Task 12570: name default "DBCA" since SITE_VISITS has no USERNAME column)
+        "SubmitterInformation__name": [static_value_factory("DBCA")],
+        "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
         "SubmitterInformation__organisation": [static_value_factory("DBCA")],
         # OCRLocation defaults from Parent Occurrence
+        "OCRLocation__coordinate_source": [
+            lambda val, ctx: _result(
+                get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "coordinate_source_id")
+            )
+        ],
         "OCRLocation__district": [
             lambda val, ctx: _result(
                 get_parent_occ_location_value(ctx.row.get("Occurrence__migrated_from_id"), "district_id")
@@ -141,9 +181,11 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         "OccurrenceReportGeometry__content_type": [lambda val, ctx: _result(get_occurrence_report_content_type_id())],
         # OCRHabitatComposition transformation (Task 12472)
         "OCRHabitatComposition__habitat_notes": [
-            lambda val, ctx: _result(f"Vegetation Condition: {ctx.row.get('SV_VEGETATION_CONDITION')}")
-            if ctx.row.get("SV_VEGETATION_CONDITION")
-            else _result(None)
+            lambda val, ctx: (
+                _result(f"Vegetation Condition: {ctx.row.get('SV_VEGETATION_CONDITION')}")
+                if ctx.row.get("SV_VEGETATION_CONDITION")
+                else _result(None)
+            )
         ],
         # OCRFireHistory transformation (Task 12495)
         "OCRFireHistory__comment": [
@@ -159,9 +201,15 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
                 )
             )
         ],
-        # Task 12499
-        "OCRAssociatedSpecies__species_list_relates_to": [
-            lambda val, ctx: _result(lookup_species_list_relates_to(val))
+        # Task 12499: species_list_relates_to from SV_OBSERVATION_TYPE
+        "OCRAssociatedSpecies__species_list_relates_to": [SPECIES_LIST_RELATES_TO_TRANSFORM],
+        # Copy identification_certainty from parent Occurrence's OCC Identification
+        "OCRIdentification__identification_certainty": [
+            lambda val, ctx: _result(
+                get_parent_occ_identification_value(
+                    ctx.row.get("Occurrence__migrated_from_id"), "identification_certainty_id"
+                )
+            )
         ],
     }
 

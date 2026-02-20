@@ -141,6 +141,13 @@ SOIL_TYPE_TRANSFORM = build_legacy_map_transform("TPFL", "SOIL_TYPE (DRF_LOV_SOI
 # Identification closed-list / default transforms
 SAMPLE_DEST_TRANSFORM = build_legacy_map_transform("TPFL", "VOUCHER_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)", required=False)
 
+# identification_certainty: always "High Certainty" (static)
+IDENTIFICATION_CERTAINTY_HIGH = fk_lookup_static(
+    model=IdentificationCertainty,
+    lookup_field="name",
+    static_value="High Certainty",
+)
+
 
 def observer_name_fallback_transform(value: str, ctx=None):
     """If observer name is missing, try to use OBSERVER_CODE from the raw row.
@@ -233,11 +240,12 @@ def submitter_name_from_emailuser(value, ctx=None):
         return _result(None)
 
 
-# Transform for approved_by: if processing_status is 'ACCEPTED', use modified_by and resolve to EmailUser id
-# The condiion_value is the raw CSV value before transformation
+# Transform for approved_by: if processing_status is 'ACCEPTED' or 'REJECTED',
+# use modified_by and resolve to EmailUser id.
+# condition_value is the raw CSV value before transformation.
 APPROVED_BY_TRANSFORM = conditional_transform_factory(
     condition_column="processing_status",
-    condition_value="ACCEPTED",  # Raw CSV value before transformation
+    condition_value=["ACCEPTED", "REJECTED"],  # Raw CSV values before transformation
     true_column="modified_by",
     true_transform=EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM,
     false_value=None,
@@ -400,13 +408,15 @@ def ocr_plant_count_comment_transform(value, ctx):
     """Concatenate fields for OCRPlantCount comment."""
     parts = []
 
-    # 1. POPULATION_NOTES
-    if value and str(value).strip():
-        parts.append(str(value).strip())
-
     row = getattr(ctx, "row", None) if ctx is not None else None
     if row is None and isinstance(ctx, dict):
         row = ctx.get("row") or ctx
+
+    # 1. POPULATION_NOTES — the pipeline key (OCRPlantCount__comment) has no direct
+    # schema column mapping, so `value` is always None.  Read from ctx.row instead.
+    population_notes = (row.get("POPULATION_NOTES") if isinstance(row, dict) else None) or value
+    if population_notes and str(population_notes).strip():
+        parts.append(str(population_notes).strip())
 
     if not isinstance(row, dict):
         return _result("; ".join(parts) if parts else "")
@@ -556,11 +566,7 @@ PIPELINES = {
     "OCRHabitatComposition__rock_type": ["strip", "blank_to_none", ROCK_TYPE_TRANSFORM],
     # Habitat composition extras (apply TPFL closed-list mappings)
     "OCRHabitatComposition__habitat_notes": ["strip", "blank_to_none"],
-    "OCRHabitatComposition__vegetation_condition": [
-        "strip",
-        "blank_to_none",
-        veg_condition_prefix_transform,
-    ],
+    # TPFL builds habitat_notes from SV_VEGETATION_CONDITION in extract() instead
     "OCRHabitatComposition__soil_colour": [
         "strip",
         "blank_to_none",
@@ -582,11 +588,7 @@ PIPELINES = {
         "blank_to_none",
         SAMPLE_DEST_TRANSFORM,
     ],
-    "OCRIdentification__identification_certainty": [
-        "strip",
-        "blank_to_none",
-        identification_certainty_default_transform,
-    ],
+    "OCRIdentification__identification_certainty": [IDENTIFICATION_CERTAINTY_HIGH],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
     # SubmitterInformation pipelines (Task 11302-11306)
     "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DEFAULT_TRANSFORM],
@@ -822,8 +824,10 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             canonical["OCRObserverDetail__main_observer"] = True
             canonical["internal_application"] = True
             # Build habitat_notes by combining habitat notes, aspect and vegetation condition
+            # NOTE: schema maps HABITAT_NOTES -> OCRHabitatComposition__habitat_notes, so read
+            # from the mapped key (not the raw column name).
             hab_notes_parts: list[str] = []
-            HAB_NOTES = canonical.get("HABITAT_NOTES", "")
+            HAB_NOTES = canonical.get("OCRHabitatComposition__habitat_notes", "")
             if HAB_NOTES:
                 hab_notes_parts.append(HAB_NOTES.strip())
             ASPECT = canonical.get("ASPECT", "")

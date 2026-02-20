@@ -4,7 +4,7 @@ import os
 from boranga.components.data_migration.adapters.base import ExtractionResult, SourceAdapter
 from boranga.components.data_migration.adapters.sources import Source
 
-from .tec_shared import load_site_visit_to_sid_mapping
+from .tec_shared import build_site_species_comments, load_site_visit_to_sid_mapping
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +40,8 @@ class OccurrenceReportTecSiteSpeciesAdapter(SourceAdapter):
             # Taxonomy lookup ID (SSP_NAME_ID in TEC CSV)
             taxon_name_id = raw.get("SSP_NAME_ID")
 
-            # Comments
-            comments_parts = []
-            if raw.get("SSP_NOTES"):
-                comments_parts.append(raw["SSP_NOTES"])
-            if raw.get("SSP_HEIGHT"):
-                comments_parts.append(f"Height: {raw['SSP_HEIGHT']}")
-            if raw.get("SSP_COLLECTOR_CODE"):
-                comments_parts.append(f"Collector Code: {raw['SSP_COLLECTOR_CODE']}")
-            if raw.get("SSP_COLLECTION_NUMBER"):
-                comments_parts.append(f"Collector Number: {raw['SSP_COLLECTION_NUMBER']}")
-
-            comments = "; ".join(comments_parts)
+            # Build comments from SSP_ fields
+            comments = build_site_species_comments(raw)
 
             row = {
                 "migrated_from_id": f"tec-site-{site_visit_id}",  # Link to OCR via SITE_VISIT_ID

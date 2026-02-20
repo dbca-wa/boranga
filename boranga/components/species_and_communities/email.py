@@ -125,9 +125,14 @@ def send_user_species_create_email_notification(request, species_proposal):
 
     url = convert_external_url_to_internal_url(url)
 
+    if species_proposal.submitter:
+        submitter_name = EmailUser.objects.get(id=species_proposal.submitter).get_full_name()
+    else:
+        submitter_name = "Unknown"
+
     context = {
         "species_community_proposal": species_proposal,
-        "submitter": EmailUser.objects.get(id=species_proposal.submitter).get_full_name(),
+        "submitter": submitter_name,
         "url": url,
     }
     all_ccs = []
@@ -252,7 +257,10 @@ def send_species_combine_email_notification(request, combine_species_qs, resulti
 
     all_ccs = list(set(all_ccs))
 
-    submitter_email = EmailUser.objects.get(id=resulting_species_instance.submitter).email
+    if resulting_species_instance.submitter:
+        submitter_email = EmailUser.objects.get(id=resulting_species_instance.submitter).email
+    else:
+        submitter_email = None
 
     to = request.user.email if request else submitter_email
 
@@ -298,7 +306,10 @@ def send_species_rename_email_notification(request, species_proposal, new_specie
         "new_species": new_species,
     }
 
-    submitter_email = EmailUser.objects.get(id=species_proposal.submitter).email
+    if species_proposal.submitter:
+        submitter_email = EmailUser.objects.get(id=species_proposal.submitter).email
+    else:
+        submitter_email = None
 
     to = request.user.email if request else submitter_email
 
@@ -354,15 +365,23 @@ def send_user_community_create_email_notification(request, community_proposal):
 
     url = convert_external_url_to_internal_url(url)
 
+    if community_proposal.submitter:
+        submitter_user = EmailUser.objects.get(id=community_proposal.submitter)
+        submitter_name = submitter_user.get_full_name()
+        submitter_email = submitter_user.email
+    else:
+        submitter_name = "Unknown"
+        submitter_email = request.user.email if request else None
+
     context = {
         "species_community_proposal": community_proposal,
-        "submitter": EmailUser.objects.get(id=community_proposal.submitter).get_full_name(),
+        "submitter": submitter_name,
         "url": url,
     }
     all_ccs = []
 
     msg = email.send(
-        EmailUser.objects.get(id=community_proposal.submitter).email,
+        submitter_email,
         cc=all_ccs,
         context=context,
     )
@@ -411,7 +430,10 @@ def send_community_rename_email_notification(
         "original_made_historical": original_made_historical,
     }
 
-    submitter_email = EmailUser.objects.get(id=original_community.submitter).email
+    if original_community.submitter:
+        submitter_email = EmailUser.objects.get(id=original_community.submitter).email
+    else:
+        submitter_email = None
 
     to = request.user.email if request else submitter_email
 
@@ -470,13 +492,16 @@ def _log_species_email(email_message, species_proposal, sender=None, file_bytes=
     else:
         text = smart_str(email_message)
         subject = ""
-        to = EmailUser.objects.get(id=species_proposal.submitter).email
+        if species_proposal.submitter:
+            to = EmailUser.objects.get(id=species_proposal.submitter).email
+        else:
+            to = None
         fromm = smart_str(sender) if sender else SYSTEM_NAME
         all_ccs = ""
 
     customer = species_proposal.submitter
 
-    staff = sender.id
+    staff = sender.id if sender and hasattr(sender, "id") else None
 
     kwargs = {
         "subject": subject,
@@ -527,13 +552,16 @@ def _log_community_email(email_message, community_proposal, sender=None, file_by
     else:
         text = smart_str(email_message)
         subject = ""
-        to = EmailUser.objects.get(id=community_proposal.submitter).email
+        if community_proposal.submitter:
+            to = EmailUser.objects.get(id=community_proposal.submitter).email
+        else:
+            to = None
         fromm = smart_str(sender) if sender else SYSTEM_NAME
         all_ccs = ""
 
     customer = community_proposal.submitter
 
-    staff = sender.id
+    staff = sender.id if sender and hasattr(sender, "id") else None
 
     kwargs = {
         "subject": subject,

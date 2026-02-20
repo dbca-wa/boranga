@@ -1578,9 +1578,13 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
                     if split_species_instance.processing_status == Species.PROCESSING_STATUS_DRAFT:
                         split_species_list[index]["action"] = Species.SPLIT_SPECIES_ACTION_ACTIVATED
                         SPLIT_FROM_ACTION = SpeciesUserAction.ACTION_SPLIT_SPECIES_FROM_EXISTING_DRAFT
+                        # Set submitter since this draft is being activated
+                        split_species_instance.submitter = request.user.id
                     elif split_species_instance.processing_status == Species.PROCESSING_STATUS_HISTORICAL:
                         split_species_list[index]["action"] = Species.SPLIT_SPECIES_ACTION_REACTIVATED
                         SPLIT_FROM_ACTION = SpeciesUserAction.ACTION_SPLIT_SPECIES_FROM_EXISTING_HISTORICAL
+                        # Set submitter since this historical record is being reactivated
+                        split_species_instance.submitter = request.user.id
                     split_species_instance.processing_status = Species.PROCESSING_STATUS_ACTIVE
                     split_species_instance.save(version_user=request.user)
                 else:
@@ -1891,6 +1895,8 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
             if resulting_species_instance.processing_status == Species.PROCESSING_STATUS_DRAFT:
                 resulting_species_instance.processing_status = Species.PROCESSING_STATUS_ACTIVE
+                # Set submitter since this draft is being activated
+                resulting_species_instance.submitter = request.user.id
                 resulting_species_instance.log_user_action(
                     SpeciesUserAction.ACTION_COMBINE_SPECIES_FROM_EXISTING_DRAFT.format(
                         resulting_species_instance.species_number,
@@ -1909,6 +1915,8 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
             elif resulting_species_instance.processing_status == Species.PROCESSING_STATUS_HISTORICAL:
                 resulting_species_instance.processing_status = Species.PROCESSING_STATUS_ACTIVE
+                # Set submitter since this historical record is being reactivated
+                resulting_species_instance.submitter = request.user.id
                 resulting_species_instance.log_user_action(
                     SpeciesUserAction.ACTION_COMBINE_SPECIES_FROM_EXISTING_HISTORICAL.format(
                         resulting_species_instance.species_number,
@@ -2027,6 +2035,9 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
                 rename_instance.submitter = request.user.id
             if rename_instance.processing_status == Species.PROCESSING_STATUS_HISTORICAL:
                 RENAME_FROM_ACTION = SpeciesUserAction.ACTION_RENAME_SPECIES_FROM_EXISTING_HISTORICAL
+                # The record has to have a submitter so since this is being reactivated
+                # we set the submitter to the current request user
+                rename_instance.submitter = request.user.id
 
             rename_instance = rename_deep_copy(request, instance, existing_species=rename_instance)
             rename_instance.processing_status = Species.PROCESSING_STATUS_ACTIVE
@@ -2090,6 +2101,10 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         serializer.is_valid(raise_exception=True)
         if serializer.is_valid():
             new_instance, new_returned = serializer.save(version_user=request.user)
+
+            # Set submitter to the user creating the record
+            new_instance.submitter = request.user.id
+            new_instance.save(version_user=request.user)
 
             data = {"species_id": new_instance.id}
 
@@ -2552,6 +2567,8 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             raise serializers.ValidationError("Community is not historical")
 
         instance.processing_status = Community.PROCESSING_STATUS_ACTIVE
+        # Set submitter since this historical record is being reactivated
+        instance.submitter = request.user.id
         instance.save(version_user=request.user)
 
         # Log user action
@@ -2598,6 +2615,10 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         serializer.is_valid(raise_exception=True)
         if serializer.is_valid():
             new_instance, new_returned = serializer.save(version_user=request.user)
+
+            # Set submitter to the user creating the record
+            new_instance.submitter = request.user.id
+            new_instance.save(version_user=request.user)
 
             data = {"community_id": new_instance.id}
             # create CommunityTaxonomy for new instance
@@ -2952,6 +2973,9 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
             elif resulting_community.processing_status == Community.PROCESSING_STATUS_HISTORICAL:
                 resulting_community.processing_status = Community.PROCESSING_STATUS_ACTIVE
+                # The record has to have a submitter so since this is being reactivated
+                # we set the submitter to the current request user
+                resulting_community.submitter = request.user.id
                 resulting_community.save(version_user=request.user)
 
                 # Log community action for the historical community

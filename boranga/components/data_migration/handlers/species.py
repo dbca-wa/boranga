@@ -84,6 +84,13 @@ class SpeciesImporter(BaseSheetImporter):
             occ_filter = {}
             report_filter = {}
 
+        # Delete reversion history first (more efficient than waiting for cascade)
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_species_and_related(species_filter)
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
+
         # Perform deletes in an autocommit block so they are committed
         # immediately. This avoids the case where clear_targets runs inside a
         # larger transaction that later rolls back leaving the wipe undone.
@@ -365,7 +372,7 @@ class SpeciesImporter(BaseSheetImporter):
         def merge_group(entries, source_priority):
             entries_sorted = sorted(
                 entries,
-                key=lambda e: (source_priority.index(e[1]) if e[1] in source_priority else len(source_priority)),
+                key=lambda e: source_priority.index(e[1]) if e[1] in source_priority else len(source_priority),
             )
             merged = {}
             combined_issues = []
@@ -435,7 +442,7 @@ class SpeciesImporter(BaseSheetImporter):
                 "group_type_id": merged.get("group_type_id"),
                 "taxonomy_id": merged.get("taxonomy_id"),
                 "comment": merged.get("comment"),
-                "conservation_plan_exists": merged.get("conservation_plan_exists"),
+                "conservation_plan_exists": merged.get("conservation_plan_exists") or False,
                 "conservation_plan_reference": merged.get("conservation_plan_reference"),
                 "department_file_numbers": merged.get("department_file_numbers"),
                 "processing_status": merged.get("processing_status"),
@@ -495,24 +502,16 @@ class SpeciesImporter(BaseSheetImporter):
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
-                # update existing
+                # update existing (re-import of same record)
                 for k, v in defaults.items():
                     setattr(obj, k, v)
                 to_update.append((obj, merged, districts_raw))
                 continue
 
             taxonomy_id = defaults.get("taxonomy_id")
-            existing = None
-            if taxonomy_id:
-                existing = existing_by_taxonomy.get(taxonomy_id)
 
-            if existing:
-                # update existing species rather than creating new
-                for k, v in defaults.items():
-                    setattr(existing, k, v)
-                existing.migrated_from_id = migrated_from_id
-                to_update.append((existing, merged, districts_raw))
-            elif taxonomy_id and taxonomy_id in tax_seen:
+            # Check if this taxonomy_id was already processed in this batch
+            if taxonomy_id and taxonomy_id in tax_seen:
                 # Another op in this run has already claimed this taxonomy_id.
                 # Skip this record to avoid duplicate taxonomy entries.
                 canonical = tax_seen[taxonomy_id]
@@ -525,6 +524,31 @@ class SpeciesImporter(BaseSheetImporter):
                 )
                 tax_collisions[taxonomy_id].append(migrated_from_id)
                 skipped += 1
+                continue
+
+            # Check if species with this taxonomy exists in DB with a different migrated_from_id
+            existing = None
+            if taxonomy_id:
+                existing = existing_by_taxonomy.get(taxonomy_id)
+
+            if existing:
+                # Taxonomy collision: species with this taxonomy_id already exists in DB
+                # Skip this duplicate to preserve the original record
+                logger.info(
+                    "SpeciesImporter: taxonomy collision detected for taxonomy_id=%s; "
+                    "species already exists in DB (species_id=%s, migrated_from_id=%s); "
+                    "skipping duplicate migrated_from_id=%s",
+                    taxonomy_id,
+                    existing.id,
+                    existing.migrated_from_id,
+                    migrated_from_id,
+                )
+                # Track this collision consistent with batch collisions
+                if taxonomy_id not in tax_seen:
+                    tax_seen[taxonomy_id] = existing.migrated_from_id
+                tax_collisions[taxonomy_id].append(migrated_from_id)
+                skipped += 1
+                continue
             elif taxonomy_id:
                 # First time we see this taxonomy_id and it doesn't exist in DB.
                 # Claim it as canonical and create one instance for it.
@@ -647,7 +671,8 @@ class SpeciesImporter(BaseSheetImporter):
 
             # prepare distribution update/create
             distribution = merged.get("distribution", None)
-            dist_to_update.append((obj.pk, distribution))
+            noo_auto_val = merged.get("noo_auto", True)
+            dist_to_update.append((obj.pk, distribution, noo_auto_val))
 
             processing_status_is_active = merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
             publish_to_update.append((obj.pk, processing_status_is_active))
@@ -680,8 +705,11 @@ class SpeciesImporter(BaseSheetImporter):
                 created += 1
                 created_species_ids.append(obj.pk)
                 distribution = merged.get("distribution", None)
+                noo_auto_val = merged.get("noo_auto") or True
                 dist_to_create.append(
-                    SpeciesDistribution(species=obj, aoo_actual_auto=False, distribution=distribution)
+                    SpeciesDistribution(
+                        species=obj, aoo_actual_auto=False, noo_auto=noo_auto_val, distribution=distribution
+                    )
                 )
 
                 processing_status_is_active = merged.get("processing_status") == Species.PROCESSING_STATUS_ACTIVE
@@ -729,6 +757,7 @@ class SpeciesImporter(BaseSheetImporter):
                             species=d.species,
                             defaults={
                                 "aoo_actual_auto": d.aoo_actual_auto,
+                                "noo_auto": d.noo_auto,
                                 "distribution": d.distribution,
                             },
                         )
@@ -768,15 +797,16 @@ class SpeciesImporter(BaseSheetImporter):
         # Handle updates for SpeciesDistribution and SpeciesPublishingStatus in bulk
         # Distributions: fetch existing for updated species and update or create as needed
         if dist_to_update:
-            species_ids = [sid for sid, _ in dist_to_update]
+            species_ids = [sid for sid, _, _ in dist_to_update]
             existing_dists = {d.species_id: d for d in SpeciesDistribution.objects.filter(species_id__in=species_ids)}
             to_create_dists = []
             to_update_dists = []
-            for sid, distribution in dist_to_update:
+            for sid, distribution, noo_auto_val in dist_to_update:
                 if sid in existing_dists:
                     inst = existing_dists[sid]
                     inst.distribution = distribution
                     inst.aoo_actual_auto = False
+                    inst.noo_auto = noo_auto_val or True
                     to_update_dists.append(inst)
                 else:
                     # species instance available in DB
@@ -784,6 +814,7 @@ class SpeciesImporter(BaseSheetImporter):
                         SpeciesDistribution(
                             species_id=sid,
                             aoo_actual_auto=False,
+                            noo_auto=noo_auto_val or True,
                             distribution=distribution,
                         )
                     )
@@ -792,7 +823,7 @@ class SpeciesImporter(BaseSheetImporter):
                 try:
                     SpeciesDistribution.objects.bulk_update(
                         to_update_dists,
-                        ["distribution", "aoo_actual_auto"],
+                        ["distribution", "aoo_actual_auto", "noo_auto"],
                         batch_size=BATCH,
                     )
                 except Exception:

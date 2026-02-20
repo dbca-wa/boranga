@@ -147,3 +147,27 @@ def load_sid_to_site_visit_rows(site_visits_path: str):
         logger.error(f"Failed to load SITE_VISITS.csv: {e}")
 
     return _SID_TO_SITE_VISIT_ROWS_CACHE
+
+
+def build_site_species_comments(row: dict) -> str:
+    """Build comments string from SITE_SPECIES SSP_ fields.
+
+    Concatenates SSP_NOTES, SSP_HEIGHT, SSP_COLLECTOR_CODE, and SSP_COLLECTION_NUMBER
+    with appropriate prefixes, separated by "; ".
+
+    Args:
+        row: Dict containing SSP_ field values
+
+    Returns:
+        Concatenated comments string
+    """
+    parts = []
+    if row.get("SSP_NOTES"):
+        parts.append(row["SSP_NOTES"])
+    if row.get("SSP_HEIGHT"):
+        parts.append(f"Height: {row['SSP_HEIGHT']}")
+    if row.get("SSP_COLLECTOR_CODE"):
+        parts.append(f"Collector Code: {row['SSP_COLLECTOR_CODE']}")
+    if row.get("SSP_COLLECTION_NUMBER"):
+        parts.append(f"Collector Number: {row['SSP_COLLECTION_NUMBER']}")
+    return "; ".join(parts)

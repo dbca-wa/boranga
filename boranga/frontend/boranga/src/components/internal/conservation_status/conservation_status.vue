@@ -31,6 +31,22 @@
                     class="mb-3"
                 />
 
+                <div
+                    v-if="
+                        conservation_status_obj.approved_by_name &&
+                        ['Approved', 'DeListed', 'Closed'].includes(
+                            conservation_status_obj.processing_status
+                        )
+                    "
+                    class="card card-default mb-3"
+                >
+                    <div class="card-header">Approval</div>
+                    <div class="card-body py-2">
+                        <strong>Approved by</strong><br />
+                        {{ conservation_status_obj.approved_by_name }}
+                    </div>
+                </div>
+
                 <div class="card card-default sticky-top">
                     <div class="card-header">Workflow</div>
                     <div class="card-body">

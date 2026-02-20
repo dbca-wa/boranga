@@ -109,6 +109,71 @@ def t_static_value_boranga_tec(value, ctx):
     return _result("boranga.tec@dbca.wa.gov.au")
 
 
+# Mapping from source key -> default/dummy user email
+_SOURCE_DEFAULT_USER_MAP = {
+    "TEC": "boranga.tec@dbca.wa.gov.au",
+    "TEC_SITE_VISITS": "boranga.tec@dbca.wa.gov.au",
+    "TEC_SITE_SPECIES": "boranga.tec@dbca.wa.gov.au",
+    "TEC_SURVEYS": "boranga.tec@dbca.wa.gov.au",
+    "TEC_SURVEY_THREATS": "boranga.tec@dbca.wa.gov.au",
+    "TEC_BOUNDARIES": "boranga.tec@dbca.wa.gov.au",
+    "TPFL": "boranga.ptfl@dbca.wa.gov.au",
+    "TFAUNA": "boranga.tfauna@dbca.wa.gov.au",
+}
+
+
+@registry.register("default_user_for_source")
+def t_default_user_for_source(value, ctx):
+    """Return the EmailUser ID for the default/dummy user based on the row's _source key.
+
+    Source mapping:
+      TEC / TEC_*  -> boranga.tec@dbca.wa.gov.au
+      TPFL         -> boranga.ptfl@dbca.wa.gov.au
+      TFAUNA       -> boranga.tfauna@dbca.wa.gov.au
+
+    The email is resolved to an EmailUserRO.id via DB lookup (cached after first hit).
+    """
+    source = None
+    if ctx and hasattr(ctx, "row") and isinstance(ctx.row, dict):
+        source = ctx.row.get("_source")
+    if not source:
+        return _result(
+            value,
+            TransformIssue("error", "No _source key found on row; cannot determine default user"),
+        )
+
+    email = _SOURCE_DEFAULT_USER_MAP.get(source.upper())
+    if not email:
+        return _result(
+            value,
+            TransformIssue("error", f"No default user mapping for source '{source}'"),
+        )
+
+    # Resolve email -> EmailUserRO.id (cached)
+    if email in _SOURCE_DEFAULT_USER_CACHE:
+        cached = _SOURCE_DEFAULT_USER_CACHE[email]
+        if isinstance(cached, TransformIssue):
+            return _result(value, cached)
+        return _result(cached)
+
+    try:
+        user = EmailUserRO.objects.get(email__iexact=email)
+        _SOURCE_DEFAULT_USER_CACHE[email] = user.id
+        return _result(user.id)
+    except EmailUserRO.DoesNotExist:
+        err = TransformIssue("error", f"Default user '{email}' not found in EmailUserRO")
+        _SOURCE_DEFAULT_USER_CACHE[email] = err
+        return _result(value, err)
+    except EmailUserRO.MultipleObjectsReturned:
+        err = TransformIssue("error", f"Multiple EmailUserRO entries for '{email}'")
+        _SOURCE_DEFAULT_USER_CACHE[email] = err
+        return _result(value, err)
+
+
+# Cache: email -> EmailUserRO.id or TransformIssue on failure
+_SOURCE_DEFAULT_USER_CACHE: dict = {}
+
+
 @registry.register("static_value_community")
 def t_static_value_community(value, ctx):
     return _result("community")
@@ -214,6 +279,16 @@ def t_to_int(value, ctx):
         return _result(int(value))
     except (ValueError, TypeError):
         return _result(value, TransformIssue("error", f"Not an integer: {value!r}"))
+
+
+@registry.register("to_float")
+def t_to_float(value, ctx):
+    if value in (None, ""):
+        return _result(None)
+    try:
+        return _result(float(value))
+    except (ValueError, TypeError):
+        return _result(value, TransformIssue("error", f"Not a float: {value!r}"))
 
 
 @registry.register("to_decimal")
@@ -584,6 +659,7 @@ def t_smart_date_parse(value, ctx):
 
 @registry.register("ocr_comments_transform")
 def t_ocr_comments_transform(value, ctx):
+    OTHER_COMMENTS = (ctx.row.get("OTHER_COMMENTS") or "").strip()
     PURPOSE1 = (ctx.row.get("PURPOSE1") or "").strip()
     PURPOSE2 = (ctx.row.get("PURPOSE2") or "").strip()
     VESTING = (ctx.row.get("VESTING") or "").strip()
@@ -604,6 +680,9 @@ def t_ocr_comments_transform(value, ctx):
             comments += ", " + part
         else:
             comments = part
+
+    # OTHER_COMMENTS: plain text, no prefix
+    _append_part(OTHER_COMMENTS if OTHER_COMMENTS else None)
 
     if PURPOSE1:
         purpose1 = LegacyValueMap.get_target(
@@ -643,12 +722,12 @@ def t_ocr_comments_transform(value, ctx):
         if not vesting:
             transform_issues.append(TransformIssue("error", f"No Vesting found that maps to legacy value: {VESTING!r}"))
         else:
-            _append_part(f"Vesting: {vesting}")
+            _append_part(vesting)
 
     _append_part(f"Fencing Status: {FENCING_STATUS}" if FENCING_STATUS else None)
     _append_part(f"Fencing Comments: {FENCING_COMMENTS}" if FENCING_COMMENTS else None)
-    _append_part(f"Roadside Marker Status: {ROADSIDE_MARKER_STATUS}" if ROADSIDE_MARKER_STATUS else None)
-    _append_part(f"Roadside Marker Comments: {RDSIDE_MKR_COMMENTS}" if RDSIDE_MKR_COMMENTS else None)
+    _append_part(f"Road Marker Status: {ROADSIDE_MARKER_STATUS}" if ROADSIDE_MARKER_STATUS else None)
+    _append_part(f"Road Marker Comments: {RDSIDE_MKR_COMMENTS}" if RDSIDE_MKR_COMMENTS else None)
 
     return _result(comments, *transform_issues)
 
@@ -1488,19 +1567,56 @@ def taxonomy_lookup_legacy_mapping_species(list_name: str, return_field: str = "
             fn = registry._fns.get(tax_transform_name)
             if fn is not None:
                 res = fn(value, ctx)
-                # If the general lookup returned a species/taxonomy result, we need to extract the correct ID
-                # The generic `taxonomy_lookup` usually returns a Species instance or ID.
-                # Wait, `taxonomy_lookup` (generic) returns model instance or ID?
-                # Let's assume it returns what we need or we can't handle it easily here.
-                # Actually, `taxonomy_lookup` usually returns a serialized value or ID.
-                # If the fallback returns a value, we just return it.
+                # taxonomy_lookup returns a Taxonomy ID. We need to convert to Species ID if requested.
                 if isinstance(res, TransformResult):
                     if any(i.level == "error" for i in res.issues):
-                        pass
+                        pass  # Let error fall through to final error return
                     elif res.value:
-                        return _result(res.value)
+                        # res.value is a taxonomy_id. Convert to species_id if needed.
+                        if return_field == "species_id":
+                            try:
+                                from boranga.components.species_and_communities.models import Species, Taxonomy
+
+                                tax = Taxonomy.all_objects.get(pk=res.value)
+                                sp = Species.objects.filter(taxonomy=tax).first()
+                                if sp:
+                                    return _result(sp.pk)
+                                else:
+                                    # Taxonomy exists but no Species - this is the error case
+                                    return _result(
+                                        value,
+                                        TransformIssue(
+                                            "error",
+                                            f"Taxonomy '{value}' found (taxonomy_id={tax.pk}) but no Species record exists",
+                                        ),
+                                    )
+                            except Exception:
+                                pass  # Fall through to error
+                        else:
+                            # Return taxonomy_id as-is
+                            return _result(res.value)
                 elif res:
-                    return _result(res)
+                    # Same logic for non-TransformResult
+                    if return_field == "species_id":
+                        try:
+                            from boranga.components.species_and_communities.models import Species, Taxonomy
+
+                            tax = Taxonomy.all_objects.get(pk=res)
+                            sp = Species.objects.filter(taxonomy=tax).first()
+                            if sp:
+                                return _result(sp.pk)
+                            else:
+                                return _result(
+                                    value,
+                                    TransformIssue(
+                                        "error",
+                                        f"Taxonomy '{value}' found (taxonomy_id={tax.pk}) but no Species record exists",
+                                    ),
+                                )
+                        except Exception:
+                            pass
+                    else:
+                        return _result(res)
         except Exception:
             pass
 
@@ -1673,13 +1789,9 @@ def emailuser_by_legacy_username_factory(legacy_system: str) -> str:
             _lookup_cache[value] = (res_val, res_issues)
             return _result(res_val, *res_issues)
         except LegacyUsernameEmailuserMapping.MultipleObjectsReturned:
-            res_val = value
-            res_issues = [
-                TransformIssue(
-                    "error",
-                    f"Multiple users with legacy username='{value}' for system='{legacy_system}'",
-                )
-            ]
+            # Use the first match if multiple exist (case-insensitive duplicates)
+            mapping = qs.first()
+            res_val, res_issues = mapping.emailuser_id, []
             _lookup_cache[value] = (res_val, res_issues)
             return _result(res_val, *res_issues)
 
@@ -2490,12 +2602,14 @@ def conditional_transform_factory(
 ) -> str:
     """
     Return a registered transform name that applies conditional logic:
-    - If condition_column equals condition_value, apply true_transform to true_column value
+    - If condition_column equals condition_value (or is in condition_value when a
+      list/tuple is passed), apply true_transform to true_column value
     - Otherwise return false_value
 
     Parameters:
       - condition_column: column name to check in the row
-      - condition_value: value to compare against (uses == comparison)
+      - condition_value: value to compare against (uses == comparison), or a
+        list/tuple of values to match against (uses `in` check)
       - true_column: column name to use when condition is true
       - true_transform: registered transform name to apply to true_column value (optional)
       - false_value: value to return when condition is false (default None)
@@ -2503,7 +2617,7 @@ def conditional_transform_factory(
     Usage:
       APPROVED_BY_IF_ACCEPTED = conditional_transform_factory(
           condition_column="processing_status",
-          condition_value="PROCESSING_STATUS_APPROVED",
+          condition_value=["ACCEPTED", "REJECTED"],
           true_column="modified_by",
           true_transform="emailuser_by_legacy_username_tpfl"
       )
@@ -2512,7 +2626,10 @@ def conditional_transform_factory(
     if not condition_column or not true_column:
         raise ValueError("condition_column and true_column must be provided")
 
-    key_repr = f"conditional:{condition_column}:{condition_value}:{true_column}:{true_transform or ''}:{false_value!r}"
+    # Normalise condition_value to a hashable form for the cache key
+    condition_values = tuple(condition_value) if isinstance(condition_value, (list | tuple)) else (condition_value,)
+
+    key_repr = f"conditional:{condition_column}:{condition_values}:{true_column}:{true_transform or ''}:{false_value!r}"
     name = "conditional_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
@@ -2523,8 +2640,8 @@ def conditional_transform_factory(
         condition_val = row.get(condition_column)
         true_val = row.get(true_column)
 
-        # Check condition
-        if condition_val != condition_value:
+        # Check condition (single value or set membership)
+        if condition_val not in condition_values:
             return _result(false_value)
 
         # If no true_column value, return false_value
@@ -2868,6 +2985,7 @@ def geometry_from_coords_factory(
     longitude_field: str = "GDA94LONG",
     datum_field: str | None = None,
     radius_m: float = 1.0,
+    point_only: bool = False,
 ):
     """
     Factory that returns a registered transform name for creating WGS84 geometries from lat/lon coordinates.
@@ -2875,6 +2993,10 @@ def geometry_from_coords_factory(
     This transform reads latitude and longitude from the row context and creates a small buffered
     polygon (default 1m radius) around the point. It handles coordinate transformation from the
     source datum (GDA94, AGD84, WGS84, GPS, etc.) to WGS84 (EPSG:4326).
+
+    When ``point_only=True`` the raw Point is returned instead of a buffered
+    polygon.  Fauna OccurrenceReportGeometry records reject polygons, so use
+    ``point_only=True`` for fauna adapters.
 
     Usage:
       GEOMETRY_FROM_COORDS = geometry_from_coords_factory("GDA94LAT", "GDA94LONG", "DATUM", radius_m=1.0)
@@ -2885,9 +3007,10 @@ def geometry_from_coords_factory(
         longitude_field: The row column name containing longitude (default: GDA94LONG)
         datum_field: The row column name containing datum/CRS info (optional, default: None)
         radius_m: Buffer radius in meters (default: 1.0m)
+        point_only: If True, return a Point instead of a buffered Polygon (default: False)
 
     Returns:
-        A registered transform name that converts point coordinates to WGS84 polygon geometry
+        A registered transform name that converts point coordinates to WGS84 geometry
     """
     from django.contrib.gis.geos import Point
     from pyproj import Transformer
@@ -2901,7 +3024,7 @@ def geometry_from_coords_factory(
         "UNKNOWN": "EPSG:4326",  # Default to WGS84 when datum is unknown
     }
 
-    key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}"
+    key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}_{point_only}"
     name = "geometry_from_coords_" + hashlib.sha1(key.encode()).hexdigest()[:8]
 
     if name in registry._fns:
@@ -2941,6 +3064,9 @@ def geometry_from_coords_factory(
 
             # Create a point from the coordinates
             point = Point(lng, lat, srid=4326)
+
+            if point_only:
+                return _result(point)
 
             # Create a small buffer. Convert radius in meters to degrees (approximate):
             # 1 degree ≈ 111,320 meters at the equator
