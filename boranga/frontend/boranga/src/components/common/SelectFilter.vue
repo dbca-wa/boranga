@@ -1,53 +1,38 @@
 <!-- A single dropdown with selectable items as a component -->
 <template>
-    <div :class="classes">
+    <div class="select-filter-wrapper" :class="classes">
         <label
             v-if="showTitle"
             :for="`select-filter-${id}`"
             class="text-secondary mb-1"
             >{{ title }}</label
         >
-        <v-select
+        <Multiselect
             :id="`select-filter-${id}`"
-            ref="vueSelectFilter"
+            ref="multiselectFilter"
             v-model="selectedFilterItem"
-            :multiple="multiple"
+            :mode="multiple ? 'multiple' : 'single'"
             :options="optionsFormatted"
-            :name="name"
             :label="label"
-            :reduce="(option) => option.value"
-            :track-by="name"
+            value-prop="value"
             :placeholder="placeholder"
-            :class="classes"
             :disabled="disabled"
-            @option:selected="(selected) => $emit('option:selected', selected)"
-            @option:deselected="
-                (deselected) => $emit('option:deselected', deselected)
-            "
-            @input="input($event)"
-            @search="(...args) => $emit('search', ...args)"
-            @select="
-                $emit('selection-changed-select', {
-                    id: id,
-                    value: selectedFilterItem,
-                    multiple: multiple,
-                })
-            "
-            @remove="
-                $emit('selection-changed-remove', {
-                    id: id,
-                    value: selectedFilterItem,
-                    multiple: multiple,
-                })
-            "
-        >
-        </v-select>
+            :searchable="true"
+            :can-clear="true"
+            @select="handleSelect"
+            @deselect="handleDeselect"
+            @change="handleChange"
+            @search-change="(...args) => $emit('search', ...args)"
+        />
     </div>
 </template>
 
 <script>
+import Multiselect from '@vueform/multiselect';
+
 export default {
     name: 'SelectFilter',
+    components: { Multiselect },
     props: {
         id: {
             type: String,
@@ -127,7 +112,7 @@ export default {
     ],
     data: function () {
         return {
-            selectedFilterItem: [],
+            selectedFilterItem: this.multiple ? [] : null,
         };
     },
     computed: {
@@ -137,22 +122,55 @@ export default {
         },
     },
     mounted: function () {
-        // Purpose needs to use this function to map the key-value pairs to value-text pairs
-        this.selectedFilterItem = this.getSelectedFilterItemByKey(
+        // Resolve pre-selected values to the primitive value used by Multiselect (value-prop)
+        const matched = this.getSelectedFilterItemByKey(
             this.preSelectedFilterItem
         );
+        if (this.multiple) {
+            this.selectedFilterItem = matched.map((opt) => opt.value);
+        } else {
+            this.selectedFilterItem =
+                matched.length > 0 ? matched[0].value : null;
+        }
     },
     methods: {
-        input: function (event) {
-            if (!this.multiple) {
-                // For some reason option:deselected doesn't get triggered when the select component is in single mode
-                // Therefor we need to emit it manually
-                this.$emit('option:deselected', event);
-            }
-            this.$emit('input', event);
+        /**
+         * Fired by @vueform/multiselect @change — emits 'input' with the new model value.
+         * @param {string|number|string[]|number[]|null} value The new model value
+         */
+        handleChange: function (value) {
+            this.$emit('input', value);
         },
         /**
-         * Maps key-value pairs to value-text pairs to be used by the MultiSelect component
+         * Fired by @vueform/multiselect @select — re-emits 'option:selected' and
+         * 'selection-changed-select' to preserve backward-compatible event interface.
+         * @param {string|number} _value The selected value-prop primitive (unused; option carries it)
+         * @param {Object} option The full option object { value, text }
+         */
+        handleSelect: function (_value, option) {
+            this.$emit('option:selected', option);
+            this.$emit('selection-changed-select', {
+                id: this.id,
+                value: this.selectedFilterItem,
+                multiple: this.multiple,
+            });
+        },
+        /**
+         * Fired by @vueform/multiselect @deselect — re-emits 'option:deselected' and
+         * 'selection-changed-remove' to preserve backward-compatible event interface.
+         * @param {string|number} _value The deselected value-prop primitive (unused; option carries it)
+         * @param {Object} option The full option object { value, text }
+         */
+        handleDeselect: function (_value, option) {
+            this.$emit('option:deselected', option);
+            this.$emit('selection-changed-remove', {
+                id: this.id,
+                value: this.selectedFilterItem,
+                multiple: this.multiple,
+            });
+        },
+        /**
+         * Maps key-value pairs to value-text pairs to be used by the Multiselect component.
          * @param {{ key: String, value: String; }[] | { value: String, text: String; }[] } options The key-value pair(s) to be mapped
          */
         mapKeyValuePairs: function (options) {
@@ -172,13 +190,9 @@ export default {
             });
         },
         /**
-         * Returns value-text pair(s) from the model's filter_options property by filter id and item key(s)
-         * to be used by the MultiSelect component as selected value(s).
-         * The key being the respective model field entry and the value being its human readable representation.
-         * For example: `[ { "value": ..., "text": ... }, ... ]`
-         * @param {Number|String|(Number|String|{value:String|Number;})[]} selected The selected filter item key(s),
-         * or an object in the form of { value: string | number; text: string; }, or an array of such objects
-         * @returns {Object[]} An array of filter item objects
+         * Returns matching option objects from optionsFormatted for the given pre-selected value(s).
+         * @param {Number|String|(Number|String|{value:String|Number;})[]} selected
+         * @returns {{ value: string; text: string; }[]}
          */
         getSelectedFilterItemByKey: function (selected) {
             const filterOptions = this.optionsFormatted;
@@ -230,9 +244,29 @@ export default {
 </script>
 
 <style>
-@import 'vue-select/dist/vue-select.css';
+@import '@vueform/multiselect/themes/default.css';
 
-* {
-    --vs-dropdown-z-index: 9001 !important;
+.multiselect-dropdown {
+    z-index: 9001 !important;
+}
+
+/* Fill the parent input-group-text container completely */
+.select-filter-wrapper {
+    width: 100%;
+}
+
+/* Override default green with project primary blue (#226fbb).
+   margin:0 removes the theme's margin:0 auto which fights flex layout. */
+.multiselect {
+    width: 100%;
+    margin: 0;
+    --ms-tag-bg: #226fbb;
+    --ms-tag-color: #fff;
+    --ms-option-bg-selected: #226fbb;
+    --ms-option-bg-selected-pointed: #5393d2;
+    --ms-option-color-selected: #fff;
+    --ms-option-color-selected-pointed: #fff;
+    --ms-border-color-active: #226fbb;
+    --ms-ring-color: rgba(34, 111, 187, 0.2);
 }
 </style>

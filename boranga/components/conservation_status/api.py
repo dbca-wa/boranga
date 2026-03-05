@@ -237,6 +237,14 @@ class SpeciesConservationStatusFilterBackend(DatatablesFilterBackend):
             if filter_genus and not filter_genus.lower() == "all":
                 queryset = queryset.filter(conservation_status__species__taxonomy__genera_id=filter_genus)
 
+        filter_fauna_group = request.POST.get("filter_fauna_group")
+        if queryset.model is ConservationStatus:
+            if filter_fauna_group and not filter_fauna_group.lower() == "all":
+                queryset = queryset.filter(species__fauna_group__id=filter_fauna_group)
+        elif queryset.model is ConservationStatusReferral:
+            if filter_fauna_group and not filter_fauna_group.lower() == "all":
+                queryset = queryset.filter(conservation_status__species__fauna_group__id=filter_fauna_group)
+
         filter_change_code = request.POST.get("filter_change_code")
         if queryset.model is ConservationStatus:
             if filter_change_code and not filter_change_code.lower() == "all":
@@ -346,6 +354,8 @@ class SpeciesConservationStatusFilterBackend(DatatablesFilterBackend):
                     queryset = queryset.filter(
                         processing_status__in=ConservationStatus.PROCESSING_STATUSES_AWAITING_APPROVER_ACTION
                     )
+                elif filter_application_status == ConservationStatus.PROCESSING_STATUS_ACTIVE:
+                    queryset = queryset.filter(processing_status__in=ConservationStatus.PROCESSING_STATUSES_ACTIVE)
                 elif filter_application_status == ConservationStatus.PROCESSING_STATUS_INACTIVE:
                     queryset = queryset.filter(processing_status__in=ConservationStatus.PROCESSING_STATUSES_INACTIVE)
                 else:
@@ -417,10 +427,17 @@ class SpeciesConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
             or self.request.user.is_superuser
         ):
             return qs
+
+        active_referral_cs_ids = (
+            ConservationStatusReferral.objects.filter(referral=self.request.user.id)
+            .exclude(processing_status=ConservationStatusReferral.PROCESSING_STATUS_RECALLED)
+            .values("conservation_status_id")
+        )
+
         if is_conservation_status_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id)).distinct()
+            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_cs_ids)).distinct()
         elif is_conservation_status_referee(self.request):
-            qs = qs.filter(referrals__referral=self.request.user.id).distinct()
+            qs = qs.filter(id__in=active_referral_cs_ids).distinct()
         elif is_contributor(self.request):
             qs = qs.filter(submitter=self.request.user.id)
         return qs
@@ -499,9 +516,9 @@ class CommunityConservationStatusFilterBackend(DatatablesFilterBackend):
         filter_community_name = request.POST.get("filter_community_name")
         if filter_community_name and not filter_community_name.lower() == "all":
             if queryset.model is ConservationStatus:
-                queryset = queryset.filter(community__taxonomy__id=filter_community_name)
+                queryset = queryset.filter(community_id=filter_community_name)
             elif queryset.model is ConservationStatusReferral:
-                queryset = queryset.filter(conservation_status__community__taxonomy__id=filter_community_name)
+                queryset = queryset.filter(conservation_status__community_id=filter_community_name)
 
         filter_region = request.POST.get("filter_region")
         if filter_region and not filter_region.lower() == "all":
@@ -621,6 +638,8 @@ class CommunityConservationStatusFilterBackend(DatatablesFilterBackend):
                     queryset = queryset.filter(
                         processing_status__in=ConservationStatus.PROCESSING_STATUSES_AWAITING_APPROVER_ACTION
                     )
+                elif filter_application_status == ConservationStatus.PROCESSING_STATUS_ACTIVE:
+                    queryset = queryset.filter(processing_status__in=ConservationStatus.PROCESSING_STATUSES_ACTIVE)
                 elif filter_application_status == ConservationStatus.PROCESSING_STATUS_INACTIVE:
                     queryset = queryset.filter(processing_status__in=ConservationStatus.PROCESSING_STATUSES_INACTIVE)
                 else:
@@ -693,10 +712,16 @@ class CommunityConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet)
         ):
             return qs
 
+        active_referral_cs_ids = (
+            ConservationStatusReferral.objects.filter(referral=self.request.user.id)
+            .exclude(processing_status=ConservationStatusReferral.PROCESSING_STATUS_RECALLED)
+            .values("conservation_status_id")
+        )
+
         if is_conservation_status_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id)).distinct()
+            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_cs_ids)).distinct()
         elif is_conservation_status_referee(self.request):
-            qs = qs.filter(referrals__referral=self.request.user.id).distinct()
+            qs = qs.filter(id__in=active_referral_cs_ids).distinct()
         elif is_contributor(self.request):
             qs = qs.filter(submitter=self.request.user.id)
         return qs
@@ -969,12 +994,19 @@ class ConservationStatusViewSet(CheckUpdatedActionMixin, viewsets.GenericViewSet
             or self.request.user.is_superuser
         ):
             return qs
+
+        active_referral_cs_ids = (
+            ConservationStatusReferral.objects.filter(referral=self.request.user.id)
+            .exclude(processing_status=ConservationStatusReferral.PROCESSING_STATUS_RECALLED)
+            .values("conservation_status_id")
+        )
+
         if is_contributor(self.request) and is_conservation_status_referee(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id)).distinct()
+            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_cs_ids)).distinct()
         if is_contributor(self.request):
             qs = qs.filter(submitter=self.request.user.id)
         if is_conservation_status_referee(self.request):
-            qs = qs.filter(referrals__referral=self.request.user.id).distinct()
+            qs = qs.filter(id__in=active_referral_cs_ids).distinct()
         return qs
 
     def get_serializer_class(self):
@@ -1547,7 +1579,9 @@ class ConservationStatusReferralViewSet(viewsets.GenericViewSet, mixins.Retrieve
         ):
             return qs
         if is_conservation_status_referee(self.request):
-            qs = qs.filter(referral=self.request.user.id)
+            qs = qs.filter(referral=self.request.user.id).exclude(
+                processing_status=ConservationStatusReferral.PROCESSING_STATUS_RECALLED
+            )
         return qs
 
     @list_route(

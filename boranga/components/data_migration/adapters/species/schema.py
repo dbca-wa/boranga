@@ -74,6 +74,9 @@ class SpeciesRow:
     lodgement_date: datetime | None = None
     last_data_curation_date: date | None = None
     distribution: str | None = None
+    # Task 11843+11844: fauna group / sub-group (TFAUNA only)
+    fauna_sub_group_id: int | None = None
+    fauna_group_id: int | None = None
 
 
 def validate_species_row(row) -> list[tuple[str, str]]:

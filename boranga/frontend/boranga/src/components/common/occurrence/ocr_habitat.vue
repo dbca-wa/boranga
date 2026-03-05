@@ -365,7 +365,6 @@
                                 .habitat_notes
                         "
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
                         placeholder=""
                     />
@@ -668,8 +667,6 @@
                                 .vegetation_structure_layer_four
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -687,8 +684,6 @@
                                 .vegetation_structure_layer_three
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -706,8 +701,6 @@
                                 .vegetation_structure_layer_two
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -725,8 +718,6 @@
                                 .vegetation_structure_layer_one
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -867,8 +858,6 @@
                         id="fire_history_comment"
                         v-model="occurrence_report_obj.fire_history.comment"
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -1010,8 +999,6 @@
                             occurrence_report_obj.associated_species.comment
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -1202,6 +1189,18 @@ export default {
                 this.$emit('dirty', true);
             } else {
                 this.$emit('dirty', false);
+            }
+        },
+        // obs_date is automatically synced from the observation_date field
+        // on the profile tab (for Community type) — update the snapshot so
+        // this auto-propagation does not trigger a false "unsaved changes"
+        // warning.
+        'occurrence_report_obj.habitat_condition.obs_date': function () {
+            if (this.originalHabitatCondition !== null) {
+                let original = JSON.parse(this.originalHabitatCondition);
+                original.obs_date =
+                    this.occurrence_report_obj.habitat_condition.obs_date;
+                this.originalHabitatCondition = JSON.stringify(original);
             }
         },
     },

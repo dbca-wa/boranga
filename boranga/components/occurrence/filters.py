@@ -21,7 +21,7 @@ class OccurrenceReportReferralFilterBackend(DatatablesFilterBackend):
         if filter_group_type == "community":
             filter_community_name = request.GET.get("filter_community_name")
             if filter_community_name and not filter_community_name.lower() == "all":
-                queryset = queryset.filter(occurrence_report__community__taxonomy__id=filter_community_name)
+                queryset = queryset.filter(occurrence_report__community_id=filter_community_name)
         else:
             filter_scientific_name = request.GET.get("filter_scientific_name")
             if filter_scientific_name and not filter_scientific_name.lower() == "all":

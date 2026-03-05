@@ -339,6 +339,67 @@ class ReversionHistoryCleaner:
         logger.info("=== Total Occurrence-related versions deleted: %d ===", total)
         return total
 
+    def clear_occurrence_report_and_related(self, group_type_filter: dict[str, Any]) -> int:
+        """
+        Delete all OccurrenceReport versions with related OCR models.
+
+        Use this when wiping only OccurrenceReport data (not full Occurrence data).
+
+        Args:
+            group_type_filter: e.g., {'group_type__name__in': ['flora']} or {} for all
+
+        Returns:
+            Total versions deleted across all models
+        """
+        from boranga.components.occurrence.models import (
+            OccurrenceReport,
+            OccurrenceReportDocument,
+            OccurrenceReportGeometry,
+            OCRAnimalObservation,
+            OCRAssociatedSpecies,
+            OCRConservationThreat,
+            OCRFireHistory,
+            OCRHabitatComposition,
+            OCRHabitatCondition,
+            OCRIdentification,
+            OCRObservationDetail,
+            OCRObserverDetail,
+            OCRPlantCount,
+            OCRVegetationStructure,
+        )
+
+        logger.info("=== Clearing OccurrenceReport reversion history ===")
+
+        # Main model with group_type
+        self.clear_for_model(OccurrenceReport, group_type_filter)
+
+        # OccurrenceReport-related models (OCR*)
+        ocr_models = [
+            (OccurrenceReportGeometry, "occurrence_report"),
+            (OCRObserverDetail, "occurrence_report"),
+            (OCRHabitatComposition, "occurrence_report"),
+            (OCRHabitatCondition, "occurrence_report"),
+            (OCRVegetationStructure, "occurrence_report"),
+            (OCRFireHistory, "occurrence_report"),
+            (OCRAssociatedSpecies, "occurrence_report"),
+            (OCRObservationDetail, "occurrence_report"),
+            (OCRPlantCount, "occurrence_report"),
+            (OCRAnimalObservation, "occurrence_report"),
+            (OCRIdentification, "occurrence_report"),
+            (OccurrenceReportDocument, "occurrence_report"),
+            (OCRConservationThreat, "occurrence_report"),
+        ]
+
+        for model_class, related_path in ocr_models:
+            try:
+                self.clear_for_related_model(model_class, related_path, group_type_filter)
+            except Exception as e:
+                logger.warning("Failed to clear %s versions: %s", model_class.__name__, e)
+
+        total = sum(self.stats.values())
+        logger.info("=== Total OccurrenceReport-related versions deleted: %d ===", total)
+        return total
+
     def get_stats(self) -> dict[str, int]:
         """
         Return deletion statistics.

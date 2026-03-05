@@ -4,7 +4,6 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
 import helpers from '@/utils/helpers';
-import VueSelect from 'vue-select';
 
 import $ from 'jquery';
 import select2 from 'select2';
@@ -29,7 +28,7 @@ import 'select2/dist/css/select2.min.css';
 import 'select2-bootstrap-5-theme/dist/select2-bootstrap-5-theme.min.css';
 import '@/../node_modules/datatables.net-bs5/css/dataTables.bootstrap5.min.css';
 import '@/../node_modules/datatables.net-responsive-bs5/css/responsive.bootstrap5.min.css';
-import '@/../node_modules/@fortawesome/fontawesome-free/css/all.min.css';
+import 'bootstrap-icons/font/bootstrap-icons.css';
 
 const app = createApp(App);
 
@@ -103,5 +102,5 @@ window.fetch = ((orig) => {
     };
 })(originalFetch);
 
-app.component('v-select', VueSelect).use(router);
+app.use(router);
 router.isReady().then(() => app.mount('#app'));

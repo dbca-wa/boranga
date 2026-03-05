@@ -1715,7 +1715,7 @@ export default {
                     'With Referral',
                     'Approved',
                     'Declined',
-                    'DeListed',
+                    'Delisted',
                     'Closed',
                 ].includes(this.conservation_status_obj.processing_status) ||
                 this.conservation_status_obj.locked
@@ -1841,14 +1841,14 @@ export default {
             );
         },
         conservation_list_proposed: function () {
-            return !['Approved', 'DeListed', 'Closed'].includes(
+            return !['Approved', 'Delisted', 'Closed'].includes(
                 this.conservation_status_obj.processing_status
             );
         },
         canViewCurrentList: function () {
             return this.conservation_status_obj.processing_status ==
                 'Approved' ||
-                this.conservation_status_obj.processing_status == 'DeListed'
+                this.conservation_status_obj.processing_status == 'Delisted'
                 ? false
                 : true;
         },

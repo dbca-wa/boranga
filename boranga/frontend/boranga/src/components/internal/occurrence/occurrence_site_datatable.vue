@@ -9,7 +9,7 @@
                         class="btn btn-primary mb-2"
                         @click.prevent="newSite"
                     >
-                        <i class="fa-solid fa-circle-plus"></i>
+                        <i class="bi bi-plus-circle"></i>
                         Add New Site
                     </button>
                 </div>

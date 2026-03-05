@@ -226,13 +226,13 @@ export default {
                 searchable: true,
                 visible: true,
                 render: function (data, type, full) {
-                    let tick = '';
+                    let tick;
                     if (full.can_be_processed) {
                         tick =
-                            " <i class='fa fa-exclamation-circle' style='color:#FFBF00'></i>";
+                            " <i class='bi bi-exclamation-circle' style='color:#FFBF00'></i>";
                     } else {
                         tick =
-                            " <i class='fa fa-check-circle' style='color:green'></i>";
+                            " <i class='bi bi-check-circle' style='color:green'></i>";
                     }
                     return full.occurrence_report_number + tick;
                 },
@@ -315,12 +315,12 @@ export default {
         },
         datatable_options: function () {
             let vm = this;
-            let search = null;
+            let search;
             let buttons = [
                 {
                     extend: 'excel',
                     title: 'Boranga Occurrence Reports Referred to Me Excel Export',
-                    text: '<i class="fa-solid fa-download"></i> Excel',
+                    text: '<i class="bi bi-download"></i> Excel',
                     className: 'btn btn-primary me-2 rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -330,7 +330,7 @@ export default {
                 {
                     extend: 'csv',
                     title: 'Boranga Occurrence Reports Referred to Me CSV Export',
-                    text: '<i class="fa-solid fa-download"></i> CSV',
+                    text: '<i class="bi bi-download"></i> CSV',
                     className: 'btn btn-primary rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -475,7 +475,7 @@ export default {
                 vm.initialiseScientificNameLookup();
             }
             vm.addEventListeners();
-            var newOption = null;
+            var newOption;
             if (
                 sessionStorage.getItem('filterOCRReferralsOccurrence') !=
                     'all' &&

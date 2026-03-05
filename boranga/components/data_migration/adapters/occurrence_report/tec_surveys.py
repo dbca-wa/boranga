@@ -71,6 +71,70 @@ def load_survey_conditions_map(path: str) -> dict[tuple[str, str], list[str]]:
     return _SURVEY_CONDITIONS_CACHE
 
 
+# Tasks 12629-12635: Cache for SURVEY_CONDITIONS percent values per condition code.
+# Maps (OCC_UNIQUE_ID, SUR_NO) -> {SCON_COND_CODE: SCON_PERCENT}
+_SURVEY_CONDITIONS_PERCENT_CACHE = None
+
+# Mapping from SCON_COND_CODE values to OCRHabitatCondition field names
+_SCON_CODE_TO_FIELD = {
+    "MOD": "very_good",  # Task 12635
+    "INS": "pristine",  # Task 12634
+    "HIG": "good",  # Task 12632
+    "COM": "completely_degraded",  # Task 12629
+    "VHM": "degraded",  # Task 12630
+    "SLT": "excellent",  # Task 12631
+}
+
+
+def load_survey_conditions_percent_map(path: str) -> dict[tuple[str, str], dict[str, str]]:
+    """
+    Tasks 12629-12635: Load SURVEY_CONDITIONS.csv and build a map:
+        (OCC_UNIQUE_ID, SUR_NO) -> {SCON_COND_CODE: SCON_PERCENT}
+    Used to populate OCRHabitatCondition percentage fields.
+    """
+    global _SURVEY_CONDITIONS_PERCENT_CACHE
+
+    if _SURVEY_CONDITIONS_PERCENT_CACHE is not None:
+        return _SURVEY_CONDITIONS_PERCENT_CACHE
+
+    import logging
+    import os
+    from collections import defaultdict
+
+    import pandas as pd
+
+    logger = logging.getLogger(__name__)
+
+    base_dir = os.path.dirname(path)
+    conditions_path = os.path.join(base_dir, "SURVEY_CONDITIONS.csv")
+
+    if not os.path.exists(conditions_path):
+        logger.warning(f"SURVEY_CONDITIONS.csv not found at {conditions_path} (percent map)")
+        _SURVEY_CONDITIONS_PERCENT_CACHE = {}
+        return _SURVEY_CONDITIONS_PERCENT_CACHE
+
+    mapping: dict[tuple[str, str], dict[str, str]] = defaultdict(dict)
+    try:
+        df = pd.read_csv(conditions_path, dtype=str).fillna("")
+        for _, row in df.iterrows():
+            occ_id = row.get("OCC_UNIQUE_ID", "").strip()
+            sur_no = row.get("SUR_NO", "").strip()
+            cond_code = row.get("SCON_COND_CODE", "").strip().upper()
+            percent = row.get("SCON_PERCENT", "").strip()
+
+            if occ_id and sur_no and cond_code:
+                key = (occ_id, sur_no)
+                mapping[key][cond_code] = percent
+
+        logger.info(f"Loaded SURVEY_CONDITIONS percent map: {len(mapping)} OCC+SUR combinations from {conditions_path}")
+        _SURVEY_CONDITIONS_PERCENT_CACHE = dict(mapping)
+    except Exception as e:
+        logger.warning(f"Failed to load SURVEY_CONDITIONS.csv (percent map): {e}")
+        _SURVEY_CONDITIONS_PERCENT_CACHE = {}
+
+    return _SURVEY_CONDITIONS_PERCENT_CACHE
+
+
 def concatenate_survey_conditions(val, ctx):
     """
     Task 12623: Concatenate SCON_COMMENTS from SURVEY_CONDITIONS.csv
@@ -333,6 +397,9 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
         # Task 12623: Pre-load SURVEY_CONDITIONS for habitat_notes concatenation
         survey_conditions_map = load_survey_conditions_map(path)
 
+        # Tasks 12629-12635: Pre-load SURVEY_CONDITIONS percent values per condition code
+        survey_conditions_percent_map = load_survey_conditions_percent_map(path)
+
         raw_rows, warnings = self.read_table(path)
         rows = []
 
@@ -361,6 +428,20 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
 
             # Task 12623: Attach survey_conditions_map to each row for the pipeline to access
             canonical["_survey_conditions_map"] = survey_conditions_map
+
+            # Tasks 12629-12635: Populate OCRHabitatCondition percentage fields from SURVEY_CONDITIONS
+            # Use OCC_UNIQUE_ID + SUR_NO to look up this survey's condition subrecords.
+            # For each SCON_COND_CODE, set the corresponding field; default = 0 when absent.
+            percent_key = (occ_id or "", sur_no or "")
+            condition_percents = survey_conditions_percent_map.get(percent_key, {})
+            for cond_code, field_name in _SCON_CODE_TO_FIELD.items():
+                raw_percent = condition_percents.get(cond_code, "")
+                try:
+                    canonical[f"OCRHabitatCondition__{field_name}"] = (
+                        float(raw_percent) if raw_percent not in ("", None) else 0
+                    )
+                except (ValueError, TypeError):
+                    canonical[f"OCRHabitatCondition__{field_name}"] = 0
 
             rows.append(canonical)
 

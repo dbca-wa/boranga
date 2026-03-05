@@ -137,9 +137,6 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
 
                 if any(i.level == "error" for i in res.issues):
                     has_error = True
-                    # Log error
-                    msg = f"Error transforming {col} for row {row.get('SHEETNO')}: {res.issues}"
-                    logger.error(msg)
                     for issue in res.issues:
                         if issue.level == "error":
                             errors_details.append(

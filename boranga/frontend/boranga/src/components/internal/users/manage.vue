@@ -496,7 +496,10 @@
                                                                 unlinkUser(org)
                                                             "
                                                             ><i
-                                                                class="fa fa-chain-broken fa-2x"
+                                                                class="bi bi-scissors"
+                                                                style="
+                                                                    font-size: 2em;
+                                                                "
                                                             ></i
                                                             >&nbsp;Unlink</a
                                                         >

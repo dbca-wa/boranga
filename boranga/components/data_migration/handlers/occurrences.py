@@ -46,6 +46,7 @@ from boranga.components.occurrence.models import (
     OCCIdentification,
     OCCLocation,
     OCCObservationDetail,
+    OCCPlantCount,
     Occurrence,
     OccurrenceDocument,
     OccurrenceGeometry,
@@ -174,6 +175,7 @@ class OccurrenceImporter(BaseSheetImporter):
                     OccurrenceDocument,
                     OCCIdentification,
                     OCCHabitatCondition,
+                    OCCPlantCount,
                     OCCVegetationStructure,
                     OccurrenceGeometry,
                 ]
@@ -848,6 +850,8 @@ class OccurrenceImporter(BaseSheetImporter):
             geo_create, geo_update = [], []
             ident_create, ident_update = [], []
             veg_create, veg_update = [], []
+            hcond_create, hcond_update = [], []
+            plant_create, plant_update = [], []
 
             existing_locs = {}
             existing_obs = {}
@@ -858,6 +862,8 @@ class OccurrenceImporter(BaseSheetImporter):
             existing_geo = {}
             existing_ident = {}
             existing_veg = {}
+            existing_hcond = {}
+            existing_plant = {}
 
             if not getattr(ctx, "wipe_targets", False):
                 existing_locs = {
@@ -887,6 +893,12 @@ class OccurrenceImporter(BaseSheetImporter):
                 existing_veg = {
                     v.occurrence_id: v for v in OCCVegetationStructure.objects.filter(occurrence_id__in=chunk_occ_ids)
                 }
+                existing_hcond = {
+                    hc.occurrence_id: hc for hc in OCCHabitatCondition.objects.filter(occurrence_id__in=chunk_occ_ids)
+                }
+                existing_plant = {
+                    p.occurrence_id: p for p in OCCPlantCount.objects.filter(occurrence_id__in=chunk_occ_ids)
+                }
 
             for op in chunk_ops:
                 mig = op["migrated_from_id"]
@@ -897,13 +909,21 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 # OCCLocation
                 if any(k.startswith("OCCLocation__") for k in merged):
+                    # Concatenate location_description with LGA code if present
+                    loc_desc = merged.get("OCCLocation__location_description")
+                    lga_code = merged.get("OCCLocation__lga_code")
+                    if loc_desc and lga_code:
+                        loc_desc = f"{loc_desc} LGA: {lga_code}"
+                    elif lga_code:
+                        loc_desc = f"LGA: {lga_code}"
                     defaults = {
                         "coordinate_source_id": merged.get("OCCLocation__coordinate_source_id"),
                         "boundary_description": merged.get("OCCLocation__boundary_description"),
                         "locality": merged.get("OCCLocation__locality"),
-                        "location_description": merged.get("OCCLocation__location_description"),
+                        "location_description": loc_desc,
                         "district_id": merged.get("OCCLocation__district_id"),
                         "region_id": merged.get("OCCLocation__region_id"),
+                        "location_accuracy_id": merged.get("OCCLocation__location_accuracy_id"),
                     }
                     apply_model_defaults(OCCLocation, defaults)
                     if occ.pk in existing_locs:
@@ -916,7 +936,12 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 # OCCObservationDetail
                 if any(k.startswith("OCCObservationDetail__") for k in merged):
-                    defaults = {"comments": merged.get("OCCObservationDetail__comments")}
+                    defaults = {
+                        "comments": merged.get("OCCObservationDetail__comments"),
+                        "area_assessment_id": merged.get("OCCObservationDetail__area_assessment_id"),
+                        "area_surveyed": merged.get("OCCObservationDetail__area_surveyed"),
+                        "survey_duration": merged.get("OCCObservationDetail__survey_duration"),
+                    }
                     apply_model_defaults(OCCObservationDetail, defaults)
                     if occ.pk in existing_obs:
                         obj = existing_obs[occ.pk]
@@ -928,9 +953,19 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 # OCCHabitatComposition
                 if any(k.startswith("OCCHabitatComposition__") for k in merged):
+                    # land_form and soil_type are MultiSelectField — wrap in list
+                    _lf = merged.get("OCCHabitatComposition__land_form")
+                    _st = merged.get("OCCHabitatComposition__soil_type")
                     defaults = {
                         "water_quality": merged.get("OCCHabitatComposition__water_quality"),
                         "habitat_notes": merged.get("OCCHabitatComposition__habitat_notes"),
+                        "drainage_id": merged.get("OCCHabitatComposition__drainage_id"),
+                        "land_form": [str(_lf)] if _lf else [],
+                        "loose_rock_percent": merged.get("OCCHabitatComposition__loose_rock_percent"),
+                        "rock_type_id": merged.get("OCCHabitatComposition__rock_type_id"),
+                        "soil_colour_id": merged.get("OCCHabitatComposition__soil_colour_id"),
+                        "soil_condition_id": merged.get("OCCHabitatComposition__soil_condition_id"),
+                        "soil_type": [str(_st)] if _st else [],
                     }
                     apply_model_defaults(OCCHabitatComposition, defaults)
                     if occ.pk in existing_hab:
@@ -943,7 +978,17 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 # OCCFireHistory
                 if any(k.startswith("OCCFireHistory__") for k in merged):
-                    defaults = {"comment": merged.get("OCCFireHistory__comment")}
+                    # Build comment from fire_season (transformed) + fire_year
+                    fire_comment = merged.get("OCCFireHistory__comment")
+                    if not fire_comment:
+                        fire_season = merged.get("OCCFireHistory__fire_season")
+                        fire_year = merged.get("OCCFireHistory__fire_year")
+                        fc_parts = [p for p in (fire_season, fire_year) if p]
+                        fire_comment = " ".join(fc_parts) if fc_parts else None
+                    defaults = {
+                        "comment": fire_comment,
+                        "intensity_id": merged.get("OCCFireHistory__intensity_id"),
+                    }
                     apply_model_defaults(OCCFireHistory, defaults)
                     if occ.pk in existing_fire:
                         obj = existing_fire[occ.pk]
@@ -967,7 +1012,58 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 # OccurrenceGeometry
                 geo_src = merged.get("_source")
-                if geo_src != Source.TPFL.value and any(k.startswith("OccurrenceGeometry__") for k in merged):
+                if geo_src == Source.TPFL.value:
+                    # TPFL: build geometry from lat/long as 1m circle polygon
+                    tpfl_lat = merged.get("OccurrenceGeometry__latitude")
+                    tpfl_lon = merged.get("OccurrenceGeometry__longitude")
+                    if tpfl_lat and tpfl_lon:
+                        try:
+                            from django.contrib.gis.geos import GEOSGeometry, Point
+
+                            tpfl_lat = float(tpfl_lat)
+                            tpfl_lon = float(tpfl_lon)
+                            point = Point(tpfl_lon, tpfl_lat, srid=4283)  # GDA94
+                            # Project to a metric CRS (GDA94/MGA zone 50), buffer 1m, project back
+                            point_proj = point.clone()
+                            point_proj.transform(28350)  # GDA94 / MGA zone 50
+                            circle = point_proj.buffer(1)
+                            circle.transform(4283)  # back to GDA94
+                            defaults = {
+                                "geometry": circle,
+                                "original_geometry_ewkb": circle.ewkb,
+                                "locked": True,
+                                "buffer_radius": 1,
+                            }
+                            if occ_content_type:
+                                defaults["content_type"] = occ_content_type
+                            apply_model_defaults(OccurrenceGeometry, defaults)
+                            if occ.pk in existing_geo:
+                                obj = existing_geo[occ.pk]
+                                for k, v in defaults.items():
+                                    setattr(obj, k, v)
+                                geo_update.append(obj)
+                            else:
+                                geo_create.append(OccurrenceGeometry(occurrence=occ, **defaults))
+                        except Exception:
+                            logger.exception(
+                                "Failed to create geometry from lat/long for migrated_from_id=%s (lat=%s, lon=%s)",
+                                mig,
+                                tpfl_lat,
+                                tpfl_lon,
+                            )
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": mig,
+                                    "reason": "geometry_creation_failed",
+                                    "level": "error",
+                                    "message": (
+                                        f"Failed to create 1m circle geometry from lat={tpfl_lat}, lon={tpfl_lon}"
+                                    ),
+                                    "row": merged,
+                                }
+                            )
+                            errors += 1
+                elif any(k.startswith("OccurrenceGeometry__") for k in merged):
                     defaults = {
                         "geometry": merged.get("OccurrenceGeometry__geometry"),
                         "locked": merged.get("OccurrenceGeometry__locked"),
@@ -981,8 +1077,25 @@ class OccurrenceImporter(BaseSheetImporter):
 
                         wkt = merged.get("OccurrenceGeometry__geometry")
                         if wkt:
-                            geom = GEOSGeometry(wkt)
-                            defaults["original_geometry_ewkb"] = geom.ewkb
+                            try:
+                                geom = GEOSGeometry(wkt)
+                                defaults["original_geometry_ewkb"] = geom.ewkb
+                            except Exception:
+                                logger.exception(
+                                    "Failed to parse WKT geometry for migrated_from_id=%s; "
+                                    "skipping original_geometry_ewkb",
+                                    mig,
+                                )
+                                errors_details.append(
+                                    {
+                                        "migrated_from_id": mig,
+                                        "reason": "invalid_wkt_geometry",
+                                        "level": "error",
+                                        "message": "Malformed WKT for OccurrenceGeometry; original_geometry_ewkb not set",
+                                        "row": merged,
+                                    }
+                                )
+                                errors += 1
                     apply_model_defaults(OccurrenceGeometry, defaults)
                     if occ.pk in existing_geo:
                         obj = existing_geo[occ.pk]
@@ -1019,9 +1132,24 @@ class OccurrenceImporter(BaseSheetImporter):
                         doc_create.append(OccurrenceDocument(occurrence=occ, **defaults))
 
                 # OCCIdentification
-                id_certainty = merged.get("OCCIdentification__identification_certainty_id")
-                if id_certainty is not None:
-                    defaults = {"identification_certainty_id": id_certainty}
+                if any(k.startswith("OCCIdentification__") for k in merged):
+                    # Build identification_comment from vchr_status_code + dupvouch_location
+                    vchr = merged.get("OCCIdentification__vchr_status_code")
+                    dupv = merged.get("OCCIdentification__dupvouch_location")
+                    id_comment_parts: list[str] = []
+                    if vchr:
+                        id_comment_parts.append(f"Specimen Status: {vchr}")
+                    if dupv:
+                        id_comment_parts.append(f"Duplicate Voucher Location: {dupv}")
+                    id_comment = "; ".join(id_comment_parts) if id_comment_parts else None
+                    defaults = {
+                        "identification_certainty_id": merged.get("OCCIdentification__identification_certainty_id"),
+                        "barcode_number": merged.get("OCCIdentification__barcode_number"),
+                        "collector_number": merged.get("OCCIdentification__collector_number"),
+                        "identification_comment": id_comment,
+                        "permit_id": merged.get("OCCIdentification__permit_id"),
+                        "sample_destination_id": merged.get("OCCIdentification__sample_destination_id"),
+                    }
                     apply_model_defaults(OCCIdentification, defaults)
                     if occ.pk in existing_ident:
                         obj = existing_ident[occ.pk]
@@ -1044,6 +1172,114 @@ class OccurrenceImporter(BaseSheetImporter):
                     else:
                         veg_create.append(OCCVegetationStructure(occurrence=occ, **defaults))
 
+                # OCCHabitatCondition
+                if any(k.startswith("OCCHabitatCondition__") for k in merged):
+                    defaults = {
+                        "pristine": merged.get("OCCHabitatCondition__pristine"),
+                        "excellent": merged.get("OCCHabitatCondition__excellent"),
+                        "very_good": merged.get("OCCHabitatCondition__very_good"),
+                        "good": merged.get("OCCHabitatCondition__good"),
+                        "degraded": merged.get("OCCHabitatCondition__degraded"),
+                        "completely_degraded": merged.get("OCCHabitatCondition__completely_degraded"),
+                    }
+                    # Only create/update if at least one value is non-None
+                    if any(v is not None for v in defaults.values()):
+                        apply_model_defaults(OCCHabitatCondition, defaults)
+                        if occ.pk in existing_hcond:
+                            obj = existing_hcond[occ.pk]
+                            for k, v in defaults.items():
+                                setattr(obj, k, v)
+                            hcond_update.append(obj)
+                        else:
+                            hcond_create.append(OCCHabitatCondition(occurrence=occ, **defaults))
+
+                # OCCPlantCount
+                if any(k.startswith("OCCPlantCount__") for k in merged):
+                    # Build comment from multiple fields
+                    pc_comment_parts: list[str] = []
+                    pc_pollinator = merged.get("OCCPlantCount__pollinator_observation")
+                    if pc_pollinator:
+                        pc_comment_parts.append(f"Pollinator Observation: {pc_pollinator}")
+                    pc_area_method = merged.get("OCCPlantCount__area_occupied_method")
+                    if pc_area_method:
+                        pc_comment_parts.append(f"Area Occupied Method: {pc_area_method}")
+                    pc_quad_size = merged.get("OCCPlantCount__quad_size")
+                    if pc_quad_size:
+                        pc_comment_parts.append(f"Quadrat Size: {pc_quad_size}")
+                    pc_quad_total = merged.get("OCCPlantCount__quad_num_total")
+                    if pc_quad_total:
+                        pc_comment_parts.append(f"Quadrat Num Total: {pc_quad_total}")
+                    pc_quad_mat = merged.get("OCCPlantCount__quad_num_mature")
+                    if pc_quad_mat:
+                        pc_comment_parts.append(f"Quadrat Num Mature: {pc_quad_mat}")
+                    pc_quad_juv = merged.get("OCCPlantCount__quad_num_juvenile")
+                    if pc_quad_juv:
+                        pc_comment_parts.append(f"Quadrat Num Juvenile: {pc_quad_juv}")
+                    pc_quad_seed = merged.get("OCCPlantCount__quad_num_seedlings")
+                    if pc_quad_seed:
+                        pc_comment_parts.append(f"Quadrat Num Seedlings: {pc_quad_seed}")
+                    pc_pop_notes = merged.get("OCCPlantCount__population_notes")
+                    if pc_pop_notes:
+                        pc_comment_parts.append(pc_pop_notes)
+                    pc_comment = "; ".join(pc_comment_parts) if pc_comment_parts else None
+
+                    # Derive count_status from detailed/simple data
+                    has_detailed = any(
+                        merged.get(f"OCCPlantCount__{f}") is not None
+                        for f in (
+                            "detailed_alive_mature",
+                            "detailed_dead_mature",
+                            "detailed_alive_juvenile",
+                            "detailed_dead_juvenile",
+                            "detailed_alive_seedling",
+                            "detailed_dead_seedling",
+                        )
+                    )
+                    has_simple = any(
+                        merged.get(f"OCCPlantCount__{f}") is not None for f in ("simple_alive", "simple_dead")
+                    )
+                    if has_detailed:
+                        count_status = "detailed"
+                    elif has_simple:
+                        count_status = "simple"
+                    else:
+                        count_status = None
+
+                    defaults = {
+                        "counted_subject_id": merged.get("OCCPlantCount__counted_subject_id"),
+                        "plant_condition_id": merged.get("OCCPlantCount__plant_condition_id"),
+                        "plant_count_method_id": merged.get("OCCPlantCount__plant_count_method_id"),
+                        "count_status": count_status,
+                        "clonal_reproduction_present": merged.get("OCCPlantCount__clonal_reproduction_present"),
+                        "vegetative_state_present": merged.get("OCCPlantCount__vegetative_state_present"),
+                        "flower_bud_present": merged.get("OCCPlantCount__flower_bud_present"),
+                        "flower_present": merged.get("OCCPlantCount__flower_present"),
+                        "immature_fruit_present": merged.get("OCCPlantCount__immature_fruit_present"),
+                        "ripe_fruit_present": merged.get("OCCPlantCount__ripe_fruit_present"),
+                        "dehisced_fruit_present": merged.get("OCCPlantCount__dehisced_fruit_present"),
+                        "detailed_alive_mature": merged.get("OCCPlantCount__detailed_alive_mature"),
+                        "detailed_dead_mature": merged.get("OCCPlantCount__detailed_dead_mature"),
+                        "detailed_alive_juvenile": merged.get("OCCPlantCount__detailed_alive_juvenile"),
+                        "detailed_dead_juvenile": merged.get("OCCPlantCount__detailed_dead_juvenile"),
+                        "detailed_alive_seedling": merged.get("OCCPlantCount__detailed_alive_seedling"),
+                        "detailed_dead_seedling": merged.get("OCCPlantCount__detailed_dead_seedling"),
+                        "simple_alive": merged.get("OCCPlantCount__simple_alive"),
+                        "simple_dead": merged.get("OCCPlantCount__simple_dead"),
+                        "quadrats_surveyed": merged.get("OCCPlantCount__quadrats_surveyed"),
+                        "estimated_population_area": merged.get("OCCPlantCount__estimated_population_area"),
+                        "flowering_plants_per": merged.get("OCCPlantCount__flowering_plants_per"),
+                        "total_quadrat_area": merged.get("OCCPlantCount__total_quadrat_area"),
+                        "comment": pc_comment,
+                    }
+                    apply_model_defaults(OCCPlantCount, defaults)
+                    if occ.pk in existing_plant:
+                        obj = existing_plant[occ.pk]
+                        for k, v in defaults.items():
+                            setattr(obj, k, v)
+                        plant_update.append(obj)
+                    else:
+                        plant_create.append(OCCPlantCount(occurrence=occ, **defaults))
+
             # Execution
             if loc_create:
                 OCCLocation.objects.bulk_create(loc_create, batch_size=BATCH)
@@ -1057,6 +1293,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         "location_description",
                         "district_id",
                         "region_id",
+                        "location_accuracy_id",
                     ],
                     batch_size=BATCH,
                 )
@@ -1064,19 +1301,35 @@ class OccurrenceImporter(BaseSheetImporter):
             if obs_create:
                 OCCObservationDetail.objects.bulk_create(obs_create, batch_size=BATCH)
             if obs_update:
-                OCCObservationDetail.objects.bulk_update(obs_update, ["comments"], batch_size=BATCH)
+                OCCObservationDetail.objects.bulk_update(
+                    obs_update,
+                    ["comments", "area_assessment_id", "area_surveyed", "survey_duration"],
+                    batch_size=BATCH,
+                )
 
             if hab_create:
                 OCCHabitatComposition.objects.bulk_create(hab_create, batch_size=BATCH)
             if hab_update:
                 OCCHabitatComposition.objects.bulk_update(
-                    hab_update, ["water_quality", "habitat_notes"], batch_size=BATCH
+                    hab_update,
+                    [
+                        "water_quality",
+                        "habitat_notes",
+                        "drainage_id",
+                        "land_form",
+                        "loose_rock_percent",
+                        "rock_type_id",
+                        "soil_colour_id",
+                        "soil_condition_id",
+                        "soil_type",
+                    ],
+                    batch_size=BATCH,
                 )
 
             if fire_create:
                 OCCFireHistory.objects.bulk_create(fire_create, batch_size=BATCH)
             if fire_update:
-                OCCFireHistory.objects.bulk_update(fire_update, ["comment"], batch_size=BATCH)
+                OCCFireHistory.objects.bulk_update(fire_update, ["comment", "intensity_id"], batch_size=BATCH)
 
             if assoc_create:
                 OCCAssociatedSpecies.objects.bulk_create(assoc_create, batch_size=BATCH)
@@ -1107,13 +1360,74 @@ class OccurrenceImporter(BaseSheetImporter):
             if ident_create:
                 OCCIdentification.objects.bulk_create(ident_create, batch_size=BATCH)
             if ident_update:
-                OCCIdentification.objects.bulk_update(ident_update, ["identification_certainty_id"], batch_size=BATCH)
+                OCCIdentification.objects.bulk_update(
+                    ident_update,
+                    [
+                        "identification_certainty_id",
+                        "barcode_number",
+                        "collector_number",
+                        "identification_comment",
+                        "permit_id",
+                        "sample_destination_id",
+                    ],
+                    batch_size=BATCH,
+                )
 
             if veg_create:
                 OCCVegetationStructure.objects.bulk_create(veg_create, batch_size=BATCH)
             if veg_update:
                 OCCVegetationStructure.objects.bulk_update(
                     veg_update, ["vegetation_structure_layer_one"], batch_size=BATCH
+                )
+
+            if hcond_create:
+                OCCHabitatCondition.objects.bulk_create(hcond_create, batch_size=BATCH)
+            if hcond_update:
+                OCCHabitatCondition.objects.bulk_update(
+                    hcond_update,
+                    [
+                        "pristine",
+                        "excellent",
+                        "very_good",
+                        "good",
+                        "degraded",
+                        "completely_degraded",
+                    ],
+                    batch_size=BATCH,
+                )
+
+            if plant_create:
+                OCCPlantCount.objects.bulk_create(plant_create, batch_size=BATCH)
+            if plant_update:
+                OCCPlantCount.objects.bulk_update(
+                    plant_update,
+                    [
+                        "counted_subject_id",
+                        "plant_condition_id",
+                        "plant_count_method_id",
+                        "count_status",
+                        "clonal_reproduction_present",
+                        "vegetative_state_present",
+                        "flower_bud_present",
+                        "flower_present",
+                        "immature_fruit_present",
+                        "ripe_fruit_present",
+                        "dehisced_fruit_present",
+                        "detailed_alive_mature",
+                        "detailed_dead_mature",
+                        "detailed_alive_juvenile",
+                        "detailed_dead_juvenile",
+                        "detailed_alive_seedling",
+                        "detailed_dead_seedling",
+                        "simple_alive",
+                        "simple_dead",
+                        "quadrats_surveyed",
+                        "estimated_population_area",
+                        "flowering_plants_per",
+                        "total_quadrat_area",
+                        "comment",
+                    ],
+                    batch_size=BATCH,
                 )
 
             # Re-fetch OCCAssociatedSpecies for current chunk to get PKs
@@ -1431,8 +1745,23 @@ class OccurrenceImporter(BaseSheetImporter):
         # Attach lightweight error/warning details and write CSV if needed
         stats["error_count_details"] = len(errors_details)
         stats["warning_count_details"] = len(warnings_details)
-        stats["warning_messages"] = warnings
         stats["error_details_csv"] = None
+
+        # Merge extraction warnings and per-column transform warnings into errors_details
+        # so they appear in the CSV rather than in the stats object.
+        for w_msg in warnings:
+            source_ref, msg_body = w_msg.split(": ", 1) if ": " in w_msg else ("", w_msg)
+            errors_details.append(
+                {
+                    "migrated_from_id": "",
+                    "column": "",
+                    "level": "warning",
+                    "message": msg_body,
+                    "raw_value": "",
+                    "reason": source_ref,
+                }
+            )
+        errors_details.extend(warnings_details)
 
         elapsed = timezone.now() - start_time
         stats["time_taken"] = str(elapsed)

@@ -375,6 +375,7 @@ class OccurrenceReportRow:
     # Geometry fields
     OccurrenceReportGeometry__geometry: object | None = None
     OccurrenceReportGeometry__locked: bool | None = None
+    OccurrenceReportGeometry__show_on_map: bool | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> OccurrenceReportRow:
@@ -560,6 +561,7 @@ class OccurrenceReportRow:
             OCRFireHistory__intensity=utils.safe_strip(d.get("OCRFireHistory__intensity")),
             OccurrenceReportGeometry__geometry=d.get("OccurrenceReportGeometry__geometry"),
             OccurrenceReportGeometry__locked=d.get("OccurrenceReportGeometry__locked"),
+            OccurrenceReportGeometry__show_on_map=d.get("OccurrenceReportGeometry__show_on_map"),
         )
 
     def validate(self, source: str | None = None) -> list[tuple[str, str]]:

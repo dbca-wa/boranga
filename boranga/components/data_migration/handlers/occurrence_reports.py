@@ -7,6 +7,9 @@ import os
 from collections import defaultdict
 from typing import Any
 
+from django.conf import settings
+from django.contrib.gis.geos import GEOSGeometry, Polygon
+from django.core.cache import cache
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models as dj_models
 from django.db import transaction
@@ -134,6 +137,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
         else:
             logger.warning("OccurrenceReportImporter: deleting OccurrenceReport and related data...")
             report_filter = {}
+
+        # Delete reversion history first (more efficient than waiting for cascade)
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_occurrence_report_and_related(report_filter)
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
 
         # Perform deletes in an autocommit block so they are committed
         # immediately. This mirrors the approach used in `SpeciesImporter` and
@@ -572,7 +582,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         if v in (None, ""):
                             continue
                         try:
-                            nv = int(v)
+                            # Use float to preserve decimal precision (e.g. TEC SURVEYS % values)
+                            nv = float(v)
                         except Exception:
                             # ignore non-numeric values for the percentage flags
                             continue
@@ -953,33 +964,59 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 with transaction.atomic():
                     OccurrenceReport.objects.bulk_create(chunk, batch_size=BATCH)
 
-        # Refresh created objects to get PKs
+        # Refresh created objects to get PKs — fetch in chunks to avoid
+        # a single enormous query.  For TFAUNA, occurrences are created
+        # *after* OCRs so we skip the occurrence JOIN and use .only() for
+        # speed.  For TPFL/TEC, occurrences already exist and later code
+        # needs the related occurrence, so we use select_related.
         if create_meta:
             created_keys = [m[0] for m in create_meta]
-            # logger.info(f"created_keys for lookup: {created_keys[:5]}")
-            for s in OccurrenceReport.objects.filter(migrated_from_id__in=created_keys).select_related("occurrence"):
-                # logger.info(f"Adding to created_map: {s.migrated_from_id}={s.pk}")
-                created_map[s.migrated_from_id] = s
+            # Sources where occurrences are created AFTER OCRs (no JOIN needed)
+            ocrs_created_before_occurrences = Source.TFAUNA.value in sources and len(sources) == 1
+            for i in range(0, len(created_keys), BATCH):
+                key_chunk = created_keys[i : i + BATCH]
+                qs = OccurrenceReport.objects.filter(migrated_from_id__in=key_chunk)
+                if ocrs_created_before_occurrences:
+                    qs = qs.only(
+                        "pk",
+                        "migrated_from_id",
+                        "occurrence_report_number",
+                        "group_type_id",
+                        "species_id",
+                        "community_id",
+                        "processing_status",
+                        "customer_status",
+                        "submitter",
+                        "occurrence_id",
+                    )
+                else:
+                    qs = qs.select_related("occurrence")
+                for s in qs:
+                    created_map[s.migrated_from_id] = s
 
-        # Populate occurrence_report_number for newly-created objects (bulk_update)
+        # Populate occurrence_report_number via a single SQL UPDATE instead of
+        # fetching all instances into Python and doing bulk_update.
         if created_map:
-            occs_to_update = []
-            for mig, s in created_map.items():
-                if not s.occurrence_report_number:
-                    s.occurrence_report_number = f"{s.MODEL_PREFIX}{s.pk}"
-                    occs_to_update.append(s)
-            if occs_to_update:
-                try:
-                    OccurrenceReport.objects.bulk_update(occs_to_update, ["occurrence_report_number"], batch_size=BATCH)
-                except Exception:
-                    for s in occs_to_update:
-                        try:
-                            s.save()
-                        except Exception:
-                            logger.exception(
-                                "Failed to populate occurrence_report_number for created OccurrenceReport %s",
-                                getattr(s, "pk", None),
-                            )
+            from django.db import connection
+
+            new_pks = [s.pk for s in created_map.values() if not s.occurrence_report_number]
+            if new_pks:
+                prefix = OccurrenceReport.MODEL_PREFIX
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        f"UPDATE boranga_occurrencereport "
+                        f"SET occurrence_report_number = '{prefix}' || id "
+                        f"WHERE id = ANY(%s) AND (occurrence_report_number IS NULL OR occurrence_report_number = '')",
+                        [new_pks],
+                    )
+                logger.info(
+                    "Fixed occurrence_report_number for %d OccurrenceReports via SQL UPDATE",
+                    len(new_pks),
+                )
+                # Refresh the in-memory instances so later code sees the correct number
+                for s in created_map.values():
+                    if not s.occurrence_report_number:
+                        s.occurrence_report_number = f"{prefix}{s.pk}"
 
         # Bulk update existing objects
         if to_update:
@@ -1782,11 +1819,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             if not occ_assoc:
                                 continue
 
-                            # Update OCCAssociatedSpecies fields (comment and link)
+                            # Update OCCAssociatedSpecies link (traceability)
+                            # NOTE: Comment copy removed per Task #11604.
+                            # OCCAssociatedSpecies.comment is now populated directly
+                            # in the occurrence_legacy handler from DRF_POPULATION
+                            # ASSOCIATED_SPECIES field.
                             updated = False
-                            if ocr_assoc.comment and occ_assoc.comment != ocr_assoc.comment:
-                                occ_assoc.comment = ocr_assoc.comment
-                                updated = True
                             if occ_assoc.copied_ocr_associated_species_id != ocr_assoc.pk:
                                 occ_assoc.copied_ocr_associated_species = ocr_assoc
                                 updated = True
@@ -1806,7 +1844,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             try:
                                 OCCAssociatedSpecies.objects.bulk_update(
                                     occ_assoc_to_update,
-                                    ["comment", "copied_ocr_associated_species"],
+                                    ["copied_ocr_associated_species"],
                                     batch_size=BATCH,
                                 )
                             except Exception:
@@ -2375,54 +2413,97 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Note: We create a text file containing the reference if no file is provided.
         doc_cat_photo = DocumentCategory.objects.filter(document_category_name="ORF Document").first()
         doc_sub_photo = DocumentSubCategory.objects.filter(document_sub_category_name="Photo").first()
+        # Task 12856: TFAUNA docs use sub-category "Tfauna Document Reference"
+        doc_sub_tfauna = DocumentSubCategory.objects.filter(
+            document_sub_category_name="Tfauna Document Reference"
+        ).first()
+        if doc_sub_tfauna is None:
+            errors_details.append(
+                {
+                    "migrated_from_id": "N/A",
+                    "column": "document_sub_category",
+                    "level": "error",
+                    "message": "DocumentSubCategory 'Tfauna Document Reference' not found in DB — TFAUNA documents will not be created.",
+                    "raw_value": "Tfauna Document Reference",
+                    "reason": "missing_lookup",
+                    "row": {},
+                }
+            )
+
+        # Prefetch existing document descriptions per OCR for deduplication (single query)
+        existing_doc_keys = set()
+        for d in OccurrenceReportDocument.objects.filter(occurrence_report__in=target_occs).values_list(
+            "occurrence_report_id", "description"
+        ):
+            existing_doc_keys.add((d[0], d[1]))
+
+        docs_to_create = []
+        docs_need_uploaded_date = []  # list of (doc_instance, en_date) for post-create UPDATE
 
         for mid in target_mig_ids:
             if mid in op_map:
                 op = op_map[mid]
+                ocr = target_map.get(mid)
+                if not ocr:
+                    continue
+
                 photo_ref = op["merged"].get("temp_sv_photo")
                 if photo_ref:
-                    ocr = target_map[mid]
-                    # Check if already exists to avoid duplication
-                    if not OccurrenceReportDocument.objects.filter(
-                        occurrence_report=ocr, description=photo_ref
-                    ).exists():
-                        try:
-                            doc = OccurrenceReportDocument(
-                                occurrence_report=ocr,
-                                description=photo_ref,
-                                document_category=doc_cat_photo,
-                                document_sub_category=doc_sub_photo,
-                                can_submitter_access=False,
-                            )
-                            # User request: No dummy file needed, just the description.
-                            # However, if _file is mandatory at model level, this might fail saving.
-                            # Assuming _file is optional or handled otherwise.
-                            # If _file is mandatory, we might need to skip validation or save with empty string?
-                            # Models generally require a file for FileField unless blank=True.
-                            # Checking OccurrenceReportDocument definition:
-                            # _file = models.FileField(...) -> blank=False by default.
-                            doc.save()
-                        except Exception:
-                            logger.exception("Failed to create legacy photo document for %s", mid)
+                    if (ocr.pk, photo_ref) not in existing_doc_keys:
+                        doc = OccurrenceReportDocument(
+                            occurrence_report=ocr,
+                            description=photo_ref,
+                            document_category=doc_cat_photo,
+                            document_sub_category=doc_sub_photo,
+                            can_submitter_access=False,
+                        )
+                        docs_to_create.append(doc)
+                        existing_doc_keys.add((ocr.pk, photo_ref))
 
                 # TFAUNA document description (Map/MudMap/Photo/Notes flags)
                 doc_desc = op["merged"].get("temp_document_description")
-                if doc_desc:
-                    ocr = target_map[mid]
-                    if not OccurrenceReportDocument.objects.filter(
-                        occurrence_report=ocr, description=doc_desc
-                    ).exists():
-                        try:
-                            doc = OccurrenceReportDocument(
-                                occurrence_report=ocr,
-                                description=doc_desc,
-                                document_category=doc_cat_photo,
-                                document_sub_category=doc_sub_photo,
-                                can_submitter_access=False,
-                            )
-                            doc.save()
-                        except Exception:
-                            logger.exception("Failed to create TFAUNA document for %s", mid)
+                if doc_desc and doc_sub_tfauna:
+                    if (ocr.pk, doc_desc) not in existing_doc_keys:
+                        doc = OccurrenceReportDocument(
+                            occurrence_report=ocr,
+                            description=doc_desc,
+                            document_category=doc_cat_photo,
+                            document_sub_category=doc_sub_tfauna,  # Task 12856
+                            can_submitter_access=False,
+                        )
+                        docs_to_create.append(doc)
+                        existing_doc_keys.add((ocr.pk, doc_desc))
+                        # Task 12866: set uploaded_date to EnDate (lodgement_date)
+                        en_date = op["merged"].get("lodgement_date")
+                        if en_date:
+                            docs_need_uploaded_date.append((doc, en_date))
+
+        if docs_to_create:
+            logger.info("Bulk-creating %d OccurrenceReportDocument records", len(docs_to_create))
+            try:
+                OccurrenceReportDocument.objects.bulk_create(docs_to_create, batch_size=BATCH)
+                # Fix uploaded_date via UPDATE (auto_now_add prevents direct assignment)
+                if docs_need_uploaded_date:
+                    for doc, en_date in docs_need_uploaded_date:
+                        if doc.pk:
+                            OccurrenceReportDocument.objects.filter(pk=doc.pk).update(uploaded_date=en_date)
+            except Exception:
+                logger.exception("Failed to bulk_create OccurrenceReportDocument; falling back to individual saves")
+                for doc in docs_to_create:
+                    try:
+                        doc.save()
+                    except Exception:
+                        logger.exception(
+                            "Failed to create document for OCR %s", getattr(doc.occurrence_report, "pk", None)
+                        )
+                # Retry uploaded_date for fallback-saved docs
+                if docs_need_uploaded_date:
+                    for doc, en_date in docs_need_uploaded_date:
+                        if doc.pk:
+                            try:
+                                OccurrenceReportDocument.objects.filter(pk=doc.pk).update(uploaded_date=en_date)
+                            except Exception:
+                                pass
 
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report;
         # also update organisation on existing observers when it is missing.
@@ -2569,6 +2650,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         vegetation_structures_to_update = []
         fire_history_to_create = []
         fire_history_to_update = []
+        ocr_geom_batch_create = []  # list of (migrated_from_id, ocr_pk, OccurrenceReportGeometry)
 
         # Fetch ContentType once before processing geometries
         from django.contrib.contenttypes.models import ContentType
@@ -2836,7 +2918,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if len(fh_fields) > 0:
                     fire_history_to_create.append(OCRFireHistory(**normalize_create_kwargs(OCRFireHistory, fh_create)))
 
-            # OccurrenceReportGeometry handling for updates
+            # OccurrenceReportGeometry handling for updates — collect for batch create
             gd = geometry_data or {}
             if gd.get("geometry"):
                 existing_geom = existing_ocr_geoms.get(inst.pk)
@@ -2857,7 +2939,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             inst.pk,
                         )
                 else:
-                    # Create new geometry
+                    # Collect new geometry for batch creation later
                     geom_create_kwargs = {
                         "occurrence_report_id": inst.pk,
                         "content_type": ocr_content_type,
@@ -2878,24 +2960,42 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 geom_create_kwargs["original_geometry_ewkb"] = original_point.ewkb
                     except Exception:
                         pass
-                        # logger.debug("Could not extract original point geometry")
 
-                    try:
-                        new_geom = OccurrenceReportGeometry.objects.create(
-                            **normalize_create_kwargs(OccurrenceReportGeometry, geom_create_kwargs)
-                        )
-                        existing_ocr_geoms[inst.pk] = new_geom
-                    except Exception as exc:
-                        logger.exception(
-                            "Failed to create OccurrenceReportGeometry for occurrence_report %s",
-                            inst.pk,
-                        )
+                    # Pre-validate geometry extent (same check as model save())
+                    geom_obj = geom_create_kwargs.get("geometry")
+                    if geom_obj and geom_obj.valid and not geom_obj.empty and geom_obj.srid == 4326:
+                        gis_bbox = GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=4326)
+                        if geom_obj.within(gis_bbox):
+                            ocr_geom_batch_create.append(
+                                (
+                                    inst.migrated_from_id,
+                                    inst.pk,
+                                    OccurrenceReportGeometry(
+                                        **normalize_create_kwargs(OccurrenceReportGeometry, geom_create_kwargs)
+                                    ),
+                                )
+                            )
+                        else:
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": inst.migrated_from_id,
+                                    "column": "geometry",
+                                    "level": "error",
+                                    "message": f"Failed to create geometry: ['Geometry is not within the extent defined for the Boranga application ({settings.GIS_EXTENT})']",
+                                    "raw_value": str(geom_obj),
+                                    "reason": "geometry_creation_error",
+                                    "row": {"pk": inst.pk},
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+                            errors += 1
+                    else:
                         errors_details.append(
                             {
                                 "migrated_from_id": inst.migrated_from_id,
                                 "column": "geometry",
                                 "level": "error",
-                                "message": f"Failed to create geometry: {exc}",
+                                "message": "Failed to create geometry: invalid geometry object",
                                 "raw_value": str(gd.get("geometry", "")),
                                 "reason": "geometry_creation_error",
                                 "row": {"pk": inst.pk},
@@ -3186,13 +3286,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             ocr.pk,
                         )
                 else:
-                    # Create new geometry
+                    # Collect new geometry for batch creation later
                     geom_create_kwargs = {
                         "occurrence_report_id": ocr.pk,
                         "content_type": ocr_content_type,
                         "object_id": ocr.pk,
                     }
-                    # Add geometry fields from gd
                     valid_geom_fields = {f.name for f in OccurrenceReportGeometry._meta.fields}
                     for field_name, val in gd.items():
                         if field_name == "occurrence_report":
@@ -3200,36 +3299,50 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         if val is not None and field_name in valid_geom_fields:
                             geom_create_kwargs[field_name] = val
 
-                    # Store the original point geometry (before buffering) in EWKB format
-                    # The buffered polygon is in gd['geometry'], but we also want to preserve
-                    # the original point for reference
                     try:
                         buffered_geom = gd.get("geometry")
                         if buffered_geom and hasattr(buffered_geom, "centroid"):
-                            # Extract the centroid of the buffered polygon as the original point
                             original_point = buffered_geom.centroid
                             if original_point:
                                 geom_create_kwargs["original_geometry_ewkb"] = original_point.ewkb
                     except Exception:
                         pass
-                        # logger.debug("Could not extract original point geometry")
 
-                    try:
-                        new_geom = OccurrenceReportGeometry.objects.create(
-                            **normalize_create_kwargs(OccurrenceReportGeometry, geom_create_kwargs)
-                        )
-                        existing_ocr_geoms[ocr.pk] = new_geom
-                    except Exception as exc:
-                        logger.exception(
-                            "Failed to create OccurrenceReportGeometry for occurrence_report %s",
-                            ocr.pk,
-                        )
+                    # Pre-validate geometry extent (same check as model save())
+                    geom_obj = geom_create_kwargs.get("geometry")
+                    if geom_obj and geom_obj.valid and not geom_obj.empty and geom_obj.srid == 4326:
+                        gis_bbox = GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=4326)
+                        if geom_obj.within(gis_bbox):
+                            ocr_geom_batch_create.append(
+                                (
+                                    mig,
+                                    ocr.pk,
+                                    OccurrenceReportGeometry(
+                                        **normalize_create_kwargs(OccurrenceReportGeometry, geom_create_kwargs)
+                                    ),
+                                )
+                            )
+                        else:
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": mig,
+                                    "column": "geometry",
+                                    "level": "error",
+                                    "message": f"Failed to create geometry: ['Geometry is not within the extent defined for the Boranga application ({settings.GIS_EXTENT})']",
+                                    "raw_value": str(geom_obj),
+                                    "reason": "geometry_creation_error",
+                                    "row": {"pk": ocr.pk},
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+                            errors += 1
+                    else:
                         errors_details.append(
                             {
                                 "migrated_from_id": mig,
                                 "column": "geometry",
                                 "level": "error",
-                                "message": f"Failed to create geometry: {exc}",
+                                "message": "Failed to create geometry: invalid geometry object",
                                 "raw_value": str(gd.get("geometry", "")),
                                 "reason": "geometry_creation_error",
                                 "row": {"pk": ocr.pk},
@@ -3239,6 +3352,40 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         errors += 1
 
             # Geometry copying to Occurrence is handled in the final population phase
+
+        # Bulk-create all collected OccurrenceReportGeometry instances
+        if ocr_geom_batch_create:
+            geom_instances = [g for _, _, g in ocr_geom_batch_create]
+            logger.info("Bulk-creating %d OccurrenceReportGeometry records", len(geom_instances))
+            try:
+                OccurrenceReportGeometry.objects.bulk_create(geom_instances, batch_size=BATCH)
+                # Update the existing_ocr_geoms cache with newly created geometries
+                for mig_id, ocr_pk, geom_inst in ocr_geom_batch_create:
+                    existing_ocr_geoms[ocr_pk] = geom_inst
+            except Exception:
+                logger.exception("Failed to bulk_create OccurrenceReportGeometry; falling back to individual creates")
+                for mig_id, ocr_pk, geom_inst in ocr_geom_batch_create:
+                    try:
+                        geom_inst.save()
+                        existing_ocr_geoms[ocr_pk] = geom_inst
+                    except Exception as exc:
+                        logger.exception(
+                            "Failed to create OccurrenceReportGeometry for occurrence_report %s",
+                            ocr_pk,
+                        )
+                        errors_details.append(
+                            {
+                                "migrated_from_id": mig_id,
+                                "column": "geometry",
+                                "level": "error",
+                                "message": f"Failed to create geometry: {exc}",
+                                "raw_value": "",
+                                "reason": "geometry_creation_error",
+                                "row": {"pk": ocr_pk},
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
+                        errors += 1
 
         if habs_to_create:
             try:
@@ -3921,6 +4068,31 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # OccurrenceReportUserAction: TFAUNA-only — record ChDate/ChName as an action log
         user_actions_to_create = []
+
+        # Prefetch: which TFAUNA OCRs already have user actions (single query)
+        tfauna_ocr_ids = [
+            target_map[mid].pk for mid in target_mig_ids if mid.startswith("tfauna-") and mid in target_map
+        ]
+        ocr_ids_with_actions = (
+            set(
+                OccurrenceReportUserAction.objects.filter(occurrence_report_id__in=tfauna_ocr_ids).values_list(
+                    "occurrence_report_id", flat=True
+                )
+            )
+            if tfauna_ocr_ids
+            else set()
+        )
+
+        # Prefetch: TFAUNA username→emailuser mappings (single query)
+        tfauna_username_map = {}
+        try:
+            from boranga.components.main.models import LegacyUsernameEmailuserMapping
+
+            for m in LegacyUsernameEmailuserMapping.objects.filter(legacy_system="TFAUNA"):
+                tfauna_username_map[m.legacy_username] = m.emailuser_id
+        except Exception:
+            pass
+
         for mid in target_mig_ids:
             if not mid.startswith("tfauna-"):
                 continue
@@ -3936,24 +4108,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
             ocr = target_map.get(mid)
             if not ocr:
                 continue
-            # Skip if action already exists for this OCR
-            if OccurrenceReportUserAction.objects.filter(occurrence_report=ocr).exists():
+            # Skip if action already exists for this OCR (uses prefetched set)
+            if ocr.pk in ocr_ids_with_actions:
                 continue
-            # Resolve user: use submitter id as fallback if ChName lookup fails
-            who_id = None
-            if ch_name:
-                # The ChName may have been resolved to an email user id via approved_by pipeline
-                # Try to resolve via the same lookup
-                try:
-                    from boranga.components.main.models import LegacyUsernameEmailuserMapping
-
-                    mapping = LegacyUsernameEmailuserMapping.objects.filter(
-                        legacy_system="TFAUNA", legacy_username=ch_name
-                    ).first()
-                    if mapping:
-                        who_id = mapping.emailuser_id
-                except Exception:
-                    pass
+            # Resolve user: use prefetched mapping
+            who_id = tfauna_username_map.get(ch_name) if ch_name else None
             if not who_id:
                 # Fallback: use the submitter from the OccurrenceReport
                 who_id = ocr.submitter
@@ -3975,7 +4134,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             except Exception:
                 pass
 
-            action_text = f"Legacy record checked by {ch_name or 'unknown'}"
+            action_text = "Edited to improve accuracy"  # Task 12868
             ua = OccurrenceReportUserAction(
                 occurrence_report=ocr,
                 who=who_id,
@@ -4052,6 +4211,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "group_type_id": ocr.group_type_id,
                     "species_id": ocr.species_id,
                     "processing_status": Occurrence.PROCESSING_STATUS_ACTIVE,
+                    "comment": f"This Occurrence was auto-generated from a migrated Occurrence Report Form: ORF{ocr.pk} (migrated_from_id: {ocr.migrated_from_id})",
+                    "locked": True,
                 }
                 if getattr(ctx, "migration_run", None) is not None:
                     defaults["migration_run"] = ctx.migration_run
@@ -4070,37 +4231,77 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     occ = Occurrence(migrated_from_id=occ_mid, **defaults)
                     new_occs.append(occ)
 
-            # Bulk-create new Occurrences (cannot use bulk_create because the
-            # model's save() performs a double-save to set occurrence_number).
+            # Bulk-create new Occurrences.  The model's save() performs a
+            # double-save to set occurrence_number = 'OCC' + str(pk), which
+            # makes individual saves extremely slow at scale.  Instead we:
+            #   1. Set a temporary occurrence_number so save() won't trigger
+            #      its double-save branch (it only does that when == "").
+            #   2. bulk_create to get PKs assigned efficiently.
+            #   3. Fix occurrence_number in a single raw SQL UPDATE.
             occ_created = 0
-            for i in range(0, len(new_occs), BATCH):
-                batch = new_occs[i : i + BATCH]
-                for occ in batch:
+            if new_occs:
+                for occ in new_occs:
+                    # Prevent Occurrence.save()'s double-save branch
+                    occ.occurrence_number = "PENDING"
+
+                for i in range(0, len(new_occs), BATCH):
+                    chunk = new_occs[i : i + BATCH]
                     try:
-                        occ.save()  # triggers double-save for occurrence_number
-                        occ_created += 1
-                    except Exception as exc:
+                        with transaction.atomic():
+                            Occurrence.objects.bulk_create(chunk, batch_size=BATCH)
+                        occ_created += len(chunk)
+                    except Exception:
+                        # Fallback: individual saves for this chunk
                         logger.exception(
-                            "Failed to create Occurrence for migrated_from_id=%s: %s",
-                            occ.migrated_from_id,
-                            exc,
+                            "Failed to bulk_create Occurrence chunk %d-%d; falling back to individual saves",
+                            i,
+                            i + len(chunk),
                         )
-                        errors += 1
-                        errors_details.append(
-                            {
-                                "migrated_from_id": occ.migrated_from_id,
-                                "column": "Occurrence",
-                                "level": "error",
-                                "message": f"Failed to create Occurrence: {exc}",
-                                "raw_value": "",
-                            }
+                        for occ in chunk:
+                            try:
+                                occ.occurrence_number = ""
+                                occ.save()
+                                occ_created += 1
+                            except Exception as exc:
+                                logger.exception(
+                                    "Failed to create Occurrence for migrated_from_id=%s: %s",
+                                    occ.migrated_from_id,
+                                    exc,
+                                )
+                                errors += 1
+                                errors_details.append(
+                                    {
+                                        "migrated_from_id": occ.migrated_from_id,
+                                        "column": "Occurrence",
+                                        "level": "error",
+                                        "message": f"Failed to create Occurrence: {exc}",
+                                        "raw_value": "",
+                                    }
+                                )
+                    if (i + BATCH) % 5000 < BATCH:
+                        logger.info(
+                            "TFAUNA Occurrence create progress: %d/%d",
+                            min(i + BATCH, len(new_occs)),
+                            len(new_occs),
                         )
-                if (i + BATCH) % 5000 < BATCH:
+
+                # Fix occurrence_number for all bulk-created rows in one SQL UPDATE
+                from django.db import connection
+
+                pending_ids = [occ.pk for occ in new_occs if occ.pk]
+                if pending_ids:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "UPDATE boranga_occurrence SET occurrence_number = 'OCC' || id "
+                            "WHERE id = ANY(%s) AND occurrence_number = 'PENDING'",
+                            [pending_ids],
+                        )
                     logger.info(
-                        "TFAUNA Occurrence create progress: %d/%d",
-                        min(i + BATCH, len(new_occs)),
-                        len(new_occs),
+                        "Fixed occurrence_number for %d Occurrences via SQL UPDATE",
+                        len(pending_ids),
                     )
+                    # Also clear the cache once (not per-row)
+                    cache.delete(settings.CACHE_KEY_MAP_OCCURRENCES)
 
             # Bulk-update changed Occurrences
             occ_updated = 0
@@ -4110,6 +4311,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "group_type_id",
                     "species_id",
                     "processing_status",
+                    "locked",
                 ]
                 if getattr(ctx, "migration_run", None) is not None:
                     update_fields.append("migration_run_id")
@@ -4249,11 +4451,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
             section_config = {
                 "LOCATION": [
                     (OCRLocation, OCCLocation, "copied_ocr_location"),
-                    (
-                        OccurrenceReportGeometry,
-                        OccurrenceGeometry,
-                        "copied_ocr_geometry",
-                    ),
+                    # NOTE: OccurrenceReportGeometry → OccurrenceGeometry copy
+                    # removed per Task #11569. Geometry is now populated directly
+                    # in the occurrence_legacy handler from DRF_POPULATION
+                    # coordinates (GDA94LAT/GDA94LONG).
                 ],
                 "PLNT_CNT": [
                     (OCRPlantCount, OCCPlantCount, "copied_ocr_plant_count"),
@@ -4454,32 +4655,24 @@ class OccurrenceReportImporter(BaseSheetImporter):
         )
         stats["error_count_details"] = len(errors_details)
         stats["warning_count_details"] = len(warnings_details)
-        stats["warning_messages"] = warnings
         stats["error_details_csv"] = None
 
-        # Append global warnings to errors_details if any, so they appear in CSV
+        # Merge extraction warnings into errors_details so they appear in the CSV
         for w_msg in warnings:
-            # simple parse specific to how we append these warnings
-            level = "warning"
-            source_ref = ""
-            msg_body = w_msg
-            if ": " in w_msg:
-                # "source: message"
-                parts = w_msg.split(": ", 1)
-                source_ref = parts[0]
-                msg_body = parts[1]
-
+            source_ref, msg_body = w_msg.split(": ", 1) if ": " in w_msg else ("", w_msg)
             errors_details.append(
                 {
                     "migrated_from_id": "",
                     "column": "",
-                    "level": level,
+                    "level": "warning",
                     "message": msg_body,
                     "raw_value": "",
                     "reason": source_ref,
                     "row": {},
                 }
             )
+        # Merge per-column transform warnings into errors_details
+        errors_details.extend(warnings_details)
 
         elapsed = timezone.now() - start_time
         stats["time_taken"] = str(elapsed)

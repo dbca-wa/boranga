@@ -83,7 +83,7 @@
                     class="btn btn-primary mb-2"
                     @click.prevent="createFloraOccurrence"
                 >
-                    <i class="fa-solid fa-circle-plus"></i> Add Flora Occurrence
+                    <i class="bi bi-plus-circle"></i> Add Flora Occurrence
                 </button>
             </div>
         </div>
@@ -441,7 +441,7 @@ export default {
                 {
                     extend: 'excel',
                     title: 'Boranga OCC Flora Excel Export',
-                    text: '<i class="fa-solid fa-download"></i> Excel',
+                    text: '<i class="bi bi-download"></i> Excel',
                     className: 'btn btn-primary me-2 rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -451,7 +451,7 @@ export default {
                 {
                     extend: 'csv',
                     title: 'Boranga OCC Flora CSV Export',
-                    text: '<i class="fa-solid fa-download"></i> CSV',
+                    text: '<i class="bi bi-download"></i> CSV',
                     className: 'btn btn-primary rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -617,7 +617,7 @@ export default {
             vm.initialiseOccurrenceNameLookup();
             vm.initialiseScientificNameLookup();
             vm.addEventListeners();
-            var newOption = null;
+            var newOption;
             if (
                 sessionStorage.getItem('filterOCCFloraOccurrenceName') !=
                     'all' &&

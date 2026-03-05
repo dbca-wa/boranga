@@ -19,6 +19,7 @@ export default defineConfig(() => {
             port: port,
             strictPort: true,
             open: false,
+            origin: `http://localhost:${port}`,
             headers: {
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Headers':
@@ -44,10 +45,6 @@ export default defineConfig(() => {
                     { src: 'src/assets/*.gif', dest: 'src' },
                     { src: 'src/assets/*.jpg', dest: 'src' },
                     { src: 'src/assets/*.json', dest: 'src' },
-                    {
-                        src: 'node_modules/@fortawesome/fontawesome-free/webfonts',
-                        dest: 'node_modules/@fortawesome/fontawesome-free/',
-                    },
                 ],
             }),
             analyze &&

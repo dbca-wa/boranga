@@ -17,6 +17,11 @@
                         class="btn btn-primary disabled"
                         >No Approved CS</span
                     >
+                    <span
+                        v-else-if="isDelisted"
+                        class="btn btn-primary disabled"
+                        >Delisted</span
+                    >
                     <a
                         v-else-if="conservation_status"
                         :href="`/internal/conservation-status/${conservation_status.id}`"
@@ -191,6 +196,9 @@ export default {
                     !this.is_internal &&
                     !this.is_external)
             );
+        },
+        isDelisted() {
+            return this.conservation_status?.processing_status === 'delisted';
         },
         showConservationStatusFields() {
             return (

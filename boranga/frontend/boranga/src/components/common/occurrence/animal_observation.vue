@@ -255,8 +255,6 @@
                         id="distinct_features"
                         v-model="animal_observation.distinctive_feature"
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -272,8 +270,6 @@
                         id="distinct_features"
                         v-model="animal_observation.action_taken"
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -289,8 +285,6 @@
                         id="distinct_features"
                         v-model="animal_observation.action_required"
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -308,8 +302,6 @@
                             animal_observation.animal_observation_detail_comment
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -872,6 +864,14 @@ export default {
             } else {
                 vm.$emit('dirty', false);
             }
+        },
+        // obs_date is automatically synced from the observation_date field
+        // on the profile tab — update the snapshot so this auto-propagation
+        // does not trigger a false "unsaved changes" warning.
+        'animal_observation.obs_date': function () {
+            let original = JSON.parse(this.originalAnimalObservation);
+            original.obs_date = this.animal_observation.obs_date;
+            this.originalAnimalObservation = JSON.stringify(original);
         },
     },
     created: async function () {

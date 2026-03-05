@@ -1,6 +1,7 @@
 babel~=2.14
 coverage==6.5.0 # Last version supported by coveralls
 coveralls~=3.3
+chardet<6
 datapackage~=1.15
 dj-database-url~=2.1
 dj-static==0.0.6
@@ -71,7 +72,7 @@ python-decouple~=3.8
 python-docx~=1.1.0
 reportlab~=4.1
 sentry-sdk~=2.19
-setuptools~=80.9.0
+setuptools~=82.0
 six>=1.16.0
 unicodecsv==0.14.1 # A Python 2.7 drop-in replacement from 2015
 wheel~=0.45

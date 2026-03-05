@@ -5,12 +5,15 @@
                 <div class="row justify-content-center">
                     <div class="col-9 p-3 border rounded">
                         <template v-if="isOCRProposal">
-                            <h3>Occurrence Report Submitted Successfully</h3>
+                            <h3>
+                                Occurrence Report Form Submitted Successfully
+                            </h3>
                             <div class="mb-3">
                                 <strong
                                     >Your
                                     {{ occurrence_report_obj.group_type }}
-                                    occurrence report has been received.</strong
+                                    occurrence report form has been
+                                    received.</strong
                                 >
                             </div>
 
@@ -19,7 +22,7 @@
                                     <tr>
                                         <td>
                                             <strong
-                                                >Occurrence Report
+                                                >Occurrence Report Form
                                                 Number:</strong
                                             >
                                         </td>
@@ -45,13 +48,13 @@
                             <p>
                                 You will receive a notification email if there
                                 is any incomplete information or documents
-                                missing from the proposal.
+                                missing from the occurrence report form.
                             </p>
                         </template>
                         <template v-else>
                             <strong
-                                >Sorry it looks like there isn't any application
-                                currently in your session.</strong
+                                >Sorry it looks like there isn't any occurrence
+                                report form currently in your session.</strong
                             >
                         </template>
                         <router-link

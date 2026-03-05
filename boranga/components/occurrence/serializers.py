@@ -194,6 +194,7 @@ class BufferGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer):
 
 class OccurrenceGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer):
     occurrence_id = serializers.IntegerField(write_only=True, required=False)
+    geometry_id = serializers.IntegerField(source="id", read_only=True)
     geometry_source = serializers.SerializerMethodField()
     created_from = serializers.SerializerMethodField(read_only=True)
     source_of = serializers.SerializerMethodField(read_only=True)
@@ -210,6 +211,7 @@ class OccurrenceGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer
         fields = [
             "id",
             "occurrence_id",
+            "geometry_id",
             "geometry",
             "original_geometry",
             "srid",
@@ -517,6 +519,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
     internal_user_edit = serializers.SerializerMethodField()
     can_user_approve = serializers.SerializerMethodField()
     can_user_assess = serializers.SerializerMethodField()
+    can_user_copy = serializers.SerializerMethodField()
     occurrence = serializers.IntegerField(source="occurrence.id", allow_null=True)
     occurrence_name = serializers.CharField(source="occurrence.occurrence_number", allow_null=True)
     is_new_contributor = serializers.SerializerMethodField()
@@ -549,6 +552,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "can_user_view",
             "can_user_assess",
             "can_user_approve",
+            "can_user_copy",
             "assessor_edit",
             "internal_user_edit",
             "occurrence",
@@ -581,6 +585,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "can_user_view",
             "can_user_approve",
             "can_user_assess",
+            "can_user_copy",
             "internal_user_edit",
             "is_new_contributor",
             "copied_to_occurrence",
@@ -637,6 +642,10 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
     def get_can_user_edit(self, obj):
         request = self.context["request"]
         return obj.can_user_edit(request)
+
+    def get_can_user_copy(self, obj):
+        request = self.context["request"]
+        return obj.submitter == request.user.id or is_occurrence_assessor(request)
 
     def get_is_new_contributor(self, obj):
         return is_new_external_contributor(obj.submitter)
@@ -1038,6 +1047,7 @@ class OCRLocationSerializer(BaseModelSerializer):
 
 class OccurrenceReportGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer):
     occurrence_report_id = serializers.IntegerField(write_only=True, required=False)
+    geometry_id = serializers.IntegerField(source="id", read_only=True)
     geometry_source = serializers.SerializerMethodField()
     report_copied_from = serializers.SerializerMethodField(read_only=True)
     srid = serializers.SerializerMethodField(read_only=True)
@@ -1052,6 +1062,7 @@ class OccurrenceReportGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSeri
         fields = [
             "id",
             "occurrence_report_id",
+            "geometry_id",
             "geometry",
             "original_geometry",
             "srid",
@@ -1574,9 +1585,11 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
     can_user_approve = serializers.SerializerMethodField()
     can_user_assess = serializers.SerializerMethodField()
     can_user_action = serializers.SerializerMethodField()
+    can_user_copy = serializers.SerializerMethodField()
     can_add_log = serializers.SerializerMethodField()
     user_is_assessor = serializers.SerializerMethodField()
     current_assessor = serializers.SerializerMethodField(read_only=True)
+    approved_by_name = serializers.SerializerMethodField(read_only=True)
     approval_details = OccurrenceReportApprovalDetailsSerializer(read_only=True, allow_null=True)
     declined_details = OccurrenceReportDeclinedDetailsSerializer(read_only=True, allow_null=True)
     assessor_mode = serializers.SerializerMethodField()
@@ -1664,10 +1677,18 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
             "is_submitter",
             "migrated_from_id",
             "user_is_assessor",
+            "can_user_copy",
             "record_source",
             "comments",
             "common_names",
+            "approved_by_name",
         )
+
+    def get_approved_by_name(self, obj):
+        if obj.approved_by:
+            email_user = retrieve_email_user(obj.approved_by)
+            return email_user.get_full_name()
+        return None
 
     def get_readonly(self, obj):
         # Assessor can edit the report in appropriate statuses
@@ -1702,6 +1723,10 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
     def get_user_is_assessor(self, obj):
         request = self.context["request"]
         return is_occurrence_assessor(request)
+
+    def get_can_user_copy(self, obj):
+        request = self.context["request"]
+        return obj.submitter == request.user.id or is_occurrence_assessor(request)
 
     def get_can_user_approve(self, obj):
         request = self.context["request"]
@@ -1821,6 +1846,13 @@ class OccurrenceReportReferralProposalSerializer(InternalOccurrenceReportSeriali
             "assessor_level": "referral",
             "assessor_box_view": obj.assessor_comments_view(request),
         }
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Strip PII fields from the referral view — referees should not
+        # see the submitter's free-text comments as they may contain PII.
+        ret.pop("comments", None)
+        return ret
 
 
 class OccurrenceReportReferralSerializer(BaseModelSerializer):

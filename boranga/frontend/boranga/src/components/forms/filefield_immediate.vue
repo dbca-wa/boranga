@@ -3,10 +3,13 @@
         <ul v-if="numDocuments > 0" class="list-group mb-3">
             <li v-for="v in documents" :key="v.id" class="list-group-item">
                 <div>
-                    <span v-if="v.name.endsWith('.pdf')" class="fa fa-file-pdf">
+                    <span
+                        v-if="v.name.endsWith('.pdf')"
+                        class="bi bi-file-earmark-pdf"
+                    >
                         &nbsp;
                     </span>
-                    <span v-else class="fa fa-file"> &nbsp; </span>
+                    <span v-else class="bi bi-file-earmark"> &nbsp; </span>
                     <a
                         :href="
                             Object.hasOwn(v, 'secure_url')
@@ -58,7 +61,7 @@
                     class="btn btn-primary ffu-input-text"
                     @click="button_clicked(name)"
                 >
-                    <i class="fa fa-upload" aria-hidden="true"></i>&nbsp;
+                    <i class="bi bi-upload" aria-hidden="true"></i>&nbsp;
                     {{ text_string }}</span
                 >
             </div>
@@ -170,7 +173,7 @@ export default {
             return helpers.getCookie('csrftoken');
         },
         document_action_url: function () {
-            let url = '';
+            let url;
             if (this.documentActionUrl == 'temporary_document') {
                 if (!this.temporary_document_collection_id) {
                     url = api_endpoints.temporary_document;

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from boranga.components.data_migration import utils
@@ -82,6 +83,85 @@ COLUMN_MAP = {
     "ADD_USERNAME": "OccurrenceDocument__uploaded_by",
     # OccurrenceGeometry
     "OCC_BUFFER_RADIUS": "OccurrenceGeometry__buffer_radius",
+    # ── TPFL Population-level fields (DRF_POPULATION.csv) ──
+    # OCCLocation
+    "LOCATION": "OCCLocation__location_description",
+    "CO_ORD_SOURCE_CODE": "OCCLocation__coordinate_source_id",
+    "LOCALITY": "OCCLocation__locality",
+    "DISTRICT": "OCCLocation__district_id",
+    "REGION": "OCCLocation__region_id",
+    "LOCATION_ACCURACY": "OCCLocation__location_accuracy_id",
+    "LGA_CODE": "OCCLocation__lga_code",
+    # Comment composition parts (adapter composes these)
+    "REASON_DEACTIVATED": "REASON_DEACTIVATED",
+    "DEACTIVATED_DATE": "DEACTIVATED_DATE",
+    # Contact composition parts (LAND_MGR_ADDRESS + LAND_MGR_PHONE → OCCContactDetail__contact)
+    "LAND_MGR_ADDRESS": "LAND_MGR_ADDRESS",
+    "LAND_MGR_PHONE": "LAND_MGR_PHONE",
+    # OCCHabitatComposition
+    "DRAINAGE": "OCCHabitatComposition__drainage_id",
+    "LAND_FORM": "OCCHabitatComposition__land_form",
+    "GRAVEL": "OCCHabitatComposition__loose_rock_percent",
+    "ROCK_TYPE": "OCCHabitatComposition__rock_type_id",
+    "SOIL_COLOUR": "OCCHabitatComposition__soil_colour_id",
+    "SOIL_CONDITION": "OCCHabitatComposition__soil_condition_id",
+    "SOIL_TYPE": "OCCHabitatComposition__soil_type",
+    # Habitat notes composition parts (HABITAT_NOTES + "ASPECT: " + ASPECT)
+    "HABITAT_NOTES": "HABITAT_NOTES",
+    "ASPECT": "ASPECT",
+    # OCCFireHistory
+    "FIRE_SEASON": "OCCFireHistory__fire_season",
+    "FIRE_YEAR": "OCCFireHistory__fire_year",
+    "FIRE_INTENSITY": "OCCFireHistory__intensity_id",
+    # OCCIdentification
+    "BARCODE_NUMBER": "OCCIdentification__barcode_number",
+    "COLLECTOR_NUMBER": "OCCIdentification__collector_number",
+    "PERMIT_ID": "OCCIdentification__permit_id",
+    "SAMPLE_DESTINATION": "OCCIdentification__sample_destination_id",
+    "VCHR_STATUS_CODE": "OCCIdentification__vchr_status_code",
+    "DUPVOUCH_LOCATION": "OCCIdentification__dupvouch_location",
+    # OCCObservationDetail
+    "AREA_ASSESSMENT": "OCCObservationDetail__area_assessment_id",
+    "AREA_SURVEYED": "OCCObservationDetail__area_surveyed",
+    "SURVEY_DURATION": "OCCObservationDetail__survey_duration",
+    # OCCAssociatedSpecies
+    "ASSOCIATED_SPECIES": "OCCAssociatedSpecies__comment",
+    # OCCPlantCount
+    "COUNTED_SUBJECT": "OCCPlantCount__counted_subject_id",
+    "PLANT_CONDITION": "OCCPlantCount__plant_condition_id",
+    "PLANT_COUNT_METHOD": "OCCPlantCount__plant_count_method_id",
+    "CLONAL": "OCCPlantCount__clonal_reproduction_present",
+    "VEGETATIVE_STATE": "OCCPlantCount__vegetative_state_present",
+    "FLOWER_BUD": "OCCPlantCount__flower_bud_present",
+    "FLOWER": "OCCPlantCount__flower_present",
+    "IMMATURE_FRUIT": "OCCPlantCount__immature_fruit_present",
+    "RIPE_FRUIT": "OCCPlantCount__ripe_fruit_present",
+    "DEHISCED_FRUIT": "OCCPlantCount__dehisced_fruit_present",
+    "ALIVE_MATURE": "OCCPlantCount__detailed_alive_mature",
+    "DEAD_MATURE": "OCCPlantCount__detailed_dead_mature",
+    "ALIVE_JUVENILE": "OCCPlantCount__detailed_alive_juvenile",
+    "DEAD_JUVENILE": "OCCPlantCount__detailed_dead_juvenile",
+    "ALIVE_SEEDLING": "OCCPlantCount__detailed_alive_seedling",
+    "DEAD_SEEDLING": "OCCPlantCount__detailed_dead_seedling",
+    "SIMPLE_ALIVE": "OCCPlantCount__simple_alive",
+    "SIMPLE_DEAD": "OCCPlantCount__simple_dead",
+    "QUADRATS_SURVEYED": "OCCPlantCount__quadrats_surveyed",
+    "ESTIMATED_POPULATION_AREA": "OCCPlantCount__estimated_population_area",
+    "FLOWERING_PLANTS_PER": "OCCPlantCount__flowering_plants_per",
+    "TOTAL_QUADRAT_AREA": "OCCPlantCount__total_quadrat_area",
+    "POLLINATOR_OBSERVATION": "OCCPlantCount__pollinator_observation",
+    "AREA_OCCUPIED_METHOD": "OCCPlantCount__area_occupied_method",
+    "QUAD_SIZE": "OCCPlantCount__quad_size",
+    "QUAD_NUM_TOTAL": "OCCPlantCount__quad_num_total",
+    "QUAD_NUM_MATURE": "OCCPlantCount__quad_num_mature",
+    "QUAD_NUM_JUVENILE": "OCCPlantCount__quad_num_juvenile",
+    "QUAD_NUM_SEEDLINGS": "OCCPlantCount__quad_num_seedlings",
+    "POPULATION_NOTES": "OCCPlantCount__population_notes",
+    # OCCHabitatCondition (adapter dispatches to 6 fields from single code)
+    "HABITAT_CONDITION": "HABITAT_CONDITION",
+    # OccurrenceGeometry (lat/long for 1m circle generation in handler)
+    "GDA94LAT": "OccurrenceGeometry__latitude",
+    "GDA94LONG": "OccurrenceGeometry__longitude",
 }
 
 REQUIRED_COLUMNS = [
@@ -143,6 +223,10 @@ class OccurrenceRow:
     OCCLocation__boundary_description: str | None = None
     OCCLocation__locality: str | None = None
     OCCLocation__location_description: str | None = None
+    OCCLocation__district_id: int | None = None
+    OCCLocation__region_id: int | None = None
+    OCCLocation__location_accuracy_id: int | None = None
+    OCCLocation__lga_code: str | None = None
 
     OccurrenceSite__comments: str | None = None
     OccurrenceSite__latitude: float | None = None
@@ -153,11 +237,24 @@ class OccurrenceRow:
     OccurrenceSite__geometry: Any | None = None
 
     OCCObservationDetail__comments: str | None = None
+    OCCObservationDetail__area_assessment_id: int | None = None
+    OCCObservationDetail__area_surveyed: Decimal | None = None
+    OCCObservationDetail__survey_duration: int | None = None
 
     OCCHabitatComposition__water_quality: str | None = None
     OCCHabitatComposition__habitat_notes: str | None = None
+    OCCHabitatComposition__drainage_id: int | None = None
+    OCCHabitatComposition__land_form: str | None = None
+    OCCHabitatComposition__loose_rock_percent: int | None = None
+    OCCHabitatComposition__rock_type_id: int | None = None
+    OCCHabitatComposition__soil_colour_id: int | None = None
+    OCCHabitatComposition__soil_condition_id: int | None = None
+    OCCHabitatComposition__soil_type: str | None = None
 
     OCCFireHistory__comment: str | None = None
+    OCCFireHistory__fire_season: str | None = None
+    OCCFireHistory__fire_year: str | None = None
+    OCCFireHistory__intensity_id: int | None = None
 
     OCCHabitatCondition__pristine: float | None = None
     OCCHabitatCondition__excellent: float | None = None
@@ -172,11 +269,49 @@ class OccurrenceRow:
     AssociatedSpeciesTaxonomy__species_role_id: int | None = None
 
     OCCIdentification__identification_certainty_id: int | None = None
+    OCCIdentification__barcode_number: str | None = None
+    OCCIdentification__collector_number: str | None = None
+    OCCIdentification__permit_id: str | None = None
+    OCCIdentification__sample_destination_id: int | None = None
+    OCCIdentification__vchr_status_code: str | None = None
+    OCCIdentification__dupvouch_location: str | None = None
 
     OCCVegetationStructure__vegetation_structure_layer_one: str | None = None
 
-    OCCLocation__district_id: int | None = None
-    OCCLocation__region_id: int | None = None
+    OCCPlantCount__counted_subject_id: int | None = None
+    OCCPlantCount__plant_condition_id: int | None = None
+    OCCPlantCount__plant_count_method_id: int | None = None
+    OCCPlantCount__clonal_reproduction_present: bool | None = None
+    OCCPlantCount__vegetative_state_present: bool | None = None
+    OCCPlantCount__flower_bud_present: bool | None = None
+    OCCPlantCount__flower_present: bool | None = None
+    OCCPlantCount__immature_fruit_present: bool | None = None
+    OCCPlantCount__ripe_fruit_present: bool | None = None
+    OCCPlantCount__dehisced_fruit_present: bool | None = None
+    OCCPlantCount__detailed_alive_mature: int | None = None
+    OCCPlantCount__detailed_dead_mature: int | None = None
+    OCCPlantCount__detailed_alive_juvenile: int | None = None
+    OCCPlantCount__detailed_dead_juvenile: int | None = None
+    OCCPlantCount__detailed_alive_seedling: int | None = None
+    OCCPlantCount__detailed_dead_seedling: int | None = None
+    OCCPlantCount__simple_alive: int | None = None
+    OCCPlantCount__simple_dead: int | None = None
+    OCCPlantCount__quadrats_surveyed: int | None = None
+    OCCPlantCount__estimated_population_area: Decimal | None = None
+    OCCPlantCount__flowering_plants_per: Decimal | None = None
+    OCCPlantCount__total_quadrat_area: Decimal | None = None
+    OCCPlantCount__pollinator_observation: str | None = None
+    OCCPlantCount__area_occupied_method: str | None = None
+    OCCPlantCount__quad_size: str | None = None
+    OCCPlantCount__quad_num_total: str | None = None
+    OCCPlantCount__quad_num_mature: str | None = None
+    OCCPlantCount__quad_num_juvenile: str | None = None
+    OCCPlantCount__quad_num_seedlings: str | None = None
+    OCCPlantCount__population_notes: str | None = None
+
+    OccurrenceGeometry__latitude: float | None = None
+    OccurrenceGeometry__longitude: float | None = None
+    OccurrenceGeometry__buffer_radius: float | None = None
 
     OccurrenceDocument__document_sub_category_id: int | None = None
     OccurrenceDocument__description: str | None = None
@@ -214,10 +349,16 @@ class OccurrenceRow:
             OCCContactDetail__notes=utils.safe_strip(d.get("OCCContactDetail__notes")),
             OccurrenceTenure__purpose_id=utils.to_int_maybe(d.get("OccurrenceTenure__purpose_id")),
             OccurrenceTenure__vesting_id=utils.to_int_maybe(d.get("OccurrenceTenure__vesting_id")),
+            # --- OCCLocation ---
             OCCLocation__coordinate_source_id=utils.to_int_maybe(d.get("OCCLocation__coordinate_source_id")),
             OCCLocation__boundary_description=utils.safe_strip(d.get("OCCLocation__boundary_description")),
             OCCLocation__locality=utils.safe_strip(d.get("OCCLocation__locality")),
             OCCLocation__location_description=utils.safe_strip(d.get("OCCLocation__location_description")),
+            OCCLocation__district_id=utils.to_int_maybe(d.get("OCCLocation__district_id")),
+            OCCLocation__region_id=utils.to_int_maybe(d.get("OCCLocation__region_id")),
+            OCCLocation__location_accuracy_id=utils.to_int_maybe(d.get("OCCLocation__location_accuracy_id")),
+            OCCLocation__lga_code=utils.safe_strip(d.get("OCCLocation__lga_code")),
+            # --- OccurrenceSite ---
             OccurrenceSite__comments=utils.safe_strip(d.get("OccurrenceSite__comments")),
             OccurrenceSite__latitude=utils.to_float_maybe(d.get("OccurrenceSite__latitude")),
             OccurrenceSite__longitude=utils.to_float_maybe(d.get("OccurrenceSite__longitude")),
@@ -225,22 +366,101 @@ class OccurrenceRow:
             OccurrenceSite__updated_date=d.get("OccurrenceSite__updated_date"),
             OccurrenceSite__drawn_by=utils.to_int_maybe(d.get("OccurrenceSite__drawn_by")),
             OccurrenceSite__geometry=d.get("OccurrenceSite__geometry"),
+            # --- OCCObservationDetail ---
             OCCObservationDetail__comments=utils.safe_strip(d.get("OCCObservationDetail__comments")),
+            OCCObservationDetail__area_assessment_id=utils.to_int_maybe(
+                d.get("OCCObservationDetail__area_assessment_id")
+            ),
+            OCCObservationDetail__area_surveyed=utils.to_decimal_maybe(d.get("OCCObservationDetail__area_surveyed")),
+            OCCObservationDetail__survey_duration=utils.to_int_maybe(d.get("OCCObservationDetail__survey_duration")),
+            # --- OCCHabitatComposition ---
             OCCHabitatComposition__water_quality=utils.safe_strip(d.get("OCCHabitatComposition__water_quality")),
             OCCHabitatComposition__habitat_notes=utils.safe_strip(d.get("OCCHabitatComposition__habitat_notes")),
+            OCCHabitatComposition__drainage_id=utils.to_int_maybe(d.get("OCCHabitatComposition__drainage_id")),
+            OCCHabitatComposition__land_form=utils.safe_strip(d.get("OCCHabitatComposition__land_form")),
+            OCCHabitatComposition__loose_rock_percent=utils.to_int_maybe(
+                d.get("OCCHabitatComposition__loose_rock_percent")
+            ),
+            OCCHabitatComposition__rock_type_id=utils.to_int_maybe(d.get("OCCHabitatComposition__rock_type_id")),
+            OCCHabitatComposition__soil_colour_id=utils.to_int_maybe(d.get("OCCHabitatComposition__soil_colour_id")),
+            OCCHabitatComposition__soil_condition_id=utils.to_int_maybe(
+                d.get("OCCHabitatComposition__soil_condition_id")
+            ),
+            OCCHabitatComposition__soil_type=utils.safe_strip(d.get("OCCHabitatComposition__soil_type")),
+            # --- OCCFireHistory ---
             OCCFireHistory__comment=utils.safe_strip(d.get("OCCFireHistory__comment")),
+            OCCFireHistory__fire_season=utils.safe_strip(d.get("OCCFireHistory__fire_season")),
+            OCCFireHistory__fire_year=utils.safe_strip(d.get("OCCFireHistory__fire_year")),
+            OCCFireHistory__intensity_id=utils.to_int_maybe(d.get("OCCFireHistory__intensity_id")),
+            # --- OCCHabitatCondition ---
+            OCCHabitatCondition__pristine=utils.to_float_maybe(d.get("OCCHabitatCondition__pristine")),
+            OCCHabitatCondition__excellent=utils.to_float_maybe(d.get("OCCHabitatCondition__excellent")),
+            OCCHabitatCondition__very_good=utils.to_float_maybe(d.get("OCCHabitatCondition__very_good")),
+            OCCHabitatCondition__good=utils.to_float_maybe(d.get("OCCHabitatCondition__good")),
+            OCCHabitatCondition__degraded=utils.to_float_maybe(d.get("OCCHabitatCondition__degraded")),
+            OCCHabitatCondition__completely_degraded=utils.to_float_maybe(
+                d.get("OCCHabitatCondition__completely_degraded")
+            ),
+            # --- OCCAssociatedSpecies ---
             OCCAssociatedSpecies__comment=utils.safe_strip(d.get("OCCAssociatedSpecies__comment")),
+            # --- AssociatedSpeciesTaxonomy ---
             AssociatedSpeciesTaxonomy__species_role_id=utils.to_int_maybe(
                 d.get("AssociatedSpeciesTaxonomy__species_role_id")
             ),
+            # --- OCCIdentification ---
             OCCIdentification__identification_certainty_id=utils.to_int_maybe(
                 d.get("OCCIdentification__identification_certainty_id")
             ),
+            OCCIdentification__barcode_number=utils.safe_strip(d.get("OCCIdentification__barcode_number")),
+            OCCIdentification__collector_number=utils.safe_strip(d.get("OCCIdentification__collector_number")),
+            OCCIdentification__permit_id=utils.safe_strip(d.get("OCCIdentification__permit_id")),
+            OCCIdentification__sample_destination_id=utils.to_int_maybe(
+                d.get("OCCIdentification__sample_destination_id")
+            ),
+            OCCIdentification__vchr_status_code=utils.safe_strip(d.get("OCCIdentification__vchr_status_code")),
+            OCCIdentification__dupvouch_location=utils.safe_strip(d.get("OCCIdentification__dupvouch_location")),
+            # --- OCCVegetationStructure ---
             OCCVegetationStructure__vegetation_structure_layer_one=utils.safe_strip(
                 d.get("OCCVegetationStructure__vegetation_structure_layer_one")
             ),
-            OCCLocation__district_id=utils.to_int_maybe(d.get("OCCLocation__district_id")),
-            OCCLocation__region_id=utils.to_int_maybe(d.get("OCCLocation__region_id")),
+            # --- OCCPlantCount ---
+            OCCPlantCount__counted_subject_id=utils.to_int_maybe(d.get("OCCPlantCount__counted_subject_id")),
+            OCCPlantCount__plant_condition_id=utils.to_int_maybe(d.get("OCCPlantCount__plant_condition_id")),
+            OCCPlantCount__plant_count_method_id=utils.to_int_maybe(d.get("OCCPlantCount__plant_count_method_id")),
+            OCCPlantCount__clonal_reproduction_present=d.get("OCCPlantCount__clonal_reproduction_present"),
+            OCCPlantCount__vegetative_state_present=d.get("OCCPlantCount__vegetative_state_present"),
+            OCCPlantCount__flower_bud_present=d.get("OCCPlantCount__flower_bud_present"),
+            OCCPlantCount__flower_present=d.get("OCCPlantCount__flower_present"),
+            OCCPlantCount__immature_fruit_present=d.get("OCCPlantCount__immature_fruit_present"),
+            OCCPlantCount__ripe_fruit_present=d.get("OCCPlantCount__ripe_fruit_present"),
+            OCCPlantCount__dehisced_fruit_present=d.get("OCCPlantCount__dehisced_fruit_present"),
+            OCCPlantCount__detailed_alive_mature=utils.to_int_maybe(d.get("OCCPlantCount__detailed_alive_mature")),
+            OCCPlantCount__detailed_dead_mature=utils.to_int_maybe(d.get("OCCPlantCount__detailed_dead_mature")),
+            OCCPlantCount__detailed_alive_juvenile=utils.to_int_maybe(d.get("OCCPlantCount__detailed_alive_juvenile")),
+            OCCPlantCount__detailed_dead_juvenile=utils.to_int_maybe(d.get("OCCPlantCount__detailed_dead_juvenile")),
+            OCCPlantCount__detailed_alive_seedling=utils.to_int_maybe(d.get("OCCPlantCount__detailed_alive_seedling")),
+            OCCPlantCount__detailed_dead_seedling=utils.to_int_maybe(d.get("OCCPlantCount__detailed_dead_seedling")),
+            OCCPlantCount__simple_alive=utils.to_int_maybe(d.get("OCCPlantCount__simple_alive")),
+            OCCPlantCount__simple_dead=utils.to_int_maybe(d.get("OCCPlantCount__simple_dead")),
+            OCCPlantCount__quadrats_surveyed=utils.to_int_maybe(d.get("OCCPlantCount__quadrats_surveyed")),
+            OCCPlantCount__estimated_population_area=utils.to_decimal_maybe(
+                d.get("OCCPlantCount__estimated_population_area")
+            ),
+            OCCPlantCount__flowering_plants_per=utils.to_decimal_maybe(d.get("OCCPlantCount__flowering_plants_per")),
+            OCCPlantCount__total_quadrat_area=utils.to_decimal_maybe(d.get("OCCPlantCount__total_quadrat_area")),
+            OCCPlantCount__pollinator_observation=utils.safe_strip(d.get("OCCPlantCount__pollinator_observation")),
+            OCCPlantCount__area_occupied_method=utils.safe_strip(d.get("OCCPlantCount__area_occupied_method")),
+            OCCPlantCount__quad_size=utils.safe_strip(d.get("OCCPlantCount__quad_size")),
+            OCCPlantCount__quad_num_total=utils.safe_strip(d.get("OCCPlantCount__quad_num_total")),
+            OCCPlantCount__quad_num_mature=utils.safe_strip(d.get("OCCPlantCount__quad_num_mature")),
+            OCCPlantCount__quad_num_juvenile=utils.safe_strip(d.get("OCCPlantCount__quad_num_juvenile")),
+            OCCPlantCount__quad_num_seedlings=utils.safe_strip(d.get("OCCPlantCount__quad_num_seedlings")),
+            OCCPlantCount__population_notes=utils.safe_strip(d.get("OCCPlantCount__population_notes")),
+            # --- OccurrenceGeometry ---
+            OccurrenceGeometry__latitude=utils.to_float_maybe(d.get("OccurrenceGeometry__latitude")),
+            OccurrenceGeometry__longitude=utils.to_float_maybe(d.get("OccurrenceGeometry__longitude")),
+            OccurrenceGeometry__buffer_radius=utils.to_float_maybe(d.get("OccurrenceGeometry__buffer_radius")),
+            # --- OccurrenceDocument ---
             OccurrenceDocument__document_sub_category_id=utils.to_int_maybe(
                 d.get("OccurrenceDocument__document_sub_category_id")
             ),

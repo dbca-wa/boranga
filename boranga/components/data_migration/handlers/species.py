@@ -39,6 +39,84 @@ SOURCE_ADAPTERS = {
 }
 
 
+def _apply_tfauna_region_district(
+    *,
+    species_pk: int,
+    raw_sp_code: str,
+    merged: dict,
+    region_map: dict,
+    region_map_ci: dict,
+    district_map: dict,
+    district_map_ci: dict,
+    district_links: dict,
+    district_to_region: dict,
+    desired_region_pairs: set,
+    desired_district_pairs: set,
+    warnings: list,
+    warnings_details: list,
+) -> int:
+    """
+    Tasks 11872+11875 (TFAUNA only):
+
+    1. Parse the comma-separated Region column value (``regions_raw``) into
+       individual CALMRegion names, resolve each to a Boranga Region PK via
+       ``region_map``, and add ``(species_pk, region_pk)`` pairs to
+       ``desired_region_pairs``.
+
+    2. Look up the Species Districts CSV rows for this SpCode via
+       ``district_links``.  For each district name, resolve to a District PK
+       via ``district_map`` and only add ``(species_pk, district_pk)`` to
+       ``desired_district_pairs`` when the district's parent Region is already
+       in the species' resolved region set (per Task 11875 condition).
+
+    Returns the number of warning messages added (so the caller can increment
+    its ``warn_count`` accordingly).
+    """
+    added_warnings = 0
+
+    # Step 1: resolve regions from regions_raw
+    regions_raw = (merged.get("regions_raw") or "").strip()
+    species_region_pks: set[int] = set()
+    if regions_raw:
+        for name_part in [n.strip() for n in regions_raw.split(",") if n.strip()]:
+            pk = region_map.get(name_part) or region_map_ci.get(name_part.casefold())
+            if pk:
+                species_region_pks.add(pk)
+                desired_region_pairs.add((species_pk, pk))
+            else:
+                msg = f"tfauna-{raw_sp_code}: unknown Region value {name_part!r}"
+                warnings.append(msg)
+                warnings_details.append({"migrated_from_id": f"tfauna-{raw_sp_code}", "missing_region": name_part})
+                added_warnings += 1
+
+    # Step 2: resolve districts from Species Districts CSV, conditioned on region membership
+    tfauna_dist_keys = district_links.get(raw_sp_code, [])
+    for dist_key in tfauna_dist_keys:
+        pk = district_map.get(dist_key) or district_map_ci.get(dist_key.casefold() if dist_key else "")
+        if pk:
+            parent_region_id = district_to_region.get(pk)
+            if parent_region_id and parent_region_id in species_region_pks:
+                desired_district_pairs.add((species_pk, pk))
+            else:
+                # District's parent region not in migrated region set — skip per Task 11875
+                logger.debug(
+                    "TFAUNA: skipping district_pk=%s (%s) for SpCode=%s "
+                    "– parent region_id=%s not in species regions %s",
+                    pk,
+                    dist_key,
+                    raw_sp_code,
+                    parent_region_id,
+                    species_region_pks,
+                )
+        else:
+            msg = f"tfauna-{raw_sp_code}: unknown District value {dist_key!r}"
+            warnings.append(msg)
+            warnings_details.append({"migrated_from_id": f"tfauna-{raw_sp_code}", "missing_district": dist_key})
+            added_warnings += 1
+
+    return added_warnings
+
+
 @register
 class SpeciesImporter(BaseSheetImporter):
     slug = "species_legacy"
@@ -301,6 +379,28 @@ class SpeciesImporter(BaseSheetImporter):
         # implement load_legacy_to_pk_map to read LegacyValueMap or build from the other adapter
         district_map = load_legacy_to_pk_map(legacy_system="TPFL", model_name="District")
 
+        # Task 11872+11875: TFAUNA-specific region and district lookup maps.
+        # region_map_tfauna: legacy CALMRegion name → Region PK (from LegacyValueMap).
+        # district_map_tfauna: legacy District name → District PK (from LegacyValueMap).
+        # tfauna_district_links: SpCode → list of legacy district names (from Species Districts CSV).
+        region_map_tfauna = load_legacy_to_pk_map(legacy_system="TFAUNA", model_name="Region")
+        district_map_tfauna = load_legacy_to_pk_map(legacy_system="TFAUNA", model_name="District")
+        tfauna_district_links = load_species_to_district_links(
+            legacy_system="TFAUNA",
+            key_column="SpCode",
+            district_column="District",
+        )
+        # Case-insensitive fallback maps for TFAUNA lookups
+        region_map_tfauna_ci = {k.casefold(): v for k, v in region_map_tfauna.items()}
+        district_map_tfauna_ci = {k.casefold(): v for k, v in district_map_tfauna.items()}
+
+        # Preload all District→Region parent mappings upfront so we can apply
+        # Task 11875 condition: only include a TFAUNA district if its parent
+        # Region is already being migrated for that species.
+        from boranga.components.species_and_communities.models import District as DistrictModel
+
+        all_district_to_region: dict[int, int] = dict(DistrictModel.objects.all().values_list("id", "region_id"))
+
         # 3. Transform every row into canonical form, collect per-key groups
         groups: dict[str, list[tuple[dict, str, list[tuple[str, Any]]]]] = defaultdict(list)
         # groups[migrated_from_id] -> list of (transformed_dict, source, issues_list)
@@ -449,6 +549,9 @@ class SpeciesImporter(BaseSheetImporter):
                 "submitter": merged.get("submitter"),
                 "lodgement_date": merged.get("lodgement_date"),
                 "last_data_curation_date": merged.get("last_data_curation_date"),
+                # Task 11843+11844: fauna group / sub-group (TFAUNA only; NULL for other sources)
+                "fauna_sub_group_id": merged.get("fauna_sub_group_id"),
+                "fauna_group_id": merged.get("fauna_group_id"),
             }
 
             if ctx.dry_run:
@@ -691,6 +794,26 @@ class SpeciesImporter(BaseSheetImporter):
             for did in district_ids:
                 desired_district_pairs.add((obj.pk, did))
 
+            # Task 11872+11875 (TFAUNA only): add regions from the Region column and
+            # conditionally add districts from the Species Districts CSV.
+            if str(obj.migrated_from_id).lower().startswith("tfauna-"):
+                raw_sp_code = obj.migrated_from_id[7:]
+                warn_count += _apply_tfauna_region_district(
+                    species_pk=obj.pk,
+                    raw_sp_code=raw_sp_code,
+                    merged=merged,
+                    region_map=region_map_tfauna,
+                    region_map_ci=region_map_tfauna_ci,
+                    district_map=district_map_tfauna,
+                    district_map_ci=district_map_tfauna_ci,
+                    district_links=tfauna_district_links,
+                    district_to_region=all_district_to_region,
+                    desired_region_pairs=desired_region_pairs,
+                    desired_district_pairs=desired_district_pairs,
+                    warnings=warnings,
+                    warnings_details=warnings_details,
+                )
+
         # Process created instances similarly
         created_species_ids = []
         if create_meta:
@@ -735,6 +858,26 @@ class SpeciesImporter(BaseSheetImporter):
                     )
                 for did in district_ids:
                     desired_district_pairs.add((obj.pk, did))
+
+                # Task 11872+11875 (TFAUNA only): add regions from the Region column and
+                # conditionally add districts from the Species Districts CSV.
+                if str(migrated_from_id).lower().startswith("tfauna-"):
+                    raw_sp_code = migrated_from_id[7:]
+                    warn_count += _apply_tfauna_region_district(
+                        species_pk=obj.pk,
+                        raw_sp_code=raw_sp_code,
+                        merged=merged,
+                        region_map=region_map_tfauna,
+                        region_map_ci=region_map_tfauna_ci,
+                        district_map=district_map_tfauna,
+                        district_map_ci=district_map_tfauna_ci,
+                        district_links=tfauna_district_links,
+                        district_to_region=all_district_to_region,
+                        desired_region_pairs=desired_region_pairs,
+                        desired_district_pairs=desired_district_pairs,
+                        warnings=warnings,
+                        warnings_details=warnings_details,
+                    )
 
         # Bulk create distributions and publishing statuses for created species
         if dist_to_create:
@@ -1045,7 +1188,6 @@ class SpeciesImporter(BaseSheetImporter):
         # keep lightweight: counts, messages and CSV path (set below if written)
         stats["error_count_details"] = len(errors_details)
         stats["warning_count_details"] = len(warnings_details)
-        stats["warning_messages"] = warnings
         stats["error_details_csv"] = None
 
         # Log taxonomy collision summary
@@ -1069,10 +1211,26 @@ class SpeciesImporter(BaseSheetImporter):
                 collision_skipped,
             )
 
+        # Merge extraction warnings and per-column transform warnings into errors_details
+        # so they appear in the CSV rather than in the stats object.
+        for w_msg in warnings:
+            source_ref, msg_body = w_msg.split(": ", 1) if ": " in w_msg else ("", w_msg)
+            errors_details.append(
+                {
+                    "migrated_from_id": "",
+                    "column": "",
+                    "level": "warning",
+                    "message": msg_body,
+                    "raw_value": "",
+                    "reason": source_ref,
+                }
+            )
+        errors_details.extend(warnings_details)
+
         elapsed = timezone.now() - start_time
         stats["time_taken"] = str(elapsed)
 
-        # write detailed errors to CSV (if any) but only log a concise count summary
+        # write detailed errors/warnings to CSV (if any) but only log a concise count summary
         if errors_details:
             # allow override via options, otherwise write to
             # <cwd>/private-media/handler_output with timestamp

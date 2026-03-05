@@ -178,10 +178,12 @@ CACHES = {
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS.append(os.path.join(os.path.join(BASE_DIR, "boranga", "static")))
 STATICFILES_DIRS.append(os.path.join(os.path.join(BASE_DIR, "boranga", "static", "boranga_vue")))
-DATA_UPLOAD_MAX_NUMBER_FIELDS = None
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = env("FILE_UPLOAD_MAX_MEMORY_SIZE", 2621440)
 MAX_UPLOAD_SIZE_BYTES = env("MAX_UPLOAD_SIZE_BYTES", 20 * 1024 * 1024)  # 20 MB
+
+PRIVATE_MEDIA_STORAGE_LOCATION = env("PRIVATE_MEDIA_STORAGE_LOCATION", os.path.join(BASE_DIR, "private-media"))
+PRIVATE_MEDIA_BASE_URL = env("PRIVATE_MEDIA_BASE_URL", "/private-media/")
 
 # Department details
 SYSTEM_NAME = "Boranga System"
@@ -207,9 +209,18 @@ DEP_FAX = env("DEP_FAX", "(08) 9423 8242")
 DEP_POSTAL = env("DEP_POSTAL", "Locked Bag 104, Bentley Delivery Centre, Western Australia 6983")
 DEP_NAME = env("DEP_NAME", "Department of Biodiversity, Conservation and Attractions")
 DEP_NAME_SHORT = env("DEP_NAME_SHORT", "DBCA")
-BRANCH_NAME = env("BRANCH_NAME", "Tourism and Concessions Branch")
+BRANCH_NAME = env("BRANCH_NAME", "Species and Communities Program, Biodiversity and Conservation Science")
 DEP_ADDRESS = env("DEP_ADDRESS", "17 Dick Perry Avenue, Kensington WA 6151")
 SITE_URL = env("SITE_URL", "https://" + SITE_PREFIX + "." + SITE_DOMAIN)
+EMAIL_SUPPORT_ADDRESS = env("EMAIL_SUPPORT_ADDRESS", "boranga@dbca.wa.gov.au")
+EMAIL_DO_NOT_REPLY_MSG = env(
+    "EMAIL_DO_NOT_REPLY_MSG",
+    "Please do not reply directly to this email. Should you need to contact the {branch}, please email {email}.",
+)
+EMAIL_ACKNOWLEDGEMENT = env(
+    "EMAIL_ACKNOWLEDGEMENT",
+    "The department acknowledges all Aboriginal people as the traditional owners of the land and waters it manages throughout Western Australia. We pay our respects to them, their culture and to their Elders past and present. Our office is located on the lands of the Whadjuk Noongar People.",
+)
 PUBLIC_URL = env("PUBLIC_URL", SITE_URL)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@" + SITE_DOMAIN).lower()
 MEDIA_APP_DIR = env("MEDIA_APP_DIR", "boranga")
@@ -392,7 +403,7 @@ CONSERVATION_CHANGE_CODE_NAME_CHANGE = "Name Change"
 CONSERVATION_CHANGE_CODE_RANK_CHANGE = "Rank Change"
 CONSERVATION_CHANGE_CODE_CATEGORY_CHANGE = "Category Change"
 CONSERVATION_CHANGE_CODE_CRITERIA_CHANGE = "Criteria Change"
-CONSERVATION_CHANGE_CODE_DELIST = "DeList"
+CONSERVATION_CHANGE_CODE_DELIST = "Delist"
 CONSERVATION_CHANGE_CODE_CLOSE = "Close"
 CONSERVATION_CHANGE_CODE_OTHER = "Other"
 
@@ -404,7 +415,7 @@ CONSERVATION_CHANGE_CODES = [
     {"code": CONSERVATION_CHANGE_CODE_RANK_CHANGE, "label": "Rank Change"},
     {"code": CONSERVATION_CHANGE_CODE_CATEGORY_CHANGE, "label": "Category Change"},
     {"code": CONSERVATION_CHANGE_CODE_CRITERIA_CHANGE, "label": "Criteria Change"},
-    {"code": CONSERVATION_CHANGE_CODE_DELIST, "label": "DeList"},
+    {"code": CONSERVATION_CHANGE_CODE_DELIST, "label": "Delist"},
     {"code": CONSERVATION_CHANGE_CODE_CLOSE, "label": "Close"},
     {"code": CONSERVATION_CHANGE_CODE_OTHER, "label": "Other"},
 ]
@@ -532,10 +543,9 @@ DEFAULT_SELECT2_RECORDS_LIMIT = config("DEFAULT_SELECT2_RECORDS_LIMIT", default=
 
 GIS_EXTENT = config(
     "GIS_EXTENT",
-    # default="96.0, -35.0, 129.0, -10.0",
-    # TODO: Changed for now to include much wider extent of WA plus maritime borders
-    # so geometries located around all offshore reefs are included in map views
-    default="112.0, -38.5, 129.1, -13.0",
+    # Expanded to include Cocos (Keeling) Islands (~96.8°E), Christmas Island (~105.6°E, -10.5°S),
+    # and Kimberley/NT border records (~-12°S)
+    default="95.0, -38.5, 129.1, -9.0",
     cast=Csv(float, post_process=tuple),
 )
 

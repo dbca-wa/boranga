@@ -14,6 +14,7 @@ from rest_framework.settings import api_settings
 from boranga.components.main.models import (
     CommunicationsLogEntry,
     HelpTextEntry,
+    _sanitise_json_value,
     neutralise_html,
 )
 from boranga.helpers import (
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 class NH3SanitizeSerializerMixin:
     """
     Sanitizes all CharField inputs using nh3 before validation.
+    Also recursively sanitises JSONField / DictField / ListField inputs.
 
     Output sanitization is disabled by default to avoid double-escaping
     (e.g. "&" -> "&amp;"). Enable per-serializer by setting
@@ -79,6 +81,11 @@ class NH3SanitizeSerializerMixin:
                 value = data.get(field_name)
                 if isinstance(value, str):
                     data[field_name] = neutralise_html(value)
+            # Recursively sanitise JSON / dict / list field inputs
+            elif isinstance(field, serializers.JSONField | serializers.DictField | serializers.ListField):
+                value = data.get(field_name)
+                if value is not None:
+                    data[field_name] = _sanitise_json_value(value)
         return super().to_internal_value(data)
 
     def to_representation(self, instance):
@@ -152,10 +159,10 @@ class CommunicationLogEntrySerializer(BaseModelSerializer):
             "cc",
             "type",
             "reference",
-            "subject" "text",
+            "subjecttext",
             "created",
             "staff",
-            "proposal" "documents",
+            "proposaldocuments",
         )
 
     def get_documents(self, obj):

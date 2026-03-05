@@ -3,13 +3,13 @@
         <template v-if="!isForAssessor">
             <template v-if="!showingHelpText">
                 <a href="" @click.prevent="toggleHelpText"
-                    ><i class="fa fa-question-circle" style="color: blue"
+                    ><i class="bi bi-question-circle" style="color: blue"
                         >&nbsp;</i
                     ></a
                 >
             </template>
             <a v-else href="" @click.prevent="toggleHelpText"
-                ><i class="fa fa-question-circle" style="color: blue"
+                ><i class="bi bi-question-circle" style="color: blue"
                     >&nbsp;</i
                 ></a
             >
@@ -19,13 +19,13 @@
             <template v-if="assessorMode">
                 <template v-if="!showingHelpText">
                     <a href="" @click.prevent="toggleHelpText"
-                        ><i class="fa fa-question-circle" style="color: green"
+                        ><i class="bi bi-question-circle" style="color: green"
                             >&nbsp;</i
                         ></a
                     >
                 </template>
                 <a v-else href="" @click.prevent="toggleHelpText"
-                    ><i class="fa fa-question-circle" style="color: green"
+                    ><i class="bi bi-question-circle" style="color: green"
                         >&nbsp;</i
                     ></a
                 >

@@ -15,7 +15,6 @@
                         v-model="occurrence_obj.occurrence_name"
                         class="form-control"
                         :disabled="isReadOnly"
-                        rows="1"
                         placeholder=""
                     />
                 </div>

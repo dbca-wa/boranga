@@ -347,7 +347,7 @@
                     class="btn btn-primary mb-2"
                     @click.prevent="createFloraConservationStatus"
                 >
-                    <i class="fa-solid fa-circle-plus"></i> Propose Conservation
+                    <i class="bi bi-plus-circle"></i> Propose Conservation
                     Status
                 </button>
             </div>
@@ -842,24 +842,24 @@ export default {
                 'Species',
                 'Scientific Name',
                 'Common Name',
-                'Family',
-                'Genus',
-                'Informal Group(s)',
+                'WA Legislative Category',
+                'WA Priority Category',
                 'Change Type',
                 'WA Priority List',
-                'WA Priority Category',
                 'WA Legislative List',
-                'WA Legislative Category',
-                'Commonwealth Conservation Category',
-                'Other Conservation Assessment',
                 'Conservation Criteria',
+                'Commonwealth Conservation Category',
+                'Effective From Date',
+                'Effective To Date',
+                'Review Due Date',
                 'Submitter Name',
                 'Submitter Category',
                 'Submitter Organisation',
                 'Assessor Name',
-                'Effective From Date',
-                'Effective To Date',
-                'Review Due Date',
+                'Other Conservation Assessment',
+                'Family',
+                'Genus',
+                'Informal Group(s)',
                 'Status',
                 'Action',
             ];
@@ -1185,13 +1185,13 @@ export default {
         datatable_options: function () {
             let vm = this;
 
-            let columns = [];
-            let search = null;
+            let columns;
+            let search;
             let buttons = [
                 {
                     extend: 'excel',
                     title: 'Boranga CS Flora Excel Export',
-                    text: '<i class="fa-solid fa-download"></i> Excel',
+                    text: '<i class="bi bi-download"></i> Excel',
                     className: 'btn btn-primary me-2 rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -1201,7 +1201,7 @@ export default {
                 {
                     extend: 'csv',
                     title: 'Boranga CS Flora CSV Export',
-                    text: '<i class="fa-solid fa-download"></i> CSV',
+                    text: '<i class="bi bi-download"></i> CSV',
                     className: 'btn btn-primary rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -1215,24 +1215,24 @@ export default {
                 vm.column_species_number,
                 vm.column_scientific_name,
                 vm.column_common_name,
-                vm.column_family,
-                vm.column_genera,
-                vm.column_phylo_group,
+                vm.column_wa_legislative_category,
+                vm.column_wa_priority_category,
                 vm.column_change_code,
                 vm.column_wa_priority_list,
-                vm.column_wa_priority_category,
                 vm.column_wa_legislative_list,
-                vm.column_wa_legislative_category,
-                vm.column_commonwealth_conservation_category,
-                vm.column_other_conservation_assessment,
                 vm.column_conservation_criteria,
+                vm.column_commonwealth_conservation_category,
+                vm.column_effective_from,
+                vm.column_effective_to,
+                vm.column_review_due_date,
                 vm.column_submitter_name,
                 vm.column_submitter_category,
                 vm.column_submitter_organisation,
                 vm.column_assessor_name,
-                vm.column_effective_from,
-                vm.column_effective_to,
-                vm.column_review_due_date,
+                vm.column_other_conservation_assessment,
+                vm.column_family,
+                vm.column_genera,
+                vm.column_phylo_group,
                 vm.column_status,
                 vm.column_action,
             ];
@@ -1602,7 +1602,7 @@ export default {
             vm.initialiseAssessorLookup();
             vm.initialiseSubmitterLookup();
             vm.addEventListeners();
-            var newOption = null;
+            var newOption;
             // -- to set the select2 field with the session value if exists onload()
             if (
                 sessionStorage.getItem('filterCSFloraScientificName') !=

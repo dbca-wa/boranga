@@ -240,7 +240,6 @@
                                             v-model="observerObj.contact"
                                             class="form-control"
                                             :disabled="isReadOnly"
-                                            rows="4"
                                         />
                                     </div>
                                 </div>
@@ -657,3 +656,5 @@ export default {
     },
 };
 </script>
+
+<style scoped></style>

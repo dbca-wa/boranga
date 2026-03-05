@@ -302,7 +302,7 @@
                     class="btn btn-primary mb-2"
                     @click.prevent="createFauna"
                 >
-                    <i class="fa-solid fa-circle-plus"></i> New Fauna
+                    <i class="bi bi-plus-circle"></i> New Fauna
                 </button>
             </div>
         </div>
@@ -674,19 +674,19 @@ export default {
                     'Number',
                     'Scientific Name',
                     'Common Name',
-                    'Informal Group(s)',
+                    'WA Priority Category',
+                    'WA Legislative Category',
+                    'Region',
+                    'District',
                     'Fauna Group',
                     'Fauna Sub Group',
                     'Family',
                     'Genus',
-                    'Region',
-                    'District',
-                    'WA Priority Category',
                     'WA Legislative List',
-                    'WA Legislative Category',
+                    'Conservation Criteria',
                     'Commonwealth Conservation Category',
                     'Other Conservation Assessment',
-                    'Conservation Criteria',
+                    'Informal Group(s)',
                     'Action',
                 ];
             } else {
@@ -695,19 +695,19 @@ export default {
                     'Number',
                     'Scientific Name',
                     'Common Name',
-                    'Informal Group(s)',
+                    'WA Priority Category',
+                    'WA Legislative Category',
+                    'Region',
+                    'District',
                     'Fauna Group',
                     'Fauna Sub Group',
                     'Family',
                     'Genus',
-                    'Region',
-                    'District',
-                    'WA Priority Category',
                     'WA Legislative List',
-                    'WA Legislative Category',
+                    'Conservation Criteria',
                     'Commonwealth Conservation Category',
                     'Other Conservation Assessment',
-                    'Conservation Criteria',
+                    'Informal Group(s)',
                     'Status',
                     'Action',
                 ];
@@ -956,7 +956,7 @@ export default {
                 {
                     extend: 'excel',
                     title: 'Boranga S&C Fauna Excel Export',
-                    text: '<i class="fa-solid fa-download"></i> Excel',
+                    text: '<i class="bi bi-download"></i> Excel',
                     className: 'btn btn-primary me-2 rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -966,7 +966,7 @@ export default {
                 {
                     extend: 'csv',
                     title: 'Boranga S&C Fauna CSV Export',
-                    text: '<i class="fa-solid fa-download"></i> CSV',
+                    text: '<i class="bi bi-download"></i> CSV',
                     className: 'btn btn-primary rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -980,19 +980,19 @@ export default {
                     vm.column_number,
                     vm.column_scientific_name,
                     vm.column_common_name,
-                    vm.column_informal_group,
+                    vm.column_wa_priority_category,
+                    vm.column_wa_legislative_category,
+                    vm.column_region,
+                    vm.column_district,
                     vm.column_fauna_group,
                     vm.column_fauna_sub_group,
                     vm.column_family,
                     vm.column_genera,
-                    vm.column_region,
-                    vm.column_district,
-                    vm.column_wa_priority_category,
                     vm.column_wa_legislative_list,
-                    vm.column_wa_legislative_category,
+                    vm.column_conservation_criteria,
                     vm.column_commonwealth_conservation_category,
                     vm.column_other_conservation_assessment,
-                    vm.column_conservation_criteria,
+                    vm.column_informal_group,
                     vm.column_action,
                 ];
                 search = false;
@@ -1003,19 +1003,19 @@ export default {
                     vm.column_number,
                     vm.column_scientific_name,
                     vm.column_common_name,
-                    vm.column_informal_group,
+                    vm.column_wa_priority_category,
+                    vm.column_wa_legislative_category,
+                    vm.column_region,
+                    vm.column_district,
                     vm.column_fauna_group,
                     vm.column_fauna_sub_group,
                     vm.column_family,
                     vm.column_genera,
-                    vm.column_region,
-                    vm.column_district,
-                    vm.column_wa_priority_category,
                     vm.column_wa_legislative_list,
-                    vm.column_wa_legislative_category,
+                    vm.column_conservation_criteria,
                     vm.column_commonwealth_conservation_category,
                     vm.column_other_conservation_assessment,
-                    vm.column_conservation_criteria,
+                    vm.column_informal_group,
                     vm.column_status,
                     vm.column_action,
                 ];
@@ -1310,7 +1310,7 @@ export default {
             vm.initialiseFamilyLookup();
             vm.initialiseGeneraLookup();
             vm.addEventListeners();
-            var newOption = null;
+            var newOption;
             // -- to set the select2 field with the session value if exists onload()
             if (
                 sessionStorage.getItem('filterFaunaScientificName') != 'all' &&

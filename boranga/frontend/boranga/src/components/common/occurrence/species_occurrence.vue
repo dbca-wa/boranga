@@ -15,7 +15,6 @@
                         v-model="occurrence_obj.occurrence_name"
                         class="form-control"
                         :disabled="isReadOnly"
-                        rows="1"
                         placeholder=""
                     />
                 </div>
@@ -164,7 +163,6 @@
                         class="form-control"
                         :disabled="isReadOnly"
                         placeholder=""
-                        rows="4"
                     />
                 </div>
             </div>

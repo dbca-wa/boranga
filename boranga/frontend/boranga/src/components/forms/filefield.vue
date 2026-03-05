@@ -24,7 +24,7 @@
                                 }}</a>
                                 &nbsp;
                                 <a
-                                    class="fa fa-trash-o"
+                                    class="bi bi-trash"
                                     title="Remove file"
                                     :filename="v.name"
                                     style="cursor: pointer; color: red"

@@ -14,7 +14,7 @@
                             class="btn btn-primary mb-2"
                             @click.prevent="newDocument"
                         >
-                            <i class="fa-solid fa-circle-plus"></i>
+                            <i class="bi bi-plus-circle"></i>
                             Add Document
                         </button>
                     </div>
@@ -122,7 +122,7 @@ export default {
                     {
                         extend: 'excel',
                         title: 'Boranga OCC Documents Excel Export',
-                        text: '<i class="fa-solid fa-download"></i> Excel',
+                        text: '<i class="bi bi-download"></i> Excel',
                         className: 'btn btn-primary me-2 rounded',
                         exportOptions: {
                             orthogonal: 'export',
@@ -131,7 +131,7 @@ export default {
                     {
                         extend: 'csv',
                         title: 'Boranga OCC Documents CSV Export',
-                        text: '<i class="fa-solid fa-download"></i> CSV',
+                        text: '<i class="bi bi-download"></i> CSV',
                         className: 'btn btn-primary rounded',
                         exportOptions: {
                             orthogonal: 'export',
@@ -186,9 +186,12 @@ export default {
                         orderable: true,
                         searchable: true,
                         mRender: function (data, type, full) {
+                            let value = full.name;
+                            if (type == 'export') {
+                                return value;
+                            }
                             let links = '';
                             if (full.active) {
-                                let value = full.name;
                                 let result = helpers.dtPopoverSplit(
                                     value,
                                     30,
@@ -203,16 +206,12 @@ export default {
                                     result.link +
                                     '</span>';
                             } else {
-                                let value = full.name;
                                 let result = helpers.dtPopover(
                                     value,
                                     30,
                                     'hover'
                                 );
-                                links +=
-                                    type == 'export'
-                                        ? value
-                                        : '<s>' + result + '</s>';
+                                links += '<s>' + result + '</s>';
                             }
                             return links;
                         },

@@ -12,6 +12,9 @@ from boranga.components.data_migration.adapters.conservation_status import schem
 from boranga.components.data_migration.adapters.conservation_status.tec import (
     ConservationStatusTecAdapter,
 )
+from boranga.components.data_migration.adapters.conservation_status.tfauna import (
+    ConservationStatusTfaunaAdapter,
+)
 from boranga.components.data_migration.adapters.conservation_status.tpfl import (
     ConservationStatusTpflAdapter,
 )
@@ -29,6 +32,7 @@ logger = logging.getLogger(__name__)
 SOURCE_ADAPTERS = {
     Source.TPFL.value: ConservationStatusTpflAdapter(),
     Source.TEC.value: ConservationStatusTecAdapter(),
+    Source.TFAUNA.value: ConservationStatusTfaunaAdapter(),
 }
 
 
@@ -273,8 +277,8 @@ class ConservationStatusImporter(BaseSheetImporter):
                     )
                     continue
 
-                # Resolve Species PK (for TPFL)
-                # row["species_id"] now holds the canonical Taxonomy PK (from SPECIES_LOOKUP pipeline)
+                # Resolve Species PK
+                # row["species_id"] now holds the canonical Taxonomy PK
                 # We need to map this Taxonomy PK to the Species internal PK
                 species_pk = None
                 species_taxonomy_id = None
@@ -282,6 +286,12 @@ class ConservationStatusImporter(BaseSheetImporter):
                 if row.get("species_id"):
                     # Pipeline transformed species_id to Taxonomy PK
                     species_taxonomy_id = row["species_id"]
+                    # Ensure integer type for map lookup (CSV/pipeline may yield strings)
+                    if isinstance(species_taxonomy_id, str):
+                        try:
+                            species_taxonomy_id = int(species_taxonomy_id)
+                        except (ValueError, TypeError):
+                            pass
                     species_pk = tax_to_species_pk_map.get(species_taxonomy_id)
 
                 # community_migrated_from_id pipeline should return Community PK or None
@@ -314,6 +324,7 @@ class ConservationStatusImporter(BaseSheetImporter):
                     commonwealth_conservation_category_id=row.get("commonwealth_conservation_category"),
                     iucn_version_id=row.get("iucn_version"),
                     change_code_id=row.get("change_code"),
+                    other_conservation_assessment_id=row.get("other_conservation_assessment"),
                     conservation_criteria=row.get("conservation_criteria"),
                     review_due_date=row.get("review_due_date"),
                     effective_from=row.get("effective_from_date"),
@@ -377,6 +388,17 @@ class ConservationStatusImporter(BaseSheetImporter):
 
             stats["created"] += len(created_cs)
 
+        # ── Task 11854: post-persist Species processing_status + publishing ──
+        # Now that CS records exist, update Species.processing_status and
+        # SpeciesPublishingStatus for any species whose taxonomy_id has (or no
+        # longer has) an approved ConservationStatus.
+        #
+        # This solves the ordering dilemma: species_legacy runs first (all
+        # species default to "historical"), then conservation_status_legacy
+        # creates CS records, and this block flips the affected species to
+        # "active" with all publishing sections set to Public.
+        self._update_species_status_from_cs(ctx, options, errors_details)
+
         # Write errors to CSV
         if errors_details:
             csv_path = options.get("error_csv")
@@ -416,3 +438,154 @@ class ConservationStatusImporter(BaseSheetImporter):
 
         elapsed = timezone.now() - start_time
         logger.info(f"Import complete. Stats: {stats} time_taken={elapsed}")
+
+    # ------------------------------------------------------------------
+    # Task 11854 helper: synchronise Species processing_status +
+    # SpeciesPublishingStatus after CS records are persisted.
+    # ------------------------------------------------------------------
+    def _update_species_status_from_cs(
+        self,
+        ctx: ImportContext,
+        options: dict,
+        errors_details: list,
+    ) -> None:
+        """Update Species.processing_status and SpeciesPublishingStatus based on
+        approved ConservationStatus records.
+
+        Rules (Task 11854):
+          * IF a species' taxonomy has a current Approved CS →
+            processing_status = Active, all publishing flags = True (Public).
+          * ELSE →
+            processing_status = Historical, all publishing flags = False (Private).
+
+        Only migrated species (``migrated_from_id`` not blank) are touched so
+        that manually-created records are not inadvertently changed.
+
+        The scope is further limited to the ``--sources`` group_type(s) when
+        provided, so a TFAUNA CS run won't touch TPFL species and vice-versa.
+        """
+        if ctx.dry_run:
+            logger.info("_update_species_status_from_cs: dry-run, skipping")
+            return
+
+        from boranga.components.conservation_status.models import (
+            ConservationStatus as CSModel,
+        )
+        from boranga.components.data_migration.adapters.sources import (
+            SOURCE_GROUP_TYPE_MAP,
+        )
+        from boranga.components.species_and_communities.models import (
+            Species,
+            SpeciesPublishingStatus,
+        )
+
+        # Determine group_type filter from --sources
+        sources = options.get("sources")
+        group_type_filter: dict = {}
+        if sources:
+            target_group_types = set()
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+            if target_group_types:
+                group_type_filter = {"group_type__name__in": target_group_types}
+
+        # Taxonomy IDs with at least one approved CS (across all group types,
+        # since a taxonomy can have CS from multiple lists).
+        approved_tax_ids: set[int] = set(
+            CSModel.objects.filter(
+                processing_status=CSModel.PROCESSING_STATUS_APPROVED,
+                species_taxonomy_id__isnull=False,
+            ).values_list("species_taxonomy_id", flat=True)
+        )
+
+        # Migrated species in scope
+        sp_qs = Species.objects.filter(
+            taxonomy_id__isnull=False,
+        ).exclude(migrated_from_id__exact="")
+        if group_type_filter:
+            sp_qs = sp_qs.filter(**group_type_filter)
+
+        species_to_activate: list[int] = []
+        species_to_deactivate: list[int] = []
+
+        for sp_id, tax_id, current_status in sp_qs.values_list("id", "taxonomy_id", "processing_status"):
+            if tax_id in approved_tax_ids:
+                if current_status != Species.PROCESSING_STATUS_ACTIVE:
+                    species_to_activate.append(sp_id)
+            else:
+                if current_status != Species.PROCESSING_STATUS_HISTORICAL:
+                    species_to_deactivate.append(sp_id)
+
+        BATCH = 1000
+
+        # Activate species
+        if species_to_activate:
+            Species.objects.filter(id__in=species_to_activate).update(
+                processing_status=Species.PROCESSING_STATUS_ACTIVE,
+            )
+            logger.info(
+                "CS post-persist: set %d species to '%s'",
+                len(species_to_activate),
+                Species.PROCESSING_STATUS_ACTIVE,
+            )
+
+        # Deactivate species (safety net for re-runs where CS was removed)
+        if species_to_deactivate:
+            Species.objects.filter(id__in=species_to_deactivate).update(
+                processing_status=Species.PROCESSING_STATUS_HISTORICAL,
+            )
+            logger.info(
+                "CS post-persist: set %d species to '%s'",
+                len(species_to_deactivate),
+                Species.PROCESSING_STATUS_HISTORICAL,
+            )
+
+        # Update SpeciesPublishingStatus for affected species
+        affected_ids = species_to_activate + species_to_deactivate
+        if not affected_ids:
+            logger.info("CS post-persist: no species status changes required")
+            return
+
+        existing_pubs = {p.species_id: p for p in SpeciesPublishingStatus.objects.filter(species_id__in=affected_ids)}
+
+        to_update_pubs: list[SpeciesPublishingStatus] = []
+        to_create_pubs: list[SpeciesPublishingStatus] = []
+
+        activate_set = set(species_to_activate)
+        for sp_id in affected_ids:
+            is_public = sp_id in activate_set
+            if sp_id in existing_pubs:
+                pub = existing_pubs[sp_id]
+                pub.species_public = is_public
+                pub.distribution_public = is_public
+                pub.conservation_status_public = is_public
+                pub.threats_public = is_public
+                to_update_pubs.append(pub)
+            else:
+                to_create_pubs.append(
+                    SpeciesPublishingStatus(
+                        species_id=sp_id,
+                        species_public=is_public,
+                        distribution_public=is_public,
+                        conservation_status_public=is_public,
+                        threats_public=is_public,
+                    )
+                )
+
+        if to_update_pubs:
+            SpeciesPublishingStatus.objects.bulk_update(
+                to_update_pubs,
+                ["species_public", "distribution_public", "conservation_status_public", "threats_public"],
+                batch_size=BATCH,
+            )
+        if to_create_pubs:
+            SpeciesPublishingStatus.objects.bulk_create(to_create_pubs, batch_size=BATCH)
+
+        logger.info(
+            "CS post-persist: updated %d / created %d SpeciesPublishingStatus records (%d activated, %d deactivated)",
+            len(to_update_pubs),
+            len(to_create_pubs),
+            len(species_to_activate),
+            len(species_to_deactivate),
+        )

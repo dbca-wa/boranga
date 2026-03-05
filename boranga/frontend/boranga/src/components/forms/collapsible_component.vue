@@ -12,13 +12,13 @@
                 <i
                     :id="warning_icon_id"
                     :title="warning_icon_title"
-                    class="fa-solid fa-exclamation-circle fa-2x filter_warning_icon"
+                    class="bi bi-exclamation-circle fs-2 filter_warning_icon"
                 ></i>
             </div>
             <div class="me-2">
                 <i
                     :id="chevron_elem_id"
-                    class="rotate_icon fa-solid fa-chevron-down"
+                    class="rotate_icon bi bi-chevron-down"
                 ></i>
             </div>
         </div>

@@ -592,7 +592,7 @@ export default {
             if (amendment_request.length > 0) this.hasAmendmentRequest = true;
         },
         splitText: function (aText) {
-            let newText = '';
+            let newText;
             newText = aText.split('\n');
             return newText;
         },
@@ -626,7 +626,7 @@ export default {
             // loop through all (non-hidden) required fields, and check data has been entered
             required_fields.each(function () {
                 var id = 'id_' + this.name;
-                var text = null;
+                var text;
                 if (this.type == 'radio') {
                     if (!$('input[name=' + this.name + ']').is(':checked')) {
                         text = $('#' + id).text();
@@ -701,7 +701,7 @@ export default {
         },
         can_submit: async function (check_action) {
             let vm = this;
-            let blank_fields = [];
+            let blank_fields;
             blank_fields = await vm.can_submit_occurrence_report(check_action);
 
             if (blank_fields.length == 0) {

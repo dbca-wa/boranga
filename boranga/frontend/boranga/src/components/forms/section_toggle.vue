@@ -29,19 +29,19 @@
                                 v-if="has_comment_value"
                                 href=""
                                 @click.prevent="toggleComment"
-                                ><i style="color: red" class="far fa-comment"
+                                ><i style="color: red" class="bi bi-chat"
                                     >&nbsp;</i
                                 ></a
                             >
                             <a v-else href="" @click.prevent="toggleComment"
-                                ><i class="far fa-comment">&nbsp;</i></a
+                                ><i class="bi bi-chat">&nbsp;</i></a
                             >
                         </template>
                         <a
                             v-else-if="isShowComment"
                             href=""
                             @click.prevent="toggleComment"
-                            ><i class="fa fa-ban">&nbsp;</i></a
+                            ><i class="bi bi-slash-circle">&nbsp;</i></a
                         >
                     </template>
                 </div>

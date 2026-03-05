@@ -34,7 +34,7 @@
                 <div
                     v-if="
                         conservation_status_obj.approved_by_name &&
-                        ['Approved', 'DeListed', 'Closed'].includes(
+                        ['Approved', 'Delisted', 'Closed'].includes(
                             conservation_status_obj.processing_status
                         )
                     "
@@ -127,10 +127,10 @@
                                                 'Proposed For Agenda',
                                                 'Ready For Agenda',
                                                 'On Agenda',
-                                                'Proposed DeListed',
+                                                'Proposed Delisted',
                                                 'Approved',
                                                 'Closed',
-                                                'DeListed',
+                                                'Delisted',
                                                 'Declined',
                                             ].includes(
                                                 conservation_status_obj.processing_status
@@ -314,7 +314,7 @@
                                                         )
                                                     "
                                                     ><i
-                                                        class="fa fa-bell text-warning"
+                                                        class="bi bi-bell text-warning"
                                                         aria-hidden="true"
                                                     ></i>
                                                 </a>
@@ -333,7 +333,7 @@
                                                         )
                                                     "
                                                     ><i
-                                                        class="fa fa-times-circle text-danger"
+                                                        class="bi bi-x-circle text-danger"
                                                         aria-hidden="true"
                                                     ></i>
                                                 </a>
@@ -414,7 +414,7 @@
                                                         remindReferral(r)
                                                     "
                                                     ><i
-                                                        class="fa fa-bell text-warning"
+                                                        class="bi bi-bell text-warning"
                                                         aria-hidden="true"
                                                     ></i>
                                                 </a>
@@ -432,7 +432,7 @@
                                                         recallReferral(r)
                                                     "
                                                     ><i
-                                                        class="fa fa-times-circle text-danger"
+                                                        class="bi bi-x-circle text-danger"
                                                         aria-hidden="true"
                                                     ></i>
                                                 </a>
@@ -682,7 +682,7 @@
                                 <template
                                     v-else-if="
                                         conservation_status_obj.processing_status ==
-                                        'Proposed DeListed'
+                                        'Proposed Delisted'
                                     "
                                 >
                                     <div class="row mb-2">
@@ -1184,7 +1184,7 @@ export default {
                 this.conservation_status_obj.processing_status == 'Declined' ||
                 this.conservation_status_obj.processing_status == 'Approved' ||
                 this.conservation_status_obj.processing_status == 'Closed' ||
-                this.conservation_status_obj.processing_status == 'DeListed'
+                this.conservation_status_obj.processing_status == 'Delisted'
             );
         },
         canLimitedAction: function () {
@@ -1213,9 +1213,9 @@ export default {
                 [
                     'Proposed For Agenda',
                     'Ready For Agenda',
-                    'Proposed DeListed',
+                    'Proposed Delisted',
                 ].includes(this.conservation_status_obj.processing_status) ||
-                (['Closed', 'DeListed', 'Declined', 'Approved'].includes(
+                (['Closed', 'Delisted', 'Declined', 'Approved'].includes(
                     this.conservation_status_obj.processing_status
                 ) &&
                     !this.conservation_status_obj.locked)
@@ -1367,7 +1367,7 @@ export default {
                 this.conservation_status_obj &&
                 this.conservation_status_obj.current_assessor.id ==
                     this.conservation_status_obj.assigned_approver &&
-                ['Approved', 'Closed', 'Declined', 'DeListed'].includes(
+                ['Approved', 'Closed', 'Declined', 'Delisted'].includes(
                     this.conservation_status_obj.processing_status
                 ) &&
                 this.conservation_status_obj.locked
@@ -1378,7 +1378,7 @@ export default {
                 this.conservation_status_obj &&
                 this.conservation_status_obj.current_assessor.id ==
                     this.conservation_status_obj.assigned_approver &&
-                ['Approved', 'Closed', 'Declined', 'DeListed'].includes(
+                ['Approved', 'Closed', 'Declined', 'Delisted'].includes(
                     this.conservation_status_obj.processing_status
                 ) &&
                 !this.conservation_status_obj.locked
@@ -1390,7 +1390,7 @@ export default {
         shouldShowTimerAndPoll() {
             const cs = this.conservation_status_obj;
             if (!cs) return false;
-            const allowed = ['Closed', 'DeListed', 'Approved', 'Declined'];
+            const allowed = ['Closed', 'Delisted', 'Approved', 'Declined'];
             return !cs.locked && allowed.includes(cs.processing_status);
         },
         showEditingCountdown() {
@@ -1601,7 +1601,7 @@ export default {
             });
         },
         amendmentRequest: function () {
-            let value = '';
+            let value;
             value = $('#assessor_deficiencies').val();
             this.$refs.amendment_request.amendment.text = value;
             this.$refs.amendment_request.isModalOpen = true;
@@ -1930,7 +1930,7 @@ export default {
         },
         can_submit: function (check_action) {
             let vm = this;
-            let blank_fields = [];
+            let blank_fields;
             blank_fields = vm.can_submit_conservation_status(check_action);
 
             if (blank_fields.length == 0) {
@@ -2118,15 +2118,15 @@ export default {
         },
         assignTo: function () {
             let vm = this;
-            let unassign = true;
+            let unassign;
             let data = {};
             if (
                 [
-                    'Proposed DeListed',
+                    'Proposed Delisted',
                     'Ready For Agenda',
                     'Approved',
                     'Closed',
-                    'DeListed',
+                    'Delisted',
                 ].includes(vm.conservation_status_obj.processing_status) ||
                 (vm.conservation_status_obj.processing_status == 'Deferred' &&
                     vm.conservation_status_obj.approver_process)
@@ -2221,11 +2221,11 @@ export default {
             let vm = this;
             if (
                 [
-                    'Proposed DeListed',
+                    'Proposed Delisted',
                     'Ready For Agenda',
                     'Approved',
                     'Closed',
-                    'DeListed',
+                    'Delisted',
                 ].includes(vm.conservation_status_obj.processing_status) ||
                 (vm.conservation_status_obj.processing_status == 'Deferred' &&
                     vm.conservation_status_obj.approver_process)
@@ -2295,11 +2295,11 @@ export default {
                     var selected = $(e.currentTarget);
                     if (
                         [
-                            'Proposed DeListed',
+                            'Proposed Delisted',
                             'Ready For Agenda',
                             'Approved',
                             'Closed',
-                            'DeListed',
+                            'Delisted',
                         ].includes(
                             vm.conservation_status_obj.processing_status
                         ) ||
@@ -2324,11 +2324,11 @@ export default {
                 .on('select2:unselect', function () {
                     if (
                         [
-                            'Proposed DeListed',
+                            'Proposed Delisted',
                             'Ready For Agenda',
                             'Approved',
                             'Closed',
-                            'DeListed',
+                            'Delisted',
                         ].includes(
                             vm.conservation_status_obj.processing_status
                         ) ||
@@ -2750,7 +2750,7 @@ export default {
             let vm = this;
             if (
                 vm.conservation_status_obj.processing_status ==
-                    'Proposed DeListed' &&
+                    'Proposed Delisted' &&
                 status == 'with_assessor'
             ) {
                 let data = {
@@ -2977,7 +2977,7 @@ export default {
         handleBeforeUnload(event) {
             if (
                 this.conservation_status_obj &&
-                ['Closed', 'DeListed', 'Approved', 'Declined'].includes(
+                ['Closed', 'Delisted', 'Approved', 'Declined'].includes(
                     this.conservation_status_obj.processing_status
                 ) &&
                 !this.conservation_status_obj.locked &&

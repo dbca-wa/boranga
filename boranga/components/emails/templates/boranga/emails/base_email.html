@@ -18,31 +18,23 @@
             <p></p>
             <p>
             {{settings.BRANCH_NAME}}<br>
-            {{settings.DEP_NAME}}<br>
-            Phone: {{ settings.DEP_PHONE_SUPPORT }}<br>
-            Address: {{ settings.DEP_ADDRESS}}<br>
-            <img src="{{settings.PUBLIC_URL}}/static/boranga/img/dbca-signature-logo.png" title="None" width="500" style="height: auto;">
+            {{settings.DEP_NAME}}
             </p>
         {% endblock %}
         {% block reply_statement %}
-            <p></p>
-            <p></p>
             <p>
-                <!--
-                <strong><em>Please do not reply directly to this email. Should you need to contact the licensing section of the Department of
-                Biodiversity, Conservation and Attractions, please send emails to <a href="mailto:das@dpaw.wa.gov.au">das@dpaw.wa.gov.au</a>
-                or call (08) 9219 9000.</em></strong>
-                -->
-
                 <strong><em>
-                    Please do not reply directly to this email. Should you need to contact the {{ settings.BRANCH_NAME}},
-                    please send emails to <a href="mailto:{{ settings.SUPPORT_EMAIL }}">{{ settings.SUPPORT_EMAIL }}</a> or call {{ settings.DEP_PHONE_SUPPORT }}.
+                    Please do not reply directly to this email. Should you need to contact the {{settings.BRANCH_NAME}} regarding Boranga, please email <a href="mailto:{{settings.EMAIL_SUPPORT_ADDRESS}}">{{settings.EMAIL_SUPPORT_ADDRESS}}</a>.
                 </em></strong>
             </p>
-            <!-- <p>{{PUBLIC_URL}}</p> -->
-            <!-- <p>
-                                <img src="{{settings.PUBLIC_URL}}/static/boranga/img/dbca-logo.jpg" title="None" width="500" style="height: auto;">
-            </p> -->
+            <p>
+                <em style="font-size: 9pt; color: #242424;">
+                    {{settings.EMAIL_ACKNOWLEDGEMENT}}
+                </em>
+            </p>
+            <p>
+                <img src="{{settings.PUBLIC_URL}}/static/boranga/img/CBS.png" title="Conservation and Biodiversity Science" width="625" style="height: auto;">
+            </p>
         {% endblock %}
     </body>
 </html>

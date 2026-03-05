@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from boranga.components.spatial.models import TileLayer
 from boranga.components.spatial.permissions import TileLayerPermission
 from boranga.components.spatial.serializers import TileLayerSerializer
-from boranga.helpers import is_customer, is_internal, is_referee
+from boranga.helpers import is_contributor, is_customer, is_internal, is_referee
 
 
 class TileLayerViewSet(viewsets.ReadOnlyModelViewSet):
@@ -31,6 +31,11 @@ class TileLayerViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         if is_internal(self.request):
             return TileLayer.objects.filter(active=True, is_internal=True).order_by("id")
+        elif is_contributor(self.request):
+            # Internal/External Contributors are not in the INTERNAL_GROUPS so
+            # is_internal() returns False for them. They still need access to
+            # map base layers (satellite + streets).
+            return TileLayer.objects.filter(active=True, is_external=True).order_by("id")
         elif is_referee(self.request):
             return TileLayer.objects.filter(active=True, is_external=True).order_by("id")
         elif is_customer(self.request):

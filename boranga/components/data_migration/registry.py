@@ -653,6 +653,18 @@ def t_smart_date_parse(value, ctx):
         except ValueError:
             pass
 
+    # TEC / legacy format: "26-May-23", "18-Jul-96" (day-MonthAbbr-2digitYear)
+    # and "26-May-2023" (day-MonthAbbr-4digitYear)
+    for fmt in (
+        "%d-%b-%y",  # 2-digit year (e.g. 26-May-23, 18-Jul-96)
+        "%d-%b-%Y",  # 4-digit year (e.g. 26-May-2023)
+    ):
+        try:
+            dt = datetime.strptime(value_str, fmt)
+            return _result(dt.date())
+        except ValueError:
+            pass
+
     # If nothing worked, warning
     return _result(None, TransformIssue("warning", f"Could not parse date value: {value!r}"))
 
@@ -3005,7 +3017,10 @@ def geometry_from_coords_factory(
     Args:
         latitude_field: The row column name containing latitude (default: GDA94LAT)
         longitude_field: The row column name containing longitude (default: GDA94LONG)
-        datum_field: The row column name containing datum/CRS info (optional, default: None)
+        datum_field: The row column name containing datum/CRS info (optional, default: None).
+            Only consulted when the datum cannot be inferred from the field name prefix
+            (e.g. ``GDA94LAT`` already implies GDA94 / EPSG:4283, so ``datum_field`` is
+            ignored for that field regardless of what the DATUM column contains).
         radius_m: Buffer radius in meters (default: 1.0m)
         point_only: If True, return a Point instead of a buffered Polygon (default: False)
 
@@ -3023,6 +3038,16 @@ def geometry_from_coords_factory(
         "GPS": "EPSG:4326",  # GPS typically uses WGS84
         "UNKNOWN": "EPSG:4326",  # Default to WGS84 when datum is unknown
     }
+
+    # Infer datum from the latitude field name prefix (e.g. "GDA94LAT" -> "GDA94").
+    # This takes precedence over `datum_field` so that fields whose names encode
+    # their datum (like GDA94LAT/GDA94LONG) are always treated with the correct
+    # projection regardless of what the DATUM column contains.
+    _field_implied_epsg: str | None = None
+    for _datum_key, _datum_epsg in DATUM_TO_EPSG.items():
+        if latitude_field.upper().startswith(_datum_key):
+            _field_implied_epsg = _datum_epsg
+            break
 
     key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}_{point_only}"
     name = "geometry_from_coords_" + hashlib.sha1(key.encode()).hexdigest()[:8]
@@ -3044,11 +3069,18 @@ def geometry_from_coords_factory(
             lat = float(lat_str)
             lng = float(lng_str)
 
-            # Determine source CRS from datum field or default to WGS84
-            source_epsg = "EPSG:4326"  # default
-            if datum_field:
+            # Determine source CRS:
+            # 1. If the field name encodes the datum (e.g. GDA94LAT), use that
+            #    datum directly — ignore datum_field entirely.
+            # 2. Otherwise fall back to datum_field if provided.
+            # 3. Default to WGS84 (EPSG:4326).
+            if _field_implied_epsg is not None:
+                source_epsg = _field_implied_epsg
+            elif datum_field:
                 datum_str = ctx.row.get(datum_field, "").strip().upper()
                 source_epsg = DATUM_TO_EPSG.get(datum_str, "EPSG:4326")
+            else:
+                source_epsg = "EPSG:4326"
 
             # Transform coordinates to WGS84 if necessary
             if source_epsg != "EPSG:4326":

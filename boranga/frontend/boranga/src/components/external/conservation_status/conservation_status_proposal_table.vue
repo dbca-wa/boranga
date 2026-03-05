@@ -222,7 +222,7 @@ export default {
                 { value: 'ready_for_agenda', name: 'In Meeting' },
                 { value: 'approved', name: 'Approved' },
                 { value: 'closed', name: 'Closed' },
-                { value: 'delisted', name: 'DeListed' },
+                { value: 'delisted', name: 'Delisted' },
                 { value: 'declined', name: 'Declined' },
             ],
         };
@@ -243,7 +243,7 @@ export default {
             }
         },
         addCSVisibility: function () {
-            let visibility = false;
+            let visibility;
             visibility = true;
             return visibility;
         },
@@ -359,12 +359,12 @@ export default {
         datatable_options: function () {
             let vm = this;
 
-            let columns = [];
+            let columns;
             let buttons = [
                 {
                     extend: 'excel',
                     title: 'Boranga Conservation Status Excel Export',
-                    text: '<i class="fa-solid fa-download"></i> Excel',
+                    text: '<i class="bi bi-download"></i> Excel',
                     className: 'btn btn-primary me-2 rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -374,7 +374,7 @@ export default {
                 {
                     extend: 'csv',
                     title: 'Boranga Conservation Status CSV Export',
-                    text: '<i class="fa-solid fa-download"></i> CSV',
+                    text: '<i class="bi bi-download"></i> CSV',
                     className: 'btn btn-primary rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -509,7 +509,7 @@ export default {
             vm.initialiseScientificNameLookup();
             vm.initialiseCommunityNameLookup();
             vm.addEventListeners();
-            var newOption = null;
+            var newOption;
             // -- to set the select2 field with the session value if exists onload()
             if (
                 sessionStorage.getItem('filterCSScientificName') != 'all' &&

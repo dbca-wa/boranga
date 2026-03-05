@@ -84,6 +84,23 @@
                     :is_new_contributor="occurrence_report.is_new_contributor"
                     class="mb-3"
                 />
+
+                <div
+                    v-if="
+                        occurrence_report.approved_by_name &&
+                        ['Approved', 'Unlocked'].includes(
+                            occurrence_report.processing_status
+                        )
+                    "
+                    class="card card-default mb-3"
+                >
+                    <div class="card-header">Approval</div>
+                    <div class="card-body py-2">
+                        <strong>Approved by</strong><br />
+                        {{ occurrence_report.approved_by_name }}
+                    </div>
+                </div>
+
                 <div
                     v-if="show_reassign_draft_panel"
                     class="card card-default mb-3"
@@ -308,7 +325,7 @@
                                                     )
                                                 "
                                                 ><i
-                                                    class="fa fa-bell text-warning"
+                                                    class="bi bi-bell text-warning"
                                                     aria-hidden="true"
                                                 ></i>
                                             </a>
@@ -327,7 +344,7 @@
                                                     )
                                                 "
                                                 ><i
-                                                    class="fa fa-times-circle text-danger"
+                                                    class="bi bi-x-circle text-danger"
                                                     aria-hidden="true"
                                                 ></i>
                                             </a>
@@ -406,7 +423,7 @@
                                                         remindReferral(r)
                                                     "
                                                     ><i
-                                                        class="fa fa-bell text-warning"
+                                                        class="bi bi-bell text-warning"
                                                         aria-hidden="true"
                                                     ></i>
                                                 </a>
@@ -423,7 +440,7 @@
                                                         recallReferral(r)
                                                     "
                                                     ><i
-                                                        class="fa fa-times-circle text-danger"
+                                                        class="bi bi-x-circle text-danger"
                                                         aria-hidden="true"
                                                     ></i>
                                                 </a>
@@ -468,7 +485,10 @@
                         </div>
                         <div class="text-center">
                             <button
-                                v-if="with_assessor"
+                                v-if="
+                                    with_assessor &&
+                                    occurrence_report.user_is_assessor
+                                "
                                 style="width: 80%"
                                 class="btn btn-primary mb-2"
                                 @click.prevent="amendmentRequest()"
@@ -487,7 +507,10 @@
                             </button>
 
                             <button
-                                v-if="with_assessor"
+                                v-if="
+                                    with_assessor &&
+                                    occurrence_report.user_is_assessor
+                                "
                                 style="width: 80%"
                                 class="btn btn-primary mb-2"
                                 @click.prevent="proposeApprove"
@@ -496,7 +519,10 @@
                                 Propose Approve
                             </button>
                             <button
-                                v-if="with_assessor"
+                                v-if="
+                                    with_assessor &&
+                                    occurrence_report.user_is_assessor
+                                "
                                 style="width: 80%"
                                 class="btn btn-primary mb-2"
                                 @click.prevent="proposeDecline"
@@ -545,7 +571,7 @@
                         </div>
                     </div>
                     <div
-                        v-if="occurrence_report.user_is_assessor"
+                        v-if="occurrence_report.can_user_copy"
                         class="card-body border-top text-center"
                     >
                         <button
@@ -2107,7 +2133,7 @@ export default {
         },
         assignTo: function () {
             let vm = this;
-            let unassign = true;
+            let unassign;
             let data = {};
             if (vm.with_approver) {
                 unassign =

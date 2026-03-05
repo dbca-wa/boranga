@@ -200,8 +200,6 @@
                         :disabled="isReadOnly"
                         class="form-control"
                         placeholder=""
-                        min="0"
-                        rows="6"
                     />
                 </div>
             </div>
@@ -320,7 +318,13 @@
                     />
                 </div>
             </div>
-            <div class="row mb-3">
+            <div
+                v-if="
+                    occurrence_report_obj.processing_status !=
+                    constants.PROPOSAL_STATUS.DRAFT.TEXT
+                "
+                class="row mb-3"
+            >
                 <label
                     for=""
                     class="col-sm-3 control-label"
@@ -623,8 +627,6 @@
                                 .collector_number
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -641,8 +643,6 @@
                             occurrence_report_obj.identification.barcode_number
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -660,8 +660,6 @@
                                 .identification_comment
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />

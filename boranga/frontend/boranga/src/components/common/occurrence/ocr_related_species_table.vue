@@ -23,7 +23,7 @@
                     class="btn btn-primary mb-2"
                     @click.prevent="addRelatedSpecies"
                 >
-                    <i class="fa-solid fa-circle-plus"></i>
+                    <i class="bi bi-plus-circle"></i>
                     Add Related Species
                 </button>
             </div>

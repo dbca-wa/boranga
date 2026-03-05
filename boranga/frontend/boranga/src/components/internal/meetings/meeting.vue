@@ -637,7 +637,7 @@ export default {
         },
         can_submit: function (check_action) {
             let vm = this;
-            let blank_fields = [];
+            let blank_fields;
 
             blank_fields = vm.can_submit_meeting(check_action);
 

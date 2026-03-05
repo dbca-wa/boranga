@@ -218,11 +218,25 @@ table.dataTable a:hover {
 
 .table-referrals {
     font-size: 0.8em;
+    --bs-table-hover-bg: transparent;
 }
 
-.fa-bell:hover,
-.fa-times-circle:hover {
-    opacity: 0.7;
+.table-referrals .bi {
+    display: inline-block;
+    transition: transform 0.15s ease;
+    cursor: pointer;
+}
+
+.table-referrals .bi:hover {
+    transform: scale(1.25);
+}
+
+.table-referrals .bi-bell:hover::before {
+    content: "\f189";
+}
+
+.table-referrals .bi-x-circle:hover::before {
+    content: "\f622";
 }
 
 .truncate-name {

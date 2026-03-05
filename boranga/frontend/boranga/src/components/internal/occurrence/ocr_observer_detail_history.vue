@@ -306,7 +306,7 @@ export default {
                     {
                         extend: 'excel',
                         title: `Boranga ${this.ocr_model_prefix} Observers History Excel Export`,
-                        text: '<i class="fa-solid fa-download"></i> Excel',
+                        text: '<i class="bi bi-download"></i> Excel',
                         className: 'btn btn-primary me-2 rounded',
                         exportOptions: {
                             orthogonal: 'export',
@@ -315,7 +315,7 @@ export default {
                     {
                         extend: 'csv',
                         title: `Boranga ${this.ocr_model_prefix} Observers History CSV Export`,
-                        text: '<i class="fa-solid fa-download"></i> CSV',
+                        text: '<i class="bi bi-download"></i> CSV',
                         className: 'btn btn-primary rounded',
                         exportOptions: {
                             orthogonal: 'export',

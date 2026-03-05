@@ -278,7 +278,7 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
 
             filter_community_name = request.GET.get("filter_community_name")
             if filter_community_name and not filter_community_name.lower() == "all":
-                queryset = queryset.filter(community__taxonomy__id=filter_community_name)
+                queryset = queryset.filter(community_id=filter_community_name)
 
             filter_community_common_id = request.GET.get("filter_community_common_id")
             if filter_community_common_id and not filter_community_common_id.lower() == "all":
@@ -396,10 +396,17 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset()
         if is_internal(self.request) or self.request.user.is_superuser:
             return qs
-        elif is_occurrence_report_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(referrals__referral=self.request.user.id)).distinct()
+
+        active_referral_ocr_ids = (
+            OccurrenceReportReferral.objects.filter(referral=self.request.user.id)
+            .exclude(processing_status=OccurrenceReportReferral.PROCESSING_STATUS_RECALLED)
+            .values("occurrence_report_id")
+        )
+
+        if is_occurrence_report_referee(self.request) and is_contributor(self.request):
+            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_ocr_ids)).distinct()
         elif is_occurrence_report_referee(self.request):
-            qs = qs.filter(referrals__referral=self.request.user.id).distinct()
+            qs = qs.filter(id__in=active_referral_ocr_ids).distinct()
         elif is_contributor(self.request):
             qs = qs.filter(submitter=self.request.user.id)
 
@@ -472,14 +479,21 @@ class OccurrenceReportViewSet(
 
         if is_internal(self.request) or self.request.user.is_superuser:
             return qs
-        elif is_contributor(request) and is_occurrence_report_referee(request):
+
+        active_referral_ocr_ids = (
+            OccurrenceReportReferral.objects.filter(referral=request.user.id)
+            .exclude(processing_status=OccurrenceReportReferral.PROCESSING_STATUS_RECALLED)
+            .values("occurrence_report_id")
+        )
+
+        if is_contributor(request) and is_occurrence_report_referee(request):
             qs = OccurrenceReport.objects.filter(
-                Q(submitter=request.user.id) | Q(referrals__referral=request.user.id)
+                Q(submitter=request.user.id) | Q(id__in=active_referral_ocr_ids)
             ).distinct()
         elif is_contributor(request):
             qs = OccurrenceReport.objects.filter(submitter=request.user.id)
         elif is_occurrence_report_referee(request):
-            qs = OccurrenceReport.objects.filter(referrals__referral=request.user.id).distinct()
+            qs = OccurrenceReport.objects.filter(id__in=active_referral_ocr_ids).distinct()
 
         return qs
 
@@ -2529,7 +2543,7 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
 
         filter_community_name = request.GET.get("filter_community_name")
         if filter_community_name and not filter_community_name.lower() == "all":
-            queryset = queryset.filter(community__taxonomy__id=filter_community_name)
+            queryset = queryset.filter(community_id=filter_community_name)
 
         filter_status = request.GET.get("filter_status")
         if filter_status and not filter_status.lower() == "all":
@@ -4815,11 +4829,15 @@ class OccurrenceReportReferralViewSet(viewsets.GenericViewSet, mixins.RetrieveMo
         qs = super().get_queryset()
         if not (is_internal(self.request) or self.request.user.is_superuser):
             if is_contributor(self.request) and is_occurrence_report_referee(self.request):
-                qs = qs.filter(Q(occurrence_report__submitter=self.request.user.id) | Q(referral=self.request.user.id))
+                qs = qs.filter(
+                    Q(occurrence_report__submitter=self.request.user.id) | Q(referral=self.request.user.id)
+                ).exclude(processing_status=OccurrenceReportReferral.PROCESSING_STATUS_RECALLED)
             elif is_contributor(self.request):
                 qs = qs.filter(occurrence_report__submitter=self.request.user.id)
             elif is_occurrence_report_referee(self.request):
-                qs = qs.filter(referral=self.request.user.id)
+                qs = qs.filter(referral=self.request.user.id).exclude(
+                    processing_status=OccurrenceReportReferral.PROCESSING_STATUS_RECALLED
+                )
         return qs
 
     @detail_route(

@@ -32,6 +32,9 @@ export default [
             },
             globals: projectGlobals,
         },
+        rules: {
+            'no-useless-assignment': 'off',
+        },
     },
     {
         files: ['src/**/*.vue'],
@@ -52,6 +55,7 @@ export default [
             'prettier/prettier': 'error',
             'no-redeclare': 'warn',
             'no-unused-vars': 'warn',
+            'no-useless-assignment': 'off',
             'vue/no-mutating-props': 'off',
         },
     },

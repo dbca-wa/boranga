@@ -471,7 +471,7 @@
                         />
                     </div>
                 </div>
-                <div class="row mb-3">
+                <div v-if="show_comments" class="row mb-3">
                     <label for="" class="col-sm-3 col-form-label"
                         >Comments:
                     </label>
@@ -538,6 +538,10 @@ export default {
             default: false,
         },
         show_observer_contact_information: {
+            type: Boolean,
+            default: true,
+        },
+        show_comments: {
             type: Boolean,
             default: true,
         },

@@ -245,7 +245,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         (CUSTOMER_STATUS_APPROVED, "Approved"),
         (CUSTOMER_STATUS_DECLINED, "Declined"),
         (CUSTOMER_STATUS_DISCARDED, "Discarded"),
-        (CUSTOMER_STATUS_CLOSED, "DeListed"),
+        (CUSTOMER_STATUS_CLOSED, "Delisted"),
     )
 
     # List of statuses from above that allow a customer to edit an occurrence report.
@@ -283,7 +283,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         (PROCESSING_STATUS_DECLINED, "Declined"),
         (PROCESSING_STATUS_UNLOCKED, "Unlocked"),
         (PROCESSING_STATUS_DISCARDED, "Discarded"),
-        (PROCESSING_STATUS_CLOSED, "DeListed"),
+        (PROCESSING_STATUS_CLOSED, "Delisted"),
     )
 
     VALID_BULK_IMPORT_PROCESSING_STATUSES = [
@@ -1005,6 +1005,12 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         if not self.location or not self.location.location_accuracy:
             missing_values.append("Location Accuracy")
+
+        if not self.location or not self.location.region_id:
+            missing_values.append("Region")
+
+        if not self.location or not self.location.district_id:
+            missing_values.append("District")
 
         if missing_values:
             raise ValidationError("Cannot submit this report due to missing values: " + ", ".join(missing_values))
@@ -3575,12 +3581,11 @@ class OccurrenceReportDocument(Document):
     def add_documents(self, request, *args, **kwargs):
         # save the files
         data = json.loads(request.data.get("data"))
-        # if not data.get('update'):
-        #     documents_qs = self.filter(input_name='species_doc', visible=True)
-        #     documents_qs.delete()
         for idx in range(data["num_files"]):
-            self.check_file(request.data.get("file-" + str(idx)))
             _file = request.data.get("file-" + str(idx))
+            if not _file:
+                raise ValidationError("The file upload did not complete successfully. Please try again.")
+            self.check_file(_file)
             self._file = _file
             self.name = _file.name
             self.input_name = data["input_name"]
@@ -4754,6 +4759,11 @@ class OccurrenceUserAction(UserAction):
     ACTION_DISCARD_THREAT = "Threat {} discarded for occurrence {}"
     ACTION_REINSTATE_THREAT = "Threat {} reinstated for occurrence {}"
 
+    # Geometry
+    ACTION_ADD_GEOMETRY = "Occurrence Geometry {} Created for occurrence {}"
+    ACTION_UPDATE_GEOMETRY = "Occurrence Geometry {} Updated for occurrence {}"
+    ACTION_DELETE_GEOMETRY = "Occurrence Geometry {} Deleted for occurrence {}"
+
     class Meta:
         app_label = "boranga"
         ordering = ("-when",)
@@ -4799,12 +4809,11 @@ class OccurrenceDocument(Document):
     def add_documents(self, request, *args, **kwargs):
         # save the files
         data = json.loads(request.data.get("data"))
-        # if not data.get('update'):
-        #     documents_qs = self.filter(input_name='species_doc', visible=True)
-        #     documents_qs.delete()
         for idx in range(data["num_files"]):
-            self.check_file(request.data.get("file-" + str(idx)))
             _file = request.data.get("file-" + str(idx))
+            if not _file:
+                raise ValidationError("The file upload did not complete successfully. Please try again.")
+            self.check_file(_file)
             self._file = _file
             self.name = _file.name
             self.input_name = data["input_name"]
@@ -5017,7 +5026,7 @@ class OCCHabitatComposition(BaseModel):
     soil_condition = models.ForeignKey(SoilCondition, on_delete=models.SET_NULL, null=True, blank=True)
     drainage = models.ForeignKey(Drainage, on_delete=models.SET_NULL, null=True, blank=True)
     water_quality = models.CharField(max_length=500, blank=True, default="")
-    habitat_notes = models.CharField(max_length=1000, blank=True, default="")
+    habitat_notes = models.TextField(blank=True, default="")
 
     class Meta:
         app_label = "boranga"
@@ -5345,7 +5354,7 @@ class OCCPlantCount(BaseModel):
     ripe_fruit_present = models.BooleanField(null=True, blank=True)
     dehisced_fruit_present = models.BooleanField(null=True, blank=True)
     pollinator_observation = models.CharField(max_length=1000, null=True, blank=True)
-    comment = models.CharField(max_length=1000, blank=True, default="")
+    comment = models.TextField(blank=True, default="")
     obs_date = models.DateField(null=True, blank=True)
 
     class Meta:

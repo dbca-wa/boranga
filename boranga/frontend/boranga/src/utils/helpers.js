@@ -81,7 +81,7 @@ export default {
         return returnStr;
     },
     apiError: function (resp) {
-        var error_str = '';
+        var error_str;
         if (resp.status === 400) {
             try {
                 let obj = JSON.parse(resp.responseText);
@@ -101,7 +101,7 @@ export default {
         console.log('in apiVueResourceError');
         console.log(resp);
         var error_str = '';
-        var text = null;
+        var text;
         if (resp.status === 400) {
             if (Array.isArray(resp.body)) {
                 text = resp.body[0];
@@ -127,7 +127,6 @@ export default {
                     }
                 }
             } else {
-                error_str = text.replace(/[[\]"]/g, '');
                 error_str = text.replace(/^['"](.*)['"]$/, '$1');
             }
         } else if (resp.status === 404) {

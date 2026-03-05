@@ -335,7 +335,6 @@
                             occurrence_obj.habitat_composition.water_quality
                         "
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
                         placeholder=""
                     />
@@ -351,7 +350,6 @@
                             occurrence_obj.habitat_composition.habitat_notes
                         "
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
                         placeholder=""
                     />
@@ -668,8 +666,6 @@
                                 .vegetation_structure_layer_four
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -687,8 +683,6 @@
                                 .vegetation_structure_layer_three
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -706,8 +700,6 @@
                                 .vegetation_structure_layer_two
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -725,8 +717,6 @@
                                 .vegetation_structure_layer_one
                         "
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -877,8 +867,6 @@
                         id="fire_history_comment"
                         v-model="occurrence_obj.fire_history.comment"
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />
@@ -959,8 +947,6 @@
                         id="related_species"
                         v-model="occurrence_obj.associated_species.comment"
                         :disabled="isReadOnly"
-                        type="text"
-                        row="2"
                         class="form-control"
                         placeholder=""
                     />

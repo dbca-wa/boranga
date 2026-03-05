@@ -108,8 +108,13 @@ def load_species_to_district_links(
     # directory containing the current file (defaults to project `private-media`)
     BASE_DIR = _default_legacy_base_dir()
 
-    # default import file path
-    default_csv_path = BASE_DIR / "legacy_data/TPFL/DRF_TAXON_CONSV_LST_DISTRICTS.csv"
+    # Default CSV paths per legacy system
+    _DEFAULT_PATHS: dict[str, str] = {
+        "TPFL": str(BASE_DIR / "legacy_data/TPFL/DRF_TAXON_CONSV_LST_DISTRICTS.csv"),
+        "TFAUNA": str(BASE_DIR / "legacy_data/TFAUNA/Species Districts.csv"),
+    }
+
+    default_csv_path = _DEFAULT_PATHS.get(legacy_system.upper()) if legacy_system else None
 
     csv_path = path or default_csv_path or getattr(settings, "LEGACY_SPECIES_DISTRICTS_PATH", None)
 

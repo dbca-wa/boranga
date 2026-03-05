@@ -463,12 +463,14 @@ class TaxonomySerializer(BaseModelSerializer):
             return None
         try:
             taxonSpecies = Species.objects.get(taxonomy=obj)
-            qs = ConservationStatus.objects.get(
-                species=taxonSpecies,
-                processing_status="approved",
+            qs = (
+                ConservationStatus.objects.filter(species=taxonSpecies, processing_status="approved").first()
+                or ConservationStatus.objects.filter(species=taxonSpecies, processing_status="delisted").first()
             )
-            return BasicConservationStatusSerializer(qs, context=self.context).data
-        except (ConservationStatus.DoesNotExist, Species.DoesNotExist):
+            if qs:
+                return BasicConservationStatusSerializer(qs, context=self.context).data
+            return BasicConservationStatusSerializer(context=self.context).data
+        except Species.DoesNotExist:
             return BasicConservationStatusSerializer(context=self.context).data
 
 
@@ -760,14 +762,13 @@ class BaseSpeciesSerializer(BaseModelSerializer):
                 and obj.species_publishing_status.conservation_status_public
             )
         ):
-            try:
-                qs = ConservationStatus.objects.get(
-                    species=obj,
-                    processing_status="approved",
-                )
+            qs = (
+                ConservationStatus.objects.filter(species=obj, processing_status="approved").first()
+                or ConservationStatus.objects.filter(species=obj, processing_status="delisted").first()
+            )
+            if qs:
                 return BasicConservationStatusSerializer(qs, context=self.context).data
-            except ConservationStatus.DoesNotExist:
-                return None
+            return None
         else:
             return None
 
@@ -1254,14 +1255,13 @@ class BaseCommunitySerializer(BaseModelSerializer):
                 and obj.community_publishing_status.conservation_status_public
             )
         ):
-            try:
-                qs = ConservationStatus.objects.get(
-                    community=obj,
-                    processing_status="approved",
-                )
+            qs = (
+                ConservationStatus.objects.filter(community=obj, processing_status="approved").first()
+                or ConservationStatus.objects.filter(community=obj, processing_status="delisted").first()
+            )
+            if qs:
                 return BasicConservationStatusSerializer(qs, context=self.context).data
-            except ConservationStatus.DoesNotExist:
-                return None
+            return None
         else:
             return None
 

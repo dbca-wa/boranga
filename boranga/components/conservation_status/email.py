@@ -18,7 +18,9 @@ from boranga.helpers import (
     is_internal_by_user_id,
 )
 
-private_storage = FileSystemStorage(location=settings.BASE_DIR + "/private-media/", base_url="/private-media/")
+private_storage = FileSystemStorage(
+    location=settings.PRIVATE_MEDIA_STORAGE_LOCATION, base_url=settings.PRIVATE_MEDIA_BASE_URL
+)
 
 logger = logging.getLogger(__name__)
 

@@ -355,7 +355,7 @@ export function polygon_style(feature) {
  */
 export function validateFeature(feature, component_map) {
     let vm = this;
-    let feature_wkt = undefined;
+    let feature_wkt;
     console.log('Validate feature', feature);
     if (feature === undefined) {
         // Get the WKT representation of the currently drawn polygon sketch

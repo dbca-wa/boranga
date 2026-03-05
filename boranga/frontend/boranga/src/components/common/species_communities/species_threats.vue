@@ -116,7 +116,7 @@
                             class="btn btn-primary mb-2"
                             @click.prevent="newThreat"
                         >
-                            <i class="fa-solid fa-circle-plus"></i>
+                            <i class="bi bi-plus-circle"></i>
                             Add Threat
                         </button>
                     </div>
@@ -196,7 +196,7 @@ export default {
     },
     data: function () {
         let vm = this;
-        let url = '';
+        let url;
         if (vm.is_internal) {
             url = helpers.add_endpoint_json(
                 api_endpoints.species,
@@ -279,7 +279,7 @@ export default {
                     {
                         extend: 'excel',
                         title: 'Boranga Species Threats Excel Export',
-                        text: '<i class="fa-solid fa-download"></i> Excel',
+                        text: '<i class="bi bi-download"></i> Excel',
                         className: 'btn btn-primary me-2 rounded',
                         exportOptions: {
                             orthogonal: 'export',
@@ -288,7 +288,7 @@ export default {
                     {
                         extend: 'csv',
                         title: 'Boranga Species Threats CSV Export',
-                        text: '<i class="fa-solid fa-download"></i> CSV',
+                        text: '<i class="bi bi-download"></i> CSV',
                         className: 'btn btn-primary rounded',
                         exportOptions: {
                             orthogonal: 'export',

@@ -116,7 +116,6 @@
                                 id="contact_details"
                                 v-model="submitter_information.contact_details"
                                 class="form-control"
-                                rows="4"
                             />
                         </div>
                     </div>
@@ -331,3 +330,5 @@ export default {
     },
 };
 </script>
+
+<style scoped></style>

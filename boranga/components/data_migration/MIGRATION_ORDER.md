@@ -129,6 +129,14 @@ or, if combined into one file:
 
 ./manage.py migrate_data run species_legacy private-media/legacy_data/TFAUNA/Species List.csv --sources TFAUNA --wipe-targets
 
+## Conservation Status
+
+./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TFAUNA/[TBC].csv --sources TFAUNA --wipe-targets
+
+## Occurrence Reports (and Occurrences)
+
+./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/Fauna Records.csv" --sources TFAUNA --wipe-targets
+
 # --- Cleanup
 
 # Drop the functional index now that migrations are complete

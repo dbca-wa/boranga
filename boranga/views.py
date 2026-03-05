@@ -421,10 +421,7 @@ def getPrivateFile(request):
         if extension in ["msg", "eml"]:
             content_type = "application/vnd.ms-outlook"
         else:
-            try:
-                content_type = mimetypes.types_map["." + str(extension)]
-            except KeyError:
-                raise ValueError(f"Extension {extension} not found in mimetypes.types_map")
+            content_type = mimetypes.guess_type(file_name_path)[0] or "application/octet-stream"
 
         response = HttpResponse(the_data, content_type=content_type)
 

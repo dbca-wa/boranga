@@ -9,6 +9,7 @@
                 :show_observer_contact_information="
                     show_observer_contact_information
                 "
+                :show_comments="show_comments"
                 :occurrence_report_obj="occurrence_report_obj"
                 @refresh-occurrence-report="refreshOccurrenceReport()"
                 @save-occurrence-report="saveOccurrenceReport()"
@@ -254,6 +255,10 @@ export default {
             type: Boolean,
             default: true,
         },
+        show_comments: {
+            type: Boolean,
+            default: true,
+        },
     },
     emits: [
         'refreshFromResponse',
@@ -287,6 +292,15 @@ export default {
                 this.$emit('dirty', this.isAnyTabDirty());
             },
             deep: true,
+        },
+        // When the parent replaces occurrence_report_obj (e.g. after
+        // refreshOccurrenceReport), the nested objects are fresh from the
+        // API.  Reset every section's dirty snapshot so stale baselines
+        // don't cause false "unsaved changes" warnings.
+        occurrence_report_obj: function () {
+            this.$nextTick(() => {
+                this.resetDirtyState();
+            });
         },
     },
     computed: {

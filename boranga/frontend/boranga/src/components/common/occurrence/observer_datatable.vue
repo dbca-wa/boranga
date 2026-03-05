@@ -15,7 +15,7 @@
                     class="btn btn-primary mb-2"
                     @click.prevent="newObserverDetail"
                 >
-                    <i class="fa-solid fa-circle-plus"></i>
+                    <i class="bi bi-plus-circle"></i>
                     Add Observer
                 </button>
             </div>
@@ -195,7 +195,7 @@ export default {
                     {
                         extend: 'excel',
                         title: 'Boranga Occurrence Report Observers Excel Export',
-                        text: '<i class="fa-solid fa-download"></i> Excel',
+                        text: '<i class="bi bi-download"></i> Excel',
                         className: 'btn btn-primary me-2 rounded',
                         exportOptions: {
                             orthogonal: 'export',
@@ -204,7 +204,7 @@ export default {
                     {
                         extend: 'csv',
                         title: 'Boranga Occurrence Report Observers CSV Export',
-                        text: '<i class="fa-solid fa-download"></i> CSV',
+                        text: '<i class="bi bi-download"></i> CSV',
                         className: 'btn btn-primary rounded',
                         exportOptions: {
                             orthogonal: 'export',

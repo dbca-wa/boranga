@@ -691,7 +691,7 @@
                                         title="Add a new point"
                                         @click="addNewPoint(-31.0, 116.0)"
                                     >
-                                        <i class="fa-solid fa-circle-plus"></i>
+                                        <i class="bi bi-plus-circle"></i>
                                     </button>
                                 </div>
                                 <!-- A copy-selected Button -->
@@ -725,7 +725,7 @@
                                             )
                                         "
                                     >
-                                        <i class="fa-solid fa-copy"></i>
+                                        <i class="bi bi-copy"></i>
                                     </button>
                                 </div>
                             </div>
@@ -946,7 +946,7 @@
                             >
                                 <!-- Spatial Operations Dropdown -->
                                 <div
-                                    class="input-group-text form-floating flex-grow-1"
+                                    class="input-group-text form-floating flex-grow-1 min-width-150"
                                 >
                                     <SelectFilter
                                         id="features-spatial-operation-select"
@@ -974,7 +974,6 @@
                                         :pre-selected-filter-item="
                                             selectedSpatialOperation
                                         "
-                                        classes="min-width-150"
                                         @option:selected="
                                             (selected) => {
                                                 selectedSpatialOperation =
@@ -1032,7 +1031,7 @@
                                                 selectedSpatialOperation
                                         )?.number_params > 0
                                     "
-                                    class="input-group-text form-floating flex-grow-1"
+                                    class="input-group-text form-floating flex-grow-1 min-width-150"
                                 >
                                     <SelectFilter
                                         id="features-unit-select"
@@ -1058,7 +1057,6 @@
                                         :pre-selected-filter-item="
                                             selectedSpatialUnit
                                         "
-                                        classes="min-width-150"
                                         @option:selected="
                                             (selected) => {
                                                 selectedSpatialUnit =
@@ -1384,10 +1382,7 @@
                                 @click="overlay(undefined, undefined)"
                             >
                                 <span style="font-size: smaller"
-                                    ><i
-                                        class="fa-fw fa-regular fa-window-close"
-                                    ></i>
-                                    Close</span
+                                    ><i class="bi bi-x-window"></i> Close</span
                                 >
                             </button>
                         </div>
@@ -1586,7 +1581,7 @@
 import { v4 as uuid } from 'uuid';
 import { api_endpoints, helpers } from '@/utils/hooks';
 
-import { toRaw, isProxy } from 'vue';
+import { toRaw, isProxy, markRaw } from 'vue';
 import 'ol/ol.css';
 import alert from '@vue-utils/alert.vue';
 import Map from 'ol/Map';
@@ -2011,27 +2006,39 @@ export default {
             vectorLayers: {},
             defaultQueryLayerName: null, // The layer where e.g. dropped geometries are added to
             defaultProcessedGeometryLayerName: null, // The layer to which processed geometries are added to
-            editableFeatureCollection: new Collection([], { unique: true }),
-            selectedFeatureCollection: new Collection([], { unique: true }),
+            editableFeatureCollection: markRaw(
+                new Collection([], { unique: true })
+            ),
+            selectedFeatureCollection: markRaw(
+                new Collection([], { unique: true })
+            ),
             zIndex: 0, // Incrementing Z-index for overlays
             lastPoint: null,
             sketchCoordinates: [[]],
             defaultColor: '#eeeeee',
-            clickSelectStroke: new Stroke({
-                color: 'rgba(255, 0, 0, 0.7)',
-                width: 2,
-            }),
-            hoverFill: new Fill({
-                color: 'rgba(255, 255, 255, 0.5)',
-            }),
-            hoverStrokePolygon: new Stroke({
-                color: 'rgba(255, 255, 255, 0.5)',
-                width: 1,
-            }),
-            hoverStrokePoint: new Stroke({
-                color: 'rgba(255, 255, 255, 0.5)',
-                width: 2,
-            }),
+            clickSelectStroke: markRaw(
+                new Stroke({
+                    color: 'rgba(255, 0, 0, 0.7)',
+                    width: 2,
+                })
+            ),
+            hoverFill: markRaw(
+                new Fill({
+                    color: 'rgba(255, 255, 255, 0.5)',
+                })
+            ),
+            hoverStrokePolygon: markRaw(
+                new Stroke({
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    width: 1,
+                })
+            ),
+            hoverStrokePoint: markRaw(
+                new Stroke({
+                    color: 'rgba(255, 255, 255, 0.5)',
+                    width: 2,
+                })
+            ),
             set_mode: set_mode,
             isValidating: false,
             errorMessage: null,
@@ -2064,12 +2071,20 @@ export default {
             mapMarker: null,
             geojsonSnapshot: null, // A snapshot of the geojson feature collection
             isDirty: false, // Whether the map has unsaved changes
+            // Reactive counter incremented whenever selectedFeatureCollection
+            // changes (add/remove). Used to invalidate the selectedFeatureIds
+            // computed, which cannot track markRaw Collections directly.
+            selectedRevision: 0,
+            // Reactive counter incremented whenever editableFeatureCollection
+            // changes. Used to invalidate featureCount and canAddMorePoints,
+            // which call .getFeatures()/.getArray() on markRaw sources.
+            editableRevision: 0,
         };
     },
     computed: {
         shapefileDocumentUrl: function () {
-            let endpoint = '';
-            let obj_id = 0;
+            let endpoint;
+            let obj_id;
             if (this.context?.model_name == 'occurrencereport') {
                 endpoint = api_endpoints.occurrence_report;
                 obj_id = this.context.id;
@@ -2117,6 +2132,7 @@ export default {
         featureCount: function () {
             this.defaultQueryLayerName;
             this.defaultProcessedGeometryLayerName;
+            this.editableRevision; // invalidated when editable features change (markRaw sources)
             const features = [];
 
             for (let layerName in this.layerSources) {
@@ -2147,6 +2163,7 @@ export default {
             if (!vm.undoredo) {
                 return [];
             } else {
+                vm.modifiedFeaturesStack; // reactive trigger (undoredo is markRaw)
                 return vm.undoredo.getStack('undo');
             }
         },
@@ -2158,6 +2175,7 @@ export default {
             if (!vm.undoredo) {
                 return [];
             } else {
+                vm.modifiedFeaturesStack; // reactive trigger (undoredo is markRaw)
                 return vm.undoredo.getStack('redo');
             }
         },
@@ -2344,6 +2362,7 @@ export default {
             return this.selectedSpatialUnit === 'deg' ? 0.0001 : 1;
         },
         selectedFeatureIds: function () {
+            this.selectedRevision; // reactive dependency — invalidated on add/remove
             return this.selectedFeatureCollection.getArray().map((feature) => {
                 return feature.getProperties().id;
             });
@@ -2364,6 +2383,7 @@ export default {
             if (!this.pointFeaturesSupported) {
                 return false;
             }
+            this.editableRevision; // invalidated when editable features change (markRaw collection)
             if (this.pointLimit && this.pointLimit > 0) {
                 // Only count Point and MultiPoint features in the editableFeatureCollection
                 const pointCount = this.editableFeatureCollection
@@ -2479,6 +2499,17 @@ export default {
             $('#map-spinner').css('zIndex', 9999);
             vm.featureToast = new bootstrap.Toast(toastEl, { autohide: false });
             document.addEventListener('keydown', vm.handleKeyDown);
+            // Wire up selectedFeatureCollection events so that the
+            // selectedFeatureIds computed is invalidated on add/remove
+            // (the OL Collection is markRaw and not tracked by Vue).
+            vm.selectedFeatureCollection.on(
+                'add',
+                vm.onSelectedFeatureCollectionChanged
+            );
+            vm.selectedFeatureCollection.on(
+                'remove',
+                vm.onSelectedFeatureCollectionChanged
+            );
             if (vm.refreshMapOnMounted) {
                 vm.forceToRefreshMap();
             } else {
@@ -2494,6 +2525,14 @@ export default {
         this.editableFeatureCollection.forEach((feature) => {
             feature.un('change', this.onFeatureChanged);
         });
+        this.selectedFeatureCollection.un(
+            'add',
+            this.onSelectedFeatureCollectionChanged
+        );
+        this.selectedFeatureCollection.un(
+            'remove',
+            this.onSelectedFeatureCollectionChanged
+        );
     },
     methods: {
         handleKeyDown(evt) {
@@ -2539,6 +2578,14 @@ export default {
                 JSON.stringify(currentGeoJSON) !==
                 JSON.stringify(this.geojsonSnapshot);
             this.$emit('dirty', this.isDirty);
+            // Invalidate featureCount / canAddMorePoints (editableFeatureCollection
+            // is markRaw so Vue cannot track it directly).
+            this.editableRevision++;
+        },
+        // Increments the reactive revision counter so Vue re-evaluates
+        // selectedFeatureIds (selectedFeatureCollection is markRaw).
+        onSelectedFeatureCollectionChanged() {
+            this.selectedRevision++;
         },
         // Call this after saving to reset the dirty state
         markClean() {
@@ -2613,13 +2660,13 @@ export default {
                             ].getExtent();
                     }
 
-                    let centre = [
-                        (ext[0] + ext[2]) / 2.0,
-                        (ext[1] + ext[3]) / 2.0,
-                    ];
-                    let resolution = view.getResolutionForExtent(ext);
-                    let z = view.getZoomForResolution(resolution) - 1;
-                    view.animate({ zoom: z, center: centre });
+                    ext = vm.ensureMinimumExtent(ext);
+
+                    view.fit(ext, {
+                        duration: 1000,
+                        size: vm.map.getSize(),
+                        padding: [50, 50, 50, 50],
+                    });
                 }
             }
         },
@@ -2674,6 +2721,31 @@ export default {
             ];
         },
         /**
+         * Ensures an extent is at least a minimum size so that very small
+         * features (e.g. 1 m buffered points) are visible as shapes rather
+         * than sub-pixel dots.  Returns the extent unchanged when it is
+         * already large enough.
+         *
+         * The minimum size is expressed in the map's native units.
+         * For EPSG:4326 0.0005° ≈ 55 m at mid-latitudes — tight enough to
+         * see the feature's shape with surrounding map-tile context.
+         *
+         * @param {Array<number>} ext  [minX, minY, maxX, maxY]
+         * @returns {Array<number>}    padded extent
+         */
+        ensureMinimumExtent: function (ext) {
+            const minSize = 0.0005; // degrees – ≈ 55 m at −32° lat
+            const w = ext[2] - ext[0];
+            const h = ext[3] - ext[1];
+            if (w >= minSize && h >= minSize) {
+                return ext;
+            }
+            const cx = (ext[0] + ext[2]) / 2;
+            const cy = (ext[1] + ext[3]) / 2;
+            const half = minSize / 2;
+            return [cx - half, cy - half, cx + half, cy + half];
+        },
+        /**
          * Centers the map based on its size on a feature's geometry extent.
          * The map size is pixel dimensions of the box to fit the extent into.
          * @param {Feature} feature The feature to center on
@@ -2686,10 +2758,12 @@ export default {
                 extPol.scale(1.5);
                 ext = new Feature(extPol).getGeometry().getExtent();
             }
+            // Ensure a minimum visible extent so small features are
+            // rendered as shapes rather than invisible sub-pixel dots.
+            ext = this.ensureMinimumExtent(ext);
             this.map.getView().fit(ext, {
                 duration: 1000,
                 size: this.map.getSize(),
-                maxZoom: maxZoom,
             });
         },
         /**
@@ -3023,11 +3097,13 @@ export default {
 
             // Measure tool
             let draw_source = new VectorSource({ wrapX: false });
-            vm.drawForMeasure = new Draw({
-                source: draw_source,
-                type: 'LineString',
-                style: vm.styleFunctionForMeasurement,
-            });
+            vm.drawForMeasure = markRaw(
+                new Draw({
+                    source: draw_source,
+                    type: 'LineString',
+                    style: vm.styleFunctionForMeasurement,
+                })
+            );
             // Set a custom listener to the Measure tool
             vm.drawForMeasure.set('escKey', '');
             vm.drawForMeasure.on('change:escKey', function () {});
@@ -3039,53 +3115,67 @@ export default {
             });
 
             // Create a layer to retain the measurement
-            vm.measurementLayer = new VectorLayer({
-                title: 'Measurements',
-                source: draw_source,
-                style: function (feature, resolution) {
-                    feature.set('for_layer', true);
-                    return vm.styleFunctionForMeasurement(feature, resolution);
-                },
-            });
+            vm.measurementLayer = markRaw(
+                new VectorLayer({
+                    title: 'Measurements',
+                    source: draw_source,
+                    style: function (feature, resolution) {
+                        feature.set('for_layer', true);
+                        return vm.styleFunctionForMeasurement(
+                            feature,
+                            resolution
+                        );
+                    },
+                })
+            );
             vm.map.addInteraction(vm.drawForMeasure);
             vm.map.addLayer(vm.measurementLayer);
         },
         initialiseFeatureQueryLayer: function (title, name) {
             const modelQuerySource = new VectorSource({});
             const polygonStyle = this.createStyle(null, null, 'Polygon');
-            this.layerSources[name] = modelQuerySource;
+            this.layerSources[name] = markRaw(modelQuerySource);
             const layerDef = this.getLayerDefinitionByName(name);
             let zIndex = layerDef.z_index;
 
-            this.vectorLayers[name] = new VectorLayer({
-                title: title,
-                name: name,
-                source: modelQuerySource,
-                can_edit: layerDef.can_edit,
-                editing: false,
-                style: (feature, resolution) => {
-                    const color = feature.get('color') || this.defaultColor;
-                    let style = polygonStyle;
-                    let renderAsPoint = false;
-                    let pointGeom = null;
+            this.vectorLayers[name] = markRaw(
+                new VectorLayer({
+                    title: title,
+                    name: name,
+                    source: modelQuerySource,
+                    can_edit: layerDef.can_edit,
+                    editing: false,
+                    style: (feature, resolution) => {
+                        const color = feature.get('color') || this.defaultColor;
+                        let style = polygonStyle;
+                        let renderAsPoint = false;
+                        let pointGeom = null;
 
-                    if (this.isPolygonLikeFeature(feature)) {
-                        const extent = feature.getGeometry().getExtent();
-                        const width = extent[2] - extent[0]; // Width in View Units (Degrees)
-                        const widthPx = width / resolution;
+                        if (this.isPolygonLikeFeature(feature)) {
+                            const extent = feature.getGeometry().getExtent();
+                            const width = extent[2] - extent[0]; // Width in View Units (Degrees)
+                            const widthPx = width / resolution;
 
-                        // Threshold: 20 pixels
-                        if (widthPx < 20) {
-                            renderAsPoint = true;
-                            // Calculate centroid for the marker
-                            const type = feature.getGeometry().getType();
-                            if (type === 'Polygon') {
-                                try {
-                                    pointGeom = feature
-                                        .getGeometry()
-                                        .getInteriorPoint();
-                                } catch {
-                                    // Fallback if interior point fails
+                            // Threshold: 20 pixels
+                            if (widthPx < 20) {
+                                renderAsPoint = true;
+                                // Calculate centroid for the marker
+                                const type = feature.getGeometry().getType();
+                                if (type === 'Polygon') {
+                                    try {
+                                        pointGeom = feature
+                                            .getGeometry()
+                                            .getInteriorPoint();
+                                    } catch {
+                                        // Fallback if interior point fails
+                                        const center = [
+                                            (extent[0] + extent[2]) / 2,
+                                            (extent[1] + extent[3]) / 2,
+                                        ];
+                                        pointGeom = new Point(center);
+                                    }
+                                } else {
+                                    // MultiPolygon: use center of extent
                                     const center = [
                                         (extent[0] + extent[2]) / 2,
                                         (extent[1] + extent[3]) / 2,
@@ -3093,38 +3183,31 @@ export default {
                                     pointGeom = new Point(center);
                                 }
                             } else {
-                                // MultiPolygon: use center of extent
-                                const center = [
-                                    (extent[0] + extent[2]) / 2,
-                                    (extent[1] + extent[3]) / 2,
-                                ];
-                                pointGeom = new Point(center);
+                                // Render as Polygon (apply color to shared style)
+                                style.getFill().setColor(color);
                             }
-                        } else {
-                            // Render as Polygon (apply color to shared style)
-                            style.getFill().setColor(color);
                         }
-                    }
 
-                    if (this.isPointLikeFeature(feature) || renderAsPoint) {
-                        const rgba = this.colorHexToRgbaValues(color);
-                        style = this.createStyle(
-                            color,
-                            null,
-                            'Point',
-                            null,
-                            null,
-                            this.mapMarker,
-                            rgba[3]
-                        );
-                        if (renderAsPoint && pointGeom) {
-                            // Important: Set the point geometry to draw the marker
-                            style.setGeometry(pointGeom);
+                        if (this.isPointLikeFeature(feature) || renderAsPoint) {
+                            const rgba = this.colorHexToRgbaValues(color);
+                            style = this.createStyle(
+                                color,
+                                null,
+                                'Point',
+                                null,
+                                null,
+                                this.mapMarker,
+                                rgba[3]
+                            );
+                            if (renderAsPoint && pointGeom) {
+                                // Important: Set the point geometry to draw the marker
+                                style.setGeometry(pointGeom);
+                            }
                         }
-                    }
-                    return style;
-                },
-            });
+                        return style;
+                    },
+                })
+            );
             // Add the layer
             this.map.addLayer(this.vectorLayers[name]);
             // Set zIndex to some layers to be rendered over the other layers
@@ -3159,130 +3242,145 @@ export default {
                 return;
             }
 
-            vm.drawPolygonsForModel = new Draw({
-                source: vm.layerSources[vm.defaultQueryLayerName],
-                type: 'Polygon',
-                geometryFunction: function (coordinates, geometry) {
-                    if (geometry) {
-                        if (coordinates[0].length) {
-                            // Add a closing coordinate to match the first
-                            geometry.setCoordinates(
-                                [coordinates[0].concat([coordinates[0][0]])],
+            vm.drawPolygonsForModel = markRaw(
+                new Draw({
+                    source: vm.layerSources[vm.defaultQueryLayerName],
+                    type: 'Polygon',
+                    geometryFunction: function (coordinates, geometry) {
+                        if (geometry) {
+                            if (coordinates[0].length) {
+                                // Add a closing coordinate to match the first
+                                geometry.setCoordinates(
+                                    [
+                                        coordinates[0].concat([
+                                            coordinates[0][0],
+                                        ]),
+                                    ],
+                                    this.geometryLayout_
+                                );
+                            } else {
+                                geometry.setCoordinates(
+                                    [],
+                                    this.geometryLayout_
+                                );
+                            }
+                        } else {
+                            geometry = new Polygon(
+                                coordinates,
                                 this.geometryLayout_
                             );
-                        } else {
-                            geometry.setCoordinates([], this.geometryLayout_);
                         }
-                    } else {
-                        geometry = new Polygon(
-                            coordinates,
-                            this.geometryLayout_
-                        );
-                    }
 
-                    if (vm.unOrRedoing_sketchPoint) {
-                        // Don't run below undo stack logic while executing an undo/redo of sketch points
-                        return geometry;
-                    }
-
-                    // Current feature id list for undo stack
-                    let before = [...vm.sketchCoordinates];
-                    // Ignore the last coordinate that is the movable cursor point
-                    let drawnVertexCoords = coordinates[0].toSpliced(-1);
-                    if (before.length != drawnVertexCoords.length) {
-                        // Sort out back-to-back duplicate coordinates
-                        let sketchCoordinates = drawnVertexCoords
-                            .slice()
-                            .reduce((acc, cur) => {
-                                let prev = acc.slice(-1)[0] || [];
-                                if (prev[0] !== cur[0] && prev[1] !== cur[1]) {
-                                    acc.push(cur);
-                                }
-                                return acc;
-                            }, []);
-
-                        // Return from calculation if the new sketch coordinates are the same as the previous
-                        if (
-                            before.length === sketchCoordinates.length &&
-                            before
-                                .flat(1)
-                                .every(
-                                    (coord, index) =>
-                                        coord ===
-                                        sketchCoordinates.flat(1)[index]
-                                )
-                        ) {
+                        if (vm.unOrRedoing_sketchPoint) {
+                            // Don't run below undo stack logic while executing an undo/redo of sketch points
                             return geometry;
                         }
-                        // Set new sketch coordinates
-                        vm.sketchCoordinates = sketchCoordinates;
 
-                        // Add to undo stack
-                        vm.undoredo_forSketch.push('add polygon point', {
-                            before: before,
-                            after: vm.sketchCoordinates,
-                        });
-                    }
+                        // Current feature id list for undo stack
+                        let before = [...vm.sketchCoordinates];
+                        // Ignore the last coordinate that is the movable cursor point
+                        let drawnVertexCoords = coordinates[0].toSpliced(-1);
+                        if (before.length != drawnVertexCoords.length) {
+                            // Sort out back-to-back duplicate coordinates
+                            let sketchCoordinates = drawnVertexCoords
+                                .slice()
+                                .reduce((acc, cur) => {
+                                    let prev = acc.slice(-1)[0] || [];
+                                    if (
+                                        prev[0] !== cur[0] &&
+                                        prev[1] !== cur[1]
+                                    ) {
+                                        acc.push(cur);
+                                    }
+                                    return acc;
+                                }, []);
 
-                    return geometry;
-                },
-                condition: function (evt) {
-                    if (evt.originalEvent.buttons === 1) {
-                        // Only allow drawing when the left mouse button is pressed
+                            // Return from calculation if the new sketch coordinates are the same as the previous
+                            if (
+                                before.length === sketchCoordinates.length &&
+                                before
+                                    .flat(1)
+                                    .every(
+                                        (coord, index) =>
+                                            coord ===
+                                            sketchCoordinates.flat(1)[index]
+                                    )
+                            ) {
+                                return geometry;
+                            }
+                            // Set new sketch coordinates
+                            vm.sketchCoordinates = sketchCoordinates;
+
+                            // Add to undo stack
+                            vm.undoredo_forSketch.push('add polygon point', {
+                                before: before,
+                                after: vm.sketchCoordinates,
+                            });
+                        }
+
+                        return geometry;
+                    },
+                    condition: function (evt) {
+                        if (evt.originalEvent.buttons === 1) {
+                            // Only allow drawing when the left mouse button is pressed
+                            return true;
+                        } else if (evt.originalEvent.buttons === 2) {
+                            // If the right mouse button is pressed, undo the last point
+                            if (vm.canUndoDrawnVertex) {
+                                vm.undoredo_forSketch.undo();
+                            } else {
+                                vm.callSetMode('layer');
+                            }
+                        } else {
+                            return false;
+                        }
+                    },
+                    finishCondition: function () {
+                        if (vm.lastPoint) {
+                            if (vm.validateFeatureBeforeSave) {
+                                const coordinates =
+                                    vm.sketchCoordinates.slice();
+                                coordinates.push(coordinates[0]);
+                                const feature = new Feature({
+                                    id: -1,
+                                    geometry: new Polygon([coordinates]),
+                                    label: 'validation',
+                                    color: vm.defaultColor,
+                                    geometry_source: 'validation',
+                                });
+                                vm.emitValidateFeature(feature);
+                            } else {
+                                console.log('Skipping feature validation');
+                                vm.finishDrawing();
+                            }
+                        }
+                        return false;
+                    },
+                })
+            );
+
+            vm.drawPointsForModel = markRaw(
+                new Draw({
+                    source: vm.layerSources[vm.defaultQueryLayerName],
+                    type: 'Point',
+                    condition: function () {
+                        if (!vm.canAddMorePoints) {
+                            if (vm.mode === 'draw' && vm.subMode === 'Point') {
+                                swal.fire({
+                                    title: 'Point Limit Reached',
+                                    text: `You cannot add more than ${vm.pointLimit} points.`,
+                                    icon: 'warning',
+                                    customClass: {
+                                        confirmButton: 'btn btn-primary',
+                                    },
+                                });
+                            }
+                            return false;
+                        }
                         return true;
-                    } else if (evt.originalEvent.buttons === 2) {
-                        // If the right mouse button is pressed, undo the last point
-                        if (vm.canUndoDrawnVertex) {
-                            vm.undoredo_forSketch.undo();
-                        } else {
-                            vm.callSetMode('layer');
-                        }
-                    } else {
-                        return false;
-                    }
-                },
-                finishCondition: function () {
-                    if (vm.lastPoint) {
-                        if (vm.validateFeatureBeforeSave) {
-                            const coordinates = vm.sketchCoordinates.slice();
-                            coordinates.push(coordinates[0]);
-                            const feature = new Feature({
-                                id: -1,
-                                geometry: new Polygon([coordinates]),
-                                label: 'validation',
-                                color: vm.defaultColor,
-                                geometry_source: 'validation',
-                            });
-                            vm.emitValidateFeature(feature);
-                        } else {
-                            console.log('Skipping feature validation');
-                            vm.finishDrawing();
-                        }
-                    }
-                    return false;
-                },
-            });
-
-            vm.drawPointsForModel = new Draw({
-                source: vm.layerSources[vm.defaultQueryLayerName],
-                type: 'Point',
-                condition: function () {
-                    if (!vm.canAddMorePoints) {
-                        if (vm.mode === 'draw' && vm.subMode === 'Point') {
-                            swal.fire({
-                                title: 'Point Limit Reached',
-                                text: `You cannot add more than ${vm.pointLimit} points.`,
-                                icon: 'warning',
-                                customClass: {
-                                    confirmButton: 'btn btn-primary',
-                                },
-                            });
-                        }
-                        return false;
-                    }
-                    return true;
-                },
-            });
+                    },
+                })
+            );
 
             vm.drawPolygonsForModel.set('escKey', '');
             vm.drawPolygonsForModel.on('change:escKey', function () {
@@ -3313,26 +3411,30 @@ export default {
             return proposals;
         },
         initialiseBaseLayers: function (tileLayers) {
-            this.tileLayerMapbox = new TileLayer({
-                title: 'Mapbox Streets',
-                type: 'base',
-                visible: true,
-                // source: new OSM(),
-            });
-            this.tileLayerSat = new TileLayer({
-                title: 'Satellite Map',
-                type: 'base',
-                visible: false,
-                // source: new OSM(),
-            });
+            this.tileLayerMapbox = markRaw(
+                new TileLayer({
+                    title: 'Mapbox Streets',
+                    type: 'base',
+                    visible: true,
+                    // source: new OSM(),
+                })
+            );
+            this.tileLayerSat = markRaw(
+                new TileLayer({
+                    title: 'Satellite Map',
+                    type: 'base',
+                    visible: false,
+                    // source: new OSM(),
+                })
+            );
 
             for (let tileLayer of tileLayers) {
                 if (tileLayer.get('is_streets_background')) {
-                    this.tileLayerMapbox = tileLayer;
+                    this.tileLayerMapbox = markRaw(tileLayer);
                 } else if (tileLayer.get('is_satellite_background')) {
-                    this.tileLayerSat = tileLayer;
+                    this.tileLayerSat = markRaw(tileLayer);
                 } else {
-                    this.optionalLayers.push(tileLayer);
+                    this.optionalLayers.push(markRaw(tileLayer));
                 }
             }
 
@@ -3408,7 +3510,7 @@ export default {
                 // props['layerGroup'] = layerGroup;
             }
 
-            this.layerSwitcher = new LayerSwitcher(props);
+            this.layerSwitcher = markRaw(new LayerSwitcher(props));
 
             if (this.editable || this.drawable) {
                 // Add a new button to the list if the component allows for editing or drawing
@@ -3473,12 +3575,61 @@ export default {
                                         this.editableFeatureCollection.push(f);
                                     });
 
-                                // A bit clunky but this makes it so when switching editing modes the feature selection styles get properly set
-                                const mode = this.mode;
-                                const subMode = this.subMode;
+                                // Restore the mode that was active before editing was
+                                // toggled off (saved below). Falls back to this.mode if
+                                // there was no prior toggle-off (first activation).
+                                const mode =
+                                    this._modeBeforeEditToggle ?? this.mode;
+                                const subMode =
+                                    this._subModeBeforeEditToggle ??
+                                    this.subMode;
+                                this._modeBeforeEditToggle = null;
+                                this._subModeBeforeEditToggle = null;
+                                // Cycle through 'layer' first so set_mode's toggle-off
+                                // guard doesn't cancel the mode restoration.
                                 this.callSetMode('layer');
                                 this.callSetMode(mode, subMode);
+                                // Belt-and-suspenders: if we restored draw mode and
+                                // features are still selected, explicitly reapply the
+                                // vertex-handle style and re-enable the modify
+                                // interaction. The modeChanged event chain can miss
+                                // this when editableFeatureCollection was just
+                                // repopulated and the reference-equality checks in
+                                // editableSelectedFeatures() haven't settled.
+                                if (
+                                    this.mode === 'draw' &&
+                                    this.selectedFeatureCollection.getLength() >
+                                        0
+                                ) {
+                                    this.modifySetActive(true);
+                                    this.selectedFeatureCollection
+                                        .getArray()
+                                        .forEach((f) => {
+                                            f.setStyle(this.modifySelectStyle);
+                                        });
+                                    if (
+                                        this.drawPolygonsForModel &&
+                                        this.subMode === 'Polygon'
+                                    ) {
+                                        this.drawPolygonsForModel.setActive(
+                                            false
+                                        );
+                                    }
+                                    if (
+                                        this.drawPointsForModel &&
+                                        this.subMode === 'Point'
+                                    ) {
+                                        this.drawPointsForModel.setActive(
+                                            false
+                                        );
+                                    }
+                                }
                             } else {
+                                // Save the current mode so toggling back on can restore it.
+                                // Without this, this.mode would already be 'layer' by the
+                                // time toggle-on runs, losing the draw/transform state.
+                                this._modeBeforeEditToggle = this.mode;
+                                this._subModeBeforeEditToggle = this.subMode;
                                 this.callSetMode('layer');
                             }
 
@@ -3488,6 +3639,10 @@ export default {
                                 target,
                                 toggle_editing
                             );
+
+                            // Toggling editing is not a geometry change — reset the
+                            // dirty state so the toggle itself doesn't mark unsaved changes
+                            this.takeSnapshot();
                         });
 
                         divWrapper.appendTo(
@@ -3582,9 +3737,11 @@ export default {
         initialiseUndoRedos: function () {
             let vm = this;
             // Add undo/redo AFTER proposal geometries have been added to the map
-            vm.undoredo = new UndoRedo({
-                layers: vm.vectorLayersArray,
-            });
+            vm.undoredo = markRaw(
+                new UndoRedo({
+                    layers: vm.vectorLayersArray,
+                })
+            );
             vm.undoredo.clear();
 
             // Somehow passing the parameter has no effect, so we set it here
@@ -3651,9 +3808,11 @@ export default {
             );
 
             // Setup a dedicated undo/redo for sketch points on the draw layer
-            vm.undoredo_forSketch = new UndoRedo({
-                layers: vm.vectorLayersArray,
-            });
+            vm.undoredo_forSketch = markRaw(
+                new UndoRedo({
+                    layers: vm.vectorLayersArray,
+                })
+            );
             vm.undoredo_forSketch.clear();
 
             vm.undoredo_forSketch.setMaxLength(vm.undoStackMaxLength);
@@ -3733,27 +3892,29 @@ export default {
                 className: 'custom-mouse-position',
                 placeholder: 'Mouse Coordinates',
             });
-            this.map = new Map({
-                controls: defaultControls({
-                    rotate: false,
-                }).extend([
-                    new ScaleLine({
-                        bar: true,
-                        text: true,
-                        minWidth: 140,
+            this.map = markRaw(
+                new Map({
+                    controls: defaultControls({
+                        rotate: false,
+                    }).extend([
+                        new ScaleLine({
+                            bar: true,
+                            text: true,
+                            minWidth: 140,
+                        }),
+                        mousePositionControl,
+                    ]),
+                    layers: [baseLayers],
+                    overlays: [overlay],
+                    target: this.elem_id,
+                    view: new View({
+                        center: [115.95, -31.95],
+                        zoom: 7,
+                        projection: `EPSG:${this.mapSrid}`,
+                        enableRotation: false,
                     }),
-                    mousePositionControl,
-                ]),
-                layers: [baseLayers],
-                overlays: [overlay],
-                target: this.elem_id,
-                view: new View({
-                    center: [115.95, -31.95],
-                    zoom: 7,
-                    projection: `EPSG:${this.mapSrid}`,
-                    enableRotation: false,
-                }),
-            });
+                })
+            );
         },
         initialisePointerMoveEvent: function () {
             let vm = this;
@@ -3859,18 +4020,21 @@ export default {
                 const now = Date.now();
                 if (now - lastPointerMove < 50) return; // 20 FPS max
                 lastPointerMove = now;
-                function isSelectedFeature(selected) {
-                    if (!selected) {
+                function isSelectedFeature(feature) {
+                    if (!feature) {
                         return false;
                     }
-                    return vm.selectedFeatureIds.includes(
-                        selected.getProperties().id
-                    );
+                    // selectedFeatureCollection is markRaw, so the selectedFeatureIds
+                    // computed is never invalidated by Vue. Check the OL Collection
+                    // directly by object reference instead.
+                    return vm.selectedFeatureCollection
+                        .getArray()
+                        .includes(feature);
                 }
                 if (selected !== null) {
                     if (isSelectedFeature(selected)) {
-                        // Don't alter style of click-selected features
-                        console.log('ignoring hover on selected feature');
+                        // Feature is click-selected — keep its selection style intact.
+                        // (Do not call setStyle(undefined), which would erase the red border.)
                     } else {
                         // Turn off hover styling -> reverts to undefined, which falls back to Layer style or Feature style function (if set)
                         // Note: If feature.setStyle(undefined) is called, it removes any feature-level style.
@@ -4432,9 +4596,17 @@ export default {
             const transformEndCallback = function (evt) {
                 evt.features.forEach((feature) => {
                     vm.emitValidateFeature(feature);
-                    const original_srid =
-                        feature.getProperties().original_geometry.properties
-                            .srid;
+                    const origGeom = feature.getProperties().original_geometry;
+                    const origType = origGeom && origGeom.type;
+
+                    // For Point/MultiPoint features (buffer-radius circles),
+                    // the original_geometry stores the source point and must
+                    // not be overwritten with polygon ring coordinates.
+                    if (origType === 'Point' || origType === 'MultiPoint') {
+                        return;
+                    }
+
+                    const original_srid = origGeom.properties.srid;
                     let coordinates = feature.getGeometry().getCoordinates();
                     if (original_srid != vm.mapSrid) {
                         // Transform the coordinates from the map crs to the user input crs
@@ -4530,7 +4702,7 @@ export default {
 
             let success = false;
             let errorStr = '';
-            let endpoint = '';
+            let endpoint;
             if (this.context?.model_name == 'occurrencereport') {
                 endpoint = api_endpoints.occurrence_report;
             } else if (this.context?.model_name == 'occurrence') {
@@ -5173,7 +5345,12 @@ export default {
             // eslint-disable-next-line no-unused-vars
             const feature = this.drawPolygonsForModel.finishDrawing();
             this.setLoadingMap(false);
-            if (this.mode == 'draw' && this.selectedFeatureIds.length == 0) {
+            // selectedFeatureIds is stale (markRaw collection) — use the live
+            // OL Collection directly to avoid always calling setMode('layer').
+            if (
+                this.mode == 'draw' &&
+                this.selectedFeatureCollection.getLength() == 0
+            ) {
                 this.callSetMode('layer');
             }
         },
@@ -5234,7 +5411,7 @@ export default {
                 body: formData,
             };
             vm.isValidating = true;
-            let endpoint = '';
+            let endpoint;
             if (this.context?.model_name == 'occurrencereport') {
                 endpoint = api_endpoints.occurrence_report;
             } else if (this.context?.model_name == 'occurrence') {
@@ -5342,14 +5519,9 @@ export default {
          * Returns the selected features
          */
         selectedFeatures: function () {
-            let vm = this;
-            const features = vm.getMapFeatures();
-            console.log('features:', features);
-            return features.filter((feature) => {
-                return vm.selectedFeatureIds.includes(
-                    feature.getProperties().id
-                );
-            });
+            // selectedFeatureCollection is markRaw so selectedFeatureIds computed
+            // is stale — use the live OL Collection by object reference.
+            return this.selectedFeatureCollection.getArray().slice();
         },
         /**
          * Returns features that are both selectable and editable
@@ -5614,8 +5786,13 @@ export default {
                 if (interaction instanceof Select) {
                     let selected = [];
                     let deselected = [];
-                    let feature_id = feature.get('id');
-                    if (this.selectedFeatureIds.includes(feature_id)) {
+                    // selectedFeatureCollection is markRaw so selectedFeatureIds computed
+                    // is stale — check the OL Collection directly by object reference.
+                    if (
+                        this.selectedFeatureCollection
+                            .getArray()
+                            .includes(feature)
+                    ) {
                         // already selected, so deselect
                         deselected.push(feature);
                     } else {
@@ -5798,7 +5975,7 @@ export default {
         transformFeature: async function (feature, srid_from, srid_to) {
             const format = new GeoJSON();
             const geomStr = format.writeGeometry(feature.getGeometry());
-            let endpoint = '';
+            let endpoint;
             if (this.context?.model_name == 'occurrencereport') {
                 endpoint = api_endpoints.occurrence_report;
             } else if (this.context?.model_name == 'occurrence') {
@@ -6126,7 +6303,7 @@ export default {
                 btn.addClass('btn-danger');
                 $(toggleButton).attr('title', 'Layer Editing: On');
                 layer.set('editing', true);
-                this.activeEditLayer = layer;
+                this.activeEditLayer = markRaw(layer);
             } else {
                 btn.removeClass('btn-danger');
                 btn.removeClass('btn-success');
@@ -6277,7 +6454,7 @@ export default {
          * @param {Object} layer A layer object
          */
         featureGetDisplayProperties: function (selected, layer) {
-            const properties = {};
+            const unordered = {};
             const layerName = layer.getProperties().name;
             const layerDef = this.getLayerDefinitionByName(layerName);
             const propertyMap = layerDef.property_display_map || null;
@@ -6290,7 +6467,7 @@ export default {
                     key,
                     value,
                     selected,
-                    properties,
+                    unordered,
                     propertyMap,
                     propertyOverwrite
                 );
@@ -6306,14 +6483,32 @@ export default {
                         key,
                         value,
                         selected,
-                        properties,
+                        unordered,
                         propertyMap,
                         propertyOverwrite
                     );
                 }
             }
 
-            return properties;
+            // Re-order properties to match the property_display_map key order
+            // so the popup displays fields in the intended sequence.
+            if (propertyMap) {
+                const ordered = {};
+                for (const displayLabel of Object.values(propertyMap)) {
+                    if (displayLabel in unordered) {
+                        ordered[displayLabel] = unordered[displayLabel];
+                    }
+                }
+                // Append any remaining properties not in the display map
+                for (const [key, value] of Object.entries(unordered)) {
+                    if (!(key in ordered)) {
+                        ordered[key] = value;
+                    }
+                }
+                return ordered;
+            }
+
+            return unordered;
         },
         filterFeaturesShowOnMap: function (features, what, not = false) {
             if (not) {
@@ -6366,6 +6561,27 @@ export default {
 
 .custom-mouse-position:empty {
     display: none;
+}
+
+/* Utility min-width classes — must be unscoped so they apply inside child
+   components (e.g. SelectFilter wrapper div) */
+.min-width-60 {
+    min-width: 60px !important;
+}
+.min-width-90 {
+    min-width: 90px !important;
+}
+.min-width-120 {
+    min-width: 120px !important;
+}
+.min-width-150 {
+    min-width: 150px !important;
+}
+.min-width-180 {
+    min-width: 180px !important;
+}
+.min-width-210 {
+    min-width: 210px !important;
 }
 </style>
 <style scoped>
@@ -6447,24 +6663,6 @@ export default {
     width: 100%;
 }
 
-.min-width-60 {
-    min-width: 60px !important;
-}
-.min-width-90 {
-    min-width: 90px !important;
-}
-.min-width-120 {
-    min-width: 120px !important;
-}
-.min-width-150 {
-    min-width: 150px !important;
-}
-.min-width-180 {
-    min-width: 180px !important;
-}
-.min-width-210 {
-    min-width: 210px !important;
-}
 .svg-green {
     filter: invert(42%) sepia(93%) saturate(1352%) hue-rotate(87deg)
         brightness(119%) contrast(119%);

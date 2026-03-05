@@ -595,7 +595,7 @@ export default {
         },
         ocrPropertyDisplayMap: function () {
             return {
-                id: 'ID',
+                geometry_id: 'Geometry ID',
                 // name: 'Name',
                 label: 'Label', // Occurrence Report
                 geometry_source: 'Geometry Source',
@@ -610,7 +610,7 @@ export default {
         },
         occPropertyDisplayMap: function () {
             return {
-                id: 'ID',
+                geometry_id: 'Geometry ID',
                 // name: 'Name',
                 label: 'Label', // Occurrence
                 occurrence_number: 'Identification Number', // OCC1

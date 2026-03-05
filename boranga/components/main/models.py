@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import html
 import logging
 import os
 from abc import ABCMeta, abstractmethod
@@ -12,10 +11,10 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.gis.db import models as gis_models
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.files.storage import FileSystemStorage
 from django.db import models
 from django.utils import timezone
-from django.utils.html import strip_tags
 from ordered_model.models import OrderedModel, OrderedModelManager
 from reversion.models import Version
 
@@ -27,29 +26,13 @@ model_type = models.base.ModelBase
 logger = logging.getLogger(__name__)
 
 
-class TagStrippingModelMixin:
-    """
-    Mixin to strip HTML tags from all CharField and TextField string values before saving.
-
-    Uses Django's `strip_tags` to remove HTML tags and `html.unescape` to
-    convert entities like `&amp;` back to readable characters.
-    """
-
-    def save(self, *args, **kwargs):
-        for field in self._meta.get_fields():
-            if isinstance(field, models.CharField | models.TextField):
-                value = getattr(self, field.name, None)
-                if isinstance(value, str) and value:
-                    cleaned = strip_tags(value)
-                    cleaned = html.unescape(cleaned)
-                    setattr(self, field.name, cleaned)
-
-        super().save(*args, **kwargs)
-
-
 def neutralise_html(value: str) -> str:
     """
     Neutralise HTML tags in a string using nh3.
+
+    nh3 is a Rust-based HTML sanitiser that correctly parses HTML (unlike regex
+    approaches) and handles all edge cases: encoding tricks, nested tags,
+    malformed HTML, SVG payloads, etc.
     """
     if not value:
         return value
@@ -58,26 +41,122 @@ def neutralise_html(value: str) -> str:
     return cleaned
 
 
-class Nh3SanitizationModelMixin:
+def _sanitise_json_value(value):
     """
-    Mixin to sanitize all CharField and TextField string values using nh3 before saving.
+    Recursively sanitise strings within a JSON-like structure (dicts, lists,
+    and nested combinations thereof).
+
+    Dict keys containing HTML are removed entirely (keys should never contain
+    user-controlled HTML).
+    """
+    if isinstance(value, str):
+        return neutralise_html(value)
+
+    if isinstance(value, dict):
+        sanitised = {}
+        for k, v in value.items():
+            if isinstance(k, str):
+                clean_key = neutralise_html(k)
+                if clean_key != k:
+                    # Key contained HTML — drop it entirely
+                    logger.warning("Sanitisation removed dict key containing HTML: %r", k)
+                    continue
+            else:
+                clean_key = k
+            sanitised[clean_key] = _sanitise_json_value(v)
+        return sanitised
+
+    if isinstance(value, list):
+        return [_sanitise_json_value(item) for item in value]
+
+    # int, float, bool, None — pass through unchanged
+    return value
+
+
+class SanitisationModelMixin:
+    """
+    Single model mixin that sanitises all string and JSON field values on save()
+    using nh3 (a Rust-based, spec-compliant HTML sanitiser).
+
+    Features
+    --------
+    - **CharField / TextField**: cleaned via ``neutralise_html()``
+    - **JSONField**: recursively traversed; all string leaves are cleaned,
+      dict keys containing HTML are dropped entirely.
+    - **Field exclusion**: set ``sanitise_exclude_fields`` on the model class
+      to a ``set`` of field names that should be skipped entirely (e.g. rich
+      text fields that legitimately store HTML).
+    - **Reject-on-change**: set ``sanitise_reject_fields`` on the model class
+      to a ``set`` of field names where *any* change caused by sanitisation
+      raises a ``ValidationError`` instead of silently cleaning. This is useful
+      for audit-sensitive fields where injected HTML should be loudly rejected.
+
+    Notes
+    -----
+    ``strip_tags()`` is intentionally **not** called in addition to ``nh3.clean()``.
+    ``nh3.clean()`` already strips dangerous tags/attributes; running
+    ``strip_tags()`` on top would be redundant work and would also destroy
+    harmless HTML entities that nh3 already handled.
     """
 
+    # Override on subclasses to exclude specific fields from sanitisation
+    sanitise_exclude_fields: set[str] = set()
+
+    # Override on subclasses to reject (raise) rather than silently clean
+    sanitise_reject_fields: set[str] = set()
+
     def save(self, *args, **kwargs):
-        # Sanitize CharField and TextField values
+        exclude = self.sanitise_exclude_fields
+        reject = self.sanitise_reject_fields
+
         for field in self._meta.get_fields():
+            if field.name in exclude:
+                continue
+
+            # CharField / TextField
             if isinstance(field, models.CharField | models.TextField):
                 value = getattr(self, field.name, None)
-                if isinstance(value, str):
-                    setattr(self, field.name, neutralise_html(value))
+                if isinstance(value, str) and value:
+                    cleaned = neutralise_html(value)
+                    if field.name in reject and cleaned != value:
+                        raise ValidationError({field.name: ("HTML content is not allowed in this field.")})
+                    setattr(self, field.name, cleaned)
+
+            # JSONField — recursively sanitise nested structures
+            elif isinstance(field, models.JSONField):
+                value = getattr(self, field.name, None)
+                if value is not None:
+                    cleaned = _sanitise_json_value(value)
+                    if field.name in reject and cleaned != value:
+                        raise ValidationError({field.name: ("HTML content is not allowed in this field.")})
+                    setattr(self, field.name, cleaned)
 
         super().save(*args, **kwargs)
 
 
-class BaseModel(TagStrippingModelMixin, Nh3SanitizationModelMixin, models.Model):
+# ---------------------------------------------------------------------------
+# Backwards-compatible aliases
+# ---------------------------------------------------------------------------
+# Existing migrations reference these names in their ``bases`` tuples.
+# They must remain importable so ``migrate`` does not break.
+# New code should use ``SanitisationModelMixin`` directly (or ``BaseModel``).
+TagStrippingModelMixin = SanitisationModelMixin
+Nh3SanitizationModelMixin = SanitisationModelMixin
+
+
+class BaseModel(SanitisationModelMixin, models.Model):
     """
     Base model class that all models should inherit from.
     It provides a common interface for saving and retrieving models.
+
+    Sanitisation features (inherited from SanitisationModelMixin)
+    ---------------------------------------------------------------
+    - All CharField/TextField values are cleaned via ``nh3`` on every save().
+    - All JSONField values are recursively sanitised.
+    - Override ``sanitise_exclude_fields`` with a set of field names to skip.
+    - Override ``sanitise_reject_fields`` with a set of field names where
+      sanitisation changes should raise a ``ValidationError`` instead of
+      silently cleaning the value.
     """
 
     class Meta:

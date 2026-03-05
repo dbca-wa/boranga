@@ -31,9 +31,10 @@ from boranga.components.occurrence.models import (
     BufferGeometry,
     OccurrenceGeometry,
     OccurrenceTenure,
+    OccurrenceUserAction,
 )
 from boranga.components.spatial.models import PlausibilityGeometry, Proxy, TileLayer
-from boranga.helpers import is_internal
+from boranga.helpers import is_internal, is_occurrence_assessor
 
 logger = logging.getLogger(__name__)
 
@@ -559,6 +560,7 @@ def save_geometry(
                     action in ["submit"] and geometry.drawn_by == request.user.id or geometry.locked
                 )
                 serializer = InstanceGeometrySaveSerializer(geometry, data=geometry_data)
+                is_new_geometry = False
             else:
                 logger.info(f"Creating new geometry for {instance_model_name}: {instance}")
 
@@ -578,10 +580,32 @@ def save_geometry(
                 geometry_data["last_updated_by"] = request.user.id
                 geometry_data["locked"] = action in ["submit"]
                 serializer = InstanceGeometrySaveSerializer(data=geometry_data)
+                is_new_geometry = True
 
             serializer.is_valid(raise_exception=True)
             geometry_instance = serializer.save()
             logger.info(f"Saved {instance_model_name} geometry: {geometry_instance}")
+
+            # Log action for OccurrenceGeometry create/update
+            if isinstance(geometry_instance, OccurrenceGeometry):
+                if is_new_geometry:
+                    OccurrenceUserAction.log_action(
+                        instance,
+                        OccurrenceUserAction.ACTION_ADD_GEOMETRY.format(
+                            geometry_instance.id,
+                            instance.occurrence_number,
+                        ),
+                        request.user.id,
+                    )
+                else:
+                    OccurrenceUserAction.log_action(
+                        instance,
+                        OccurrenceUserAction.ACTION_UPDATE_GEOMETRY.format(
+                            geometry_instance.id,
+                            instance.occurrence_number,
+                        ),
+                        request.user.id,
+                    )
 
             geometry_id_intersect_data[geometry_instance.id] = intersect_data
 
@@ -627,7 +651,22 @@ def save_geometry(
     # For non-occurrence geometries, respect the drawn_by constraint
     # For occurrence geometries, only users who can edit the occurrence can delete geometries
     if instance_fk_field_name != "occurrence":
-        to_delete_qs = to_delete_qs.exclude(~Q(drawn_by=request.user.id))
+        # OccurrenceReport geometries: allow assessors to delete any geometry
+        # when the ORF is With Assessor or With Referral, otherwise restrict
+        # to the user's own geometries.
+        from boranga.components.occurrence.models import OccurrenceReport
+
+        assessor_can_delete_any = (
+            is_occurrence_assessor(request)
+            and hasattr(instance, "processing_status")
+            and instance.processing_status
+            in [
+                OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
+                OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
+            ]
+        )
+        if not assessor_can_delete_any:
+            to_delete_qs = to_delete_qs.exclude(~Q(drawn_by=request.user.id))
     elif not instance.can_user_edit:
         # User cannot edit this occurrence, so restrict to only their own geometries
         to_delete_qs = to_delete_qs.exclude(~Q(drawn_by=request.user.id))
@@ -644,9 +683,20 @@ def save_geometry(
                 f"Deleted {buffers_deleted[0]} buffer geometries for {instance_model_name} {instance} (parent removed)"
             )
 
+    deleted_geometry_ids = list(to_delete_qs.values_list("id", flat=True))
     deleted_geometries = to_delete_qs.delete()
     if deleted_geometries[0] > 0:
         logger.info(f"Deleted {instance_model_name} geometries: {deleted_geometries} for {instance}")
+        if instance_fk_field_name == "occurrence":
+            for geom_id in deleted_geometry_ids:
+                OccurrenceUserAction.log_action(
+                    instance,
+                    OccurrenceUserAction.ACTION_DELETE_GEOMETRY.format(
+                        geom_id,
+                        instance.occurrence_number,
+                    ),
+                    request.user.id,
+                )
 
     if instance_fk_field_name == "occurrence":
         # we save affected tenures to record the historical change
@@ -665,7 +715,7 @@ def wkb_to_geojson(wkb):
     geo_json = shp.mapping(shapely_geometry)
     geo_json["properties"] = {
         "srid": geos_geometry.srid,
-        "crs_projected": geos_geometry.crs.projected,
+        "crs_projected": geos_geometry.crs.projected if geos_geometry.crs else None,
     }
 
     return geo_json

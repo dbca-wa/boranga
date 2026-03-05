@@ -9,7 +9,9 @@
             <div class="row">
                 <div class="col-md-3">
                     <div id="select_occurrence" class="form-group">
-                        <label for="ocr_occurrence_lookup">Occurrence:</label>
+                        <label for="ocr_occurrence_lookup"
+                            >Occurrence Number:</label
+                        >
                         <select
                             id="ocr_occurrence_lookup"
                             ref="ocr_occurrence_lookup"
@@ -151,8 +153,8 @@
                     class="btn btn-primary mb-2"
                     @click.prevent="createCommunityOccurrenceReport"
                 >
-                    <i class="fa-solid fa-circle-plus"></i> Add Community
-                    Occurrence Report
+                    <i class="bi bi-plus-circle"></i> Add Community Occurrence
+                    Report
                 </button>
             </div>
         </div>
@@ -603,13 +605,13 @@ export default {
         },
         datatable_options: function () {
             let vm = this;
-            let columns = [];
-            let search = null;
+            let columns;
+            let search;
             let buttons = [
                 {
                     extend: 'excel',
                     title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Communities Excel Export`,
-                    text: '<i class="fa-solid fa-download"></i> Excel',
+                    text: '<i class="bi bi-download"></i> Excel',
                     className: 'btn btn-primary me-2 rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -619,7 +621,7 @@ export default {
                 {
                     extend: 'csv',
                     title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Communities CSV Export`,
-                    text: '<i class="fa-solid fa-download"></i> CSV',
+                    text: '<i class="bi bi-download"></i> CSV',
                     className: 'btn btn-primary rounded',
                     exportOptions: {
                         columns: ':not(.no-export)',
@@ -860,7 +862,7 @@ export default {
             vm.initialiseAssessorLookup();
             vm.initialiseSubmitterLookup();
             vm.addEventListeners();
-            var newOption = null;
+            var newOption;
             if (
                 sessionStorage.getItem('filterOCRCommunityOccurrence') !=
                     'all' &&
@@ -945,7 +947,7 @@ export default {
                     allowClear: true,
                     placeholder: 'Select Occurrence',
                     ajax: {
-                        url: api_endpoints.community_lookup,
+                        url: api_endpoints.occurrence_lookup,
                         dataType: 'json',
                         data: function (params) {
                             var query = {
