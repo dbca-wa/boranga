@@ -12,7 +12,6 @@ RUN apt-get install --no-install-recommends -y wget git libmagic-dev gcc binutil
 RUN apt-get install --no-install-recommends -y libpq-dev patch
 RUN apt-get install --no-install-recommends -y postgresql-client mtr htop vim ssh 
 # Install Python libs from requirements.txt.
-RUN pip install --upgrade pip
 
 COPY timezone /etc/timezone
 ENV TZ=Australia/Perth
