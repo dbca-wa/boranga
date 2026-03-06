@@ -13,9 +13,16 @@ RUN apt-get install --no-install-recommends -y libpq-dev patch
 RUN apt-get install --no-install-recommends -y postgresql-client mtr htop vim ssh 
 # Install Python libs from requirements.txt.
 
+# Default Scripts
+RUN wget https://raw.githubusercontent.com/dbca-wa/wagov_utils/main/wagov_utils/bin/default_script_installer.sh -O /tmp/default_script_installer.sh
+RUN chmod 755 /tmp/default_script_installer.sh
+RUN /tmp/default_script_installer.sh
+
 COPY timezone /etc/timezone
 ENV TZ=Australia/Perth
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+
 
 # Create local user
 RUN groupadd -g 5000 oim
@@ -40,7 +47,7 @@ RUN chown -R oim.oim /container-config/
 WORKDIR /app
 USER oim
 # Install the project (ensure that frontend projects have been built prior to this step).
-
+COPY python-cron ./
 RUN touch /app/.env
 
 COPY --chown=oim:oim reporting_database_rebuild.sh /
