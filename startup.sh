@@ -20,7 +20,7 @@ fi
 if [ $ENABLE_CRON == "True" ];
 then
     echo "Starting Cron"
-    service cron start &
+    python /bin/scheduler.py /app/python-cron /app/logs/python-cron.log &
     status=$?
     if [ $status -ne 0 ]; then
         echo "Failed to start cron: $status"
