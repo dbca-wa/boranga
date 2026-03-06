@@ -11,10 +11,8 @@ RUN apt-get upgrade -y
 RUN apt-get install --no-install-recommends -y wget git libmagic-dev gcc binutils libproj-dev gdal-bin python3 python3-setuptools python3-dev python3-pip tzdata cron nginx sudo
 RUN apt-get install --no-install-recommends -y libpq-dev patch
 RUN apt-get install --no-install-recommends -y postgresql-client mtr htop vim ssh 
-RUN ln -s /usr/bin/python3 /usr/bin/python 
-#RUN ln -s /usr/bin/pip3 /usr/bin/pip
-RUN pip install --upgrade pip
 # Install Python libs from requirements.txt.
+RUN pip install --upgrade pip
 
 COPY timezone /etc/timezone
 ENV TZ=Australia/Perth
@@ -23,8 +21,6 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Create local user
 RUN groupadd -g 5000 oim
 RUN useradd -g 5000 -u 5000 oim -s /bin/bash -d /app
-RUN usermod -a -G sudo oim
-RUN echo "oim  ALL=(ALL)  NOPASSWD: /startup.sh" > /etc/sudoers.d/oim
 RUN mkdir /app
 RUN chown -R oim.oim /app
 
