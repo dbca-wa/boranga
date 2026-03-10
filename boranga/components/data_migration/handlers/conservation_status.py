@@ -358,6 +358,9 @@ class ConservationStatusImporter(BaseSheetImporter):
                     }
                 )
 
+        # Free all_rows — no longer needed once the transform loop is complete.
+        del all_rows
+
         # Bulk create SubmitterInformation
         if submitter_infos:
             logger.info(f"Bulk creating {len(submitter_infos)} SubmitterInformation records...")

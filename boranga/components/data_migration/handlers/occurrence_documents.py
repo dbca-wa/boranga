@@ -224,6 +224,9 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
                 continue
             transformed_rows.append((transformed, row.get("_source"), issues, row))
 
+        # Free all_rows — no longer needed once the transform loop is complete.
+        del all_rows
+
         # 4. Persist each transformed document row, linking to parent occurrence
         # Resolve models
         try:

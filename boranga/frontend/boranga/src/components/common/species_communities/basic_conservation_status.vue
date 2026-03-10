@@ -202,9 +202,10 @@ export default {
         },
         showConservationStatusFields() {
             return (
-                this.is_internal ||
-                this.isConservationStatusPublic ||
-                this.is_external
+                !this.isDelisted &&
+                (this.is_internal ||
+                    this.isConservationStatusPublic ||
+                    this.is_external)
             );
         },
     },

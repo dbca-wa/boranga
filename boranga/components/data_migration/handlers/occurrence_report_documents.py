@@ -230,6 +230,9 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
             # Store tuple of (instance, original_row) to allow fallback error logging
             to_create.append((OccurrenceReportDocument(**defaults), row))
 
+        # Free all_rows — no longer needed once the transform loop is complete.
+        del all_rows
+
         # Handle wipe_targets before creating new documents
         if options.get("wipe_targets"):
             # Collect occurrence_report IDs from our extracted data to limit deletion scope

@@ -74,6 +74,19 @@ from boranga.components.users.models import SubmitterInformation
 
 logger = logging.getLogger(__name__)
 
+
+def _rss_mb():
+    """Current RSS in MB from /proc/self/status (Linux)."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024  # kB -> MB
+    except OSError:
+        pass
+    return 0.0
+
+
 # Map adapter keys to adapter classes (not instances) so we can lazily
 # instantiate adapters after import-time. Some adapters perform expensive
 # setup in their constructor which can block the management command
@@ -481,9 +494,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
             processed += 1
             if processed % 500 == 0:
                 logger.info(
-                    "OccurrenceReportImporter %s: processed %d rows so far",
+                    "OccurrenceReportImporter %s: processed %d rows so far (RSS=%.0fMB)",
                     self.slug,
                     processed,
+                    _rss_mb(),
                 )
 
             tcx = TransformContext(row=row, model=None, user_id=ctx.user_id)
@@ -780,10 +794,53 @@ class OccurrenceReportImporter(BaseSheetImporter):
         transform_end = timezone.now()
         transform_duration = transform_end - transform_start
         logger.info(
-            "OccurrenceReportImporter %s: transform phase complete (groups=%d) in %s",
+            "OccurrenceReportImporter %s: transform phase complete (groups=%d) in %s (RSS=%.0fMB)",
             self.slug,
             len(ops),
             str(transform_duration),
+            _rss_mb(),
+        )
+
+        # Free all_rows — no longer needed after ops is built.
+        del all_rows
+
+        # Retain only group keys for later warning loops; free the full
+        # groups dict (transformed rows + issues per key) which can be very
+        # large and is no longer needed after ops is built.
+        group_keys = set(groups.keys())
+        del groups
+
+        # Slim `merged` dicts inside ops to only the keys accessed by later
+        # phases (documents, observers, associated species, user actions).
+        # The full merged dict can contain 50-100+ columns per row; keeping
+        # only ~15 keys dramatically reduces retained memory.
+        _MERGED_KEYS_NEEDED = frozenset(
+            {
+                "OCRAssociatedSpecies__comment",
+                "OCRAssociatedSpecies__species_list_relates_to",
+                "OCRObserverDetail__observer_name",
+                "OCRObserverDetail__role",
+                "OCRObserverDetail__contact",
+                "OCRObserverDetail__organisation",
+                "temp_sv_photo",
+                "temp_document_description",
+                "lodgement_date",
+                "modified_by",
+                "modified_date",
+                "processing_status",
+                "ChDate",
+                "ChName",
+            }
+        )
+        for op in ops:
+            full_merged = op.get("merged")
+            if full_merged:
+                op["merged"] = {k: v for k, v in full_merged.items() if k in _MERGED_KEYS_NEEDED}
+
+        logger.info(
+            "OccurrenceReportImporter %s: freed groups + slimmed merged dicts (RSS=%.0fMB)",
+            self.slug,
+            _rss_mb(),
         )
 
         # Pre-fetch Occurrences for linking
@@ -880,6 +937,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         }
                     )
 
+        # Free canonical (OccurrenceReportRow dataclass) from ops — no longer
+        # needed after occurrence linking.  Prevents duplicate retention of
+        # fields already captured in defaults/merged.
+        for op in ops:
+            op.pop("canonical", None)
+
         # Build op_map for O(1) access to per-migrated-id data (avoid O(n) scans)
         op_map = {o["migrated_from_id"]: o for o in ops}
 
@@ -952,17 +1015,26 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
             )
 
+        # Free per-op defaults — now embedded in to_create / to_update instances.
+        for op in ops:
+            op.pop("defaults", None)
+        del existing_by_migrated
+
         # Bulk create new OccurrenceReports
         created_map = {}
         if to_create:
             logger.info(
-                "OccurrenceReportImporter: bulk-creating %d new OccurrenceReports",
+                "OccurrenceReportImporter: bulk-creating %d new OccurrenceReports (RSS=%.0fMB)",
                 len(to_create),
+                _rss_mb(),
             )
             for i in range(0, len(to_create), BATCH):
                 chunk = to_create[i : i + BATCH]
                 with transaction.atomic():
                     OccurrenceReport.objects.bulk_create(chunk, batch_size=BATCH)
+
+        # Free to_create list — instances will be re-fetched into created_map.
+        del to_create
 
         # Refresh created objects to get PKs — fetch in chunks to avoid
         # a single enormous query.  For TFAUNA, occurrences are created
@@ -1322,7 +1394,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         sheet_to_guesses[str(sheet_no)] = guesses_on_sheet
 
                 # Check active import groups for matches
-                for migrated_from_id in groups:
+                for migrated_from_id in group_keys:
                     if "-" in migrated_from_id:
                         suffix = migrated_from_id.split("-", 1)[1]
                     else:
@@ -1358,7 +1430,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         sheet_to_ambiguous_species[str(sheet_no)] = amb_on_sheet
 
                 # Check active import groups for matches
-                for migrated_from_id in groups:
+                for migrated_from_id in group_keys:
                     # Heuristic: migrated_from_id is {prefix}-{sheet_no}
                     # or just {sheet_no}
                     if "-" in migrated_from_id:
@@ -1399,7 +1471,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                 # Check active import groups for matches
                 assoc_warnings_count = 0
-                for migrated_from_id in groups:
+                for migrated_from_id in group_keys:
                     # Heuristic: migrated_from_id is {prefix}-{sheet_no}
                     # or just {sheet_no} depending on source.
                     # We try to extract suffix if a dash is present.
@@ -2479,7 +2551,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             docs_need_uploaded_date.append((doc, en_date))
 
         if docs_to_create:
-            logger.info("Bulk-creating %d OccurrenceReportDocument records", len(docs_to_create))
+            logger.info(
+                "Bulk-creating %d OccurrenceReportDocument records (RSS=%.0fMB)", len(docs_to_create), _rss_mb()
+            )
             try:
                 OccurrenceReportDocument.objects.bulk_create(docs_to_create, batch_size=BATCH)
                 # Fix uploaded_date via UPDATE (auto_now_add prevents direct assignment)
@@ -3356,7 +3430,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Bulk-create all collected OccurrenceReportGeometry instances
         if ocr_geom_batch_create:
             geom_instances = [g for _, _, g in ocr_geom_batch_create]
-            logger.info("Bulk-creating %d OccurrenceReportGeometry records", len(geom_instances))
+            logger.info(
+                "Bulk-creating %d OccurrenceReportGeometry records (RSS=%.0fMB)", len(geom_instances), _rss_mb()
+            )
             try:
                 OccurrenceReportGeometry.objects.bulk_create(geom_instances, batch_size=BATCH)
                 # Update the existing_ocr_geoms cache with newly created geometries
@@ -4637,6 +4713,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             logger.info(f"Finished populating Occurrence 1-to-1 objects. Cloned {cloned_count} sections.")
 
+        logger.info("OccurrenceReportImporter: persist phase complete (RSS=%.0fMB)", _rss_mb())
         persist_end = timezone.now()
         persist_duration = persist_end - transform_end
 

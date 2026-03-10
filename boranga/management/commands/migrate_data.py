@@ -3,6 +3,7 @@ import os
 
 from django.core.management.base import BaseCommand, CommandError
 
+from boranga.components.data_migration.adapters.sources import ALL_SOURCES, get_locked_sources
 from boranga.components.data_migration.registry import ImportContext, all_importers, get
 from boranga.components.main.models import MigrationRun
 
@@ -64,6 +65,26 @@ class Command(BaseCommand):
             help="Optional limit of rows to process (for testing)",
         )
 
+        # Seed initial reversion history for migrated records after the import
+        p_run.add_argument(
+            "--seed-history",
+            action="store_true",
+            help=(
+                "After the import completes, create initial django-reversion history "
+                "for every migrated record that does not already have one. "
+                "No-op in dry-run mode."
+            ),
+        )
+        p_multi.add_argument(
+            "--seed-history",
+            action="store_true",
+            help=(
+                "After all importers complete, create initial django-reversion history "
+                "for every migrated record that does not already have one. "
+                "No-op in dry-run mode."
+            ),
+        )
+
         # Manually add --sources to allow any value (avoid conflicts between importers)
         p_run.add_argument(
             "--sources",
@@ -102,6 +123,17 @@ class Command(BaseCommand):
             path = opts["path"]
             if not os.path.exists(path):
                 raise CommandError(f"Path not found: {path}")
+            # Check source locks before doing any work.
+            specified_sources = opts.get("sources")
+            sources_to_check = specified_sources if specified_sources else ALL_SOURCES
+            locked = get_locked_sources(sources_to_check)
+            if locked:
+                locked_str = ", ".join(locked)
+                raise CommandError(
+                    f"The following source(s) are locked and cannot be migrated: {locked_str}. "
+                    f"To unlock, unset (or set to False) the corresponding "
+                    f"MIGRATED_LOCKED_<SOURCE> environment variable(s)."
+                )
             slug = opts["slug"]
             try:
                 imp_cls = get(slug)
@@ -161,6 +193,11 @@ class Command(BaseCommand):
                 except Exception:
                     pass
             self.stdout.write(f"{imp_cls.slug} stats: {stats}")
+            if opts.get("seed_history"):
+                if ctx.dry_run:
+                    self.stdout.write(self.style.WARNING("dry-run: would seed migrated history (skipped)."))
+                else:
+                    self._run_history_seeder()
             self.stdout.write(self.style.SUCCESS("Done."))
             return
 
@@ -168,6 +205,17 @@ class Command(BaseCommand):
             path = opts["path"]
             if not os.path.exists(path):
                 raise CommandError(f"Path not found: {path}")
+            # Check source locks before doing any work.
+            specified_sources = opts.get("sources")
+            sources_to_check = specified_sources if specified_sources else ALL_SOURCES
+            locked = get_locked_sources(sources_to_check)
+            if locked:
+                locked_str = ", ".join(locked)
+                raise CommandError(
+                    f"The following source(s) are locked and cannot be migrated: {locked_str}. "
+                    f"To unlock, unset (or set to False) the corresponding "
+                    f"MIGRATED_LOCKED_<SOURCE> environment variable(s)."
+                )
             wanted = opts.get("only")
             if wanted:
                 # Validate slugs early
@@ -232,7 +280,26 @@ class Command(BaseCommand):
                     del os.environ["DATA_MIGRATION_LIMIT"]
                 except Exception:
                     pass
+            if opts.get("seed_history"):
+                if ctx.dry_run:
+                    self.stdout.write(self.style.WARNING("dry-run: would seed migrated history (skipped)."))
+                else:
+                    self._run_history_seeder()
             self.stdout.write(self.style.SUCCESS(f"All done: {ctx.stats}"))
             return
 
         raise CommandError("Unknown action")
+
+    def _run_history_seeder(self) -> None:
+        """Invoke the MigratedHistorySeeder and report results to stdout."""
+        from boranga.components.data_migration.history_seeding.reversion_seeder import (
+            MigratedHistorySeeder,
+        )
+
+        self.stdout.write("Seeding initial reversion history for all migrated records…")
+        seeder = MigratedHistorySeeder()
+        stats = seeder.seed_all()
+        total = sum(stats.values())
+        self.stdout.write(
+            self.style.SUCCESS(f"History seeding complete: {total} version(s) created. Breakdown: {stats}")
+        )

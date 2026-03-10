@@ -1339,6 +1339,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         ocr_copy.assigned_officer = None
         ocr_copy.assigned_approver = None
         ocr_copy.approved_by = None
+        ocr_copy.occurrence = None
         ocr_copy.submitter_information = None
         if request_user_id != self.submitter:
             ocr_copy.submitter = request_user_id
@@ -2466,7 +2467,7 @@ class OCRHabitatComposition(BaseModel):
     soil_condition = models.ForeignKey(SoilCondition, on_delete=models.SET_NULL, null=True, blank=True)
     drainage = models.ForeignKey(Drainage, on_delete=models.SET_NULL, null=True, blank=True)
     water_quality = models.CharField(max_length=500, blank=True, default="")
-    habitat_notes = models.CharField(max_length=1000, blank=True, default="")
+    habitat_notes = models.TextField(blank=True, default="")
 
     class Meta:
         app_label = "boranga"
@@ -3075,7 +3076,7 @@ class OCRPlantCount(BaseModel):
     ripe_fruit_present = models.BooleanField(null=True, blank=True)
     dehisced_fruit_present = models.BooleanField(null=True, blank=True)
     pollinator_observation = models.CharField(max_length=1000, null=True, blank=True)
-    comment = models.CharField(max_length=1000, blank=True, default="")
+    comment = models.TextField(blank=True, default="")
     obs_date = models.DateField(null=True, blank=True)
 
     class Meta:

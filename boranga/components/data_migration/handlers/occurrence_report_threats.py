@@ -223,6 +223,9 @@ class OCRConservationThreatImporter(BaseSheetImporter):
                 continue
             transformed_rows.append((transformed, row.get("_source"), issues))
 
+        # Free all_rows — no longer needed once the transform loop is complete.
+        del all_rows
+
         # 4. Persist each transformed row
         try:
             from boranga.components.occurrence.models import OCRConservationThreat

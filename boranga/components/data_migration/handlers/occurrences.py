@@ -527,6 +527,11 @@ class OccurrenceImporter(BaseSheetImporter):
                 }
             )
 
+        # Free large intermediate structures — all_rows and groups are no longer
+        # needed once ops is built; releasing them reduces peak memory usage.
+        del all_rows
+        del groups
+
         # Note: do not exit early on dry-run here — continue so error CSV is generated
 
         # Determine existing occurrences and plan create vs update

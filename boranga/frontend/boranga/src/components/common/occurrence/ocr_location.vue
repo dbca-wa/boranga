@@ -60,7 +60,17 @@
             </div>
 
             <div class="row mb-3">
-                <label for="" class="col-sm-3 control-label"
+                <label
+                    for=""
+                    class="col-sm-3 control-label"
+                    :class="
+                        occurrence_report_obj.processing_status ==
+                            constants.PROPOSAL_STATUS.WITH_ASSESSOR.TEXT ||
+                        occurrence_report_obj.processing_status ==
+                            constants.PROPOSAL_STATUS.WITH_REFERRAL.TEXT
+                            ? 'fw-bold'
+                            : ''
+                    "
                     >Region:<span
                         v-if="
                             occurrence_report_obj.processing_status ==
@@ -90,7 +100,17 @@
                 </div>
             </div>
             <div class="row mb-3">
-                <label for="" class="col-sm-3 control-label"
+                <label
+                    for=""
+                    class="col-sm-3 control-label"
+                    :class="
+                        occurrence_report_obj.processing_status ==
+                            constants.PROPOSAL_STATUS.WITH_ASSESSOR.TEXT ||
+                        occurrence_report_obj.processing_status ==
+                            constants.PROPOSAL_STATUS.WITH_REFERRAL.TEXT
+                            ? 'fw-bold'
+                            : ''
+                    "
                     >District:<span
                         v-if="
                             occurrence_report_obj.processing_status ==

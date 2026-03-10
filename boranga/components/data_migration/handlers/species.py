@@ -579,6 +579,11 @@ class SpeciesImporter(BaseSheetImporter):
                 }
             )
 
+        # Free large intermediate structures — all_rows and groups are no longer
+        # needed once ops is built; releasing them reduces peak memory usage.
+        del all_rows
+        del groups
+
         # Prefetch existing Species by migrated_from_id and taxonomy_id to avoid N queries
         migrated_keys = [o["migrated_from_id"] for o in ops]
         taxonomy_ids = [o["defaults"].get("taxonomy_id") for o in ops if o["defaults"].get("taxonomy_id")]

@@ -18,13 +18,7 @@ __pycache__
 tests
 docs
 logs
-media
-private-media
-staticfiles
-boranga/cache
 diagrams
 scripts
-*.md
-!requirements.txt
 Dockerfile
 docker-compose*.yml

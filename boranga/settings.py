@@ -563,3 +563,11 @@ KB_CADASTRE_LAYER_URL = env("KB_CADASTRE_LAYER_URL", default=None)
 KB_AUTH_USER = env("KB_AUTH_USER", default=None)
 KB_AUTH_PASS = env("KB_AUTH_PASS", default=None)
 KB_LAYER_TABLE = env("KB_LAYER_TABLE", default="kb_cadastre")
+
+# ------------- Legacy data migration source locks -------------
+# Set to True once a legacy source's migration runs are approved to prevent
+# accidental re-migration in production.  Locking TEC covers all TEC sub-sources
+# (TEC_SITE_VISITS, TEC_SITE_SPECIES, TEC_SURVEYS, TEC_SURVEY_THREATS, TEC_BOUNDARIES).
+MIGRATED_LOCKED_TPFL = env("MIGRATED_LOCKED_TPFL", True)
+MIGRATED_LOCKED_TEC = env("MIGRATED_LOCKED_TEC", True)
+MIGRATED_LOCKED_TFAUNA = env("MIGRATED_LOCKED_TFAUNA", True)

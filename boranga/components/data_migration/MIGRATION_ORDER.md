@@ -62,80 +62,80 @@ python scripts/combine_csvs.py \
  private-media/legacy_data/TPFL/ADDITIONAL_PROFILES_FROM_OLD_NAMES_OCC_NAMES.csv \
  -o private-media/legacy_data/TPFL/species-profiles-combined.csv
 
-./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv --sources TPFL --wipe-targets
-./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/ADDITIONAL_PROFILES_FROM_OLD_NAMES_OCC_NAMES.csv --sources TPFL
+./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/DRF_TAXON_CONSV_LISTINGS.csv --sources TPFL --wipe-targets --seed-history
+./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/ADDITIONAL_PROFILES_FROM_OLD_NAMES_OCC_NAMES.csv --sources TPFL --seed-history
 
 or, if combined into one file:
 
-./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/species-profiles-combined.csv --sources TPFL --wipe-targets
+./manage.py migrate_data run species_legacy private-media/legacy_data/TPFL/species-profiles-combined.csv --sources TPFL --wipe-targets --seed-history
 
 ## Conservation Status
 
-./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TPFL/SAMPLE_CS_Data_Dec2025.csv --sources TPFL --wipe-targets
+./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TPFL/SAMPLE_CS_Data_Dec2025.csv --sources TPFL --wipe-targets --seed-history
 
 ## Occurrences
 
-./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TPFL/DRF_POPULATION.csv --sources TPFL --wipe-targets
-./manage.py migrate_data run occurrence_documents_legacy private-media/legacy_data/TPFL/DRF_LIAISONS.csv --sources TPFL --wipe-targets
-./manage.py migrate_data run occurrence_threats_legacy private-media/legacy_data/TPFL/DRF_POP_THREATS.csv --sources TPFL --wipe-targets
+./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TPFL/DRF_POPULATION.csv --sources TPFL --wipe-targets --seed-history
+./manage.py migrate_data run occurrence_documents_legacy private-media/legacy_data/TPFL/DRF_LIAISONS.csv --sources TPFL --wipe-targets --seed-history
+./manage.py migrate_data run occurrence_threats_legacy private-media/legacy_data/TPFL/DRF_POP_THREATS.csv --sources TPFL --wipe-targets --seed-history
 
 ## Occurrence Reports
 
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets
-./manage.py migrate_data run occurrence_report_documents_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets
-./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TPFL/DRF_SHEET_THREATS.csv --sources TPFL --wipe-targets
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets --seed-history
+./manage.py migrate_data run occurrence_report_documents_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets --seed-history
+./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TPFL/DRF_SHEET_THREATS.csv --sources TPFL --wipe-targets --seed-history
 
 # The occurrence geometries are copied from the occurrence reports so this run must be done after the occurrence reports
 
-./manage.py migrate_data run occurrence_tenure private-media/legacy_data/TPFL/DRF_POPULATION.csv --sources TPFL --wipe-targets
+./manage.py migrate_data run occurrence_tenure private-media/legacy_data/TPFL/DRF_POPULATION.csv --sources TPFL --wipe-targets --seed-history
 
 # --- TEC
 
 ## Communities
 
-./manage.py migrate_data run communities_legacy private-media/legacy_data/TEC/COMMUNITIES.csv --sources TEC --wipe-targets
+./manage.py migrate_data run communities_legacy private-media/legacy_data/TEC/COMMUNITIES.csv --sources TEC --wipe-targets --seed-history
 
 ## Conservation Status
 
-./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TEC/[TBC].csv --sources TEC --wipe-targets
+./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TEC/[TBC].csv --sources TEC --wipe-targets --seed-history
 
 ## Occurrences
 
-./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/ --sources TEC --wipe-targets
+./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/ --sources TEC --wipe-targets --seed-history
 
 # Don't wipe targets for the boundaries run as the Occurrence Geometry records are created in the previous run and contain important data (wipe targets is disabled in the handler anyway as a precaution)
 
-./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES
+./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES --seed-history
 
 ## Occurrence Reports
 
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITE_VISITS.csv --sources TEC_SITE_VISITS --wipe-targets
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITE_VISITS.csv --sources TEC_SITE_VISITS --wipe-targets --seed-history
 
 # Don't wipe targets for this one either as it would delete the site visit OCRS that were created in the prior run
 
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources TEC_SURVEYS
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SURVEYS.csv --sources TEC_SURVEYS --seed-history
 
 ## Occurrence Report Threats
 
-./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TEC/SURVEY_THREATS.csv --sources TEC_SURVEY_THREATS --wipe-targets
+./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TEC/SURVEY_THREATS.csv --sources TEC_SURVEY_THREATS --wipe-targets --seed-history
 
 ## Associated Species (from structured SITE_SPECIES.csv)
 
-./manage.py migrate_data run associated_species private-media/legacy_data/TEC/SITE_SPECIES.csv --sources TEC_SITE_SPECIES --wipe-targets
+./manage.py migrate_data run associated_species private-media/legacy_data/TEC/SITE_SPECIES.csv --sources TEC_SITE_SPECIES --wipe-targets --seed-history
 
 # -- TFAUNA
 
 ## Species
 
-./manage.py migrate_data run species_legacy private-media/legacy_data/TFAUNA/Species List.csv --sources TFAUNA --wipe-targets
+./manage.py migrate_data run species_legacy private-media/legacy_data/TFAUNA/Species List.csv --sources TFAUNA --wipe-targets --seed-history
 
 ## Conservation Status
 
-./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TFAUNA/[TBC].csv --sources TFAUNA --wipe-targets
+./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TFAUNA/[TBC].csv --sources TFAUNA --wipe-targets --seed-history
 
 ## Occurrence Reports (and Occurrences)
 
-./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/Fauna Records.csv" --sources TFAUNA --wipe-targets
+./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/Fauna Records.csv" --sources TFAUNA --wipe-targets --seed-history
 
 # --- Cleanup
 

@@ -88,7 +88,7 @@
                 <div
                     v-if="
                         occurrence_report.approved_by_name &&
-                        ['Approved', 'Unlocked'].includes(
+                        ['Approved', 'Declined', 'Unlocked'].includes(
                             occurrence_report.processing_status
                         )
                     "

@@ -474,6 +474,9 @@ class CommunityImporter(BaseSheetImporter):
                 to_create.append(obj)
                 communities_cache[migrated_id] = obj
 
+        # Free all_rows — no longer needed once the transform loop is complete.
+        del all_rows
+
         # 4. Bulk operations
         if not ctx.dry_run:
             if to_create:
