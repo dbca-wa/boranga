@@ -58,4 +58,4 @@ RUN chmod 755 /reporting_database_rebuild.sh
 
 EXPOSE 80
 HEALTHCHECK CMD service cron status | grep "cron is running" || exit 1
-CMD ["/pre_startup.sh"]
+CMD ["/startup.sh"]
