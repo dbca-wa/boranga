@@ -300,13 +300,13 @@
             >
             <div class="row mb-3">
                 <div class="col-sm-3"></div>
-                <div class="col-sm-2 fw-bold">Mature</div>
-                <div class="col-sm-2 fw-bold">Juvenile</div>
-                <div class="col-sm-2 fw-bold">Seedling</div>
+                <div class="col-sm-3 fw-bold">Mature</div>
+                <div class="col-sm-3 fw-bold">Juvenile</div>
+                <div class="col-sm-3 fw-bold">Seedling</div>
             </div>
             <div class="row mb-3">
                 <div class="col-sm-3 fw-bold">Alive</div>
-                <div class="col-sm-2">
+                <div class="col-sm-3">
                     <input
                         id="alive_mature"
                         v-model="plant_count.detailed_alive_mature"
@@ -315,9 +315,10 @@
                         class="form-control plant_count"
                         placeholder=""
                         min="0"
+                        max="9999999999"
                     />
                 </div>
-                <div class="col-sm-2">
+                <div class="col-sm-3">
                     <input
                         id="plant_alive_juvenile"
                         v-model="plant_count.detailed_alive_juvenile"
@@ -326,9 +327,10 @@
                         class="form-control plant_count"
                         placeholder=""
                         min="0"
+                        max="9999999999"
                     />
                 </div>
-                <div class="col-sm-2">
+                <div class="col-sm-3">
                     <input
                         id="alive_seedling"
                         v-model="plant_count.detailed_alive_seedling"
@@ -337,12 +339,13 @@
                         class="form-control plant_count"
                         placeholder=""
                         min="0"
+                        max="9999999999"
                     />
                 </div>
             </div>
             <div class="row mb-3">
                 <div class="col-sm-3 fw-bold">Dead</div>
-                <div class="col-sm-2">
+                <div class="col-sm-3">
                     <input
                         id="dead_mature"
                         v-model="plant_count.detailed_dead_mature"
@@ -351,9 +354,10 @@
                         class="form-control plant_count"
                         placeholder=""
                         min="0"
+                        max="9999999999"
                     />
                 </div>
-                <div class="col-sm-2">
+                <div class="col-sm-3">
                     <input
                         id="plant_dead_juvenile"
                         v-model="plant_count.detailed_dead_juvenile"
@@ -362,9 +366,10 @@
                         class="form-control plant_count"
                         placeholder=""
                         min="0"
+                        max="9999999999"
                     />
                 </div>
-                <div class="col-sm-2">
+                <div class="col-sm-3">
                     <input
                         id="dead_seedling"
                         v-model="plant_count.detailed_dead_seedling"
@@ -373,6 +378,7 @@
                         class="form-control plant_count"
                         placeholder=""
                         min="0"
+                        max="9999999999"
                     />
                 </div>
             </div>
@@ -394,9 +400,10 @@
                         v-model="plant_count.simple_alive"
                         :disabled="isReadOnly"
                         type="number"
-                        class="form-control ocr_number"
+                        class="form-control"
                         placeholder=""
                         min="0"
+                        max="9999999999"
                     />
                 </div>
             </div>
@@ -410,9 +417,10 @@
                         v-model="plant_count.simple_dead"
                         :disabled="isReadOnly"
                         type="number"
-                        class="form-control ocr_number"
+                        class="form-control"
                         placeholder=""
                         min="0"
+                        max="9999999999"
                     />
                 </div>
             </div>
@@ -1061,7 +1069,7 @@ input[type='number'] {
 }
 
 input.plant_count {
-    width: 63%;
+    width: 75%;
 }
 
 input.ocr_number {

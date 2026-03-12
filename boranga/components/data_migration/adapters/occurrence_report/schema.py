@@ -151,7 +151,6 @@ COLUMN_MAP = {
     "Phone": "Phone",
     "Certainty": "Certainty",
     "NumSeen": "NumSeen",
-    "Features": "OCRAnimalObservation__distinctive_feature",
     "AdultM": "AdultM",
     "AdultF": "AdultF",
     "AdultU": "AdultU",
@@ -326,7 +325,6 @@ class OccurrenceReportRow:
     OCRPlantCount__obs_date: date | None = None
 
     # OCRAnimalObservation fields
-    OCRAnimalObservation__distinctive_feature: str | None = None
     OCRAnimalObservation__animal_observation_detail_comment: str | None = None
     OCRAnimalObservation__count_status: str | None = None
     OCRAnimalObservation__alive_adult_male: int | None = None
@@ -479,9 +477,6 @@ class OccurrenceReportRow:
             OCRPlantCount__vegetative_state_present=d.get("OCRPlantCount__vegetative_state_present"),
             OCRPlantCount__obs_date=obs_date,
             # OCRAnimalObservation
-            OCRAnimalObservation__distinctive_feature=utils.safe_strip(
-                d.get("OCRAnimalObservation__distinctive_feature")
-            ),
             OCRAnimalObservation__animal_observation_detail_comment=utils.safe_strip(
                 d.get("OCRAnimalObservation__animal_observation_detail_comment")
             ),

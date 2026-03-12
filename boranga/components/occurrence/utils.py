@@ -71,7 +71,7 @@ def ocr_proposal_submit(ocr_proposal, request):
     if ret1 and ret2:
         ocr_proposal.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
         ocr_proposal.customer_status = OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
-        ocr_proposal.save()
+        ocr_proposal.save(version_user=request.user)
     else:
         raise ValidationError(
             "An error occurred while submitting occurrence report (Submit email notifications failed)"

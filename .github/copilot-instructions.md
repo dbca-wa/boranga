@@ -81,3 +81,20 @@ This project includes legacy data migration components under `boranga/components
 That folder contains a README.md with specific instructions on how to use the data migration framework, including how to define adapters, schemas, and run migrations.
 
 When working in that area, YOU MUST read `boranga/components/data_migration/README.md` first. It serves as the definitive guide for data migration architecture, including how to define adapters/schemas, which source files to use for each handler, and how to verify changes.
+
+FRONTEND CODE FORMATTING (MANDATORY)
+
+After editing **any** file under `boranga/frontend/`, you MUST run Prettier on every file you modified before considering the task complete:
+
+```bash
+cd boranga/frontend/boranga
+npx prettier --write <file1> <file2> ...
+```
+
+Then verify no issues remain with:
+
+```bash
+npx prettier --check <file1> <file2> ...
+```
+
+Do **not** skip this step or run it on only a subset of the modified files — every changed `.vue`, `.js`, `.ts`, etc. file must be formatted.

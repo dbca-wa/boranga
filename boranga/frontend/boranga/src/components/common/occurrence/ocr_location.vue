@@ -248,7 +248,10 @@
                     <label for="newOccurrenceNo">No</label>
                 </div>
             </div>-->
-            <div v-if="canAssess" class="row mb-3">
+            <div
+                v-if="!is_external && (canAssess || isReadOnly)"
+                class="row mb-3"
+            >
                 <label for="" class="col-sm-3 control-label"
                     >Map Data Type</label
                 >
@@ -334,7 +337,7 @@
                     </template>
                 </div>
             </div>
-            <div class="row mb-3">
+            <div v-if="!is_external" class="row mb-3">
                 <label
                     for=""
                     class="col-sm-3 control-label"
@@ -604,23 +607,15 @@ export default {
         },
         ocrPropertyDisplayMap: function () {
             const displayMap = {
+                geometry_id: 'Geometry ID',
                 label: 'Label', // Occurrence Report
-                geometry_source: 'Geometry Source',
                 occurrence_report_number: 'Identification Number',
                 processing_status_display: 'Processing Status',
                 drawn_by: 'Drawn By', // fullname
+                lodgement_date_display: 'Lodgement Date',
+                last_updated_by: 'Updated By',
                 updated_date: 'Last updated',
             };
-            const mode = this.occurrence_report_obj.assessor_mode || {};
-            const assessorCanAssess =
-                mode.assessor_level === 'assessor' &&
-                mode.assessor_mode &&
-                mode.assessor_can_assess;
-            if (assessorCanAssess) {
-                displayMap['last_updated_by'] = 'Updated By';
-                displayMap['lodgement_date_display'] = 'Lodgement Date';
-                displayMap['locked'] = 'Locked';
-            }
 
             return displayMap;
         },

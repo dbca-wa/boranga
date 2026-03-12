@@ -8,14 +8,12 @@
         >
             <div class="row">
                 <div class="col-md-3">
-                    <div id="select_occurrence" class="form-group">
-                        <label for="ocr_occurrence_lookup"
-                            >Occurrence Number:</label
-                        >
+                    <div class="form-group">
+                        <label for="community_id_lookup">Community ID:</label>
                         <select
-                            id="ocr_occurrence_lookup"
-                            ref="ocr_occurrence_lookup"
-                            name="ocr_occurrence_lookup"
+                            id="community_id_lookup"
+                            ref="community_id_lookup"
+                            name="community_id_lookup"
                             class="form-control"
                         />
                     </div>
@@ -34,12 +32,14 @@
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="form-group">
-                        <label for="community_id_lookup">Community ID:</label>
+                    <div id="select_occurrence_name" class="form-group">
+                        <label for="ocr_occurrence_name_lookup"
+                            >Occurrence Name:</label
+                        >
                         <select
-                            id="community_id_lookup"
-                            ref="community_id_lookup"
-                            name="community_id_lookup"
+                            id="ocr_occurrence_name_lookup"
+                            ref="ocr_occurrence_name_lookup"
+                            name="ocr_occurrence_name_lookup"
                             class="form-control"
                         />
                     </div>
@@ -65,50 +65,62 @@
             </div>
             <div class="row">
                 <div class="col-md-3">
-                    <div class="form-group">
-                        <label for="">Observation Date Range:</label>
-                        <input
-                            id="observation_from_date"
-                            v-model="filterOCRCommunityObservationFromDate"
-                            type="date"
+                    <div id="select_occurrence" class="form-group">
+                        <label for="ocr_occurrence_lookup"
+                            >Occurrence Number:</label
+                        >
+                        <select
+                            id="ocr_occurrence_lookup"
+                            ref="ocr_occurrence_lookup"
+                            name="ocr_occurrence_lookup"
                             class="form-control"
-                            placeholder="DD/MM/YYYY"
                         />
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for=""></label>
-                        <input
-                            id="observation_from_date"
-                            v-model="filterOCRCommunityObservationToDate"
-                            type="date"
-                            class="form-control"
-                            placeholder="DD/MM/YYYY"
-                        />
+                        <label for="">Region:</label>
+                        <select
+                            v-model="filterOCRCommunityRegion"
+                            class="form-select"
+                        >
+                            <option value="all">All</option>
+                            <option
+                                v-for="region in region_list"
+                                :value="region.id"
+                                :key="region.id"
+                            >
+                                {{ region.name }}
+                            </option>
+                        </select>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Submitted Date Range:</label>
-                        <input
-                            id="submitted_from_date"
-                            v-model="filterOCRCommunitySubmittedFromDate"
-                            type="date"
-                            class="form-control"
-                            placeholder="DD/MM/YYYY"
-                        />
+                        <label for="">District:</label>
+                        <select
+                            v-model="filterOCRCommunityDistrict"
+                            class="form-select"
+                        >
+                            <option value="all">All</option>
+                            <option
+                                v-for="district in filtered_district_list"
+                                :value="district.id"
+                                :key="district.id"
+                            >
+                                {{ district.name }}
+                            </option>
+                        </select>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="form-group">
-                        <label for=""></label>
-                        <input
-                            id="submitted_from_date"
-                            v-model="filterOCRCommunitySubmittedToDate"
-                            type="date"
+                    <div id="select_submitter" class="form-group">
+                        <label for="ocr_submitter_lookup">Submitter:</label>
+                        <select
+                            id="ocr_submitter_lookup"
+                            ref="ocr_submitter_lookup"
+                            name="ocr_submitter_lookup"
                             class="form-control"
-                            placeholder="DD/MM/YYYY"
                         />
                     </div>
                 </div>
@@ -126,13 +138,105 @@
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div id="select_submitter" class="form-group">
-                        <label for="ocr_submitter_lookup">Submitter:</label>
+                    <div class="form-group">
+                        <label for="ocr_last_modified_by_lookup"
+                            >Last Modified By:</label
+                        >
                         <select
-                            id="ocr_submitter_lookup"
-                            ref="ocr_submitter_lookup"
-                            name="ocr_submitter_lookup"
+                            id="ocr_last_modified_by_lookup"
+                            ref="ocr_last_modified_by_lookup"
+                            name="ocr_last_modified_by_lookup"
                             class="form-control"
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Observation Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            id="observation_from_date"
+                            v-model="filterOCRCommunityObservationFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCRCommunityObservationToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Submitted Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            id="submitted_from_date"
+                            v-model="filterOCRCommunitySubmittedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCRCommunitySubmittedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Approved Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCRCommunityApprovedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCRCommunityApprovedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Last Modified Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCRCommunityLastModifiedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCRCommunityLastModifiedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
                         />
                     </div>
                 </div>
@@ -278,6 +382,46 @@ export default {
             required: false,
             default: 'filterOCRCommunitySubmitter',
         },
+        filterOCRCommunityOccurrenceName_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityOccurrenceName',
+        },
+        filterOCRCommunityRegion_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityRegion',
+        },
+        filterOCRCommunityDistrict_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityDistrict',
+        },
+        filterOCRCommunityLastModifiedBy_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityLastModifiedBy',
+        },
+        filterOCRCommunityApprovedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityApprovedFromDate',
+        },
+        filterOCRCommunityApprovedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityApprovedToDate',
+        },
+        filterOCRCommunityLastModifiedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityLastModifiedFromDate',
+        },
+        filterOCRCommunityLastModifiedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityLastModifiedToDate',
+        },
     },
     data() {
         return {
@@ -371,12 +515,76 @@ export default {
                 ? sessionStorage.getItem(this.filterOCRCommunitySubmitter_cache)
                 : 'all',
 
+            filterOCRCommunityOccurrenceName: sessionStorage.getItem(
+                this.filterOCRCommunityOccurrenceName_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCRCommunityOccurrenceName_cache
+                  )
+                : 'all',
+
+            filterOCRCommunityRegion: sessionStorage.getItem(
+                this.filterOCRCommunityRegion_cache
+            )
+                ? sessionStorage.getItem(this.filterOCRCommunityRegion_cache)
+                : 'all',
+
+            filterOCRCommunityDistrict: sessionStorage.getItem(
+                this.filterOCRCommunityDistrict_cache
+            )
+                ? sessionStorage.getItem(this.filterOCRCommunityDistrict_cache)
+                : 'all',
+
+            filterOCRCommunityLastModifiedBy: sessionStorage.getItem(
+                this.filterOCRCommunityLastModifiedBy_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCRCommunityLastModifiedBy_cache
+                  )
+                : 'all',
+
+            filterOCRCommunityApprovedFromDate: sessionStorage.getItem(
+                this.filterOCRCommunityApprovedFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCRCommunityApprovedFromDate_cache
+                  )
+                : '',
+
+            filterOCRCommunityApprovedToDate: sessionStorage.getItem(
+                this.filterOCRCommunityApprovedToDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCRCommunityApprovedToDate_cache
+                  )
+                : '',
+
+            filterOCRCommunityLastModifiedFromDate: sessionStorage.getItem(
+                this.filterOCRCommunityLastModifiedFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCRCommunityLastModifiedFromDate_cache
+                  )
+                : '',
+
+            filterOCRCommunityLastModifiedToDate: sessionStorage.getItem(
+                this.filterOCRCommunityLastModifiedToDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCRCommunityLastModifiedToDate_cache
+                  )
+                : '',
+
             filterListsCommunity: {},
+            filterRegionDistrict: {},
             occurrence_list: [],
             community_name_list: [],
             status_list: [],
             submissions_from_list: [],
             submissions_to_list: [],
+            region_list: [],
+            district_list: [],
+            filtered_district_list: [],
 
             // filtering options
             processing_statuses: [
@@ -404,7 +612,15 @@ export default {
                 this.filterOCRFromCommunityDueDate === '' &&
                 this.filterOCRToCommunityDueDate === '' &&
                 this.filterOCRCommunityAssessor === 'all' &&
-                this.filterOCRCommunitySubmitter === 'all'
+                this.filterOCRCommunitySubmitter === 'all' &&
+                this.filterOCRCommunityOccurrenceName === 'all' &&
+                this.filterOCRCommunityRegion === 'all' &&
+                this.filterOCRCommunityDistrict === 'all' &&
+                this.filterOCRCommunityLastModifiedBy === 'all' &&
+                this.filterOCRCommunityApprovedFromDate === '' &&
+                this.filterOCRCommunityApprovedToDate === '' &&
+                this.filterOCRCommunityLastModifiedFromDate === '' &&
+                this.filterOCRCommunityLastModifiedToDate === ''
             ) {
                 return false;
             } else {
@@ -424,14 +640,20 @@ export default {
                 'ID',
                 'Number',
                 'Occurrence',
+                'Occurrence Name',
                 'Community Name',
                 'Community ID',
                 'Observation Date',
                 'Main Observer',
                 'Migrated From ID',
+                'Region',
+                'District',
                 'Submitted on',
                 'Submitter',
+                'Approved Date',
                 'Assessor',
+                'Last Modified By',
+                'Last Modified Date',
                 'Status',
                 'Action',
             ];
@@ -566,6 +788,60 @@ export default {
                 name: 'assessor__first_name, assessor__last_name',
             };
         },
+        column_occurrence_name_text: function () {
+            return {
+                data: 'occurrence_name_text',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'occurrence__occurrence_name',
+            };
+        },
+        column_region: function () {
+            return {
+                data: 'region',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'location__region__name',
+            };
+        },
+        column_district: function () {
+            return {
+                data: 'district',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'location__district__name',
+            };
+        },
+        column_approved_date: function () {
+            return {
+                data: 'datetime_approved',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'datetime_approved',
+            };
+        },
+        column_last_modified_by: function () {
+            return {
+                data: 'last_modified_by_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'last_modified_by_name',
+            };
+        },
+        column_last_modified_date: function () {
+            return {
+                data: 'datetime_updated',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'datetime_updated',
+            };
+        },
         column_status: function () {
             return {
                 data: 'processing_status_display',
@@ -633,14 +909,20 @@ export default {
                 vm.column_id,
                 vm.column_number,
                 vm.column_occurrence,
+                vm.column_occurrence_name_text,
                 vm.column_community_name,
                 vm.column_community_common_id,
                 vm.column_observation_date_time,
                 vm.column_main_observer,
                 vm.column_migrated_from_id,
+                vm.column_region,
+                vm.column_district,
                 vm.column_lodgement_date,
                 vm.column_submitter,
+                vm.column_approved_date,
                 vm.column_assessor,
+                vm.column_last_modified_by,
+                vm.column_last_modified_date,
                 vm.column_status,
                 vm.column_action,
             ];
@@ -656,7 +938,33 @@ export default {
                     [10, 25, 50, 100, 100000000],
                     [10, 25, 50, 100, 'All'],
                 ],
-                responsive: true,
+                responsive: {
+                    details: {
+                        renderer: function (api, rowIdx, columns) {
+                            var hidden = columns.filter(function (col) {
+                                return col.hidden;
+                            });
+                            if (!hidden.length) return false;
+                            var cells = hidden
+                                .map(function (col) {
+                                    return (
+                                        '<span class="me-3"><strong>' +
+                                        col.title +
+                                        ':</strong> ' +
+                                        (col.data !== null &&
+                                        col.data !== undefined
+                                            ? col.data
+                                            : '') +
+                                        '</span>'
+                                    );
+                                })
+                                .join('');
+                            return $(
+                                '<div class="p-2 d-flex flex-wrap"/>'
+                            ).append(cells);
+                        },
+                    },
+                },
                 serverSide: true,
                 searching: search,
                 //  to show the "workflow Status","Action" columns always in the last position
@@ -692,6 +1000,20 @@ export default {
                         d.filter_to_due_date = vm.filterOCRToCommunityDueDate;
                         d.filter_assessor = vm.filterOCRCommunityAssessor;
                         d.filter_submitter = vm.filterOCRCommunitySubmitter;
+                        d.filter_occurrence_name =
+                            vm.filterOCRCommunityOccurrenceName;
+                        d.filter_region = vm.filterOCRCommunityRegion;
+                        d.filter_district = vm.filterOCRCommunityDistrict;
+                        d.filter_last_modified_by =
+                            vm.filterOCRCommunityLastModifiedBy;
+                        d.filter_approved_from_date =
+                            vm.filterOCRCommunityApprovedFromDate;
+                        d.filter_approved_to_date =
+                            vm.filterOCRCommunityApprovedToDate;
+                        d.filter_last_modified_from_date =
+                            vm.filterOCRCommunityLastModifiedFromDate;
+                        d.filter_last_modified_to_date =
+                            vm.filterOCRCommunityLastModifiedToDate;
                     },
                 },
                 dom:
@@ -843,9 +1165,99 @@ export default {
                 vm.filterOCRCommunitySubmitter
             );
         },
+        filterOCRCommunityOccurrenceName: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityOccurrenceName_cache,
+                vm.filterOCRCommunityOccurrenceName
+            );
+        },
+        filterOCRCommunityRegion: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityRegion_cache,
+                vm.filterOCRCommunityRegion
+            );
+            vm.filterDistrict();
+        },
+        filterOCRCommunityDistrict: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityDistrict_cache,
+                vm.filterOCRCommunityDistrict
+            );
+        },
+        filterOCRCommunityLastModifiedBy: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityLastModifiedBy_cache,
+                vm.filterOCRCommunityLastModifiedBy
+            );
+        },
+        filterOCRCommunityApprovedFromDate: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityApprovedFromDate_cache,
+                vm.filterOCRCommunityApprovedFromDate
+            );
+        },
+        filterOCRCommunityApprovedToDate: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityApprovedToDate_cache,
+                vm.filterOCRCommunityApprovedToDate
+            );
+        },
+        filterOCRCommunityLastModifiedFromDate: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityLastModifiedFromDate_cache,
+                vm.filterOCRCommunityLastModifiedFromDate
+            );
+        },
+        filterOCRCommunityLastModifiedToDate: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityLastModifiedToDate_cache,
+                vm.filterOCRCommunityLastModifiedToDate
+            );
+        },
     },
     mounted: function () {
         this.fetchFilterLists();
+        this.fetchRegionDistricts();
         let vm = this;
         $('a[data-toggle="collapse"]').on('click', function () {
             var chev = $(this).children()[0];
@@ -859,8 +1271,10 @@ export default {
             vm.initialiseOccurrenceLookup();
             vm.initialiseCommunityNameLookup();
             vm.initialiseCommunityIdLookup();
+            vm.initialiseOccurrenceNameLookup();
             vm.initialiseAssessorLookup();
             vm.initialiseSubmitterLookup();
+            vm.initialiseLastModifiedByLookup();
             vm.addEventListeners();
             var newOption;
             if (
@@ -903,6 +1317,22 @@ export default {
                 $('#community_id_lookup').append(newOption);
             }
             if (
+                sessionStorage.getItem('filterOCRCommunityOccurrenceName') !=
+                    'all' &&
+                sessionStorage.getItem('filterOCRCommunityOccurrenceName') !=
+                    null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem(
+                        'filterOCRCommunityOccurrenceNameText'
+                    ),
+                    vm.filterOCRCommunityOccurrenceName,
+                    false,
+                    true
+                );
+                $('#ocr_occurrence_name_lookup').append(newOption);
+            }
+            if (
                 sessionStorage.getItem('filterOCRCommunityAssessor') != 'all' &&
                 sessionStorage.getItem('filterOCRCommunityAssessor') != null
             ) {
@@ -926,6 +1356,22 @@ export default {
                     true
                 );
                 $('#ocr_submitter_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterOCRCommunityLastModifiedBy') !=
+                    'all' &&
+                sessionStorage.getItem('filterOCRCommunityLastModifiedBy') !=
+                    null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem(
+                        'filterOCRCommunityLastModifiedByText'
+                    ),
+                    vm.filterOCRCommunityLastModifiedBy,
+                    false,
+                    true
+                );
+                $('#ocr_last_modified_by_lookup').append(newOption);
             }
         });
     },
@@ -1169,6 +1615,118 @@ export default {
                     console.log(error);
                 }
             );
+        },
+        fetchRegionDistricts: function () {
+            let vm = this;
+            fetch(api_endpoints.region_district_filter_dict).then(
+                async (response) => {
+                    vm.filterRegionDistrict = await response.json();
+                    vm.region_list = vm.filterRegionDistrict.region_list;
+                    vm.district_list = vm.filterRegionDistrict.district_list;
+                    vm.filtered_district_list = vm.district_list;
+                    vm.filterDistrict();
+                },
+                (error) => {
+                    console.log(error);
+                }
+            );
+        },
+        filterDistrict: function () {
+            let vm = this;
+            if (vm.filterOCRCommunityRegion === 'all') {
+                vm.filtered_district_list = vm.district_list;
+            } else {
+                vm.filtered_district_list = vm.district_list.filter(
+                    (d) => d.region_id === parseInt(vm.filterOCRCommunityRegion)
+                );
+            }
+        },
+        initialiseOccurrenceNameLookup: function () {
+            let vm = this;
+            $(vm.$refs.ocr_occurrence_name_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    dropdownParent: $('#select_occurrence_name'),
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Occurrence Name',
+                    ajax: {
+                        url: api_endpoints.occurrence_name_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                                group_type_id: vm.group_type_id,
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCRCommunityOccurrenceName = data;
+                    sessionStorage.setItem(
+                        'filterOCRCommunityOccurrenceNameText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCRCommunityOccurrenceName = 'all';
+                    sessionStorage.setItem(
+                        'filterOCRCommunityOccurrenceNameText',
+                        ''
+                    );
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-ocr_occurrence_name_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
+        },
+        initialiseLastModifiedByLookup: function () {
+            let vm = this;
+            $(vm.$refs.ocr_last_modified_by_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for User',
+                    ajax: {
+                        url:
+                            api_endpoints.users_api +
+                            '/get_department_users_ledger_id/',
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCRCommunityLastModifiedBy = data;
+                    sessionStorage.setItem(
+                        'filterOCRCommunityLastModifiedByText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCRCommunityLastModifiedBy = 'all';
+                    sessionStorage.setItem(
+                        'filterOCRCommunityLastModifiedByText',
+                        ''
+                    );
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-ocr_last_modified_by_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
         },
         createCommunityOccurrenceReport: async function () {
             swal.fire({

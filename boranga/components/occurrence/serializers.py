@@ -129,11 +129,15 @@ class BaseTypeSerializer(BaseSerializer):
 
 
 class BufferGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer):
+    geometry_id = serializers.IntegerField(source="id", read_only=True)
     geometry_source = serializers.SerializerMethodField()
     srid = serializers.SerializerMethodField(read_only=True)
     original_geometry = serializers.SerializerMethodField(read_only=True)
     label = serializers.SerializerMethodField(read_only=True)
+    occurrence_number = serializers.SerializerMethodField(read_only=True)
     buffer_radius = serializers.SerializerMethodField(read_only=True)
+    drawn_by = serializers.SerializerMethodField(read_only=True)
+    last_updated_by = serializers.SerializerMethodField(read_only=True)
     updated_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", read_only=True)
 
     class Meta:
@@ -141,6 +145,7 @@ class BufferGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer):
         geo_field = "geometry"
         fields = [
             "id",
+            "geometry_id",
             "buffered_from_geometry",
             "geometry",
             "original_geometry",
@@ -149,6 +154,7 @@ class BufferGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer):
             "area_sqhm",
             "geometry_source",
             "label",
+            "occurrence_number",
             "object_id",
             "content_type",
             "buffer_radius",
@@ -158,6 +164,8 @@ class BufferGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer):
             "stroke",
             "opacity",
             "updated_date",
+            "drawn_by",
+            "last_updated_by",
         ] + BaseTypeSerializer.Meta.fields
 
     def get_srid(self, obj):
@@ -186,7 +194,24 @@ class BufferGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer):
         return None
 
     def get_label(self, obj):
-        return f"{obj.buffered_from_geometry.occurrence.occurrence_number} [Buffer]"
+        return "Buffer"
+
+    def get_occurrence_number(self, obj):
+        return obj.buffered_from_geometry.occurrence.occurrence_number
+
+    def get_drawn_by(self, obj):
+        drawn_by = obj.buffered_from_geometry.drawn_by
+        if drawn_by:
+            email_user = retrieve_email_user(drawn_by)
+            return EmailUserSerializer(email_user).data.get("fullname", None)
+        return None
+
+    def get_last_updated_by(self, obj):
+        last_updated_by = obj.buffered_from_geometry.last_updated_by
+        if last_updated_by:
+            email_user = retrieve_email_user(last_updated_by)
+            return EmailUserSerializer(email_user).data.get("fullname", None)
+        return None
 
     def get_buffer_radius(self, obj):
         return obj.buffered_from_geometry.buffer_radius
@@ -522,6 +547,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
     can_user_copy = serializers.SerializerMethodField()
     occurrence = serializers.IntegerField(source="occurrence.id", allow_null=True)
     occurrence_name = serializers.CharField(source="occurrence.occurrence_number", allow_null=True)
+    occurrence_name_text = serializers.CharField(source="occurrence.occurrence_name", allow_null=True)
     is_new_contributor = serializers.SerializerMethodField()
     observation_date = serializers.DateField(format="%d/%m/%Y", allow_null=True)
     location_accuracy = serializers.SerializerMethodField()
@@ -530,6 +556,15 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
     copied_to_occurrence = serializers.SerializerMethodField()
     geometry_show_on_map = serializers.SerializerMethodField()
     can_user_edit = serializers.SerializerMethodField()
+    region = serializers.CharField(source="location.region.name", allow_null=True, read_only=True)
+    district = serializers.CharField(source="location.district.name", allow_null=True, read_only=True)
+    datetime_approved = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
+    datetime_updated = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
+    last_modified_by_name = serializers.SerializerMethodField()
+    family = serializers.SerializerMethodField()
+    common_name = serializers.SerializerMethodField()
+    fauna_group = serializers.CharField(source="species.fauna_group.name", allow_null=True, read_only=True)
+    fauna_sub_group = serializers.CharField(source="species.fauna_sub_group.name", allow_null=True, read_only=True)
 
     class Meta:
         model = OccurrenceReport
@@ -557,6 +592,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "internal_user_edit",
             "occurrence",
             "occurrence_name",
+            "occurrence_name_text",
             "is_new_contributor",
             "observation_date",
             "location_accuracy",
@@ -566,6 +602,15 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "copied_to_occurrence",
             "geometry_show_on_map",
             "migrated_from_id",
+            "region",
+            "district",
+            "datetime_approved",
+            "datetime_updated",
+            "last_modified_by_name",
+            "family",
+            "common_name",
+            "fauna_group",
+            "fauna_sub_group",
         )
         datatables_always_serialize = (
             "id",
@@ -686,6 +731,27 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
         if obj.assigned_officer:
             email_user = retrieve_email_user(obj.assigned_officer)
             return EmailUserSerializer(email_user).data.get("fullname", None)
+        return ""
+
+    def get_last_modified_by_name(self, obj):
+        if obj.last_modified_by:
+            try:
+                email_user = retrieve_email_user(obj.last_modified_by)
+                return email_user.get_full_name()
+            except Exception:
+                pass
+        return ""
+
+    def get_family(self, obj):
+        if obj.species and obj.species.taxonomy:
+            return obj.species.taxonomy.family_name
+        return ""
+
+    def get_common_name(self, obj):
+        if obj.species and obj.species.taxonomy:
+            vernacular = obj.species.taxonomy.vernaculars.first()
+            if vernacular:
+                return vernacular.vernacular_name
         return ""
 
 
@@ -908,7 +974,6 @@ class OCRAnimalObservationSerializer(BaseModelSerializer):
             "death_injury_reason",
             "death_injury_reason_name",
             "total_count",
-            "distinctive_feature",
             "action_taken",
             "action_required",
             "animal_observation_detail_comment",
@@ -2103,7 +2168,6 @@ class SaveOCRAnimalObservationSerializer(IntegerFieldEmptytoNullSerializerMixin,
             "animal_health",
             "death_injury_reason",
             "total_count",
-            "distinctive_feature",
             "action_taken",
             "action_required",
             "animal_observation_detail_comment",
@@ -3121,7 +3185,6 @@ class OCCAnimalObservationSerializer(BaseModelSerializer):
             "death_injury_reason",
             "death_injury_reason_name",
             "total_count",
-            "distinctive_feature",
             "action_taken",
             "action_required",
             "animal_observation_detail_comment",
@@ -3419,7 +3482,6 @@ class SaveOCCAnimalObservationSerializer(IntegerFieldEmptytoNullSerializerMixin,
             "animal_health",
             "death_injury_reason",
             "total_count",
-            "distinctive_feature",
             "action_taken",
             "action_required",
             "animal_observation_detail_comment",
@@ -3917,11 +3979,13 @@ class SaveOccurrenceSiteSerializer(BaseModelSerializer):
 
 
 class SiteGeometrySerializer(GeoFeatureModelSerializer):
+    geometry_id = serializers.IntegerField(source="id", read_only=True)
     srid = serializers.SerializerMethodField(read_only=True)
     geometry_source = serializers.SerializerMethodField()
     original_geometry = serializers.SerializerMethodField(read_only=True)
     drawn_by = serializers.SerializerMethodField(read_only=True)
     last_updated_by = serializers.SerializerMethodField(read_only=True)
+    occurrence_number = serializers.SerializerMethodField(read_only=True)
     updated_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", read_only=True)
 
     class Meta:
@@ -3929,9 +3993,11 @@ class SiteGeometrySerializer(GeoFeatureModelSerializer):
         geo_field = "geometry"
         fields = [
             "id",
+            "geometry_id",
             "occurrence",
             "site_name",
             "site_number",
+            "occurrence_number",
             "related_occurrence_reports",
             "geometry",
             "srid",
@@ -3970,6 +4036,11 @@ class SiteGeometrySerializer(GeoFeatureModelSerializer):
         if obj.last_updated_by:
             email_user = retrieve_email_user(obj.last_updated_by)
             return EmailUserSerializer(email_user).data.get("fullname", None)
+        return None
+
+    def get_occurrence_number(self, obj):
+        if obj.occurrence:
+            return obj.occurrence.occurrence_number
         return None
 
 

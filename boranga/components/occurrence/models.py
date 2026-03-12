@@ -375,7 +375,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         null=True,
         related_name="occurrence_reports",
     )
-    reported_date = models.DateTimeField(auto_now_add=True, null=False, blank=False)
+    reported_date = models.DateTimeField(default=timezone.now, null=False, blank=False)
     submitter_information = models.OneToOneField(
         SubmitterInformation,
         on_delete=models.SET_NULL,
@@ -389,6 +389,9 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     assigned_officer = models.IntegerField(null=True)  # EmailUserRO
     assigned_approver = models.IntegerField(null=True)  # EmailUserRO
     approved_by = models.IntegerField(null=True)  # EmailUserRO
+    datetime_approved = models.DateTimeField(blank=True, null=True)
+    datetime_updated = models.DateTimeField(default=timezone.now)
+    last_modified_by = models.IntegerField(null=True)  # EmailUserRO
     # internal user who edits the approved conservation status(only specific fields)
     # modified_by = models.IntegerField(null=True) #EmailUserRO
     processing_status = models.CharField(
@@ -440,6 +443,11 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     def save(self, *args, **kwargs):
         # Clear the cache
         cache.delete(settings.CACHE_KEY_MAP_OCCURRENCE_REPORTS)
+        self.datetime_updated = timezone.now()
+        version_user = kwargs.get("version_user") or getattr(self, "version_user", None)
+        if version_user is not None:
+            user_id = version_user.id if hasattr(version_user, "id") else int(version_user)
+            self.last_modified_by = user_id
         if self.occurrence_report_number == "":
             force_insert = kwargs.pop("force_insert", False)
             super().save(no_revision=True, force_insert=force_insert)
@@ -1120,6 +1128,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_APPROVED
         self.customer_status = OccurrenceReport.CUSTOMER_STATUS_APPROVED
         self.approved_by = request.user.id
+        self.datetime_approved = timezone.now()
 
         if self.approval_details.occurrence:
             occurrence = self.approval_details.occurrence
@@ -1339,6 +1348,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         ocr_copy.assigned_officer = None
         ocr_copy.assigned_approver = None
         ocr_copy.approved_by = None
+        ocr_copy.datetime_approved = None
         ocr_copy.occurrence = None
         ocr_copy.submitter_information = None
         if request_user_id != self.submitter:
@@ -3293,7 +3303,6 @@ class OCRAnimalObservation(BaseModel):
     animal_health = models.ForeignKey(AnimalHealth, on_delete=models.SET_NULL, null=True, blank=True)
     death_injury_reason = models.ForeignKey(DeathReason, on_delete=models.SET_NULL, null=True, blank=True)
 
-    distinctive_feature = models.CharField(max_length=1000, blank=True, default="")
     action_taken = models.CharField(max_length=1000, blank=True, default="")
     action_required = models.CharField(max_length=1000, blank=True, default="")
     animal_observation_detail_comment = models.CharField(max_length=1000, blank=True, default="")
@@ -5427,7 +5436,6 @@ class OCCAnimalObservation(BaseModel):
     animal_health = models.ForeignKey(AnimalHealth, on_delete=models.SET_NULL, null=True, blank=True)
     death_injury_reason = models.ForeignKey(DeathReason, on_delete=models.SET_NULL, null=True, blank=True)
 
-    distinctive_feature = models.CharField(max_length=1000, blank=True, default="")
     action_taken = models.CharField(max_length=1000, blank=True, default="")
     action_required = models.CharField(max_length=1000, blank=True, default="")
     animal_observation_detail_comment = models.CharField(max_length=1000, blank=True, default="")

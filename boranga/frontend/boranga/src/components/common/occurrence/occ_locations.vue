@@ -58,6 +58,8 @@
                         z_index: 3,
                         property_display_map: occPropertyDisplayMap,
                         property_overwrite: {
+                            area_sqkm: (feature) =>
+                                featureAreaMeter(feature) / 1000000,
                             area_sqm: featureAreaMeter,
                             area_sqhm: (feature) =>
                                 featureAreaMeter(feature) / 10000,
@@ -94,6 +96,8 @@
                             z_index: 1,
                             property_display_map: bufferPropertyDisplayMap,
                             property_overwrite: {
+                                area_sqkm: (feature) =>
+                                    featureAreaMeter(feature) / 1000000,
                                 area_sqm: featureAreaMeter,
                                 area_sqhm: (feature) =>
                                     featureAreaMeter(feature) / 10000,
@@ -116,6 +120,17 @@
                             property_display_map: sitePropertyDisplayMap,
                             property_overwrite: {
                                 label: 'Site',
+                                site_number: (feature) => {
+                                    const siteNum =
+                                        feature.getProperties().model
+                                            ?.site_number || '';
+                                    const occNum =
+                                        feature.getProperties().model
+                                            ?.occurrence_number || '';
+                                    return occNum
+                                        ? `${siteNum} [${occNum}]`
+                                        : siteNum;
+                                },
                                 // color: '#FF0000',
                             },
                         },
@@ -596,53 +611,61 @@ export default {
         ocrPropertyDisplayMap: function () {
             return {
                 geometry_id: 'Geometry ID',
-                // name: 'Name',
                 label: 'Label', // Occurrence Report
-                geometry_source: 'Geometry Source',
                 occurrence_report_number: 'Identification Number',
                 processing_status_display: 'Processing Status',
-                lodgement_date_display: 'Lodgement Date',
-                locked: 'Locked',
                 drawn_by: 'Drawn By', // fullname
+                lodgement_date_display: 'Lodgement Date',
                 last_updated_by: 'Updated By', // fullname
                 updated_date: 'Last updated',
             };
         },
         occPropertyDisplayMap: function () {
-            return {
+            const map = {
                 geometry_id: 'Geometry ID',
-                // name: 'Name',
                 label: 'Label', // Occurrence
-                occurrence_number: 'Identification Number', // OCC1
-                geometry_source: 'Geometry Source',
+                occurrence_number: 'Identification Number',
                 processing_status_display: 'Processing Status',
-                area_sqm: 'Area [m²]',
-                area_sqhm: 'Area [ha]',
-                drawn_by: 'Drawn By', // fullname
-                last_updated_by: 'Updated By', // fullname
-                updated_date: 'Last updated',
             };
+            if (this.occurrence_obj.group_type !== 'fauna') {
+                map.area_sqkm = 'Area [km²]';
+            }
+            if (this.occurrence_obj.group_type === 'flora') {
+                map.area_sqm = 'Area [m²]';
+            }
+            if (this.occurrence_obj.group_type === 'community') {
+                map.area_sqhm = 'Area [ha]';
+            }
+            map.drawn_by = 'Drawn By';
+            map.last_updated_by = 'Updated By';
+            map.updated_date = 'Last updated';
+            return map;
         },
         bufferPropertyDisplayMap: function () {
-            return {
-                id: 'ID',
-                // name: 'Name',
-                label: 'Label', // OCC1 [Buffer]
-                geometry_source: 'Geometry Source',
-                // processing_status: 'Processing Status',
-                // lodgement_date_display: 'Lodgement Date',
-                area_sqm: 'Area [m²]',
-                area_sqhm: 'Area [ha]',
-                buffer_radius: 'Buffer Radius [m]',
-                updated_date: 'Last updated',
+            const map = {
+                geometry_id: 'Geometry ID',
+                label: 'Label', // Buffer
+                occurrence_number: 'Identification Number',
             };
+            if (this.occurrence_obj.group_type !== 'fauna') {
+                map.area_sqkm = 'Area [km²]';
+            }
+            if (this.occurrence_obj.group_type === 'flora') {
+                map.area_sqm = 'Area [m²]';
+            }
+            if (this.occurrence_obj.group_type === 'community') {
+                map.area_sqhm = 'Area [ha]';
+            }
+            map.buffer_radius = 'Buffer Radius [m]';
+            map.updated_date = 'Last updated';
+            return map;
         },
         sitePropertyDisplayMap: function () {
             return {
-                id: 'ID', // 8
+                geometry_id: 'Geometry ID',
                 label: 'Label', // Site
-                site_number: 'Identification Number', // ST1
-                site_name: 'Site Name', // My Site
+                site_number: 'Identification Number', // ST1 [OCC1]
+                site_name: 'Site Name',
                 drawn_by: 'Drawn By', // fullname
                 last_updated_by: 'Updated By', // fullname
                 updated_date: 'Last updated',

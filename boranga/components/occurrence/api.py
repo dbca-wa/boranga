@@ -329,6 +329,40 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
             if filter_to_observation_date:
                 queryset = queryset.filter(observation_date__lte=filter_to_observation_date)
 
+            filter_occurrence_name = request.GET.get("filter_occurrence_name")
+            if filter_occurrence_name and not filter_occurrence_name.lower() == "all":
+                queryset = queryset.filter(occurrence__occurrence_name__icontains=filter_occurrence_name)
+
+            filter_common_name = request.GET.get("filter_common_name")
+            if filter_common_name and not filter_common_name.lower() == "all":
+                queryset = queryset.filter(species__taxonomy__vernaculars__id=filter_common_name)
+
+            filter_region = request.GET.get("filter_region")
+            if filter_region and not filter_region.lower() == "all":
+                queryset = queryset.filter(location__region__id=filter_region)
+
+            filter_district = request.GET.get("filter_district")
+            if filter_district and not filter_district.lower() == "all":
+                queryset = queryset.filter(location__district__id=filter_district)
+
+            filter_last_modified_by = request.GET.get("filter_last_modified_by")
+            if filter_last_modified_by and not filter_last_modified_by.lower() == "all":
+                queryset = queryset.filter(last_modified_by=int(filter_last_modified_by))
+
+            filter_approved_from_date = get_date("filter_approved_from_date")
+            filter_approved_to_date = get_date("filter_approved_to_date")
+            if filter_approved_from_date:
+                queryset = queryset.filter(datetime_approved__date__gte=filter_approved_from_date)
+            if filter_approved_to_date:
+                queryset = queryset.filter(datetime_approved__date__lte=filter_approved_to_date)
+
+            filter_last_modified_from_date = get_date("filter_last_modified_from_date")
+            filter_last_modified_to_date = get_date("filter_last_modified_to_date")
+            if filter_last_modified_from_date:
+                queryset = queryset.filter(datetime_updated__date__gte=filter_last_modified_from_date)
+            if filter_last_modified_to_date:
+                queryset = queryset.filter(datetime_updated__date__lte=filter_last_modified_to_date)
+
         else:
             total_count = queryset.count()
 
@@ -1541,7 +1575,6 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
 
         ocr_proposal_submit(instance, request)
-        instance.save(version_user=request.user)
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 

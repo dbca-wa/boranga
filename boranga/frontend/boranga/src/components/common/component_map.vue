@@ -1324,9 +1324,11 @@
                                     >
                                         <tr
                                             v-if="
-                                                !['Label', 'label'].includes(
-                                                    property
-                                                )
+                                                ![
+                                                    'Label',
+                                                    'label',
+                                                    'Identification Number',
+                                                ].includes(property)
                                             "
                                         >
                                             <th scope="row">{{ property }}</th>

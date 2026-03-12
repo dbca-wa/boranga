@@ -381,7 +381,6 @@ PIPELINES = {
     "OCRIdentification__id_confirmed_by": ["strip", "blank_to_none"],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
     # OCRAnimalObservation fields — integers
-    "OCRAnimalObservation__distinctive_feature": ["strip", "blank_to_none"],
     "OCRAnimalObservation__animal_observation_detail_comment": ["strip", "blank_to_none"],
     "OCRAnimalObservation__count_status": ["strip", "blank_to_none"],
     "OCRAnimalObservation__alive_adult_male": ["strip", "blank_to_none", "to_int"],
@@ -453,6 +452,18 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             mid = canonical.get("migrated_from_id")
             if mid and not str(mid).startswith("tfauna-"):
                 canonical["migrated_from_id"] = f"tfauna-{mid}"
+
+            # ── identification_comment: SpHeld + ". Features: " + Features ─
+            sp_held = (raw.get("SpHeld") or "").strip()
+            features = (raw.get("Features") or "").strip()
+            if sp_held and features:
+                canonical["OCRIdentification__identification_comment"] = f"{sp_held}. Features: {features}"
+            elif sp_held:
+                canonical["OCRIdentification__identification_comment"] = sp_held
+            elif features:
+                canonical["OCRIdentification__identification_comment"] = f"Features: {features}"
+            else:
+                canonical["OCRIdentification__identification_comment"] = None
 
             # ── ocr_for_occ_name: "SpCode ###" sequential ──────
             sp_code = raw.get("SpCode", "").strip()
