@@ -556,15 +556,15 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
     copied_to_occurrence = serializers.SerializerMethodField()
     geometry_show_on_map = serializers.SerializerMethodField()
     can_user_edit = serializers.SerializerMethodField()
-    region = serializers.CharField(source="location.region.name", allow_null=True, read_only=True)
-    district = serializers.CharField(source="location.district.name", allow_null=True, read_only=True)
+    region = serializers.SerializerMethodField()
+    district = serializers.SerializerMethodField()
     datetime_approved = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
     datetime_updated = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
     last_modified_by_name = serializers.SerializerMethodField()
     family = serializers.SerializerMethodField()
     common_name = serializers.SerializerMethodField()
-    fauna_group = serializers.CharField(source="species.fauna_group.name", allow_null=True, read_only=True)
-    fauna_sub_group = serializers.CharField(source="species.fauna_sub_group.name", allow_null=True, read_only=True)
+    fauna_group = serializers.SerializerMethodField()
+    fauna_sub_group = serializers.SerializerMethodField()
 
     class Meta:
         model = OccurrenceReport
@@ -753,6 +753,32 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             if vernacular:
                 return vernacular.vernacular_name
         return ""
+
+    def get_fauna_group(self, obj):
+        if obj.species and obj.species.fauna_group:
+            return obj.species.fauna_group.name
+        return None
+
+    def get_fauna_sub_group(self, obj):
+        if obj.species and obj.species.fauna_sub_group:
+            return obj.species.fauna_sub_group.name
+        return None
+
+    def get_region(self, obj):
+        try:
+            if obj.location and obj.location.region:
+                return obj.location.region.name
+        except Exception:
+            pass
+        return None
+
+    def get_district(self, obj):
+        try:
+            if obj.location and obj.location.district:
+                return obj.location.district.name
+        except Exception:
+            pass
+        return None
 
 
 class OCRHabitatCompositionSerializer(BaseModelSerializer):
