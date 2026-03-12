@@ -9,7 +9,6 @@ from boranga.components.main.models import BaseModel
 
 class GeoserverUrl(BaseModel):
     url = models.CharField(max_length=255, unique=True)
-    wms_version = models.CharField(max_length=10, default="1.3.0")
 
     class Meta:
         app_label = "boranga"
@@ -19,10 +18,6 @@ class GeoserverUrl(BaseModel):
 
     def __str__(self):
         return self.url
-
-    @property
-    def get_capabilities_url(self):
-        return f"{self.url}/?SERVICE=WMS&VERSION={self.wms_version}&REQUEST=GetCapabilities"
 
 
 class TileLayer(BaseModel):

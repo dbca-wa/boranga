@@ -3,21 +3,19 @@
     "model": "boranga.geoserverurl",
     "pk": 4,
     "fields": {
-      "url": "/geoproxy/kb-node1-proxy/kaartdijin-boodja-private/wms",
-      "wms_version": "1.3.0"
+      "url": "/geoproxy/kb-node1-proxy/kaartdijin-boodja-private/wms"
     }
   },
   {
     "model": "boranga.geoserverurl",
     "pk": 5,
     "fields": {
-      "url": "/geoproxy/kb-node1-proxy/gwc/service/wmts?service=WMTS&version=1.1.1&request=GetCapabilities",
-      "wms_version": "1.3.0"
+      "url": "/geoproxy/kb-node1-proxy/gwc/service/wmts?service=WMTS&version=1.0.0&request=GetCapabilities"
     }
   },
   {
     "model": "boranga.geoserverurl",
     "pk": 7,
-    "fields": { "url": "/geoproxy/kb-node1-proxy/ows", "wms_version": "1.3.0" }
+    "fields": { "url": "/geoproxy/kb-node1-proxy/ows" }
   }
 ]

@@ -1111,7 +1111,7 @@ def process_proxy(request, remoteurl, queryString, auth_user, auth_password):
                 auth_details = None
             else:
                 auth_details = {"user": auth_user, "password": auth_password}
-            proxy_response = proxy_view(request, remoteurl, basic_auth=auth_details)
+            proxy_response = proxy_view(request, remoteurl, basic_auth=auth_details, requests_args={"timeout": 60})
 
             proxy_response_content_encoded = base64.b64encode(proxy_response.content)
             base64_json = {
@@ -1122,8 +1122,7 @@ def process_proxy(request, remoteurl, queryString, auth_user, auth_password):
             }
             if proxy_response.status_code == 200:
                 cache.set(query_string_remote_url, json.dumps(base64_json), CACHE_EXPIRY)
-            else:
-                cache.set(query_string_remote_url, json.dumps(base64_json), 15)
+            # Don't cache error responses — let frontend retries reach the upstream service
         else:
             base64_json = json.loads(proxy_cache)
         proxy_response_content = base64.b64decode(base64_json["content"].encode())

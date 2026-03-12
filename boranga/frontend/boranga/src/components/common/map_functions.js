@@ -48,6 +48,31 @@ function _alertWMTSConnection(layerDef, err) {
     });
 }
 
+// Service-level alert when a capabilities endpoint is unreachable (displayed once)
+let _serviceAlerted = false;
+function _alertServiceUnavailable(affectedLayers, err) {
+    if (_serviceAlerted) return;
+    _serviceAlerted = true;
+
+    const layerNames = affectedLayers
+        .map((l) => (l.display_title && l.display_title.trim()) || l.layer_name)
+        .join(', ');
+
+    const status = helpers.statusFromError(err);
+    const footerHtml = status
+        ? `Response Code: ${helpers.escapeHtml(status)}.`
+        : undefined;
+
+    swal.fire({
+        icon: 'error',
+        title: 'Map tile service unavailable',
+        html: `<p>Could not connect to the map tile service.</p><p>Affected layers: ${helpers.escapeHtml(layerNames)}.</p><p>This will prevent this page from functioning correctly.</p><p>Please try refreshing the page or contact support if the issue persists.</p>`,
+        footer: footerHtml,
+        confirmButtonText: 'OK',
+        customClass: { confirmButton: 'btn btn-primary' },
+    });
+}
+
 /**
  * Returns layers at map event pixel coordinates
  * @param {Proxy} map_component A map component instance
@@ -662,6 +687,65 @@ const _helper = {
     tileLayerFromLayerDefinitions: async function (layers) {
         const tileLayers = [];
 
+        // --- Pre-flight: deduplicate and fetch capabilities URLs with retry ---
+        const capabilitiesCache = new Map(); // url -> { ok: boolean, text: string | null }
+        const parsedCapabilities = new Map(); // url -> parsed result object
+        const urlToLayers = new Map(); // url -> [layer, ...]
+
+        for (const layer of layers) {
+            if (layer.is_capabilities_url) {
+                const url = layer.geoserver_url;
+                if (!urlToLayers.has(url)) {
+                    urlToLayers.set(url, []);
+                }
+                urlToLayers.get(url).push(layer);
+            }
+        }
+
+        for (const [url, affectedLayers] of urlToLayers) {
+            const MAX_RETRIES = 4;
+            // Delays: 3s, 6s, 12s — gives GWC time to recover (observed ~8s cold-start)
+            const RETRY_DELAYS = [3000, 6000, 12000];
+            let text = null;
+            let lastError = null;
+
+            for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        const body = await response.text();
+                        lastError = new Error(
+                            `HTTP ${response.status}: ${body.substring(0, 200)}`
+                        );
+                    } else {
+                        text = await response.text();
+                        break;
+                    }
+                } catch (err) {
+                    lastError = err;
+                }
+                if (attempt < MAX_RETRIES) {
+                    console.warn(
+                        `Capabilities fetch attempt ${attempt}/${MAX_RETRIES} failed for ${url}, retrying in ${RETRY_DELAYS[attempt - 1] / 1000}s...`
+                    );
+                    await new Promise((r) =>
+                        setTimeout(r, RETRY_DELAYS[attempt - 1])
+                    );
+                }
+            }
+
+            if (text) {
+                capabilitiesCache.set(url, { ok: true, text });
+            } else {
+                console.error(
+                    `Failed to fetch capabilities from ${url} after ${MAX_RETRIES} attempts`,
+                    lastError
+                );
+                _alertServiceUnavailable(affectedLayers, lastError);
+                capabilitiesCache.set(url, { ok: false, text: null });
+            }
+        }
+
         for (let j in layers) {
             const layer = layers[j];
             const isBackgroundLayer =
@@ -695,41 +779,41 @@ const _helper = {
                 let wmtsLayerOptions;
 
                 if (isCapabilitiesUrl) {
-                    // WMTS from GetCapabilities
-                    const parser = new WMTSCapabilities();
-                    wmtsLayerOptions = await fetch(layer.geoserver_url)
-                        .then(async function (response) {
-                            if (!response.ok) {
-                                return await response.text().then((json) => {
-                                    throw new Error(json);
-                                });
-                            }
-                            return response.text();
-                        })
-                        .then(function (text) {
-                            const result = parser.read(text);
+                    // WMTS from GetCapabilities (using prefetched cache)
+                    const cached = capabilitiesCache.get(layer.geoserver_url);
+                    if (!cached || !cached.ok) {
+                        continue; // Service error already reported
+                    }
+                    try {
+                        if (!parsedCapabilities.has(layer.geoserver_url)) {
+                            const parser = new WMTSCapabilities();
+                            const result = parser.read(cached.text);
+                            parsedCapabilities.set(layer.geoserver_url, result);
+                        }
+                        const result = parsedCapabilities.get(
+                            layer.geoserver_url
+                        );
 
-                            if (jQuery.isEmptyObject(result.Contents)) {
-                                throw new Error(
-                                    'result.Contents is an empty object'
-                                );
-                            }
-
-                            const options = optionsFromCapabilities(result, {
-                                layer: layer.layer_name,
-                                matrixSet: matrixSet,
-                                format: 'image/png',
-                                tileSize: tilePixelSize,
-                            });
-                            return options;
-                        })
-                        .catch(function (error) {
-                            console.error(
-                                'Error fetching WMTS capabilities:',
-                                error
+                        if (jQuery.isEmptyObject(result.Contents)) {
+                            throw new Error(
+                                'result.Contents is an empty object'
                             );
-                            _alertWMTSConnection(layer, error);
+                        }
+
+                        wmtsLayerOptions = optionsFromCapabilities(result, {
+                            layer: layer.layer_name,
+                            matrixSet: matrixSet,
+                            format: 'image/png',
+                            tileSize: tilePixelSize,
                         });
+                    } catch (error) {
+                        console.error(
+                            'Error parsing WMTS capabilities for',
+                            layer.layer_name,
+                            error
+                        );
+                        _alertWMTSConnection(layer, error);
+                    }
                 } else {
                     // WMTS from layer definition directly
                     const projectionCode =
@@ -775,46 +859,47 @@ const _helper = {
             } else if (['wms'].includes(layerService)) {
                 let wmsLayerOptions;
                 if (isCapabilitiesUrl) {
-                    // WMS from GetCapabilities
-                    let parser = new WMSCapabilities();
-                    wmsLayerOptions = await fetch(layer.geoserver_url)
-                        .then(async function (response) {
-                            if (!response.ok) {
-                                return await response.text().then((json) => {
-                                    throw new Error(json);
-                                });
-                            }
-                            return response.text();
-                        })
-                        .then(function (text) {
-                            const result = parser.read(text);
-                            const options = result.Capability.Layer.Layer.find(
-                                (l) => l.Name === layer.layer_name
+                    // WMS from GetCapabilities (using prefetched cache)
+                    const cached = capabilitiesCache.get(layer.geoserver_url);
+                    if (!cached || !cached.ok) {
+                        continue; // Service error already reported
+                    }
+                    try {
+                        if (!parsedCapabilities.has(layer.geoserver_url)) {
+                            const parser = new WMSCapabilities();
+                            const result = parser.read(cached.text);
+                            parsedCapabilities.set(layer.geoserver_url, result);
+                        }
+                        const result = parsedCapabilities.get(
+                            layer.geoserver_url
+                        );
+                        const options = result.Capability.Layer.Layer.find(
+                            (l) => l.Name === layer.layer_name
+                        );
+                        if (!options) {
+                            throw new Error(
+                                `Layer ${layer.layer_name} not found in WMS capabilities`
                             );
-                            if (!options) {
-                                throw new Error(
-                                    `Layer ${layer.layer_name} not found in WMS capabilities`
-                                );
-                            }
+                        }
 
-                            return {
-                                url: result.Capability.Request.GetMap.DCPType[0]
-                                    .HTTP.Get.OnlineResource,
-                                params: {
-                                    FORMAT: 'image/png',
-                                    VERSION: '1.1.1',
-                                    tiled: true,
-                                    STYLES: '',
-                                    LAYERS: `${layer.layer_name}`,
-                                },
-                            };
-                        })
-                        .catch(function (error) {
-                            console.error(
-                                'Error fetching WMS capabilities:',
-                                error
-                            );
-                        });
+                        wmsLayerOptions = {
+                            url: result.Capability.Request.GetMap.DCPType[0]
+                                .HTTP.Get.OnlineResource,
+                            params: {
+                                FORMAT: 'image/png',
+                                VERSION: '1.1.1',
+                                tiled: true,
+                                STYLES: '',
+                                LAYERS: `${layer.layer_name}`,
+                            },
+                        };
+                    } catch (error) {
+                        console.error(
+                            'Error parsing WMS capabilities for',
+                            layer.layer_name,
+                            error
+                        );
+                    }
                 } else {
                     // WMS from layer definition directly
                     wmsLayerOptions = {

@@ -980,6 +980,10 @@ export default {
                 ajax: {
                     url: this.url,
                     dataSrc: 'data',
+                    method: 'post',
+                    headers: {
+                        'X-CSRFToken': helpers.getCookie('csrftoken'),
+                    },
                     data: function (d) {
                         d.filter_group_type = vm.group_type_name;
                         d.filter_occurrence = vm.filterOCRCommunityOccurrence;

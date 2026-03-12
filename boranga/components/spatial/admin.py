@@ -45,7 +45,6 @@ class GeoserverUrlForm(forms.ModelForm):
         fields = "__all__"
         help_texts = {
             "url": "The URL of the Geoserver",
-            "wms_version": "The WMS version of the Geoserver",
         }
 
 
@@ -111,7 +110,7 @@ class TileLayerInline(admin.TabularInline):
 class GeoserverUrlAdmin(admin.ModelAdmin):
     form = GeoserverUrlForm
 
-    list_display = ("url", "wms_version")
+    list_display = ("url",)
     search_fields = ("url",)
     ordering = ("url",)
 
