@@ -806,6 +806,15 @@ const _helper = {
                             format: 'image/png',
                             tileSize: tilePixelSize,
                         });
+                        // OL substitutes '_empty' when a layer's default style
+                        // has an empty identifier.  GWC doesn't recognise that
+                        // token and returns 400, so reset it to an empty string.
+                        if (
+                            wmtsLayerOptions &&
+                            wmtsLayerOptions.style === '_empty'
+                        ) {
+                            wmtsLayerOptions.style = '';
+                        }
                     } catch (error) {
                         console.error(
                             'Error parsing WMTS capabilities for',
