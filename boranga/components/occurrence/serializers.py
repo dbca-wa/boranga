@@ -1296,6 +1296,17 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
     community_common_id = serializers.SerializerMethodField()
     wild_status = serializers.CharField(source="wild_status.name", allow_null=True)
     can_user_edit = serializers.SerializerMethodField()
+    region = serializers.CharField(source="location.region.name", allow_null=True, read_only=True)
+    district = serializers.CharField(source="location.district.name", allow_null=True, read_only=True)
+    last_modified_by_name = serializers.SerializerMethodField()
+    datetime_created = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
+    lodgement_date = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
+    datetime_updated_display = serializers.DateTimeField(source="datetime_updated", format="%d/%m/%Y", allow_null=True)
+    family = serializers.SerializerMethodField()
+    informal_groups = serializers.SerializerMethodField()
+    common_name = serializers.SerializerMethodField()
+    fauna_group = serializers.CharField(source="species.fauna_group.name", allow_null=True, read_only=True)
+    fauna_sub_group = serializers.CharField(source="species.fauna_sub_group.name", allow_null=True, read_only=True)
 
     class Meta:
         model = Occurrence
@@ -1319,6 +1330,17 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
             "show_locked_indicator",
             "locked",
             "datetime_updated",
+            "region",
+            "district",
+            "last_modified_by_name",
+            "datetime_created",
+            "lodgement_date",
+            "datetime_updated_display",
+            "family",
+            "informal_groups",
+            "common_name",
+            "fauna_group",
+            "fauna_sub_group",
         )
         datatables_always_serialize = (
             "id",
@@ -1374,6 +1396,33 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
     def get_can_user_edit(self, obj):
         request = self.context["request"]
         return obj.can_user_edit(request)
+
+    def get_last_modified_by_name(self, obj):
+        if obj.last_modified_by:
+            try:
+                email_user = retrieve_email_user(obj.last_modified_by)
+                return email_user.get_full_name()
+            except Exception:
+                pass
+        return ""
+
+    def get_family(self, obj):
+        if obj.species and obj.species.taxonomy:
+            return obj.species.taxonomy.family_name
+        return ""
+
+    def get_informal_groups(self, obj):
+        if obj.species and obj.species.taxonomy:
+            groups = obj.species.taxonomy.informal_groups.all()
+            return ", ".join(str(g) for g in groups) if groups else ""
+        return ""
+
+    def get_common_name(self, obj):
+        if obj.species and obj.species.taxonomy:
+            vernacular = obj.species.taxonomy.vernaculars.first()
+            if vernacular:
+                return vernacular.vernacular_name
+        return ""
 
 
 class ObservationTimeSerializer(BaseModelSerializer):
