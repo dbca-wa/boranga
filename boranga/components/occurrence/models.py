@@ -3805,6 +3805,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
     datetime_created = models.DateTimeField(auto_now_add=True, null=False, blank=False)
     datetime_updated = models.DateTimeField(auto_now=True, null=False, blank=False)
+    last_modified_by = models.IntegerField(null=True)  # EmailUserRO
 
     combined_occurrence = models.ForeignKey(
         "self",
