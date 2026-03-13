@@ -792,7 +792,7 @@ export default {
             return {
                 data: 'occurrence_name_text',
                 orderable: true,
-                searchable: false,
+                searchable: true,
                 visible: true,
                 name: 'occurrence__occurrence_name',
             };
