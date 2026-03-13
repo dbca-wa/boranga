@@ -239,7 +239,10 @@
                 </div>
             </FormSection>
             <FormSection
-                v-if="species_community.distribution"
+                v-if="
+                    species_community.distribution &&
+                    (is_internal || distribution_public)
+                "
                 :form-collapse="false"
                 label="Distribution"
                 Index="distribution"
