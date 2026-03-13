@@ -29,10 +29,7 @@
                         Documents
                     </a>
                 </li>
-                <li
-                    v-if="is_internal || threats_public || is_external"
-                    class="nav-item"
-                >
+                <li v-if="is_internal || threats_public" class="nav-item">
                     <a
                         id="pills-threats-tab"
                         class="nav-link"
@@ -123,7 +120,7 @@
                     </SpeciesDocuments>
                 </div>
                 <div
-                    v-if="is_internal || threats_public || is_external"
+                    v-if="is_internal || threats_public"
                     :id="threatBody"
                     class="tab-pane fade"
                     role="tabpanel"
