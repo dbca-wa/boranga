@@ -7,23 +7,7 @@
             :show-warning-icon="filterApplied"
         >
             <div class="row">
-                <div class="col-md-4">
-                    <div
-                        id="occurrence_name_lookup_form_group_id"
-                        class="form-group"
-                    >
-                        <label for="occurrence_name_lookup"
-                            >Name of Occurrence:</label
-                        >
-                        <select
-                            id="occurrence_name_lookup"
-                            ref="occurrence_name_lookup"
-                            name="occurrence_name_lookup"
-                            class="form-control"
-                        />
-                    </div>
-                </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <div
                         id="select_scientific_name_by_groupname_occ"
                         class="form-group"
@@ -39,7 +23,34 @@
                         />
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <div id="select_common_name" class="form-group">
+                        <label for="occ_common_name_lookup">Common Name:</label>
+                        <select
+                            id="occ_common_name_lookup"
+                            ref="occ_common_name_lookup"
+                            name="occ_common_name_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div
+                        id="occurrence_name_lookup_form_group_id"
+                        class="form-group"
+                    >
+                        <label for="occurrence_name_lookup"
+                            >Occurrence Name:</label
+                        >
+                        <select
+                            id="occurrence_name_lookup"
+                            ref="occurrence_name_lookup"
+                            name="occurrence_name_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
                     <div id="select_status" class="form-group">
                         <label for="">Status:</label>
                         <select
@@ -61,16 +72,140 @@
             <div class="row">
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="submitter-category">Locked:</label>
+                        <label for="">Region:</label>
                         <select
-                            id="submitter-category"
-                            v-model="filterOCCFaunaLocked"
+                            v-model="filterOCCFaunaRegion"
+                            class="form-select"
+                            @change="filterDistrict($event)"
+                        >
+                            <option value="all">All</option>
+                            <option
+                                v-for="region in region_list"
+                                :key="region.id"
+                                :value="region.id"
+                            >
+                                {{ region.name }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="">District:</label>
+                        <select
+                            v-model="filterOCCFaunaDistrict"
                             class="form-select"
                         >
                             <option value="all">All</option>
-                            <option value="true">Yes</option>
-                            <option value="false">No</option>
+                            <option
+                                v-for="district in filtered_district_list"
+                                :value="district.id"
+                                :key="district.id"
+                            >
+                                {{ district.name }}
+                            </option>
                         </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div id="select_last_modified_by" class="form-group">
+                        <label for="occ_last_modified_by_lookup"
+                            >Last Modified By:</label
+                        >
+                        <select
+                            id="occ_last_modified_by_lookup"
+                            ref="occ_last_modified_by_lookup"
+                            name="occ_last_modified_by_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Review Due Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCCFromFaunaDueDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCCToFaunaDueDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Created Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCCFaunaCreatedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCCFaunaCreatedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Activated Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCCFaunaActivatedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCCFaunaActivatedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Last Modified Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCCFaunaLastModifiedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCCFaunaLastModifiedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
                     </div>
                 </div>
             </div>
@@ -162,15 +297,30 @@ export default {
             required: false,
             default: 'filterOCCFaunaScientificName',
         },
+        filterOCCFaunaCommonName_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaCommonName',
+        },
         filterOCCFaunaStatus_cache: {
             type: String,
             required: false,
             default: 'filterOCCFaunaStatus',
         },
-        filterOCCFaunaLocked_cache: {
+        filterOCCFaunaRegion_cache: {
             type: String,
             required: false,
-            default: 'filterOCCFaunaLocked',
+            default: 'filterOCCFaunaRegion',
+        },
+        filterOCCFaunaDistrict_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaDistrict',
+        },
+        filterOCCFaunaLastModifiedBy_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaLastModifiedBy',
         },
         filterOCCFromFaunaDueDate_cache: {
             type: String,
@@ -181,6 +331,36 @@ export default {
             type: String,
             required: false,
             default: 'filterOCCToFaunaDueDate',
+        },
+        filterOCCFaunaCreatedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaCreatedFromDate',
+        },
+        filterOCCFaunaCreatedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaCreatedToDate',
+        },
+        filterOCCFaunaActivatedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaActivatedFromDate',
+        },
+        filterOCCFaunaActivatedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaActivatedToDate',
+        },
+        filterOCCFaunaLastModifiedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaLastModifiedFromDate',
+        },
+        filterOCCFaunaLastModifiedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFaunaLastModifiedToDate',
         },
     },
     data() {
@@ -206,16 +386,36 @@ export default {
                   )
                 : 'all',
 
+            filterOCCFaunaCommonName: sessionStorage.getItem(
+                this.filterOCCFaunaCommonName_cache
+            )
+                ? sessionStorage.getItem(this.filterOCCFaunaCommonName_cache)
+                : 'all',
+
             filterOCCFaunaStatus: sessionStorage.getItem(
                 this.filterOCCFaunaStatus_cache
             )
                 ? sessionStorage.getItem(this.filterOCCFaunaStatus_cache)
                 : 'all',
 
-            filterOCCFaunaLocked: sessionStorage.getItem(
-                this.filterOCCFaunaLocked_cache
+            filterOCCFaunaRegion: sessionStorage.getItem(
+                this.filterOCCFaunaRegion_cache
             )
-                ? sessionStorage.getItem(this.filterOCCFaunaLocked_cache)
+                ? sessionStorage.getItem(this.filterOCCFaunaRegion_cache)
+                : 'all',
+
+            filterOCCFaunaDistrict: sessionStorage.getItem(
+                this.filterOCCFaunaDistrict_cache
+            )
+                ? sessionStorage.getItem(this.filterOCCFaunaDistrict_cache)
+                : 'all',
+
+            filterOCCFaunaLastModifiedBy: sessionStorage.getItem(
+                this.filterOCCFaunaLastModifiedBy_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCFaunaLastModifiedBy_cache
+                  )
                 : 'all',
 
             filterOCCFromFaunaDueDate: sessionStorage.getItem(
@@ -229,12 +429,62 @@ export default {
                 ? sessionStorage.getItem(this.filterOCCToFaunaDueDate_cache)
                 : '',
 
+            filterOCCFaunaCreatedFromDate: sessionStorage.getItem(
+                this.filterOCCFaunaCreatedFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCFaunaCreatedFromDate_cache
+                  )
+                : '',
+
+            filterOCCFaunaCreatedToDate: sessionStorage.getItem(
+                this.filterOCCFaunaCreatedToDate_cache
+            )
+                ? sessionStorage.getItem(this.filterOCCFaunaCreatedToDate_cache)
+                : '',
+
+            filterOCCFaunaActivatedFromDate: sessionStorage.getItem(
+                this.filterOCCFaunaActivatedFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCFaunaActivatedFromDate_cache
+                  )
+                : '',
+
+            filterOCCFaunaActivatedToDate: sessionStorage.getItem(
+                this.filterOCCFaunaActivatedToDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCFaunaActivatedToDate_cache
+                  )
+                : '',
+
+            filterOCCFaunaLastModifiedFromDate: sessionStorage.getItem(
+                this.filterOCCFaunaLastModifiedFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCFaunaLastModifiedFromDate_cache
+                  )
+                : '',
+
+            filterOCCFaunaLastModifiedToDate: sessionStorage.getItem(
+                this.filterOCCFaunaLastModifiedToDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCFaunaLastModifiedToDate_cache
+                  )
+                : '',
+
             filterListsSpecies: {},
+            filterRegionDistrict: {},
             occurrence_list: [],
             scientific_name_list: [],
             status_list: [],
             submissions_from_list: [],
             submissions_to_list: [],
+            region_list: [],
+            district_list: [],
+            filtered_district_list: [],
 
             // filtering options
             internal_status: [
@@ -260,10 +510,19 @@ export default {
             if (
                 this.filterOCCFaunaOccurrenceName === 'all' &&
                 this.filterOCCFaunaScientificName === 'all' &&
+                this.filterOCCFaunaCommonName === 'all' &&
                 this.filterOCCFaunaStatus === 'all' &&
+                this.filterOCCFaunaRegion === 'all' &&
+                this.filterOCCFaunaDistrict === 'all' &&
+                this.filterOCCFaunaLastModifiedBy === 'all' &&
                 this.filterOCCFromFaunaDueDate === '' &&
                 this.filterOCCToFaunaDueDate === '' &&
-                this.filterOCCFaunaLocked === 'all'
+                this.filterOCCFaunaCreatedFromDate === '' &&
+                this.filterOCCFaunaCreatedToDate === '' &&
+                this.filterOCCFaunaActivatedFromDate === '' &&
+                this.filterOCCFaunaActivatedToDate === '' &&
+                this.filterOCCFaunaLastModifiedFromDate === '' &&
+                this.filterOCCFaunaLastModifiedToDate === ''
             ) {
                 return false;
             } else {
@@ -287,12 +546,23 @@ export default {
             return [
                 'ID',
                 'Number',
-                'Name of Occurrence',
+                'Occurrence Name',
                 'Scientific Name',
+                'Common Name',
                 'Wild Status',
                 'Number of Reports',
                 'Migrated From ID',
+                'Region',
+                'District',
                 'Review Due',
+                'Last Modified By',
+                'Last Modified Date',
+                'Activated Date',
+                'Created Date',
+                'Fauna Group',
+                'Fauna Sub Group',
+                'Family',
+                'Informal Group(s)',
                 'Status',
                 'Action',
             ];
@@ -370,6 +640,33 @@ export default {
                 searchable: true,
             };
         },
+        column_common_name: function () {
+            return {
+                data: 'common_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'common_name',
+            };
+        },
+        column_region: function () {
+            return {
+                data: 'region',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'location__region__name',
+            };
+        },
+        column_district: function () {
+            return {
+                data: 'district',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'location__district__name',
+            };
+        },
         column_review_due_date: function () {
             return {
                 data: 'review_due_date',
@@ -377,6 +674,78 @@ export default {
                 searchable: true,
                 visible: true,
                 name: 'review_due_date',
+            };
+        },
+        column_last_modified_by: function () {
+            return {
+                data: 'last_modified_by_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'last_modified_by_name',
+            };
+        },
+        column_last_modified_date: function () {
+            return {
+                data: 'datetime_updated_display',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'datetime_updated',
+            };
+        },
+        column_activated_date: function () {
+            return {
+                data: 'lodgement_date',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'lodgement_date',
+            };
+        },
+        column_created_date: function () {
+            return {
+                data: 'datetime_created',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'datetime_created',
+            };
+        },
+        column_fauna_group: function () {
+            return {
+                data: 'fauna_group',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'fauna_group',
+            };
+        },
+        column_fauna_sub_group: function () {
+            return {
+                data: 'fauna_sub_group',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'fauna_sub_group',
+            };
+        },
+        column_family: function () {
+            return {
+                data: 'family',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'family',
+            };
+        },
+        column_informal_groups: function () {
+            return {
+                data: 'informal_groups',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'informal_groups',
             };
         },
         column_status: function () {
@@ -464,10 +833,21 @@ export default {
                     vm.column_number,
                     vm.column_occurrence_name,
                     vm.column_scientific_name,
+                    vm.column_common_name,
                     vm.column_wild_status,
                     vm.column_number_of_reports,
                     vm.column_migrated_from_id,
+                    vm.column_region,
+                    vm.column_district,
                     vm.column_review_due_date,
+                    vm.column_last_modified_by,
+                    vm.column_last_modified_date,
+                    vm.column_activated_date,
+                    vm.column_created_date,
+                    vm.column_fauna_group,
+                    vm.column_fauna_sub_group,
+                    vm.column_family,
+                    vm.column_informal_groups,
                     vm.column_status,
                     vm.column_action,
                 ];
@@ -496,23 +876,40 @@ export default {
                         className: 'no-export',
                     },
                     { responsivePriority: 2, targets: -2 },
-                    { responsivePriority: 4, targets: -5 },
                 ],
                 ajax: {
                     url: this.url,
                     dataSrc: 'data',
-
-                    // adding extra GET params for Custom filtering
+                    method: 'post',
+                    headers: {
+                        'X-CSRFToken': helpers.getCookie('csrftoken'),
+                    },
                     data: function (d) {
                         d.filter_group_type = vm.group_type_name;
                         d.filter_occurrence_name =
                             vm.filterOCCFaunaOccurrenceName;
                         d.filter_scientific_name =
                             vm.filterOCCFaunaScientificName;
+                        d.filter_common_name = vm.filterOCCFaunaCommonName;
                         d.filter_status = vm.filterOCCFaunaStatus;
                         d.filter_from_due_date = vm.filterOCCFromFaunaDueDate;
                         d.filter_to_due_date = vm.filterOCCToFaunaDueDate;
-                        d.filter_locked = vm.filterOCCFaunaLocked;
+                        d.filter_region = vm.filterOCCFaunaRegion;
+                        d.filter_district = vm.filterOCCFaunaDistrict;
+                        d.filter_last_modified_by =
+                            vm.filterOCCFaunaLastModifiedBy;
+                        d.filter_created_from_date =
+                            vm.filterOCCFaunaCreatedFromDate;
+                        d.filter_created_to_date =
+                            vm.filterOCCFaunaCreatedToDate;
+                        d.filter_activated_from_date =
+                            vm.filterOCCFaunaActivatedFromDate;
+                        d.filter_activated_to_date =
+                            vm.filterOCCFaunaActivatedToDate;
+                        d.filter_last_modified_from_date =
+                            vm.filterOCCFaunaLastModifiedFromDate;
+                        d.filter_last_modified_to_date =
+                            vm.filterOCCFaunaLastModifiedToDate;
                         d.is_internal = vm.is_internal;
                     },
                 },
@@ -538,7 +935,7 @@ export default {
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCFaunaOccurrenceName_cache,
                 vm.filterOCCFaunaOccurrenceName
@@ -549,10 +946,21 @@ export default {
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCFaunaScientificName_cache,
                 vm.filterOCCFaunaScientificName
+            );
+        },
+        filterOCCFaunaCommonName: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaCommonName_cache,
+                vm.filterOCCFaunaCommonName
             );
         },
         filterOCCFaunaStatus: function () {
@@ -560,21 +968,43 @@ export default {
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCFaunaStatus_cache,
                 vm.filterOCCFaunaStatus
             );
         },
-        filterOCCFaunaLocked: function () {
+        filterOCCFaunaRegion: function () {
             let vm = this;
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
-                vm.filterOCCFaunaLocked_cache,
-                vm.filterOCCFaunaLocked
+                vm.filterOCCFaunaRegion_cache,
+                vm.filterOCCFaunaRegion
+            );
+        },
+        filterOCCFaunaDistrict: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaDistrict_cache,
+                vm.filterOCCFaunaDistrict
+            );
+        },
+        filterOCCFaunaLastModifiedBy: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaLastModifiedBy_cache,
+                vm.filterOCCFaunaLastModifiedBy
             );
         },
         filterOCCFromFaunaDueDate: function () {
@@ -582,7 +1012,7 @@ export default {
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCFromFaunaDueDate_cache,
                 vm.filterOCCFromFaunaDueDate
@@ -593,16 +1023,83 @@ export default {
             vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCToFaunaDueDate_cache,
                 vm.filterOCCToFaunaDueDate
+            );
+        },
+        filterOCCFaunaCreatedFromDate: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaCreatedFromDate_cache,
+                vm.filterOCCFaunaCreatedFromDate
+            );
+        },
+        filterOCCFaunaCreatedToDate: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaCreatedToDate_cache,
+                vm.filterOCCFaunaCreatedToDate
+            );
+        },
+        filterOCCFaunaActivatedFromDate: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaActivatedFromDate_cache,
+                vm.filterOCCFaunaActivatedFromDate
+            );
+        },
+        filterOCCFaunaActivatedToDate: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaActivatedToDate_cache,
+                vm.filterOCCFaunaActivatedToDate
+            );
+        },
+        filterOCCFaunaLastModifiedFromDate: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaLastModifiedFromDate_cache,
+                vm.filterOCCFaunaLastModifiedFromDate
+            );
+        },
+        filterOCCFaunaLastModifiedToDate: function () {
+            let vm = this;
+            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFaunaLastModifiedToDate_cache,
+                vm.filterOCCFaunaLastModifiedToDate
             );
         },
     },
 
     mounted: function () {
         this.fetchFilterLists();
+        this.fetchRegionDistricts();
         let vm = this;
         $('a[data-toggle="collapse"]').on('click', function () {
             var chev = $(this).children()[0];
@@ -615,6 +1112,8 @@ export default {
         this.$nextTick(() => {
             vm.initialiseOccurrenceNameLookup();
             vm.initialiseScientificNameLookup();
+            vm.initialiseCommonNameLookup();
+            vm.initialiseLastModifiedByLookup();
             vm.addEventListeners();
             var newOption;
             if (
@@ -628,7 +1127,7 @@ export default {
                     false,
                     true
                 );
-                $('#occ_occurrence_lookup').append(newOption);
+                $('#occurrence_name_lookup').append(newOption);
             }
             if (
                 sessionStorage.getItem('filterOCCFaunaScientificName') !=
@@ -642,6 +1141,31 @@ export default {
                     true
                 );
                 $('#occ_scientific_name_lookup_by_groupname').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterOCCFaunaCommonName') != 'all' &&
+                sessionStorage.getItem('filterOCCFaunaCommonName') != null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem('filterOCCFaunaCommonNameText'),
+                    vm.filterOCCFaunaCommonName,
+                    false,
+                    true
+                );
+                $('#occ_common_name_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterOCCFaunaLastModifiedBy') !=
+                    'all' &&
+                sessionStorage.getItem('filterOCCFaunaLastModifiedBy') != null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem('filterOCCFaunaLastModifiedByText'),
+                    vm.filterOCCFaunaLastModifiedBy,
+                    false,
+                    true
+                );
+                $('#occ_last_modified_by_lookup').append(newOption);
             }
         });
     },
@@ -772,6 +1296,124 @@ export default {
                     console.log(error);
                 }
             );
+        },
+        fetchRegionDistricts: function () {
+            let vm = this;
+            fetch(api_endpoints.region_district_filter_dict).then(
+                async (response) => {
+                    vm.filterRegionDistrict = await response.json();
+                    vm.region_list = vm.filterRegionDistrict.region_list;
+                    vm.district_list = vm.filterRegionDistrict.district_list;
+                    vm.filterDistrict();
+                },
+                (error) => {
+                    console.log(error);
+                }
+            );
+        },
+        filterDistrict: function (event) {
+            this.$nextTick(() => {
+                if (event) {
+                    this.filterOCCFaunaDistrict = 'all';
+                }
+                this.filtered_district_list = [];
+                if (this.filterOCCFaunaRegion.toString() === 'all') {
+                    this.filtered_district_list = this.district_list;
+                } else {
+                    for (let choice of this.district_list) {
+                        if (
+                            choice.region_id.toString() ===
+                            this.filterOCCFaunaRegion.toString()
+                        ) {
+                            this.filtered_district_list.push(choice);
+                        }
+                    }
+                }
+            });
+        },
+        initialiseCommonNameLookup: function () {
+            let vm = this;
+            $(vm.$refs.occ_common_name_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    dropdownParent: $('#select_common_name'),
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Common Name',
+                    ajax: {
+                        url: api_endpoints.common_name_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                                group_type_id: vm.group_type_id,
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCCFaunaCommonName = data;
+                    sessionStorage.setItem(
+                        'filterOCCFaunaCommonNameText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCCFaunaCommonName = 'all';
+                    sessionStorage.setItem('filterOCCFaunaCommonNameText', '');
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-occ_common_name_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
+        },
+        initialiseLastModifiedByLookup: function () {
+            let vm = this;
+            $(vm.$refs.occ_last_modified_by_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for User',
+                    ajax: {
+                        url:
+                            api_endpoints.users_api +
+                            '/get_department_users_ledger_id/',
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCCFaunaLastModifiedBy = data;
+                    sessionStorage.setItem(
+                        'filterOCCFaunaLastModifiedByText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCCFaunaLastModifiedBy = 'all';
+                    sessionStorage.setItem(
+                        'filterOCCFaunaLastModifiedByText',
+                        ''
+                    );
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-occ_last_modified_by_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
         },
         createFaunaOccurrence: async function () {
             swal.fire({

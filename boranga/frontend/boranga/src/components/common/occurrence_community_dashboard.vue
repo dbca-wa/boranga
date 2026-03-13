@@ -7,13 +7,13 @@
             :show-warning-icon="filterApplied"
         >
             <div class="row">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <div
                         id="occurrence_name_lookup_form_group_id"
                         class="form-group"
                     >
                         <label for="occurrence_name_lookup"
-                            >Name of Occurrence:</label
+                            >Occurrence Name:</label
                         >
                         <select
                             id="occurrence_name_lookup"
@@ -23,7 +23,7 @@
                         />
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <div id="select_occ_community_name" class="form-group">
                         <label for="occ_community_name_lookup"
                             >Community Name:</label
@@ -36,7 +36,20 @@
                         />
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="occ_community_id_lookup"
+                            >Community ID:</label
+                        >
+                        <select
+                            id="occ_community_id_lookup"
+                            ref="occ_community_id_lookup"
+                            name="occ_community_id_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
                     <div id="select_status" class="form-group">
                         <label for="occ_status_lookup">Status:</label>
                         <select
@@ -56,31 +69,142 @@
                 </div>
             </div>
             <div class="row">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <div class="form-group">
-                        <label for="occ_community_id_lookup"
-                            >Community ID:</label
+                        <label for="">Region:</label>
+                        <select
+                            v-model="filterOCCCommunityRegion"
+                            class="form-select"
+                            @change="filterDistrict($event)"
+                        >
+                            <option value="all">All</option>
+                            <option
+                                v-for="region in region_list"
+                                :key="region.id"
+                                :value="region.id"
+                            >
+                                {{ region.name }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="">District:</label>
+                        <select
+                            v-model="filterOCCCommunityDistrict"
+                            class="form-select"
+                        >
+                            <option value="all">All</option>
+                            <option
+                                v-for="district in filtered_district_list"
+                                :value="district.id"
+                                :key="district.id"
+                            >
+                                {{ district.name }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div id="select_last_modified_by" class="form-group">
+                        <label for="occ_last_modified_by_lookup"
+                            >Last Modified By:</label
                         >
                         <select
-                            id="occ_community_id_lookup"
-                            ref="occ_community_id_lookup"
-                            name="occ_community_id_lookup"
+                            id="occ_last_modified_by_lookup"
+                            ref="occ_last_modified_by_lookup"
+                            name="occ_last_modified_by_lookup"
                             class="form-control"
                         />
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="form-group">
-                        <label for="submitter-category">Locked:</label>
-                        <select
-                            id="submitter-category"
-                            v-model="filterOCCCommunityLocked"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option value="true">Yes</option>
-                            <option value="false">No</option>
-                        </select>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Review Due Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCCFromCommunityDueDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCCToCommunityDueDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Created Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCCCommunityCreatedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCCCommunityCreatedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Activated Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCCCommunityActivatedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCCCommunityActivatedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Last Modified Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCCCommunityLastModifiedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCCCommunityLastModifiedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
                     </div>
                 </div>
             </div>
@@ -177,10 +301,20 @@ export default {
             required: false,
             default: 'filterOCCCommunityStatus',
         },
-        filterOCCCommunityLocked_cache: {
+        filterOCCCommunityRegion_cache: {
             type: String,
             required: false,
-            default: 'filterOCCCommunityLocked',
+            default: 'filterOCCCommunityRegion',
+        },
+        filterOCCCommunityDistrict_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityDistrict',
+        },
+        filterOCCCommunityLastModifiedBy_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityLastModifiedBy',
         },
         filterOCCFromCommunityDueDate_cache: {
             type: String,
@@ -191,6 +325,36 @@ export default {
             type: String,
             required: false,
             default: 'filterOCCToCommunityDueDate',
+        },
+        filterOCCCommunityCreatedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityCreatedFromDate',
+        },
+        filterOCCCommunityCreatedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityCreatedToDate',
+        },
+        filterOCCCommunityActivatedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityActivatedFromDate',
+        },
+        filterOCCCommunityActivatedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityActivatedToDate',
+        },
+        filterOCCCommunityLastModifiedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityLastModifiedFromDate',
+        },
+        filterOCCCommunityLastModifiedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityLastModifiedToDate',
         },
     },
     data() {
@@ -227,10 +391,24 @@ export default {
                 ? sessionStorage.getItem(this.filterOCCCommunityStatus_cache)
                 : 'all',
 
-            filterOCCCommunityLocked: sessionStorage.getItem(
-                this.filterOCCCommunityLocked_cache
+            filterOCCCommunityRegion: sessionStorage.getItem(
+                this.filterOCCCommunityRegion_cache
             )
-                ? sessionStorage.getItem(this.filterOCCCommunityLocked_cache)
+                ? sessionStorage.getItem(this.filterOCCCommunityRegion_cache)
+                : 'all',
+
+            filterOCCCommunityDistrict: sessionStorage.getItem(
+                this.filterOCCCommunityDistrict_cache
+            )
+                ? sessionStorage.getItem(this.filterOCCCommunityDistrict_cache)
+                : 'all',
+
+            filterOCCCommunityLastModifiedBy: sessionStorage.getItem(
+                this.filterOCCCommunityLastModifiedBy_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCCommunityLastModifiedBy_cache
+                  )
                 : 'all',
 
             filterOCCFromCommunityDueDate: sessionStorage.getItem(
@@ -246,16 +424,66 @@ export default {
                 ? sessionStorage.getItem(this.filterOCCToCommunityDueDate_cache)
                 : '',
 
+            filterOCCCommunityCreatedFromDate: sessionStorage.getItem(
+                this.filterOCCCommunityCreatedFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCCommunityCreatedFromDate_cache
+                  )
+                : '',
+
+            filterOCCCommunityCreatedToDate: sessionStorage.getItem(
+                this.filterOCCCommunityCreatedToDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCCommunityCreatedToDate_cache
+                  )
+                : '',
+
+            filterOCCCommunityActivatedFromDate: sessionStorage.getItem(
+                this.filterOCCCommunityActivatedFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCCommunityActivatedFromDate_cache
+                  )
+                : '',
+
+            filterOCCCommunityActivatedToDate: sessionStorage.getItem(
+                this.filterOCCCommunityActivatedToDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCCommunityActivatedToDate_cache
+                  )
+                : '',
+
+            filterOCCCommunityLastModifiedFromDate: sessionStorage.getItem(
+                this.filterOCCCommunityLastModifiedFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCCommunityLastModifiedFromDate_cache
+                  )
+                : '',
+
+            filterOCCCommunityLastModifiedToDate: sessionStorage.getItem(
+                this.filterOCCCommunityLastModifiedToDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCCCommunityLastModifiedToDate_cache
+                  )
+                : '',
+
             filterListsCommunity: {},
+            filterRegionDistrict: {},
             occurrence_list: [],
             community_name_list: [],
             status_list: [],
             submissions_from_list: [],
             submissions_to_list: [],
+            region_list: [],
+            district_list: [],
+            filtered_district_list: [],
 
             // filtering options
-            // external_status refers to CUSTOMER_STATUS_CHOICES
-            // internal_status referes to PROCESSING_STATUS_CHOICES
             internal_status: [
                 { value: 'draft', name: 'Draft' },
                 { value: 'discarded', name: 'Discarded' },
@@ -281,9 +509,17 @@ export default {
                 this.filterOCCCommunityOccurrenceName === 'all' &&
                 this.filterOCCCommunityName === 'all' &&
                 this.filterOCCCommunityStatus === 'all' &&
+                this.filterOCCCommunityRegion === 'all' &&
+                this.filterOCCCommunityDistrict === 'all' &&
+                this.filterOCCCommunityLastModifiedBy === 'all' &&
                 this.filterOCCFromCommunityDueDate === '' &&
                 this.filterOCCToCommunityDueDate === '' &&
-                this.filterOCCCommunityLocked === 'all'
+                this.filterOCCCommunityCreatedFromDate === '' &&
+                this.filterOCCCommunityCreatedToDate === '' &&
+                this.filterOCCCommunityActivatedFromDate === '' &&
+                this.filterOCCCommunityActivatedToDate === '' &&
+                this.filterOCCCommunityLastModifiedFromDate === '' &&
+                this.filterOCCCommunityLastModifiedToDate === ''
             ) {
                 return false;
             } else {
@@ -310,13 +546,19 @@ export default {
             return [
                 'ID',
                 'Number',
-                'Name of Occurrence',
+                'Occurrence Name',
                 'Community Name',
                 'Wild Status',
                 'Number of Reports',
                 'Community ID',
                 'Migrated From ID',
+                'Region',
+                'District',
                 'Review Due',
+                'Last Modified By',
+                'Last Modified Date',
+                'Activated Date',
+                'Created Date',
                 'Status',
                 'Action',
             ];
@@ -408,6 +650,24 @@ export default {
                 searchable: true,
             };
         },
+        column_region: function () {
+            return {
+                data: 'region',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'location__region__name',
+            };
+        },
+        column_district: function () {
+            return {
+                data: 'district',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'location__district__name',
+            };
+        },
         column_wild_status: function () {
             return {
                 data: 'wild_status',
@@ -423,6 +683,42 @@ export default {
                 searchable: true,
                 visible: true,
                 name: 'review_due_date',
+            };
+        },
+        column_last_modified_by: function () {
+            return {
+                data: 'last_modified_by_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'last_modified_by_name',
+            };
+        },
+        column_last_modified_date: function () {
+            return {
+                data: 'datetime_updated_display',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'datetime_updated',
+            };
+        },
+        column_activated_date: function () {
+            return {
+                data: 'lodgement_date',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'lodgement_date',
+            };
+        },
+        column_created_date: function () {
+            return {
+                data: 'datetime_created',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'datetime_created',
             };
         },
         column_status: function () {
@@ -513,7 +809,13 @@ export default {
                     vm.column_number_of_reports,
                     vm.column_community_common_id,
                     vm.column_migrated_from_id,
+                    vm.column_region,
+                    vm.column_district,
                     vm.column_review_due_date,
+                    vm.column_last_modified_by,
+                    vm.column_last_modified_date,
+                    vm.column_activated_date,
+                    vm.column_created_date,
                     vm.column_status,
                     vm.column_action,
                 ];
@@ -533,7 +835,6 @@ export default {
                 responsive: true,
                 serverSide: true,
                 searching: search,
-                //  to show the "workflow Status","Action" columns always in the last position
                 columnDefs: [
                     { responsivePriority: 1, targets: 1 },
                     {
@@ -542,13 +843,14 @@ export default {
                         className: 'no-export',
                     },
                     { responsivePriority: 2, targets: -2 },
-                    { responsivePriority: 4, targets: 5 },
                 ],
                 ajax: {
                     url: this.url,
                     dataSrc: 'data',
-
-                    // adding extra GET params for Custom filtering
+                    method: 'post',
+                    headers: {
+                        'X-CSRFToken': helpers.getCookie('csrftoken'),
+                    },
                     data: function (d) {
                         d.filter_group_type = vm.group_type_name;
                         d.filter_community_common_id =
@@ -560,7 +862,22 @@ export default {
                         d.filter_from_due_date =
                             vm.filterOCCFromCommunityDueDate;
                         d.filter_to_due_date = vm.filterOCCToCommunityDueDate;
-                        d.filter_locked = vm.filterOCCCommunityLocked;
+                        d.filter_region = vm.filterOCCCommunityRegion;
+                        d.filter_district = vm.filterOCCCommunityDistrict;
+                        d.filter_last_modified_by =
+                            vm.filterOCCCommunityLastModifiedBy;
+                        d.filter_created_from_date =
+                            vm.filterOCCCommunityCreatedFromDate;
+                        d.filter_created_to_date =
+                            vm.filterOCCCommunityCreatedToDate;
+                        d.filter_activated_from_date =
+                            vm.filterOCCCommunityActivatedFromDate;
+                        d.filter_activated_to_date =
+                            vm.filterOCCCommunityActivatedToDate;
+                        d.filter_last_modified_from_date =
+                            vm.filterOCCCommunityLastModifiedFromDate;
+                        d.filter_last_modified_to_date =
+                            vm.filterOCCCommunityLastModifiedToDate;
                         d.is_internal = vm.is_internal;
                     },
                 },
@@ -586,7 +903,7 @@ export default {
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCCommunityMigratedId_cache,
                 vm.filterOCCCommunityMigratedId
@@ -597,7 +914,7 @@ export default {
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCCommunityOccurrenceName_cache,
                 vm.filterOCCCommunityOccurrenceName
@@ -608,7 +925,7 @@ export default {
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCCommunityName_cache,
                 vm.filterOCCCommunityName
@@ -619,21 +936,43 @@ export default {
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCCommunityStatus_cache,
                 vm.filterOCCCommunityStatus
             );
         },
-        filterOCCCommunityLocked: function () {
+        filterOCCCommunityRegion: function () {
             let vm = this;
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
-                vm.filterOCCCommunityLocked_cache,
-                vm.filterOCCCommunityLocked
+                vm.filterOCCCommunityRegion_cache,
+                vm.filterOCCCommunityRegion
+            );
+        },
+        filterOCCCommunityDistrict: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityDistrict_cache,
+                vm.filterOCCCommunityDistrict
+            );
+        },
+        filterOCCCommunityLastModifiedBy: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityLastModifiedBy_cache,
+                vm.filterOCCCommunityLastModifiedBy
             );
         },
         filterOCCFromCommunityDueDate: function () {
@@ -641,7 +980,7 @@ export default {
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCFromCommunityDueDate_cache,
                 vm.filterOCCFromCommunityDueDate
@@ -652,15 +991,82 @@ export default {
             vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
                 helpers.enablePopovers,
                 true
-            ); // This calls ajax() backend call.
+            );
             sessionStorage.setItem(
                 vm.filterOCCToCommunityDueDate_cache,
                 vm.filterOCCToCommunityDueDate
             );
         },
+        filterOCCCommunityCreatedFromDate: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityCreatedFromDate_cache,
+                vm.filterOCCCommunityCreatedFromDate
+            );
+        },
+        filterOCCCommunityCreatedToDate: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityCreatedToDate_cache,
+                vm.filterOCCCommunityCreatedToDate
+            );
+        },
+        filterOCCCommunityActivatedFromDate: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityActivatedFromDate_cache,
+                vm.filterOCCCommunityActivatedFromDate
+            );
+        },
+        filterOCCCommunityActivatedToDate: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityActivatedToDate_cache,
+                vm.filterOCCCommunityActivatedToDate
+            );
+        },
+        filterOCCCommunityLastModifiedFromDate: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityLastModifiedFromDate_cache,
+                vm.filterOCCCommunityLastModifiedFromDate
+            );
+        },
+        filterOCCCommunityLastModifiedToDate: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityLastModifiedToDate_cache,
+                vm.filterOCCCommunityLastModifiedToDate
+            );
+        },
     },
     mounted: function () {
         this.fetchFilterLists();
+        this.fetchRegionDistricts();
         let vm = this;
         $('a[data-toggle="collapse"]').on('click', function () {
             var chev = $(this).children()[0];
@@ -674,16 +1080,15 @@ export default {
             vm.initialiseOccurrenceNameLookup();
             vm.initialiseCommunityNameLookup();
             vm.initialiseCommunityIdLookup();
+            vm.initialiseLastModifiedByLookup();
             vm.addEventListeners();
             var newOption;
-            // -- to set the select2 field with the session value if exists onload()
             if (
                 sessionStorage.getItem('filterOCCCommunityOccurrenceName') !=
                     'all' &&
                 sessionStorage.getItem('filterOCCCommunityOccurrenceName') !=
                     null
             ) {
-                // contructor new Option(text, value, defaultSelected, selected)
                 newOption = new Option(
                     sessionStorage.getItem(
                         'filterOCCCommunityOccurrenceNameText'
@@ -692,14 +1097,12 @@ export default {
                     false,
                     true
                 );
-                $('#occ_occurrence_lookup').append(newOption);
-                //$('#scientific_name_lookup').append(newOption).trigger('change');
+                $('#occurrence_name_lookup').append(newOption);
             }
             if (
                 sessionStorage.getItem('filterOCCCommunityName') != 'all' &&
                 sessionStorage.getItem('filterOCCCommunityName') != null
             ) {
-                // contructor new Option(text, value, defaultSelected, selected)
                 newOption = new Option(
                     sessionStorage.getItem('filterOCCCommunityNameText'),
                     vm.filterOCCCommunityName,
@@ -713,7 +1116,6 @@ export default {
                     'all' &&
                 sessionStorage.getItem('filterOCCCommunityMigratedId') != null
             ) {
-                // contructor new Option(text, value, defaultSelected, selected)
                 newOption = new Option(
                     sessionStorage.getItem('filterOCCCommunityMigratedIdText'),
                     vm.filterOCCCommunityMigratedId,
@@ -721,6 +1123,22 @@ export default {
                     true
                 );
                 $('#occ_community_id_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterOCCCommunityLastModifiedBy') !=
+                    'all' &&
+                sessionStorage.getItem('filterOCCCommunityLastModifiedBy') !=
+                    null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem(
+                        'filterOCCCommunityLastModifiedByText'
+                    ),
+                    vm.filterOCCCommunityLastModifiedBy,
+                    false,
+                    true
+                );
+                $('#occ_last_modified_by_lookup').append(newOption);
             }
         });
     },
@@ -889,6 +1307,83 @@ export default {
                     console.log(error);
                 }
             );
+        },
+        fetchRegionDistricts: function () {
+            let vm = this;
+            fetch(api_endpoints.region_district_filter_dict).then(
+                async (response) => {
+                    vm.filterRegionDistrict = await response.json();
+                    vm.region_list = vm.filterRegionDistrict.region_list;
+                    vm.district_list = vm.filterRegionDistrict.district_list;
+                    vm.filterDistrict();
+                },
+                (error) => {
+                    console.log(error);
+                }
+            );
+        },
+        filterDistrict: function (event) {
+            this.$nextTick(() => {
+                if (event) {
+                    this.filterOCCCommunityDistrict = 'all';
+                }
+                this.filtered_district_list = [];
+                if (this.filterOCCCommunityRegion.toString() === 'all') {
+                    this.filtered_district_list = this.district_list;
+                } else {
+                    for (let choice of this.district_list) {
+                        if (
+                            choice.region_id.toString() ===
+                            this.filterOCCCommunityRegion.toString()
+                        ) {
+                            this.filtered_district_list.push(choice);
+                        }
+                    }
+                }
+            });
+        },
+        initialiseLastModifiedByLookup: function () {
+            let vm = this;
+            $(vm.$refs.occ_last_modified_by_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for User',
+                    ajax: {
+                        url:
+                            api_endpoints.users_api +
+                            '/get_department_users_ledger_id/',
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCCCommunityLastModifiedBy = data;
+                    sessionStorage.setItem(
+                        'filterOCCCommunityLastModifiedByText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCCCommunityLastModifiedBy = 'all';
+                    sessionStorage.setItem(
+                        'filterOCCCommunityLastModifiedByText',
+                        ''
+                    );
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-occ_last_modified_by_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
         },
         createCommunityOccurrence: async function () {
             swal.fire({
