@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Community OCC Buffers Active  (KB Report)
 -- DevOps Task #15560
+-- Frequency: Daily
 --
 -- One row per BufferGeometry for Community Occurrences.
 -- Filters:

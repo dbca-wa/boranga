@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Flora OCC Boundary All  (KB Report)
 -- DevOps Task #15555
+-- Frequency: Monthly
 --
 -- One row per OccurrenceGeometry (Polygon type) for Flora Occurrences.
 -- Returns ALL processing statuses.

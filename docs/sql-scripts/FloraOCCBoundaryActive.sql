@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Flora OCC Boundary Active  (KB Report)
 -- DevOps Task #15554
+-- Frequency: Daily
 --
 -- One row per OccurrenceGeometry (Polygon type) for Flora Occurrences.
 -- Filters:

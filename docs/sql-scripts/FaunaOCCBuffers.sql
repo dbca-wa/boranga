@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Fauna OCC Buffers  (KB Report)
 -- DevOps Task #15565
+-- Frequency: Monthly
 --
 -- One row per BufferGeometry for Fauna Occurrences.
 -- Returns ALL processing statuses.

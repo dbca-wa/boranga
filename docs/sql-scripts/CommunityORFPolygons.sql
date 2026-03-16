@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Community ORF Polygons  (KB Report)
 -- DevOps Task #15552
+-- Frequency: Monthly
 --
 -- One row per OccurrenceReportGeometry (Polygon type) for Community OCRs.
 -- Returns ALL processing statuses.

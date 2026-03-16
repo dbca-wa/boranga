@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Community OCC Buffers All  (KB Report)
 -- DevOps Task #15561
+-- Frequency: Monthly
 --
 -- One row per BufferGeometry for Community Occurrences.
 -- Returns ALL processing statuses.

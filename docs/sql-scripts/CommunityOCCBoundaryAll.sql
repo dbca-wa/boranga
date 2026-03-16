@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Community OCC Boundary All  (KB Report)
 -- DevOps Task #15559
+-- Frequency: Monthly
 --
 -- One row per OccurrenceGeometry (Polygon type) for Community Occurrences.
 -- Returns ALL processing statuses.

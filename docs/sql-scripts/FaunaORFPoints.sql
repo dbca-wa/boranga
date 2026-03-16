@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Fauna ORF Points  (KB Report)
 -- DevOps Task #15553
+-- Frequency: Monthly
 --
 -- One row per OccurrenceReportGeometry (Point type) for Fauna OCRs.
 -- Returns ALL processing statuses.

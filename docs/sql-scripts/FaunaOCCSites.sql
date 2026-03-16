@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Fauna OCC Sites  (KB Report)
 -- DevOps Task #15566
+-- Frequency: Monthly
 --
 -- One row per OccurrenceSite for Fauna Occurrences.
 -- Returns ALL processing statuses.

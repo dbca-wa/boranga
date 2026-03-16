@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Flora OCC Sites  (KB Report)
 -- DevOps Task #15557
+-- Frequency: Monthly
 --
 -- One row per OccurrenceSite for Flora Occurrences.
 -- Returns ALL processing statuses.

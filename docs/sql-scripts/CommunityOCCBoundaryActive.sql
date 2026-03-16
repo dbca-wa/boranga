@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Community OCC Boundary Active  (KB Report)
 -- DevOps Task #15558
+-- Frequency: Daily
 --
 -- One row per OccurrenceGeometry (Polygon type) for Community Occurrences.
 -- Filters:

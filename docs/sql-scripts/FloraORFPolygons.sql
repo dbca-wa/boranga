@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Flora ORF Polygons  (KB Report)
 -- DevOps Task #15546
+-- Frequency: Monthly
 --
 -- One row per OccurrenceReportGeometry (Polygon type) for Flora OCRs.
 -- Returns ALL processing statuses.

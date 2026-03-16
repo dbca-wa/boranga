@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Community ORF Points  (KB Report)
 -- DevOps Task #15550
+-- Frequency: Monthly
 --
 -- One row per OccurrenceReportGeometry (Point type) for Community OCRs.
 -- Returns ALL processing statuses.

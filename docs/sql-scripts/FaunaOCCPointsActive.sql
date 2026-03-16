@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Fauna OCC Points Active  (KB Report)
 -- DevOps Task #15563
+-- Frequency: Daily
 --
 -- One row per OccurrenceGeometry (Point type) for Fauna Occurrences.
 -- Filters:

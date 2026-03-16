@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Flora OCC Buffers  (KB Report)
 -- DevOps Task #15556
+-- Frequency: Monthly
 --
 -- One row per BufferGeometry for Flora Occurrences.
 -- Returns ALL processing statuses.

@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Flora ORF Points  (KB Report)
 -- DevOps Task #15549
+-- Frequency: Monthly
 --
 -- One row per OccurrenceReportGeometry (Point type) for Flora OCRs.
 -- Returns ALL processing statuses.

@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Fauna OCC Points All  (KB Report)
 -- DevOps Task #15564
+-- Frequency: Monthly
 --
 -- One row per OccurrenceGeometry (Point type) for Fauna Occurrences.
 -- Returns ALL processing statuses.

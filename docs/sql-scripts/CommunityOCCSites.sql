@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Community OCC Sites  (KB Report)
 -- DevOps Task #15562
+-- Frequency: Monthly
 --
 -- One row per OccurrenceSite for Community Occurrences.
 -- Returns ALL processing statuses.
