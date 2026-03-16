@@ -187,6 +187,7 @@ export default {
     combine_tenures_lookup: '/api/occurrence_paginated/combine_tenures_lookup/',
 
     tile_layer: '/api/tile_layer/',
+    geojson_to_shapefile: '/api/geojson_to_shapefile',
 
     discard_cs_proposal: function (id) {
         return `/api/conservation_status/${id}/discard/`;

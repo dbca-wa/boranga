@@ -3616,6 +3616,8 @@ class ShapefileDocumentQueryset(models.QuerySet):
 
 
 class OccurrenceReportShapefileDocument(Document):
+    """Stores uploaded geospatial files (shapefiles, GeoJSON, etc.) for processing."""
+
     objects = ShapefileDocumentQueryset.as_manager()
     occurrence_report = models.ForeignKey(
         "OccurrenceReport", related_name="shapefile_documents", on_delete=models.CASCADE
@@ -5911,6 +5913,8 @@ def get_occurrence_report_bulk_import_associated_files_path(instance, filename):
 
 
 class OccurrenceShapefileDocument(Document):
+    """Stores uploaded geospatial files (shapefiles, GeoJSON, etc.) for processing."""
+
     objects = ShapefileDocumentQueryset.as_manager()
     occurrence = models.ForeignKey("Occurrence", related_name="shapefile_documents", on_delete=models.CASCADE)
     _file = models.FileField(

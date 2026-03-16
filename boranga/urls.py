@@ -193,6 +193,11 @@ router.registry.sort(key=lambda x: x[0])
 api_patterns = [
     re_path(r"^api/profile$", users_api.GetProfile.as_view(), name="get-profile"),
     re_path(
+        r"^api/geojson_to_shapefile$",
+        spatial_api.GeoJsonToShapefileView.as_view(),
+        name="geojson-to-shapefile",
+    ),
+    re_path(
         r"^api/save_submitter_information$",
         users_api.SaveSubmitterInformation.as_view(),
         name="save-submitter-information",

@@ -917,14 +917,16 @@
                         </div>
                     </div>
                     <div
-                        class="optional-layers-button-wrapper"
-                        title="Select features to download as GeoJSON"
+                        class="optional-layers-button-wrapper dropdown"
+                        style="z-index: 401"
+                        title="Download selected features"
                     >
                         <div
                             class="optional-layers-button btn"
                             :class="selectedFeatureIds.length ? '' : 'disabled'"
-                            :title="`Download selected features as GeoJSON`"
-                            @click="geoJsonButtonClicked"
+                            :title="`Download ${selectedFeatureIds.length} selected feature(s)`"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
                         >
                             <SvgIcon name="download" />
                             <span
@@ -934,6 +936,24 @@
                                 >{{ selectedFeatureIds.length }}</span
                             >
                         </div>
+                        <ul class="dropdown-menu" style="z-index: 500">
+                            <li>
+                                <a
+                                    class="dropdown-item"
+                                    href="#"
+                                    @click.prevent="geoJsonButtonClicked"
+                                    >Download as GeoJSON</a
+                                >
+                            </li>
+                            <li>
+                                <a
+                                    class="dropdown-item"
+                                    href="#"
+                                    @click.prevent="shapefileButtonClicked"
+                                    >Download as Shapefile</a
+                                >
+                            </li>
+                        </ul>
                     </div>
 
                     <div
@@ -1479,9 +1499,12 @@
                 <div class="row mb-2">
                     <div class="col">
                         <label for="shapefile_document" class="fw-bold"
-                            >Upload Shapefile or archive(s) containing
+                            >Upload Shapefile, GeoJSON, or archive(s) containing
                             shapefiles
-                            <span>({{ archiveTypesAllowed.join(', ') }})</span>
+                            <span
+                                >({{ archiveTypesAllowed.join(', ') }},
+                                {{ geojsonTypesAllowed.join(', ') }})</span
+                            >
                         </label>
                     </div>
                     <div class="col">
@@ -1497,11 +1520,12 @@
                             :file-types="
                                 shapefileTypesAllowed
                                     .concat(archiveTypesAllowed)
+                                    .concat(geojsonTypesAllowed)
                                     .join(', ')
                             "
                             :text_string="`Attach Files ${shapefileTypesAllowed.join(
                                 ', '
-                            )} or ${archiveTypesAllowed.join(', ')}`"
+                            )}, ${geojsonTypesAllowed.join(', ')} or ${archiveTypesAllowed.join(', ')}`"
                             @update-parent="shapeFilesUpdated"
                         />
                     </div>
@@ -1509,7 +1533,9 @@
                 <div
                     v-if="
                         !uploadedFileTypes.includes('.zip') &&
-                        !uploadedFileTypes.includes('.prj')
+                        !uploadedFileTypes.includes('.prj') &&
+                        !uploadedFileTypes.includes('.geojson') &&
+                        !uploadedFileTypes.includes('.json')
                     "
                     class="row"
                 >
@@ -2057,6 +2083,7 @@ export default {
             archiveTypesAllowed: ['.zip'], // The allowed archive types
             shapefileTypesAllowed: ['.shp', '.dbf', '.prj', '.shx', '.cpg'], // The allowed shapefile types
             shapefileTypesRequired: ['.shp', '.dbf', '.shx'], // The required shapefile types
+            geojsonTypesAllowed: ['.geojson', '.json'], // The allowed GeoJSON types
             userInputGeometryStack: [],
             selectedSpatialOperation: null,
             selectedSpatialUnit: 'm',
@@ -2227,12 +2254,30 @@ export default {
             const shapefileTypesComplete = this.shapefileTypesRequired.every(
                 (type) => this.uploadedFileTypes.includes(type)
             );
+            // The uploaded files contain GeoJSON files
+            const containsGeojsonTypes = this.geojsonTypesAllowed.some((type) =>
+                this.uploadedFileTypes.includes(type)
+            );
+            // Every uploaded file is a GeoJSON file
+            const geojsonTypesComplete =
+                containsGeojsonTypes &&
+                this.uploadedFileTypes.every((type) =>
+                    this.geojsonTypesAllowed.includes(type)
+                );
 
-            // Either every uploaded file is an archive or
-            // every required shapefile type is uploaded but not both
+            // Either every uploaded file is an archive, every required
+            // shapefile type is uploaded, or every file is GeoJSON — but
+            // not a mix of different categories
             return (
-                (archiveTypesComplete && !containsShapefileTypes) ||
-                (shapefileTypesComplete && !containsArchiveTypes)
+                (archiveTypesComplete &&
+                    !containsShapefileTypes &&
+                    !containsGeojsonTypes) ||
+                (shapefileTypesComplete &&
+                    !containsArchiveTypes &&
+                    !containsGeojsonTypes) ||
+                (geojsonTypesComplete &&
+                    !containsArchiveTypes &&
+                    !containsShapefileTypes)
             );
         },
         coordinateReferenceSystemsForSelectFilter: function () {
@@ -2620,6 +2665,28 @@ export default {
             a.download = fileName;
             a.click();
         },
+        buildDownloadFilename: function (ext) {
+            let prefix = '';
+            const contextId = this.context?.id || 'unknown';
+            if (this.context?.model_name === 'occurrencereport') {
+                prefix = `orf-${contextId}`;
+            } else if (this.context?.model_name === 'occurrence') {
+                prefix = `occ-${contextId}`;
+            } else {
+                prefix = `${contextId}`;
+            }
+            const geomIds = this.selectedFeatureCollection
+                .getArray()
+                .map((f) => f.getId())
+                .filter((id) => id != null)
+                .map((id) => `geometry-${id}`)
+                .join('-');
+            const ts = new Date()
+                .toISOString()
+                .replace(/[:.]/g, '-')
+                .slice(0, 19);
+            return `${prefix}-${geomIds || 'features'}-${ts}.${ext}`;
+        },
         geoJsonButtonClicked: function () {
             const selectedFeatures = this.selectedFeatureCollection.getArray();
             if (selectedFeatures.length == 0) {
@@ -2639,9 +2706,56 @@ export default {
 
             this.download_content(
                 geojson,
-                'boranga_layers.geojson',
+                this.buildDownloadFilename('geojson'),
                 'text/plain'
             );
+        },
+        shapefileButtonClicked: async function () {
+            const selectedFeatures = this.selectedFeatureCollection.getArray();
+            if (selectedFeatures.length == 0) {
+                this.errorMessageProperty('Must select features to download');
+                console.error('Must select features to download');
+                return;
+            }
+
+            const format = new GeoJSON();
+            const features = [];
+            selectedFeatures.forEach((f) => {
+                const feature = f.clone();
+                feature.unset('model');
+                features.push(feature);
+            });
+            const geojson = format.writeFeatures(features);
+
+            try {
+                const response = await fetch(
+                    api_endpoints.geojson_to_shapefile,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: geojson,
+                    }
+                );
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(
+                        err.error || 'Failed to generate shapefile'
+                    );
+                }
+                const blob = await response.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = this.buildDownloadFilename('zip');
+                a.click();
+                URL.revokeObjectURL(a.href);
+            } catch (error) {
+                this.errorMessageProperty(
+                    error.message || 'Failed to download shapefile'
+                );
+                console.error('Shapefile download error:', error);
+            }
         },
         displayAllFeatures: function (features) {
             let vm = this;
@@ -5450,7 +5564,7 @@ export default {
                         vm.displayAllFeatures();
                         swal.fire({
                             title: 'Success',
-                            text: 'The shapefile has been processed successfully.',
+                            text: 'The uploaded file(s) have been processed successfully.',
                             icon: 'success',
                             customClass: {
                                 confirmButton: 'btn btn-primary',
@@ -5696,12 +5810,14 @@ export default {
                     // If dropped items aren't files, reject them
                     if (item.kind === 'file') {
                         const file = item.getAsFile();
-                        const fileType = file.name.slice(-4);
+                        const fileExt = file.name
+                            .slice(file.name.lastIndexOf('.'))
+                            .toLowerCase();
 
-                        if (vm.shapefileTypesAllowed.includes(fileType)) {
+                        if (vm.shapefileTypesAllowed.includes(fileExt)) {
                             // Non-compressed list of files
                             shapeFiles.push(file);
-                        } else if (vm.archiveTypesAllowed.includes(fileType)) {
+                        } else if (vm.archiveTypesAllowed.includes(fileExt)) {
                             // Compressed archive
                             await file.arrayBuffer().then(async (buffer) => {
                                 await shp(buffer)
@@ -5716,6 +5832,20 @@ export default {
                                             icon: 'error',
                                         });
                                     });
+                            });
+                        } else if (vm.geojsonTypesAllowed.includes(fileExt)) {
+                            // GeoJSON file - read and add to map
+                            await file.text().then((text) => {
+                                try {
+                                    const geojson = JSON.parse(text);
+                                    vm.addFeatureCollectionToMap(geojson);
+                                } catch (error) {
+                                    swal.fire({
+                                        title: 'Error',
+                                        text: 'Invalid GeoJSON file',
+                                        icon: 'error',
+                                    });
+                                }
                             });
                         } else {
                             // Nothing
