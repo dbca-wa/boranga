@@ -1220,5 +1220,23 @@
       "model": "occurrenceshapefiledocument",
       "compressed": false
     }
+  },
+  {
+    "model": "boranga.fileextensionwhitelist",
+    "pk": 157,
+    "fields": {
+      "name": "geojson",
+      "model": "occurrencereportshapefiledocument",
+      "compressed": false
+    }
+  },
+  {
+    "model": "boranga.fileextensionwhitelist",
+    "pk": 158,
+    "fields": {
+      "name": "geojson",
+      "model": "occurrenceshapefiledocument",
+      "compressed": false
+    }
   }
 ]
