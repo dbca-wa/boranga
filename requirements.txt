@@ -49,7 +49,7 @@ git+https://github.com/dbca-wa/webtemplate2.git#egg=webtemplate_dbca
 git+https://github.com/goinnn/django-multiselectfield.git#egg=django-multiselectfield
 git+https://github.com/xzzy/django-preserialize.git#egg=django-preserialize
 git+https://github.com/dbca-wa/django-cron.git@60d2002e58ac99a06ed66633ed76d8cf3380a762
-gunicorn~=23.0
+gunicorn~=25.0
 ipython~=8.22
 jedi~=0.19
 mixer~=7.2
