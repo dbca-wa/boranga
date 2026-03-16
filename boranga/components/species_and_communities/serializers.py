@@ -860,6 +860,9 @@ class SpeciesSerializer(BaseSpeciesSerializer):
             # "can_user_view",
             "comment",
             "publishing_status",
+            "occurrence_count",
+            "area_of_occupancy_km2",
+            "area_occurrence_convex_hull_km2",
         )
 
     def get_readonly(self, obj):
