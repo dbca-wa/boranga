@@ -487,6 +487,7 @@
                         <div
                             v-if="
                                 is_internal ||
+                                species_community.distribution.noo_auto ||
                                 showField(
                                     species_community.distribution
                                         .number_of_occurrences
@@ -1298,13 +1299,20 @@ export default {
             }
         },
         show_calculated_distribution_fields: function () {
+            const d = this.species_community.distribution;
+            const eooValue = d.eoo_auto
+                ? this.species_community.area_occurrence_convex_hull_km2
+                : d.extent_of_occurrences;
+            const aooActualValue = d.aoo_actual_auto
+                ? this.species_community.area_of_occupancy_km2
+                : d.area_of_occupancy_actual;
             return (
                 this.is_internal ||
-                (this.species_community.distribution.noo_auto &&
-                    this.species_community.occurrence_count > 0) ||
-                (!this.species_community.distribution.noo_auto &&
-                    this.species_community.distribution.number_of_occurrences >
-                        0)
+                (d.noo_auto && this.species_community.occurrence_count > 0) ||
+                (!d.noo_auto && d.number_of_occurrences > 0) ||
+                eooValue ||
+                d.area_of_occupancy ||
+                aooActualValue
             );
         },
         faunaSubGroupsFilteredByFaunaGroup: function () {
