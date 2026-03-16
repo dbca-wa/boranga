@@ -31,12 +31,15 @@ ocr AS (
         o.occurrence_id,
         o.species_id,
         o.observation_date,
+        o.observation_time_id,
         o.lodgement_date,
         o.site,
         o.record_source,
         o.processing_status,
         o.group_type_id,
-        o.ocr_for_occ_name
+        o.ocr_for_occ_name,
+        o.datetime_updated,
+        o.last_modified_by
     FROM boranga_occurrencereport o
     INNER JOIN gt ON o.group_type_id = gt.id
 ),
@@ -205,14 +208,10 @@ identification AS (
     LEFT JOIN boranga_identificationcertainty ic ON i.identification_certainty_id = ic.id
 ),
 
--- -- Most recent User Action per OCR -----------------------------------------
-latest_action AS (
-    SELECT DISTINCT ON (ua.occurrence_report_id)
-        ua.occurrence_report_id,
-        ua."when" AS last_modified_date,
-        ua.who    AS last_modified_by
-    FROM boranga_occurrencereportuseraction ua
-    ORDER BY ua.occurrence_report_id, ua."when" DESC
+-- -- Observation Time (Fauna-specific) ----------------------------------------
+obs_time AS (
+    SELECT id, name
+    FROM boranga_observationtime
 ),
 
 -- -- Habitat Condition -------------------------------------------------------
@@ -270,6 +269,7 @@ SELECT
 
     -- Dates & status
     ocr.observation_date                           AS OBS_DATE,
+    obs_time.name                                  AS OBS_TIME,
 
     -- Location (no boundary_description for Fauna)
     loc.location_description                       AS LOC_DESC,
@@ -305,8 +305,8 @@ SELECT
     -- Report metadata
     ocr.record_source                              AS OCR_SOURCE,
     ocr.processing_status                          AS ORF_STATUS,
-    latest_action.last_modified_date               AS ORF_MOD_DA,
-    latest_action.last_modified_by                 AS ORF_MOD_BY,
+    TO_CHAR(ocr.datetime_updated, 'YYYY-MM-DD HH24:MI:SS') AS ORF_MOD_DA,
+    ocr.last_modified_by                           AS ORF_MOD_BY,
     ocr.lodgement_date                             AS LODG_DATE,
 
     -- Region / District
@@ -337,6 +337,6 @@ LEFT JOIN observer  ON ocr.id = observer.occurrence_report_id
 LEFT JOIN obs_detail ON ocr.id = obs_detail.occurrence_report_id
 LEFT JOIN animal_obs ON ocr.id = animal_obs.occurrence_report_id
 LEFT JOIN identification ON ocr.id = identification.occurrence_report_id
-LEFT JOIN latest_action ON ocr.id = latest_action.occurrence_report_id
+LEFT JOIN obs_time  ON ocr.observation_time_id = obs_time.id
 LEFT JOIN habitat   ON ocr.id = habitat.occurrence_report_id
 ORDER BY ocr.occurrence_report_number, geom.geom_id;
