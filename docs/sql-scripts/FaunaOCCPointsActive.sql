@@ -12,8 +12,7 @@
 -- not possible in standard PostgreSQL. If human-readable names are required,
 -- either use dblink / postgres_fdw, or resolve IDs in application code.
 --
--- NOTE: OBS_DATE and OBS_TIME are not available on the Occurrence model
--- and have been excluded from all OCC reports pending further review.
+-- NOTE: OBS_DATE is sourced from boranga_occanimalobservation (animal_obs.obs_date).
 --
 -- NOTE: primary_detection_method, secondary_sign, and reproductive_state are
 -- MultiSelectFields that store comma-separated IDs. They are resolved to
@@ -178,7 +177,8 @@ animal_obs AS (
             FROM unnest(string_to_array(ao.reproductive_state, ',')) AS val(id_str)
             INNER JOIN boranga_reproductivestate rs
                 ON rs.id = NULLIF(trim(val.id_str), '')::integer
-        ) AS reproductive_state
+        ) AS reproductive_state,
+        ao.obs_date
 
     FROM boranga_occanimalobservation ao
     LEFT JOIN boranga_animalbehaviour ab ON ao.animal_behaviour_id = ab.id
@@ -265,6 +265,7 @@ SELECT
     animal_obs.secondary_sign                      AS SEC_SIGN,
     animal_obs.reproductive_state                  AS BREEDING,
     animal_obs.animal_observation_detail_comment   AS AN_OBS_COM,
+    animal_obs.obs_date                            AS OBS_DATE,
 
     -- Identification
     identification.identification_certainty        AS IDENT_CRTY,

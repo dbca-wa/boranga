@@ -10,8 +10,7 @@
 -- not possible in standard PostgreSQL. If human-readable names are required,
 -- either use dblink / postgres_fdw, or resolve IDs in application code.
 --
--- NOTE: OBS_DATE (observation_date) is not available on the Occurrence model
--- and has been excluded from all OCC reports pending further review.
+-- NOTE: OBS_DATE is sourced from boranga_occhabitatcondition (habitat.obs_date).
 -- =============================================================================
 
 WITH
@@ -139,7 +138,8 @@ habitat AS (
         hc.good,
         hc.very_good,
         hc.excellent,
-        hc.pristine
+        hc.pristine,
+        hc.obs_date
     FROM boranga_occhabitatcondition hc
 ),
 
@@ -231,6 +231,7 @@ SELECT
     habitat.very_good                              AS VERY_GOOD,
     habitat.excellent                              AS EXCELLENT,
     habitat.pristine                               AS PRISTINE,
+    habitat.obs_date                               AS OBS_DATE,
 
     -- WISH fields
     'Buffer Geometry'                              AS G_DATATYPE,

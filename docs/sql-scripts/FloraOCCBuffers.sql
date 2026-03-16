@@ -10,8 +10,7 @@
 -- not possible in standard PostgreSQL. If human-readable names are required,
 -- either use dblink / postgres_fdw, or resolve IDs in application code.
 --
--- NOTE: OBS_DATE (observation_date) is not available on the Occurrence model
--- and has been excluded from all OCC reports pending further review.
+-- NOTE: OBS_DATE is sourced from boranga_occplantcount (plant_count.obs_date).
 -- =============================================================================
 
 WITH
@@ -121,7 +120,8 @@ plant_count AS (
              WHEN pc.flower_present = FALSE THEN 'No'
              ELSE NULL
         END AS flower_present,
-        pcond.name AS plant_condition
+        pcond.name AS plant_condition,
+        pc.obs_date
     FROM boranga_occplantcount pc
     LEFT JOIN boranga_plantcountmethod pcm ON pc.plant_count_method_id = pcm.id
     LEFT JOIN boranga_countedsubject csb ON pc.counted_subject_id = csb.id
@@ -215,6 +215,7 @@ SELECT
     plant_count.comment                            AS PLCNT_COMM,
     plant_count.flower_present                     AS IN_FLOWER,
     plant_count.plant_condition                    AS PLNT_COND,
+    plant_count.obs_date                           AS OBS_DATE,
 
     -- Identification
     identification.identification_certainty        AS IDENT_CRTY,
