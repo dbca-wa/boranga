@@ -83,7 +83,7 @@ window.fetch = ((orig) => {
             (response.status === 403 && isApi)
         ) {
             window.location.href =
-                '/login/?next=' +
+                '/?next=' +
                 encodeURIComponent(
                     window.location.pathname +
                         window.location.search +
