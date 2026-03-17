@@ -2835,6 +2835,7 @@ export default {
         getFeaturesExtent: function (features) {
             const [E, S, W, N] = [[], [], [], []];
             for (let feature of features) {
+                if (!feature.getGeometry()) continue;
                 let extent = feature.getGeometry().getExtent();
                 E.push(extent[0]);
                 S.push(extent[1]);
@@ -2880,6 +2881,7 @@ export default {
          * @param {number=} maxZoom The maximum zoom level to fit the feature and that the map zooms to, defaults to no limit
          */
         centerOnFeature: function (feature, maxZoom) {
+            if (!feature.getGeometry()) return;
             let ext = feature.getGeometry().getExtent();
             if (!maxZoom) {
                 const extPol = fromExtent(ext);
@@ -5958,6 +5960,9 @@ export default {
             if (this.isFeatureEligibleToHide(feature)) {
                 return new Style({});
             }
+            if (!feature.getGeometry()) {
+                return new Style({});
+            }
             const color = feature.getProperties().color;
             const stroke = feature.getProperties().stroke;
             const type = feature.getGeometry().getType();
@@ -6228,17 +6233,19 @@ export default {
             return feature.getGeometry().getType() === 'MultiPoint';
         },
         isPointLikeFeature: function (feature) {
-            return ['Point', 'MultiPoint'].includes(
-                feature.getGeometry().getType()
-            );
+            const geometry = feature.getGeometry();
+            if (!geometry) return false;
+            return ['Point', 'MultiPoint'].includes(geometry.getType());
         },
         isMultiPolygonFeature: function (feature) {
-            return feature.getGeometry().getType() === 'MultiPolygon';
+            const geometry = feature.getGeometry();
+            if (!geometry) return false;
+            return geometry.getType() === 'MultiPolygon';
         },
         isPolygonLikeFeature: function (feature) {
-            return ['Polygon', 'MultiPolygon'].includes(
-                feature.getGeometry().getType()
-            );
+            const geometry = feature.getGeometry();
+            if (!geometry) return false;
+            return ['Polygon', 'MultiPolygon'].includes(geometry.getType());
         },
         isOriginalGeometryCrsProjected: function (feature) {
             return feature.getProperties().original_geometry.properties
