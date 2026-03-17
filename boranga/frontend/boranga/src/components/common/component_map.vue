@@ -1998,7 +1998,7 @@ export default {
             map: null,
             mapDefaultZoom: 13.335, // ~1:5e4
             gisExtentArray: null,
-            _gisSettings: null,
+            gisSettings: null,
             tileLayerMapbox: null,
             tileLayerSat: null,
             selectedBaseLayer: null,
@@ -2114,7 +2114,7 @@ export default {
                 return this.coordinateReferenceSystems;
             }
             const srid = this.effectiveMapSrid;
-            const gisSettings = this._gisSettings;
+            const gisSettings = this.gisSettings;
             const label = gisSettings
                 ? gisSettings.default_srid_name
                 : `EPSG:${srid}`;
@@ -2522,9 +2522,9 @@ export default {
         this.mapInitialisationPromise.then((initialised) => {
             const proposals = vm.initialiseProposals(initialised.shift()); // pop first element
             const baseLayers = vm.initialiseBaseLayers(initialised.shift());
-            vm._gisSettings = initialised.shift(); // pop the GIS settings
-            vm.gisExtentArray = vm._gisSettings
-                ? vm._gisSettings.gis_extent
+            vm.gisSettings = initialised.shift(); // pop the GIS settings
+            vm.gisExtentArray = vm.gisSettings
+                ? vm.gisSettings.gis_extent
                 : null;
             vm.createMap(baseLayers);
             vm.map.updateSize(); // Ensure map knows its size
@@ -5853,7 +5853,7 @@ export default {
                                 try {
                                     const geojson = JSON.parse(text);
                                     vm.addFeatureCollectionToMap(geojson);
-                                } catch (error) {
+                                } catch {
                                     swal.fire({
                                         title: 'Error',
                                         text: 'Invalid GeoJSON file',
