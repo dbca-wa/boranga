@@ -212,9 +212,12 @@ class GetGISSettings(views.APIView):
 
         srid = settings.DEFAULT_SRID
         try:
-            crs_name = pyproj.CRS.from_epsg(srid).name
+            crs = pyproj.CRS.from_epsg(srid)
+            crs_name = crs.name
+            proj4_string = crs.to_proj4()
         except Exception:
             crs_name = f"EPSG:{srid}"
+            proj4_string = None
 
         extent = settings.GIS_EXTENT
         if not isinstance(extent, list | tuple) or len(extent) != 4:
@@ -225,6 +228,7 @@ class GetGISSettings(views.APIView):
                 "default_srid": srid,
                 "default_srid_name": f"EPSG:{srid} - {crs_name}",
                 "gis_extent": list(extent),
+                "proj4_string": proj4_string,
             }
         )
 
