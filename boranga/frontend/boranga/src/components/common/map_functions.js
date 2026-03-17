@@ -4,7 +4,9 @@ import WMTS, { optionsFromCapabilities } from 'ol/source/WMTS.js';
 import WMTSTileGrid from 'ol/tilegrid/WMTS.js';
 import WMTSCapabilities from 'ol/format/WMTSCapabilities.js';
 import { get as getProjection } from 'ol/proj.js';
+import { register as registerProj4 } from 'ol/proj/proj4.js';
 import { getTopLeft, getWidth } from 'ol/extent.js';
+import proj4 from 'proj4';
 import TileLayer from 'ol/layer/Tile';
 import GeoJSON from 'ol/format/GeoJSON';
 import Feature from 'ol/Feature';
@@ -142,6 +144,12 @@ export async function fetchGISSettings(gisSettingsApiUrl) {
         const data = await response.json();
         if (data && typeof data.default_srid === 'number') {
             _gisSettingsCache = data;
+            // Register the projection with OpenLayers if it isn't already known
+            const epsgCode = `EPSG:${data.default_srid}`;
+            if (!getProjection(epsgCode) && data.proj4_string) {
+                proj4.defs(epsgCode, data.proj4_string);
+                registerProj4(proj4);
+            }
             return data;
         }
         console.error('Invalid GIS settings response', data);
