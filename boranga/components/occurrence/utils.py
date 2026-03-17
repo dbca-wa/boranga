@@ -428,7 +428,7 @@ def validate_map_files(request, instance, foreign_key_field=None):
     # Validate shapefile and all the other related files are present
     if not shp_file_qs and not archive_files_qs:
         raise ValidationError(
-            "You can only attach files with the following extensions: " ".shp, .shx, and .dbf, .geojson, .json or .zip"
+            "You can only attach files with the following extensions: .shp, .shx, and .dbf, .geojson, .json or .zip"
         )
 
     shp_files = shp_file_qs.filter(name__endswith=".shp").distinct()
