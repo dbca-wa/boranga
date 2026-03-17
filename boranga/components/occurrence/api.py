@@ -4137,13 +4137,13 @@ class OccurrenceViewSet(
                         i["properties"]["original_geometry"]["coordinates"][1],
                     )
 
-                    geom_4326 = GEOSGeometry(point_data, srid=4326)
+                    site_geom = GEOSGeometry(point_data, srid=settings.DEFAULT_SRID)
                     geom_original = GEOSGeometry(
                         original_point_data,
                         srid=int(i["properties"]["original_geometry"]["properties"]["srid"]),
                     ).ewkb
 
-                    update_site.geometry = geom_4326
+                    update_site.geometry = site_geom
                     update_site.original_geometry_ewkb = geom_original
                     update_site.save(version_user=request.user)
                     posted_site_ids.append(update_site.id)
@@ -4254,13 +4254,13 @@ class OccurrenceViewSet(
                         i["properties"]["original_geometry"]["coordinates"][1],
                     )
 
-                    geom_4326 = GEOSGeometry(point_data, srid=4326)
+                    site_geom = GEOSGeometry(point_data, srid=settings.DEFAULT_SRID)
                     geom_original = GEOSGeometry(
                         original_point_data,
                         srid=int(i["properties"]["original_geometry"]["properties"]["srid"]),
                     ).ewkb
 
-                    update_site.geometry = geom_4326
+                    update_site.geometry = site_geom
                     update_site.original_geometry_ewkb = geom_original
                     update_site.save(version_user=request.user)
                     posted_site_ids.append(update_site.id)
@@ -5350,7 +5350,7 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         original_geom = GEOSGeometry(point_data, srid=data["datum"])
         geom = GEOSGeometry(point_data, srid=data["datum"])
-        geom.transform(4326)
+        geom.transform(settings.DEFAULT_SRID)
 
         validate_geometry_within_gis_extent(geom, verbose_field_name="point coordinate")
 
@@ -5394,7 +5394,7 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             raise serializers.ValidationError("Please enter a valid point coordinate")
 
         geom = GEOSGeometry(point_data, srid=data["datum"])
-        geom.transform(4326)
+        geom.transform(settings.DEFAULT_SRID)
 
         validate_geometry_within_gis_extent(geom, verbose_field_name="point coordinate")
 
