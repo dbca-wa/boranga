@@ -1,0 +1,164 @@
+-- =============================================================================
+-- Community OCC Sites  (KB Report)
+-- DevOps Task #15562
+-- Frequency: Monthly
+--
+-- One row per OccurrenceSite for Community Occurrences.
+-- Returns ALL processing statuses.
+--
+-- NOTE: OBS_DATE (observation_date) is not available on the Occurrence model
+-- and has been excluded from all OCC reports pending further review.
+-- =============================================================================
+
+WITH
+-- -- Group Type --------------------------------------------------------------
+gt AS (
+    SELECT id, name
+    FROM boranga_grouptype
+    WHERE name = 'community'
+),
+
+-- -- Occurrences (all statuses) ----------------------------------------------
+occ AS (
+    SELECT
+        o.id,
+        o.occurrence_number,
+        o.occurrence_name,
+        o.community_id,
+        o.group_type_id,
+        o.wild_status_id,
+        o.processing_status
+    FROM boranga_occurrence o
+    INNER JOIN gt ON o.group_type_id = gt.id
+),
+
+-- -- Community + Taxonomy ----------------------------------------------------
+community AS (
+    SELECT
+        c.id,
+        c.community_number,
+        ct.community_name,
+        ct.community_common_id AS community_id
+    FROM boranga_community c
+    LEFT JOIN boranga_communitytaxonomy ct ON c.id = ct.community_id
+),
+
+-- -- Active Conservation Status (approved + delisted) ------------------------
+active_cs AS (
+    SELECT
+        cs.community_id,
+        wal.code  AS wa_legislative_list_code,
+        ccl.code  AS commonwealth_conservation_code
+    FROM boranga_conservationstatus cs
+    LEFT JOIN boranga_walegislativelist wal ON cs.wa_legislative_list_id = wal.id
+    LEFT JOIN boranga_commonwealthconservationlist ccl
+        ON cs.commonwealth_conservation_category_id = ccl.id
+    WHERE cs.processing_status IN ('approved', 'delisted')
+      AND cs.community_id IS NOT NULL
+),
+
+-- -- Approved-only Conservation Status (exclude delisted) --------------------
+approved_cs AS (
+    SELECT
+        cs.community_id,
+        concat_ws('; ',
+            NULLIF(walc.code, ''),
+            NULLIF(wapc.code, '')
+        ) AS wa_cons_code
+    FROM boranga_conservationstatus cs
+    LEFT JOIN boranga_walegislativecategory walc ON cs.wa_legislative_category_id = walc.id
+    LEFT JOIN boranga_waprioritycategory wapc ON cs.wa_priority_category_id = wapc.id
+    WHERE cs.processing_status = 'approved'
+      AND cs.community_id IS NOT NULL
+),
+
+-- -- OCC Location (region/district only for sites) ---------------------------
+loc AS (
+    SELECT
+        l.occurrence_id,
+        r.name   AS region_name,
+        d.name   AS district_name
+    FROM boranga_occlocation l
+    LEFT JOIN boranga_region r ON l.region_id = r.id
+    LEFT JOIN boranga_district d ON l.district_id = d.id
+),
+
+-- -- Identification ----------------------------------------------------------
+identification AS (
+    SELECT
+        i.occurrence_id,
+        ic.name AS identification_certainty
+    FROM boranga_occidentification i
+    LEFT JOIN boranga_identificationcertainty ic ON i.identification_certainty_id = ic.id
+),
+
+-- -- Sites -------------------------------------------------------------------
+site AS (
+    SELECT
+        s.id              AS site_id,
+        s.occurrence_id,
+        s.site_number,
+        s.site_name,
+        s.geometry,
+        s.updated_date,
+        s.comments,
+        st.name           AS site_type
+    FROM boranga_occurrencesite s
+    LEFT JOIN boranga_sitetype st ON s.site_type_id = st.id
+    WHERE s.visible = TRUE
+)
+
+-- ===========================================================================
+-- Final SELECT
+-- ===========================================================================
+SELECT
+    -- OCC core
+    occ.occurrence_number                          AS OCC_NUM,
+    occ.occurrence_name                            AS OCC_NAME,
+    site.site_number                               AS SITE_NUM,
+    site.site_name                                 AS SITE_NAME,
+    ws.name                                        AS WLD_STATUS,
+
+    -- Community
+    community.community_number                     AS COMMU_NUM,
+    community.community_name                       AS COMMU_NAME,
+    community.community_id                         AS COMMU_ID,
+
+    -- Site Geometry
+    site.geometry                                  AS GEOMETRY,
+    site.site_id                                   AS GEOM_ID,
+
+    -- Conservation Status
+    active_cs.wa_legislative_list_code             AS WA_LEG_CS,
+    approved_cs.wa_cons_code                       AS WACONSCODE,
+    active_cs.commonwealth_conservation_code       AS COMWLTH_CS,
+
+    -- Site detail
+    site.site_type                                 AS SITE_TYPE,
+    site.comments                                  AS ST_COMMENT,
+
+    -- Identification
+    identification.identification_certainty        AS IDENT_CRTY,
+
+    -- Report metadata
+    occ.processing_status                          AS OCC_STATUS,
+    TO_CHAR(site.updated_date, 'YYYY-MM-DD HH24:MI:SS') AS ST_MOD_DA,
+
+    -- Region / District
+    loc.region_name                                AS REGION,
+    loc.district_name                              AS DISTRICT,
+
+    -- WISH fields
+    'Occurrence Site'                              AS G_DATATYPE,
+    gt.name                                        AS GROUP_TYPE
+
+FROM occ
+INNER JOIN gt            ON occ.group_type_id = gt.id
+INNER JOIN site          ON occ.id = site.occurrence_id
+LEFT JOIN boranga_wildstatus ws ON occ.wild_status_id = ws.id
+LEFT JOIN community      ON occ.community_id = community.id
+LEFT JOIN active_cs      ON occ.community_id = active_cs.community_id
+LEFT JOIN approved_cs    ON occ.community_id = approved_cs.community_id
+LEFT JOIN loc            ON occ.id = loc.occurrence_id
+LEFT JOIN identification ON occ.id = identification.occurrence_id
+ORDER BY occ.occurrence_number, site.site_id;

@@ -4,7 +4,9 @@ import WMTS, { optionsFromCapabilities } from 'ol/source/WMTS.js';
 import WMTSTileGrid from 'ol/tilegrid/WMTS.js';
 import WMTSCapabilities from 'ol/format/WMTSCapabilities.js';
 import { get as getProjection } from 'ol/proj.js';
+import { register as registerProj4 } from 'ol/proj/proj4.js';
 import { getTopLeft, getWidth } from 'ol/extent.js';
+import proj4 from 'proj4';
 import TileLayer from 'ol/layer/Tile';
 import GeoJSON from 'ol/format/GeoJSON';
 import Feature from 'ol/Feature';
@@ -117,46 +119,54 @@ export function layerAtEventPixel(map_component, evt) {
     return layer_at_pixel;
 }
 
+// Module-level cache for GIS settings so they're fetched only once
+let _gisSettingsCache = null;
+
 /**
- * Fetches the GIS extent from an API endpoint and returns it as an array of floats.
- * @param {string} gisExtentApiUrl The url to the end point that returns the GIS extent
- * @returns
+ * Fetches the GIS settings (default SRID, extent, SRID name) from the backend.
+ * Results are cached after the first successful fetch.
+ * @param {string} gisSettingsApiUrl The url to the /api/gis-settings/ endpoint
+ * @returns {Promise<{default_srid: number, default_srid_name: string, gis_extent: number[]}|null>}
  */
-export async function fetchGISExtent(gisExtentApiUrl) {
-    if (!gisExtentApiUrl) {
-        console.warn('No GIS extent API URL provided');
+export async function fetchGISSettings(gisSettingsApiUrl) {
+    if (_gisSettingsCache) {
+        return _gisSettingsCache;
+    }
+    if (!gisSettingsApiUrl) {
+        console.warn('No GIS settings API URL provided');
         return null;
     }
-    let gisExtent = null;
-    await fetch(gisExtentApiUrl)
-        .then(async (response) => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
+    try {
+        const response = await fetch(gisSettingsApiUrl);
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        const data = await response.json();
+        if (data && typeof data.default_srid === 'number') {
+            _gisSettingsCache = data;
+            // Register the projection with OpenLayers if it isn't already known
+            const epsgCode = `EPSG:${data.default_srid}`;
+            if (!getProjection(epsgCode) && data.proj4_string) {
+                proj4.defs(epsgCode, data.proj4_string);
+                registerProj4(proj4);
             }
-            return response.json();
-        })
-        .then((extent) => {
-            console.log('GIS extent', extent);
-            gisExtent = extent;
-        })
-        .catch((error) => {
-            console.error('Error fetching GIS extent:', error);
-        });
-    if (gisExtent === null) {
-        console.warn('GIS extent is null');
+            return data;
+        }
+        console.error('Invalid GIS settings response', data);
+        return null;
+    } catch (error) {
+        console.error('Error fetching GIS settings:', error);
         return null;
     }
-    if (!Array.isArray(gisExtent) || gisExtent.length !== 4) {
-        console.error('GIS extent is not an array of four numbers', gisExtent);
-        return null;
-    }
-    // Convert the extent to a tuple of numbers
-    const extentArray = gisExtent.map((num) => parseFloat(num));
-    if (extentArray.some((num) => isNaN(num))) {
-        console.error('GIS extent contains non-numeric values', extentArray);
-        return null;
-    }
-    return extentArray;
+}
+
+/**
+ * Returns the cached default SRID, or 4283 if settings haven't been fetched yet.
+ * Prefer calling fetchGISSettings first during component initialisation.
+ * @returns {number}
+ */
+export function getDefaultSrid() {
+    return _gisSettingsCache ? _gisSettingsCache.default_srid : 4283;
 }
 
 /**
@@ -526,7 +536,7 @@ export let owsQuery = {
     version: '1.0.0',
     landwater: {
         typeName: 'public:dbca_legislated_lands_and_waters',
-        srsName: 'EPSG:4326',
+        srsName: `EPSG:${getDefaultSrid()}`,
         propertyName:
             'objectid,wkb_geometry,category,leg_act,leg_identifier,leg_name,leg_tenure,leg_vesting,shape_area,leg_poly_area',
         geometry: 'wkb_geometry',
@@ -806,6 +816,15 @@ const _helper = {
                             format: 'image/png',
                             tileSize: tilePixelSize,
                         });
+                        // OL substitutes '_empty' when a layer's default style
+                        // has an empty identifier.  GWC doesn't recognise that
+                        // token and returns 400, so reset it to an empty string.
+                        if (
+                            wmtsLayerOptions &&
+                            wmtsLayerOptions.style === '_empty'
+                        ) {
+                            wmtsLayerOptions.style = '';
+                        }
                     } catch (error) {
                         console.error(
                             'Error parsing WMTS capabilities for',
@@ -817,7 +836,9 @@ const _helper = {
                 } else {
                     // WMTS from layer definition directly
                     const projectionCode =
-                        matrixSet === 'gda94' ? 'EPSG:4326' : 'EPSG:3857';
+                        matrixSet === 'gda94'
+                            ? `EPSG:${getDefaultSrid()}`
+                            : 'EPSG:3857';
                     const projection = getProjection(projectionCode);
                     const projectionExtent = projection.getExtent();
 

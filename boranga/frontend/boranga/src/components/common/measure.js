@@ -1,5 +1,6 @@
 import { Fill, Stroke, Style, Text, RegularShape } from 'ol/style';
 import { getLength } from 'ol/sphere';
+import { getDefaultSrid } from '@/components/common/map_functions.js';
 
 let MeasureStyles = {
     defaultStyle: new Style({
@@ -72,7 +73,7 @@ let MeasureStyles = {
 };
 export function formatLength(line) {
     let cloned_line = line.clone();
-    cloned_line.transform('EPSG:4326', 'EPSG:3857');
+    cloned_line.transform(`EPSG:${getDefaultSrid()}`, 'EPSG:3857');
     const length = getLength(cloned_line);
     let output;
     if (length > 100) {

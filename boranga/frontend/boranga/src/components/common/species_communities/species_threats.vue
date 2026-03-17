@@ -1,6 +1,11 @@
 <template lang="html">
     <div id="species_threats">
-        <FormSection :form-collapse="false" label="Threats" :Index="threatBody">
+        <FormSection
+            v-if="showThreats"
+            :form-collapse="false"
+            label="Threats"
+            :Index="threatBody"
+        >
             <CollapsibleFilters
                 ref="collapsible_filters"
                 component_title="Filters"
@@ -462,7 +467,7 @@ export default {
                 return true;
             }
         },
-        showOccurrenceThreats: function () {
+        showThreats: function () {
             if (this.is_internal) {
                 return true;
             }
@@ -476,6 +481,9 @@ export default {
                 publishingStatus.species_public &&
                 publishingStatus.threats_public
             );
+        },
+        showOccurrenceThreats: function () {
+            return this.showThreats;
         },
     },
     watch: {

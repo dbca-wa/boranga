@@ -34,3 +34,67 @@ section-order = ["future", "standard-library", "third-party", "first-party", "lo
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
+
+[tool.deptry]
+# Packages used implicitly by Django (INSTALLED_APPS, middleware, template tags,
+# management commands, WSGI workers, renderers, signals) or as dev/infra tools
+# that are never directly imported in application source files.
+per_rule_ignores = {DEP002 = [
+    # Django plugin-style (INSTALLED_APPS / middleware / template tags)
+    "babel",
+    "django-braces",
+    "django-crispy-forms",
+    "django-datatables-view",
+    "django-debug-toolbar",
+    "django-extensions",
+    "django-ical",
+    "django-phonenumber-field",
+    "django-reset-migrations",
+    "django-reversion-compare",
+    "django-treebeard",
+    "django-vite",
+    "django-widget-tweaks",
+    "djangorestframework-csv",
+    # Infra / WSGI
+    "dj-database-url",
+    "dj-static",
+    "gunicorn",
+    "gevent",
+    "psycopg2-binary",
+    "pyogrio",
+    "whitenoise",
+    # PIL / image fields (used by Django internally)
+    "pillow",
+    # phonenumbers is used by django-phonenumber-field at runtime
+    "phonenumbers",
+    # git-sourced packages (deptry can't resolve import names from URLs)
+    "appmonitor_client",
+    "django_media_serv",
+    "django5_six",
+    "webtemplate_dbca",
+    "django-preserialize",
+    # Test / dev tools
+    "coverage",
+    "coveralls",
+    "django-dynamic-fixture",
+    "ipython",
+    "jedi",
+    "mixer",
+    "parso",
+    "pre-commit",
+    "psutil",
+    "ruff",
+    # Build / compat shims
+    "chardet",
+    "datapackage",
+    "setuptools",
+    "six",
+    "wheel",
+    # Document / report generation (called via service layer, not direct import at module level)
+    "python-docx",
+    "reportlab",
+    "xlsxwriter",
+    "pygraphviz",
+    "pycountry",
+    "py7zr",
+]}

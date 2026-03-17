@@ -7,6 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.management import call_command
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import DetailView
 from django.views.generic.base import TemplateView
 
@@ -142,6 +143,15 @@ class InternalOccurrenceReportReferralView(TemplateView):
 
 class BorangaRoutingView(TemplateView):
     template_name = "boranga/index.html"
+
+    def get(self, request, *args, **kwargs):
+        next_url = request.GET.get("next")
+        if next_url and request.user.is_authenticated:
+            if url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+            ):
+                return redirect(next_url)
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

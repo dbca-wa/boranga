@@ -24,7 +24,7 @@ from django.conf import settings
 from django.contrib.contenttypes import fields
 from django.contrib.contenttypes import models as ct_models
 from django.contrib.gis.db import models as gis_models
-from django.contrib.gis.db.models.functions import Area
+from django.contrib.gis.db.models.functions import Area, Transform
 from django.contrib.gis.geos import GEOSGeometry, Polygon
 from django.core.cache import cache
 from django.core.exceptions import FieldDoesNotExist, FieldError, ValidationError
@@ -2031,7 +2031,7 @@ class OCRLocation(BaseModel):
     mapped_boundary = models.BooleanField(null=True, blank=True)
     buffer_radius = models.IntegerField(null=True, blank=True, default=0)
     datum = models.ForeignKey(Datum, on_delete=models.SET_NULL, null=True, blank=True)
-    epsg_code = models.IntegerField(null=False, blank=False, default=4326)
+    epsg_code = models.IntegerField(null=False, blank=False, default=settings.DEFAULT_SRID)
     coordinate_source = models.ForeignKey(CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True)
     location_accuracy = models.ForeignKey(LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
 
@@ -2055,7 +2055,12 @@ class GeometryManager(models.Manager):
             area=models.Case(
                 models.When(
                     models.Q(geometry__isnull=False) & models.Q(id__in=polygon_ids),
-                    then=Area(Cast("geometry", gis_models.PolygonField(geography=True))),
+                    then=Area(
+                        Cast(
+                            Transform("geometry", 4326),
+                            gis_models.PolygonField(geography=True),
+                        )
+                    ),
                 ),
                 default=None,
             )
@@ -2069,7 +2074,7 @@ class GeometryBase(BaseModel):
 
     objects = GeometryManager()
 
-    geometry = gis_models.GeometryField(extent=settings.GIS_EXTENT, blank=True, null=True)
+    geometry = gis_models.GeometryField(srid=settings.DEFAULT_SRID, extent=settings.GIS_EXTENT, blank=True, null=True)
     original_geometry_ewkb = models.BinaryField(
         blank=True, null=True, editable=True
     )  # original geometry as uploaded by the user in EWKB format (keeps the srid)
@@ -2105,12 +2110,13 @@ class GeometryBase(BaseModel):
         if self.geometry.empty:
             raise ValidationError("Geometry is empty")
 
-        if self.geometry.srid != 4326:
+        if self.geometry.srid != settings.DEFAULT_SRID:
             raise ValidationError(
-                f"Cannot save a geometry with SRID {self.geometry.srid} into a WGS-84 (SRID 4326) geometry field."
+                f"Cannot save a geometry with SRID {self.geometry.srid} into a "
+                f"SRID {settings.DEFAULT_SRID} geometry field."
             )
 
-        if not self.geometry.within(GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=4326)):
+        if not self.geometry.within(GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=settings.DEFAULT_SRID)):
             raise ValidationError(
                 f"Geometry is not within the extent defined for the Boranga application ({settings.GIS_EXTENT})"
             )
@@ -3616,6 +3622,8 @@ class ShapefileDocumentQueryset(models.QuerySet):
 
 
 class OccurrenceReportShapefileDocument(Document):
+    """Stores uploaded geospatial files (shapefiles, GeoJSON, etc.) for processing."""
+
     objects = ShapefileDocumentQueryset.as_manager()
     occurrence_report = models.ForeignKey(
         "OccurrenceReport", related_name="shapefile_documents", on_delete=models.CASCADE
@@ -3805,6 +3813,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
     datetime_created = models.DateTimeField(auto_now_add=True, null=False, blank=False)
     datetime_updated = models.DateTimeField(auto_now=True, null=False, blank=False)
+    last_modified_by = models.IntegerField(null=True)  # EmailUserRO
 
     combined_occurrence = models.ForeignKey(
         "self",
@@ -3848,6 +3857,9 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     def save(self, *args, version_user=None, **kwargs):
         # Clear the cache
         cache.delete(settings.CACHE_KEY_MAP_OCCURRENCES)
+        if version_user is not None:
+            user_id = version_user.id if hasattr(version_user, "id") else int(version_user)
+            self.last_modified_by = user_id
 
         if self.occurrence_number == "":
             force_insert = kwargs.pop("force_insert", False)
@@ -4849,7 +4861,7 @@ class OCCLocation(BaseModel):
     mapped_boundary = models.BooleanField(null=True, blank=True)
     buffer_radius = models.IntegerField(null=True, blank=True, default=0)
     datum = models.ForeignKey(Datum, on_delete=models.SET_NULL, null=True, blank=True)
-    epsg_code = models.IntegerField(null=False, blank=False, default=4326)
+    epsg_code = models.IntegerField(null=False, blank=False, default=settings.DEFAULT_SRID)
     coordinate_source = models.ForeignKey(CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True)
     location_accuracy = models.ForeignKey(LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
 
@@ -5907,6 +5919,8 @@ def get_occurrence_report_bulk_import_associated_files_path(instance, filename):
 
 
 class OccurrenceShapefileDocument(Document):
+    """Stores uploaded geospatial files (shapefiles, GeoJSON, etc.) for processing."""
+
     objects = ShapefileDocumentQueryset.as_manager()
     occurrence = models.ForeignKey("Occurrence", related_name="shapefile_documents", on_delete=models.CASCADE)
     _file = models.FileField(

@@ -333,6 +333,22 @@ export default {
                         }
                     ).then(
                         async (response) => {
+                            if (!response.ok) {
+                                const errData = await response
+                                    .json()
+                                    .catch(() => ({}));
+                                swal.fire({
+                                    title: 'Error',
+                                    text:
+                                        errData.detail ||
+                                        'An error occurred while removing the agenda item.',
+                                    icon: 'error',
+                                    customClass: {
+                                        confirmButton: 'btn btn-primary',
+                                    },
+                                });
+                                return;
+                            }
                             swal.fire({
                                 title: 'Removed',
                                 text: 'Your agenda item is removed',

@@ -917,14 +917,16 @@
                         </div>
                     </div>
                     <div
-                        class="optional-layers-button-wrapper"
-                        title="Select features to download as GeoJSON"
+                        class="optional-layers-button-wrapper dropdown"
+                        style="z-index: 401"
+                        title="Download selected features"
                     >
                         <div
                             class="optional-layers-button btn"
                             :class="selectedFeatureIds.length ? '' : 'disabled'"
-                            :title="`Download selected features as GeoJSON`"
-                            @click="geoJsonButtonClicked"
+                            :title="`Download ${selectedFeatureIds.length} selected feature(s)`"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
                         >
                             <SvgIcon name="download" />
                             <span
@@ -934,6 +936,24 @@
                                 >{{ selectedFeatureIds.length }}</span
                             >
                         </div>
+                        <ul class="dropdown-menu" style="z-index: 500">
+                            <li>
+                                <a
+                                    class="dropdown-item"
+                                    href="#"
+                                    @click.prevent="geoJsonButtonClicked"
+                                    >Download as GeoJSON</a
+                                >
+                            </li>
+                            <li>
+                                <a
+                                    class="dropdown-item"
+                                    href="#"
+                                    @click.prevent="shapefileButtonClicked"
+                                    >Download as Shapefile</a
+                                >
+                            </li>
+                        </ul>
                     </div>
 
                     <div
@@ -1479,9 +1499,12 @@
                 <div class="row mb-2">
                     <div class="col">
                         <label for="shapefile_document" class="fw-bold"
-                            >Upload Shapefile or archive(s) containing
+                            >Upload Shapefile, GeoJSON, or archive(s) containing
                             shapefiles
-                            <span>({{ archiveTypesAllowed.join(', ') }})</span>
+                            <span
+                                >({{ archiveTypesAllowed.join(', ') }},
+                                {{ geojsonTypesAllowed.join(', ') }})</span
+                            >
                         </label>
                     </div>
                     <div class="col">
@@ -1497,11 +1520,12 @@
                             :file-types="
                                 shapefileTypesAllowed
                                     .concat(archiveTypesAllowed)
+                                    .concat(geojsonTypesAllowed)
                                     .join(', ')
                             "
                             :text_string="`Attach Files ${shapefileTypesAllowed.join(
                                 ', '
-                            )} or ${archiveTypesAllowed.join(', ')}`"
+                            )}, ${geojsonTypesAllowed.join(', ')} or ${archiveTypesAllowed.join(', ')}`"
                             @update-parent="shapeFilesUpdated"
                         />
                     </div>
@@ -1509,19 +1533,16 @@
                 <div
                     v-if="
                         !uploadedFileTypes.includes('.zip') &&
-                        !uploadedFileTypes.includes('.prj')
+                        !uploadedFileTypes.includes('.prj') &&
+                        !uploadedFileTypes.includes('.geojson') &&
+                        !uploadedFileTypes.includes('.json')
                     "
                     class="row"
                 >
                     <div class="col">
                         <alert
-                            >If you do not upload a .prj file, we will use
-                            <a
-                                href="https://en.wikipedia.org/wiki/World_Geodetic_System#WGS84"
-                                target="_blank"
-                                >WGS 84</a
-                            >
-                            / 'EPSG:4326'
+                            >If you do not upload a .prj file, we will assume
+                            EPSG:{{ effectiveMapSrid }}
                         </alert>
                     </div>
                 </div>
@@ -1617,7 +1638,8 @@ import { platformModifierKeyOnly } from 'ol/events/condition.js';
 import MeasureStyles, { formatLength } from '@/components/common/measure.js';
 import FileField from '@/components/forms/filefield_immediate.vue';
 import {
-    fetchGISExtent,
+    fetchGISSettings,
+    getDefaultSrid,
     fetchTileLayers,
     fetchProposals,
     set_mode,
@@ -1751,21 +1773,21 @@ export default {
                     // typeName
                     'kaartdijin-boodja-private:CPT_CADASTRE_SCDB': {
                         version: '2.0.0', // WFS version
-                        srsName: 'EPSG:4326',
+                        srsName: `EPSG:${getDefaultSrid()}`,
                         propertyName: 'SHAPE', // Default to query for feature geometries only
                         geometry: 'SHAPE', // Geometry name (not `the_geom`)
                         propertyNameForInfoTitle: null,
                     },
                     'kaartdijin-boodja-public:CPT_DBCA_REGIONS': {
                         version: '2.0.0', // WFS version
-                        srsName: 'EPSG:4326',
+                        srsName: `EPSG:${getDefaultSrid()}`,
                         propertyName: 'SHAPE', // Default to query for feature geometries only
                         geometry: 'SHAPE', // Geometry name (not `the_geom`)
                         propertyNameForInfoTitle: 'DRG_REGION_NAME',
                     },
                     'kaartdijin-boodja-public:CPT_DBCA_DISTRICTS': {
                         version: '2.0.0', // WFS version
-                        srsName: 'EPSG:4326',
+                        srsName: `EPSG:${getDefaultSrid()}`,
                         propertyName: 'SHAPE', // Default to query for feature geometries only
                         geometry: 'SHAPE', // Geometry name (not `the_geom`)
                         propertyNameForInfoTitle: 'DDT_DISTRICT_NAME',
@@ -1877,14 +1899,12 @@ export default {
         coordinateReferenceSystems: {
             type: Array,
             required: false,
-            default: () => {
-                return [{ id: 4326, value: 'EPSG:4326 - WGS 84' }];
-            },
+            default: null,
         },
         mapSrid: {
             type: Number,
             required: false,
-            default: 4326,
+            default: null,
         },
         spatialOperationsAllowed: {
             type: Array,
@@ -1978,6 +1998,7 @@ export default {
             map: null,
             mapDefaultZoom: 13.335, // ~1:5e4
             gisExtentArray: null,
+            gisSettings: null,
             tileLayerMapbox: null,
             tileLayerSat: null,
             selectedBaseLayer: null,
@@ -2057,6 +2078,7 @@ export default {
             archiveTypesAllowed: ['.zip'], // The allowed archive types
             shapefileTypesAllowed: ['.shp', '.dbf', '.prj', '.shx', '.cpg'], // The allowed shapefile types
             shapefileTypesRequired: ['.shp', '.dbf', '.shx'], // The required shapefile types
+            geojsonTypesAllowed: ['.geojson', '.json'], // The allowed GeoJSON types
             userInputGeometryStack: [],
             selectedSpatialOperation: null,
             selectedSpatialUnit: 'm',
@@ -2084,6 +2106,20 @@ export default {
         };
     },
     computed: {
+        effectiveMapSrid: function () {
+            return this.mapSrid !== null ? this.mapSrid : getDefaultSrid();
+        },
+        effectiveCoordinateReferenceSystems: function () {
+            if (this.coordinateReferenceSystems !== null) {
+                return this.coordinateReferenceSystems;
+            }
+            const srid = this.effectiveMapSrid;
+            const gisSettings = this.gisSettings;
+            const label = gisSettings
+                ? gisSettings.default_srid_name
+                : `EPSG:${srid}`;
+            return [{ id: srid, value: label }];
+        },
         shapefileDocumentUrl: function () {
             let endpoint;
             let obj_id;
@@ -2227,16 +2263,34 @@ export default {
             const shapefileTypesComplete = this.shapefileTypesRequired.every(
                 (type) => this.uploadedFileTypes.includes(type)
             );
+            // The uploaded files contain GeoJSON files
+            const containsGeojsonTypes = this.geojsonTypesAllowed.some((type) =>
+                this.uploadedFileTypes.includes(type)
+            );
+            // Every uploaded file is a GeoJSON file
+            const geojsonTypesComplete =
+                containsGeojsonTypes &&
+                this.uploadedFileTypes.every((type) =>
+                    this.geojsonTypesAllowed.includes(type)
+                );
 
-            // Either every uploaded file is an archive or
-            // every required shapefile type is uploaded but not both
+            // Either every uploaded file is an archive, every required
+            // shapefile type is uploaded, or every file is GeoJSON — but
+            // not a mix of different categories
             return (
-                (archiveTypesComplete && !containsShapefileTypes) ||
-                (shapefileTypesComplete && !containsArchiveTypes)
+                (archiveTypesComplete &&
+                    !containsShapefileTypes &&
+                    !containsGeojsonTypes) ||
+                (shapefileTypesComplete &&
+                    !containsArchiveTypes &&
+                    !containsGeojsonTypes) ||
+                (geojsonTypesComplete &&
+                    !containsArchiveTypes &&
+                    !containsShapefileTypes)
             );
         },
         coordinateReferenceSystemsForSelectFilter: function () {
-            return this.coordinateReferenceSystems.map((crs) => {
+            return this.effectiveCoordinateReferenceSystems.map((crs) => {
                 return {
                     id: crs.id,
                     name: crs.name,
@@ -2429,8 +2483,8 @@ export default {
             ),
             // Tile Layers
             fetchTileLayers(this, this.tileLayerApiUrl),
-            // Fetch the GIS extent for the map
-            fetchGISExtent(api_endpoints.gis_extent),
+            // Fetch GIS settings (default SRID, extent, etc.)
+            fetchGISSettings(api_endpoints.gis_settings),
         ];
         // Addional Layers
         const additionalInitialisers = [];
@@ -2468,7 +2522,10 @@ export default {
         this.mapInitialisationPromise.then((initialised) => {
             const proposals = vm.initialiseProposals(initialised.shift()); // pop first element
             const baseLayers = vm.initialiseBaseLayers(initialised.shift());
-            vm.gisExtentArray = initialised.shift(); // pop the GIS extent tuple
+            vm.gisSettings = initialised.shift(); // pop the GIS settings
+            vm.gisExtentArray = vm.gisSettings
+                ? vm.gisSettings.gis_extent
+                : null;
             vm.createMap(baseLayers);
             vm.map.updateSize(); // Ensure map knows its size
             vm.addTileLayers();
@@ -2620,6 +2677,28 @@ export default {
             a.download = fileName;
             a.click();
         },
+        buildDownloadFilename: function (ext) {
+            let prefix = '';
+            const contextId = this.context?.id || 'unknown';
+            if (this.context?.model_name === 'occurrencereport') {
+                prefix = `orf-${contextId}`;
+            } else if (this.context?.model_name === 'occurrence') {
+                prefix = `occ-${contextId}`;
+            } else {
+                prefix = `${contextId}`;
+            }
+            const geomIds = this.selectedFeatureCollection
+                .getArray()
+                .map((f) => f.getId())
+                .filter((id) => id != null)
+                .map((id) => `geometry-${id}`)
+                .join('-');
+            const ts = new Date()
+                .toISOString()
+                .replace(/[:.]/g, '-')
+                .slice(0, 19);
+            return `${prefix}-${geomIds || 'features'}-${ts}.${ext}`;
+        },
         geoJsonButtonClicked: function () {
             const selectedFeatures = this.selectedFeatureCollection.getArray();
             if (selectedFeatures.length == 0) {
@@ -2639,9 +2718,56 @@ export default {
 
             this.download_content(
                 geojson,
-                'boranga_layers.geojson',
+                this.buildDownloadFilename('geojson'),
                 'text/plain'
             );
+        },
+        shapefileButtonClicked: async function () {
+            const selectedFeatures = this.selectedFeatureCollection.getArray();
+            if (selectedFeatures.length == 0) {
+                this.errorMessageProperty('Must select features to download');
+                console.error('Must select features to download');
+                return;
+            }
+
+            const format = new GeoJSON();
+            const features = [];
+            selectedFeatures.forEach((f) => {
+                const feature = f.clone();
+                feature.unset('model');
+                features.push(feature);
+            });
+            const geojson = format.writeFeatures(features);
+
+            try {
+                const response = await fetch(
+                    api_endpoints.geojson_to_shapefile,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: geojson,
+                    }
+                );
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(
+                        err.error || 'Failed to generate shapefile'
+                    );
+                }
+                const blob = await response.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = this.buildDownloadFilename('zip');
+                a.click();
+                URL.revokeObjectURL(a.href);
+            } catch (error) {
+                this.errorMessageProperty(
+                    error.message || 'Failed to download shapefile'
+                );
+                console.error('Shapefile download error:', error);
+            }
         },
         displayAllFeatures: function (features) {
             let vm = this;
@@ -2709,6 +2835,7 @@ export default {
         getFeaturesExtent: function (features) {
             const [E, S, W, N] = [[], [], [], []];
             for (let feature of features) {
+                if (!feature.getGeometry()) continue;
                 let extent = feature.getGeometry().getExtent();
                 E.push(extent[0]);
                 S.push(extent[1]);
@@ -2754,6 +2881,7 @@ export default {
          * @param {number=} maxZoom The maximum zoom level to fit the feature and that the map zooms to, defaults to no limit
          */
         centerOnFeature: function (feature, maxZoom) {
+            if (!feature.getGeometry()) return;
             let ext = feature.getGeometry().getExtent();
             if (!maxZoom) {
                 const extPol = fromExtent(ext);
@@ -3042,7 +3170,7 @@ export default {
             vm.initialisePointerMoveEvent();
             vm.snap = vm.initialiseSnap(vm.vectorLayersArray);
             vm.dragAndDrop = new DragAndDrop({
-                projection: `EPSG:${vm.mapSrid}`,
+                projection: `EPSG:${vm.effectiveMapSrid}`,
                 formatConstructors: [GeoJSON],
             });
             vm.dragAndDrop.on('addfeatures', function (event) {
@@ -3890,7 +4018,7 @@ export default {
             });
             const mousePositionControl = new MousePosition({
                 coordinateFormat: createStringXY(4),
-                projection: 'EPSG:4326',
+                projection: `EPSG:${this.effectiveMapSrid}`,
                 className: 'custom-mouse-position',
                 placeholder: 'Mouse Coordinates',
             });
@@ -3912,7 +4040,7 @@ export default {
                     view: new View({
                         center: [115.95, -31.95],
                         zoom: 7,
-                        projection: `EPSG:${this.mapSrid}`,
+                        projection: `EPSG:${this.effectiveMapSrid}`,
                         enableRotation: false,
                     }),
                 })
@@ -4572,10 +4700,10 @@ export default {
 
                     const original_srid = origGeom.properties.srid;
                     let coordinates = feature.getGeometry().getCoordinates();
-                    if (original_srid != vm.mapSrid) {
+                    if (original_srid != vm.effectiveMapSrid) {
                         coordinates = transformCoordinates(
                             coordinates,
-                            `EPSG:${vm.mapSrid}`,
+                            `EPSG:${vm.effectiveMapSrid}`,
                             `EPSG:${original_srid}`
                         );
                     }
@@ -4610,11 +4738,11 @@ export default {
 
                     const original_srid = origGeom.properties.srid;
                     let coordinates = feature.getGeometry().getCoordinates();
-                    if (original_srid != vm.mapSrid) {
+                    if (original_srid != vm.effectiveMapSrid) {
                         // Transform the coordinates from the map crs to the user input crs
                         coordinates = transformCoordinates(
                             coordinates,
-                            `EPSG:${vm.mapSrid}`,
+                            `EPSG:${vm.effectiveMapSrid}`,
                             `EPSG:${original_srid}`
                         );
                     }
@@ -5141,7 +5269,7 @@ export default {
             const coords = feature.getGeometry().getCoordinates();
             const original_geometry = properties.original_geometry || {
                 coordinates: coords,
-                properties: { srid: this.mapSrid },
+                properties: { srid: this.effectiveMapSrid },
             };
 
             const color =
@@ -5172,7 +5300,7 @@ export default {
             featureProperties['label'] ??= label;
             featureProperties['color'] ??= color;
             featureProperties['stroke'] ??= stroke;
-            featureProperties['srid'] ??= this.mapSrid;
+            featureProperties['srid'] ??= this.effectiveMapSrid;
             featureProperties['original_geometry'] ??= original_geometry;
 
             feature.setProperties(featureProperties);
@@ -5330,7 +5458,9 @@ export default {
                 request: vm.owsQuery[layerStr].request || 'GetFeature',
                 typeName: vm.owsQuery[layerStr].typeName,
                 maxFeatures: vm.owsQuery[layerStr].maxFeatures || '5000',
-                srsName: vm.owsQuery[layerStr].srsName || `EPSG:${vm.mapSrid}`,
+                srsName:
+                    vm.owsQuery[layerStr].srsName ||
+                    `EPSG:${vm.effectiveMapSrid}`,
                 outputFormat:
                     vm.owsQuery[layerStr].outputFormat || 'application/json',
                 propertyName:
@@ -5450,7 +5580,7 @@ export default {
                         vm.displayAllFeatures();
                         swal.fire({
                             title: 'Success',
-                            text: 'The shapefile has been processed successfully.',
+                            text: 'The uploaded file(s) have been processed successfully.',
                             icon: 'success',
                             customClass: {
                                 confirmButton: 'btn btn-primary',
@@ -5674,7 +5804,7 @@ export default {
                 return null;
             }
             if (!projection) {
-                projection = `EPSG:${this.mapSrid}`;
+                projection = `EPSG:${this.effectiveMapSrid}`;
             }
             return Math.round(
                 getArea(geometry, {
@@ -5696,12 +5826,14 @@ export default {
                     // If dropped items aren't files, reject them
                     if (item.kind === 'file') {
                         const file = item.getAsFile();
-                        const fileType = file.name.slice(-4);
+                        const fileExt = file.name
+                            .slice(file.name.lastIndexOf('.'))
+                            .toLowerCase();
 
-                        if (vm.shapefileTypesAllowed.includes(fileType)) {
+                        if (vm.shapefileTypesAllowed.includes(fileExt)) {
                             // Non-compressed list of files
                             shapeFiles.push(file);
-                        } else if (vm.archiveTypesAllowed.includes(fileType)) {
+                        } else if (vm.archiveTypesAllowed.includes(fileExt)) {
                             // Compressed archive
                             await file.arrayBuffer().then(async (buffer) => {
                                 await shp(buffer)
@@ -5716,6 +5848,20 @@ export default {
                                             icon: 'error',
                                         });
                                     });
+                            });
+                        } else if (vm.geojsonTypesAllowed.includes(fileExt)) {
+                            // GeoJSON file - read and add to map
+                            await file.text().then((text) => {
+                                try {
+                                    const geojson = JSON.parse(text);
+                                    vm.addFeatureCollectionToMap(geojson);
+                                } catch {
+                                    swal.fire({
+                                        title: 'Error',
+                                        text: 'Invalid GeoJSON file',
+                                        icon: 'error',
+                                    });
+                                }
                             });
                         } else {
                             // Nothing
@@ -5812,6 +5958,9 @@ export default {
         },
         createFeatureStyle: function (feature, resolution = null) {
             if (this.isFeatureEligibleToHide(feature)) {
+                return new Style({});
+            }
+            if (!feature.getGeometry()) {
                 return new Style({});
             }
             const color = feature.getProperties().color;
@@ -6047,7 +6196,7 @@ export default {
 
             // Store the new srid in the feature for backend transformation
             feature.set('srid', newSrid);
-            if (newSrid === this.mapSrid) {
+            if (newSrid === this.effectiveMapSrid) {
                 console.log('No need to transform');
                 this.setCoordinates(feature, inputCoordinates);
                 return inputCoordinates;
@@ -6066,7 +6215,7 @@ export default {
             const transformed = await this.transformFeature(
                 transformFeature,
                 newSrid,
-                this.mapSrid
+                this.effectiveMapSrid
             );
 
             console.log('coordinates after', transformed);
@@ -6084,17 +6233,19 @@ export default {
             return feature.getGeometry().getType() === 'MultiPoint';
         },
         isPointLikeFeature: function (feature) {
-            return ['Point', 'MultiPoint'].includes(
-                feature.getGeometry().getType()
-            );
+            const geometry = feature.getGeometry();
+            if (!geometry) return false;
+            return ['Point', 'MultiPoint'].includes(geometry.getType());
         },
         isMultiPolygonFeature: function (feature) {
-            return feature.getGeometry().getType() === 'MultiPolygon';
+            const geometry = feature.getGeometry();
+            if (!geometry) return false;
+            return geometry.getType() === 'MultiPolygon';
         },
         isPolygonLikeFeature: function (feature) {
-            return ['Polygon', 'MultiPolygon'].includes(
-                feature.getGeometry().getType()
-            );
+            const geometry = feature.getGeometry();
+            if (!geometry) return false;
+            return ['Polygon', 'MultiPolygon'].includes(geometry.getType());
         },
         isOriginalGeometryCrsProjected: function (feature) {
             return feature.getProperties().original_geometry.properties

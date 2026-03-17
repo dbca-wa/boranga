@@ -386,6 +386,16 @@ export default {
                         }
                     ).then(
                         async (response) => {
+                            if (!response.ok) {
+                                const errData = await response
+                                    .json()
+                                    .catch(() => ({}));
+                                vm.errors = true;
+                                vm.errorString =
+                                    errData.detail ||
+                                    'An error occurred while copying the section.';
+                                return;
+                            }
                             const data = await response.json();
                             vm.$refs.related_ocr_datatable.vmDataTable.ajax.reload();
                             vm.$emit('copyUpdate', data, vm.section_type);

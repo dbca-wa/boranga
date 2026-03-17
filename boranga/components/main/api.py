@@ -204,13 +204,33 @@ class GetListItems(views.APIView):
         return Response(serializer.data)
 
 
-class GetGISExtent(views.APIView):
+class GetGISSettings(views.APIView):
+    """Returns GIS configuration including the default SRID and extent."""
+
     def get(self, request, *args, **kwargs):
-        """Returns the GIS extent as a list of floats"""
+        import pyproj
+
+        srid = settings.DEFAULT_SRID
+        try:
+            crs = pyproj.CRS.from_epsg(srid)
+            crs_name = crs.name
+            proj4_string = crs.to_proj4()
+        except Exception:
+            crs_name = f"EPSG:{srid}"
+            proj4_string = None
+
         extent = settings.GIS_EXTENT
         if not isinstance(extent, list | tuple) or len(extent) != 4:
             raise ValueError("GIS_EXTENT must be a list or tuple of four floats")
-        return Response(list(extent))
+
+        return Response(
+            {
+                "default_srid": srid,
+                "default_srid_name": f"EPSG:{srid} - {crs_name}",
+                "gis_extent": list(extent),
+                "proj4_string": proj4_string,
+            }
+        )
 
 
 class NoPaginationListMixin:

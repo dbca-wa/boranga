@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
@@ -381,7 +383,7 @@ BOUNDARY_DESCRIPTION_DEFAULT = static_value_factory(
     "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
 )
 
-EPSG_CODE_DEFAULT = static_value_factory(4326)
+EPSG_CODE_DEFAULT = static_value_factory(settings.DEFAULT_SRID)
 
 
 # OCRPlantCount transforms

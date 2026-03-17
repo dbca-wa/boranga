@@ -3063,7 +3063,7 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         occurrences = Occurrence.objects.filter(community=instance)
         for occurrence in occurrences:
             occurrence.community = resulting_community
-            occurrence.save()
+            occurrence.save(version_user=request.user)
 
         serializer = InternalCommunitySerializer(resulting_community, context={"request": request})
         original_made_historical = (

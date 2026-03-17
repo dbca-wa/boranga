@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 
+from django.conf import settings
+
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     TransformIssue,
@@ -246,7 +248,7 @@ STATIC_DBCA = static_value_factory("DBCA")
 
 REGION_FROM_DISTRICT = region_from_district_factory()
 
-EPSG_CODE_DEFAULT = static_value_factory(4326)
+EPSG_CODE_DEFAULT = static_value_factory(settings.DEFAULT_SRID)
 
 # Task 12762 (S&C-blocked): Resolution → LocationAccuracy mapping.
 # `required=False` so that blank values → None silently, and unmapped codes

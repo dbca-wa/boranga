@@ -90,7 +90,7 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
         "request": "GetFeature",
         "typeName": f"{intersect_layer_name}",
         "maxFeatures": "5000",
-        "srsName": "EPSG:4326",  # using the default projection for open layers and geodjango
+        "srsName": f"EPSG:{settings.DEFAULT_SRID}",
         "outputFormat": "application/json",
         "propertyName": f"{geometry_name},CAD_OWNER_NAME,CAD_OWNER_COUNT",
         "resultType": result_type,
@@ -721,11 +721,15 @@ def wkb_to_geojson(wkb):
     return geo_json
 
 
-def features_json_to_geosgeometry(features, srid=4326):
+def features_json_to_geosgeometry(features, srid=None):
+    if srid is None:
+        srid = settings.DEFAULT_SRID
     return [feature_json_to_geosgeometry(feature, srid) for feature in features]
 
 
-def feature_json_to_geosgeometry(feature, srid=4326):
+def feature_json_to_geosgeometry(feature, srid=None):
+    if srid is None:
+        srid = settings.DEFAULT_SRID
     if isinstance(srid, str) and srid.isnumeric():
         srid = int(srid)
     if "geometry" in feature:
@@ -796,36 +800,45 @@ def projection(crs_from, crs_to):
     return transformer.transform
 
 
+def projection_default_srid_to_aea_wa():
+    return projection(settings.DEFAULT_SRID, aea_wa_string)
+
+
+def projection_aea_wa_to_default_srid():
+    return projection(aea_wa_string, settings.DEFAULT_SRID)
+
+
+# Keep legacy aliases for backward compatibility
 def projection_4326_to_aea_wa():
-    return projection(4326, aea_wa_string)
+    return projection_default_srid_to_aea_wa()
 
 
 def projection_aea_wa_to_4326():
-    return projection(aea_wa_string, 4326)
+    return projection_aea_wa_to_default_srid()
 
 
-def transform_geosgeometry_3857_to_4326(geometry):
-    """Transforms a gis.geos GEOSGeometry from Web-Mercator to WGS-84
+def transform_geosgeometry_3857_to_default_srid(geometry):
+    """Transforms a gis.geos GEOSGeometry from Web-Mercator to the default SRID.
     This function is mainly intended to be used in an admin panel map that uses OSMWidget.
     For some reason, OSMWidget wants to save a geometry that has been edited in the admin panel
-    with SRID 3857, so it needs to be transformed to SRID 4326 first.
+    with SRID 3857, so it needs to be transformed first.
     """
 
     from pyproj import Transformer
 
     if geometry.srid != 3857:
-        # Potentially have to make this function more generic and allow for other projections as well
         return geometry
 
+    target_srid = settings.DEFAULT_SRID
     geom_type = "points" if geometry.geom_type in ["Point", "MultiPoint"] else "polygons"
-    projection_3857_to_4326 = Transformer.from_crs("EPSG:3857", "EPSG:4326")
+    projection_3857_to_target = Transformer.from_crs("EPSG:3857", f"EPSG:{target_srid}")
 
     if geom_type == "points":
         linear_ring = [geometry.coords]
     else:
         linear_ring = geometry.exterior_ring.coords
     pnts = [shp.Point(p) for p in linear_ring]
-    pnts_transformed = [projection_3857_to_4326.transform(p.x, p.y) for p in pnts]
+    pnts_transformed = [projection_3857_to_target.transform(p.x, p.y) for p in pnts]
 
     pnts_xy = [shp.Point(p[1], p[0]) for p in pnts_transformed]
 
@@ -839,6 +852,10 @@ def transform_geosgeometry_3857_to_4326(geometry):
         instance_geometry = shp.Polygon(pnts_xy)
 
     return instance_geometry
+
+
+# Legacy alias
+transform_geosgeometry_3857_to_4326 = transform_geosgeometry_3857_to_default_srid
 
 
 def polygon_points(polygon):
@@ -859,7 +876,7 @@ def buffer_polygon_m(polygon, distance):
     # Create a polygon from the the transformed points and buffer it
     plg_buffered = shp.Polygon(pnts_transformed).buffer(distance)
 
-    # Transform the buffered polygon's exterior points back to 4326
+    # Transform the buffered polygon's exterior points back to default SRID
     xy = plg_buffered.exterior.coords.xy
     plg_buffered_pnts = [shp.Point(p) for p in list(zip(xy[0], xy[1]))]
 

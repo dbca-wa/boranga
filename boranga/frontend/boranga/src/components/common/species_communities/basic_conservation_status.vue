@@ -1,5 +1,6 @@
 <template>
     <FormSection
+        v-if="is_internal || isConservationStatusPublic"
         :form-collapse="false"
         label="Conservation Status"
         Index="conservationstatus"
@@ -192,9 +193,7 @@ export default {
         noApprovedConservationStatus() {
             return (
                 !this.conservation_status ||
-                (!this.isConservationStatusPublic &&
-                    !this.is_internal &&
-                    !this.is_external)
+                (!this.isConservationStatusPublic && !this.is_internal)
             );
         },
         isDelisted() {
@@ -203,9 +202,7 @@ export default {
         showConservationStatusFields() {
             return (
                 !this.isDelisted &&
-                (this.is_internal ||
-                    this.isConservationStatusPublic ||
-                    this.is_external)
+                (this.is_internal || this.isConservationStatusPublic)
             );
         },
     },

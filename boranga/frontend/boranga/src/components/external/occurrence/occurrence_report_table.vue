@@ -754,6 +754,22 @@ export default {
                         }
                     ).then(
                         async (response) => {
+                            if (!response.ok) {
+                                const errData = await response
+                                    .json()
+                                    .catch(() => ({}));
+                                swal.fire({
+                                    title: 'Error',
+                                    text:
+                                        errData.detail ||
+                                        'An error occurred while copying the occurrence report.',
+                                    icon: 'error',
+                                    customClass: {
+                                        confirmButton: 'btn btn-primary',
+                                    },
+                                });
+                                return;
+                            }
                             const ocr_copy = await response.json();
                             swal.fire({
                                 title: 'Copied',

@@ -144,8 +144,8 @@ def process_shapefile_document(request, instance, *args, **kwargs):
     return {"filedata": returned_file_data}
 
 
-def _to_wgs84(gdf):
-    """Transform a GeoDataFrame to WGS84 (EPSG:4326), bypassing the PROJ 8+
+def _to_default_crs(gdf):
+    """Transform a GeoDataFrame to settings.DEFAULT_SRID, bypassing the PROJ 8+
     datum-ensemble behaviour that silently selects a noop (identity) transform
     for datums it considers close to WGS84.
 
@@ -155,7 +155,7 @@ def _to_wgs84(gdf):
     ITRF2014), so the noop is correct there.
 
     Strategy:
-    1. Build a ``TransformerGroup`` for ``src_crs`` → EPSG:4326 using the
+    1. Build a ``TransformerGroup`` for ``src_crs`` → DEFAULT_SRID using the
        application's configured ``GIS_EXTENT`` as area of interest.
     2. Skip noop/ballpark transforms and look for a *direct* parametric Helmert
        (Coordinate Frame rotation, Position Vector, or Geocentric translations)
@@ -163,11 +163,13 @@ def _to_wgs84(gdf):
        "Inverse of …" sub-operations and grid-based methods (NTv2/hgridshift)
        are rejected — inverse static Helmerts can be low-accuracy approximations
        and grid methods fail silently when grid files are absent.
-    3. Fall back to ``gdf.to_crs("epsg:4326")`` if no better option is found.
+    3. Fall back to ``gdf.to_crs(epsg=DEFAULT_SRID)`` if no better option is found.
     """
+    target_srid = settings.DEFAULT_SRID
+    target_crs = f"EPSG:{target_srid}"
     src_crs = gdf.crs
     if src_crs is None:
-        return gdf.to_crs("epsg:4326")
+        return gdf.to_crs(target_crs.lower())
 
     # Use GIS_EXTENT as the area of interest so PROJ selects transforms
     # appropriate for the application's actual coverage area
@@ -175,12 +177,12 @@ def _to_wgs84(gdf):
     aoi = AreaOfInterest(west, south, east, north)
 
     try:
-        grp = TransformerGroup(src_crs, "EPSG:4326", always_xy=True, area_of_interest=aoi)
+        grp = TransformerGroup(src_crs, target_crs, always_xy=True, area_of_interest=aoi)
     except Exception:
-        return gdf.to_crs("epsg:4326")
+        return gdf.to_crs(target_crs.lower())
 
     if not grp.transformers:
-        return gdf.to_crs("epsg:4326")
+        return gdf.to_crs(target_crs.lower())
 
     # Use the centroid of the first geometry as a representative test point
     test_geom = next(iter(gdf.geometry))
@@ -261,14 +263,14 @@ def _to_wgs84(gdf):
             best_delta = delta
 
     if best_transformer is None:
-        return gdf.to_crs("epsg:4326")
+        return gdf.to_crs(target_crs.lower())
 
     # Apply the chosen transformer geometry-by-geometry via shapely
     transformed_geoms = [shapely_transform(best_transformer.transform, geom) for geom in gdf.geometry]
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"]),
         geometry=transformed_geoms,
-        crs="EPSG:4326",
+        crs=target_crs,
     )
 
 
@@ -307,17 +309,114 @@ def extract_attached_archives(instance, foreign_key_field=None):
     return archive_files_qs
 
 
+def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, archive_files_qs=None):
+    """Process a GeoDataFrame (from shapefile or GeoJSON) into geometry model instances.
+
+    Returns True if geometry was saved successfully.
+    """
+    if gdf.empty:
+        if archive_files_qs:
+            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+        raise ValidationError(f"Geometry is empty in {file_name}")
+
+    if gdf.geometry.crs is None:
+        if archive_files_qs:
+            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+        raise ValidationError(f"Geometry in {file_name} has no coordinate reference system (CRS)")
+
+    # Determine the SRID of the original uploaded geometry
+    original_srid = gdf.geometry.crs.to_epsg()
+    if original_srid is None:
+        try:
+            original_srid = SpatialReference(gdf.geometry.crs.to_wkt()).srid
+        except Exception:
+            pass
+    if original_srid is None:
+        logger.warning(
+            "Could not determine SRID for %s (CRS: %s), defaulting to 4326",
+            file_name,
+            gdf.geometry.crs,
+        )
+        original_srid = 4326
+
+    # Transform to the application's default CRS
+    try:
+        gdf_transform = _to_default_crs(gdf)
+    except Exception as e:
+        if archive_files_qs:
+            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+        raise ValidationError(
+            f"Unable to transform coordinates in {file_name} "
+            f"from SRID {original_srid} to EPSG:{settings.DEFAULT_SRID}: {e}"
+        )
+
+    geometries = gdf_transform.geometry  # GeoSeries
+
+    # Only accept points or polygons
+    geom_type = geometries.geom_type.values[0]
+    if geom_type not in ("Point", "MultiPoint", "Polygon", "MultiPolygon"):
+        raise ValidationError(f"Geometry of type {geom_type} not allowed")
+
+    gdf_transform["valid"] = False
+    for idx, row in gdf_transform.iterrows():
+        srid = settings.DEFAULT_SRID  # We transformed to DEFAULT_SRID above
+
+        geometry = GEOSGeometry(row.geometry.wkt, srid=srid)
+        original_geometry = GEOSGeometry(gdf.loc[idx, "geometry"].wkt, srid=original_srid)
+
+        if "source_" not in gdf_transform:
+            gdf_transform["source_"] = file_name
+
+        gdf_transform["valid"] = True
+
+        instance_name = instance._meta.model.__name__
+        fk_field = foreign_key_field if foreign_key_field else instance_name.lower()
+
+        geometry_model = apps.get_model("boranga", f"{instance_name}Geometry")
+        geometry_model.objects.create(
+            **{
+                fk_field: instance,
+                "geometry": geometry,
+                "original_geometry_ewkb": original_geometry.ewkb,
+                "drawn_by": request.user.id,
+            }
+        )
+
+    instance.save(version_user=request.user, no_revision=True)
+    return True
+
+
 def validate_map_files(request, instance, foreign_key_field=None):
-    # Validates shapefiles uploaded with via the proposal map or the competitive process map.
-    # Shapefiles are valid when the shp, shx, and dbf extensions are provided
-    # and when they intersect with DBCA legislated land or water polygons
+    # Validates shapefiles and GeoJSON files uploaded via the proposal map or the competitive process map.
+    # Shapefiles are valid when the shp, shx, and dbf extensions are provided.
+    # GeoJSON files (.geojson, .json) are also accepted.
 
     valid_geometry_saved = False
 
     if not instance.shapefile_documents.exists():
         raise ValidationError(
-            "Please attach at least a .shp, .shx, and .dbf file (the .prj file is optional but recommended)"
+            "Please attach at least a .shp, .shx, and .dbf file, a .geojson/.json file, "
+            "or a .zip archive (the .prj file is optional but recommended for shapefiles)"
         )
+
+    # Check for GeoJSON files first
+    geojson_file_qs = instance.shapefile_documents.filter(Q(name__endswith=".geojson") | Q(name__endswith=".json"))
+
+    if geojson_file_qs.exists():
+        # Process GeoJSON files
+        for geojson_file_obj in geojson_file_qs:
+            gdf = gpd.read_file(geojson_file_obj.path)
+
+            # GeoJSON spec (RFC 7946) mandates WGS84; geopandas may not set CRS
+            if gdf.crs is None:
+                gdf = gdf.set_crs("EPSG:4326")
+
+            if _process_geodataframe(gdf, geojson_file_obj.name, instance, request, foreign_key_field):
+                valid_geometry_saved = True
+
+        # Delete all documents so the user can upload another one if they wish.
+        instance.shapefile_documents.all().delete()
+        return valid_geometry_saved
 
     archive_files_qs = extract_attached_archives(instance, foreign_key_field)
 
@@ -328,7 +427,9 @@ def validate_map_files(request, instance, foreign_key_field=None):
 
     # Validate shapefile and all the other related files are present
     if not shp_file_qs and not archive_files_qs:
-        raise ValidationError("You can only attach files with the following extensions: .shp, .shx, and .dbf or .zip")
+        raise ValidationError(
+            "You can only attach files with the following extensions: .shp, .shx, and .dbf, .geojson, .json or .zip"
+        )
 
     shp_files = shp_file_qs.filter(name__endswith=".shp").distinct()
     shp_file_basenames = [s[:-4] for s in shp_files.values_list("name", flat=True)]
@@ -367,87 +468,8 @@ def validate_map_files(request, instance, foreign_key_field=None):
     for shp_file_obj in shp_file_objs:
         gdf = gpd.read_file(shp_file_obj.path)  # Shapefile to GeoDataFrame
 
-        if gdf.empty:
-            if archive_files_qs:
-                instance.shapefile_documents.exclude(name__endswith=".zip").delete()
-            raise ValidationError(f"Geometry is empty in {shp_file_obj.name}")
-
-        if gdf.geometry.crs is None:
-            if archive_files_qs:
-                instance.shapefile_documents.exclude(name__endswith=".zip").delete()
-            raise ValidationError(f"Geometry in {shp_file_obj.name} has no coordinate reference system (CRS)")
-
-        # Determine the SRID of the original uploaded geometry
-        # Use pyproj's to_epsg() first as it handles Esri WKT .prj formats
-        # (e.g. GDA94/EPSG:4283, GDA2020/EPSG:7844) more reliably than
-        # Django's SpatialReference
-        original_srid = gdf.geometry.crs.to_epsg()
-        if original_srid is None:
-            try:
-                original_srid = SpatialReference(gdf.geometry.crs.to_wkt()).srid
-            except Exception:
-                pass
-        if original_srid is None:
-            logger.warning(
-                "Could not determine SRID for %s (CRS: %s), defaulting to 4326",
-                shp_file_obj.name,
-                gdf.geometry.crs,
-            )
-            original_srid = 4326
-
-        # Transform to WGS-84 (EPSG:4326)
-        # Use _to_wgs84() rather than gdf.to_crs() directly: PROJ 8+ silently
-        # picks a noop/ballpark transform for datums within its WGS84 datum
-        # ensemble tolerance (e.g. GDA94 ~1.5m shift is otherwise dropped).
-        try:
-            gdf_transform = _to_wgs84(gdf)
-        except Exception as e:
-            if archive_files_qs:
-                instance.shapefile_documents.exclude(name__endswith=".zip").delete()
-            raise ValidationError(
-                f"Unable to transform coordinates in {shp_file_obj.name} "
-                f"from SRID {original_srid} to WGS-84 (EPSG:4326): {e}"
-            )
-
-        geometries = gdf_transform.geometry  # GeoSeries
-
-        # Only accept points or polygons
-        geom_type = geometries.geom_type.values[0]
-        if geom_type not in ("Point", "MultiPoint", "Polygon", "MultiPolygon"):
-            raise ValidationError(f"Geometry of type {geom_type} not allowed")
-
-        # Check for intersection with DBCA geometries
-        gdf_transform["valid"] = False
-        for idx, row in gdf_transform.iterrows():
-            srid = 4326  # We transformed to 4326 above
-
-            geometry = GEOSGeometry(row.geometry.wkt, srid=srid)
-            original_geometry = GEOSGeometry(gdf.loc[idx, "geometry"].wkt, srid=original_srid)
-
-            # Add the file name as identifier to the geojson for use in the frontend
-            if "source_" not in gdf_transform:
-                gdf_transform["source_"] = shp_file_obj.name
-
-            gdf_transform["valid"] = True
-
-            # Some generic code to save the geometry to the database
-            # That will work for both a proposal instance and a competitive process instance
-            instance_name = instance._meta.model.__name__
-            if not foreign_key_field:
-                foreign_key_field = instance_name.lower()
-
-            geometry_model = apps.get_model("boranga", f"{instance_name}Geometry")
-            geometry_model.objects.create(
-                **{
-                    foreign_key_field: instance,
-                    "geometry": geometry,
-                    "original_geometry_ewkb": original_geometry.ewkb,
-                    "drawn_by": request.user.id,
-                }
-            )
-
-        instance.save(no_revision=True)
-        valid_geometry_saved = True
+        if _process_geodataframe(gdf, shp_file_obj.name, instance, request, foreign_key_field, archive_files_qs):
+            valid_geometry_saved = True
 
     # Delete all shapefile documents so the user can upload another one if they wish.
     instance.shapefile_documents.all().delete()

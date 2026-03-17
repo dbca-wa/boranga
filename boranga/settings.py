@@ -262,18 +262,30 @@ if DEBUG:
         "level": "WARNING",
     }
 
+    # Suppress fiona GDAL/PROJ path debug messages
+    LOGGING["loggers"]["fiona"] = {
+        "level": "WARNING",
+    }
+    LOGGING["loggers"]["fiona.env"] = {
+        "level": "WARNING",
+    }
+    LOGGING["loggers"]["fiona._env"] = {
+        "level": "WARNING",
+    }
+
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
 # Use random hash for purging cache in browser for deployment changes
 GIT_COMMIT_HASH = ""
 GIT_COMMIT_DATE = ""
 if len(GIT_COMMIT_HASH) == 0:
-    GIT_COMMIT_HASH = os.popen("cat /app/git_hash").read()
+    GIT_COMMIT_HASH = os.popen("cat /app/git_hash 2>/dev/null").read()
     if len(GIT_COMMIT_HASH) == 0:
-        print("ERROR: No git hash provided")
         if os.path.isdir(BASE_DIR + "/.git/") is True:
             GIT_COMMIT_DATE = os.popen("cd " + BASE_DIR + " ; git log -1 --format=%cd").read()
             GIT_COMMIT_HASH = os.popen("cd  " + BASE_DIR + " ; git log -1 --format=%H").read()
+        if len(GIT_COMMIT_HASH) == 0:
+            print("ERROR: No git hash provided")
 
 APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0")
 
@@ -548,6 +560,18 @@ GIS_EXTENT = config(
     default="95.0, -38.5, 129.1, -9.0",
     cast=Csv(float, post_process=tuple),
 )
+
+# ---------- Default Coordinate Reference System ----------
+# The SRID used by all geometry fields in the database and as the default
+# projection for the frontend map.  To switch CRS (e.g. from WGS 84 → GDA94
+# or GDA2020), change this value, create a data migration to transform existing
+# geometries (see boranga/migrations/README_CRS_MIGRATION.md), and deploy.
+#
+# Common values:
+#   4326  – WGS 84
+#   4283  – GDA94
+#   7844  – GDA2020
+DEFAULT_SRID = config("DEFAULT_SRID", default=4283, cast=int)
 
 DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES = config("DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES", default=30, cast=int)
 UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES = config(

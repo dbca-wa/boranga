@@ -1,8 +1,5 @@
 <template>
-    <span :class="errorText ? 'text-danger' : ''">
-        <template v-if="errorText">
-            {{ errorText }}
-        </template>
+    <span>
         <template v-if="helpTextEntry">
             <template v-if="helpTextEntry.icon_with_popover">
                 <i
@@ -65,7 +62,6 @@ export default {
     data: function () {
         return {
             helpTextEntry: null,
-            errorText: null,
         };
     },
     mounted: function () {
@@ -80,7 +76,6 @@ export default {
                 ).then(async (response) => {
                     const data = await response.json();
                     if (!response.ok) {
-                        this.errorText = data;
                         return;
                     }
                     vm.helpTextEntry = data;
