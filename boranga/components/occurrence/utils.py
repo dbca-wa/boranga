@@ -144,8 +144,8 @@ def process_shapefile_document(request, instance, *args, **kwargs):
     return {"filedata": returned_file_data}
 
 
-def _to_wgs84(gdf):
-    """Transform a GeoDataFrame to WGS84 (EPSG:4326), bypassing the PROJ 8+
+def _to_default_crs(gdf):
+    """Transform a GeoDataFrame to settings.DEFAULT_SRID, bypassing the PROJ 8+
     datum-ensemble behaviour that silently selects a noop (identity) transform
     for datums it considers close to WGS84.
 
@@ -155,7 +155,7 @@ def _to_wgs84(gdf):
     ITRF2014), so the noop is correct there.
 
     Strategy:
-    1. Build a ``TransformerGroup`` for ``src_crs`` → EPSG:4326 using the
+    1. Build a ``TransformerGroup`` for ``src_crs`` → DEFAULT_SRID using the
        application's configured ``GIS_EXTENT`` as area of interest.
     2. Skip noop/ballpark transforms and look for a *direct* parametric Helmert
        (Coordinate Frame rotation, Position Vector, or Geocentric translations)
@@ -163,11 +163,13 @@ def _to_wgs84(gdf):
        "Inverse of …" sub-operations and grid-based methods (NTv2/hgridshift)
        are rejected — inverse static Helmerts can be low-accuracy approximations
        and grid methods fail silently when grid files are absent.
-    3. Fall back to ``gdf.to_crs("epsg:4326")`` if no better option is found.
+    3. Fall back to ``gdf.to_crs(epsg=DEFAULT_SRID)`` if no better option is found.
     """
+    target_srid = settings.DEFAULT_SRID
+    target_crs = f"EPSG:{target_srid}"
     src_crs = gdf.crs
     if src_crs is None:
-        return gdf.to_crs("epsg:4326")
+        return gdf.to_crs(target_crs.lower())
 
     # Use GIS_EXTENT as the area of interest so PROJ selects transforms
     # appropriate for the application's actual coverage area
@@ -175,12 +177,12 @@ def _to_wgs84(gdf):
     aoi = AreaOfInterest(west, south, east, north)
 
     try:
-        grp = TransformerGroup(src_crs, "EPSG:4326", always_xy=True, area_of_interest=aoi)
+        grp = TransformerGroup(src_crs, target_crs, always_xy=True, area_of_interest=aoi)
     except Exception:
-        return gdf.to_crs("epsg:4326")
+        return gdf.to_crs(target_crs.lower())
 
     if not grp.transformers:
-        return gdf.to_crs("epsg:4326")
+        return gdf.to_crs(target_crs.lower())
 
     # Use the centroid of the first geometry as a representative test point
     test_geom = next(iter(gdf.geometry))
@@ -261,14 +263,14 @@ def _to_wgs84(gdf):
             best_delta = delta
 
     if best_transformer is None:
-        return gdf.to_crs("epsg:4326")
+        return gdf.to_crs(target_crs.lower())
 
     # Apply the chosen transformer geometry-by-geometry via shapely
     transformed_geoms = [shapely_transform(best_transformer.transform, geom) for geom in gdf.geometry]
     return gpd.GeoDataFrame(
         gdf.drop(columns=["geometry"]),
         geometry=transformed_geoms,
-        crs="EPSG:4326",
+        crs=target_crs,
     )
 
 
@@ -337,14 +339,15 @@ def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, 
         )
         original_srid = 4326
 
-    # Transform to WGS-84 (EPSG:4326)
+    # Transform to the application's default CRS
     try:
-        gdf_transform = _to_wgs84(gdf)
+        gdf_transform = _to_default_crs(gdf)
     except Exception as e:
         if archive_files_qs:
             instance.shapefile_documents.exclude(name__endswith=".zip").delete()
         raise ValidationError(
-            f"Unable to transform coordinates in {file_name} " f"from SRID {original_srid} to WGS-84 (EPSG:4326): {e}"
+            f"Unable to transform coordinates in {file_name} "
+            f"from SRID {original_srid} to EPSG:{settings.DEFAULT_SRID}: {e}"
         )
 
     geometries = gdf_transform.geometry  # GeoSeries
@@ -356,7 +359,7 @@ def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, 
 
     gdf_transform["valid"] = False
     for idx, row in gdf_transform.iterrows():
-        srid = 4326  # We transformed to 4326 above
+        srid = settings.DEFAULT_SRID  # We transformed to DEFAULT_SRID above
 
         geometry = GEOSGeometry(row.geometry.wkt, srid=srid)
         original_geometry = GEOSGeometry(gdf.loc[idx, "geometry"].wkt, srid=original_srid)
