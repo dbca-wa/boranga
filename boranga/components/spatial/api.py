@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from shapely.geometry import mapping, shape
 
+from boranga import settings
 from boranga.components.spatial.models import TileLayer
 from boranga.components.spatial.permissions import TileLayerPermission
 from boranga.components.spatial.serializers import TileLayerSerializer
@@ -109,7 +110,7 @@ class GeoJsonToShapefileView(APIView):
                         shapefile_path,
                         "w",
                         driver="ESRI Shapefile",
-                        crs=CRS.from_epsg(4326),
+                        crs=CRS.from_epsg(settings.DEFAULT_SRID),
                         schema=schema,
                     ) as shp_file:
                         for feat in type_features:

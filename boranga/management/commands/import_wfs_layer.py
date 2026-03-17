@@ -37,7 +37,9 @@ class Command(BaseCommand):
             "--layer",
             help="workspace:layer_name (used to construct WFS URL from Proxy.proxy_url when wfs_url omitted)",
         )
-        parser.add_argument("--srid", help="Target SRID (e.g. 4326)", type=int, default=4326)
+        parser.add_argument(
+            "--srid", help=f"Target SRID (default: {settings.DEFAULT_SRID})", type=int, default=settings.DEFAULT_SRID
+        )
         parser.add_argument("--overwrite", action="store_true", help="Pass -overwrite to ogr2ogr")
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("--extra-args", help="Extra args to pass to ogr2ogr (quoted)", default="")

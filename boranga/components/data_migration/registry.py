@@ -13,6 +13,7 @@ from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any, Literal
 
 import shapely.wkt
+from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.cache import cache
 from django.db import models
@@ -1917,7 +1918,7 @@ def t_split_multiselect(value, ctx):
 # map spreadsheet datum values -> source CRS
 _DATUM_CRS = {
     "GDA94": "EPSG:4283",
-    "AGD84": "EPSG:4283",
+    "AGD84": "EPSG:4202",
     "WGS84": "EPSG:4326",
     "GPS": "EPSG:4326",
     "UNKNOWN": "EPSG:4326",
@@ -1979,23 +1980,25 @@ def point_to_circle_factory(
             datum = (raw_datum or "UNKNOWN").strip().upper()
             src_crs = _DATUM_CRS.get(datum, "EPSG:4326")
 
-            # normalize to EPSG:4326 lon/lat for consistent processing
-            if src_crs != "EPSG:4326":
-                to_4326 = Transformer.from_crs(src_crs, "EPSG:4326", always_xy=True)
-                lon_x, lat_y = to_4326.transform(lon, lat)
+            target_crs = f"EPSG:{settings.DEFAULT_SRID}"
+
+            # normalize to target CRS lon/lat for consistent processing
+            if src_crs != target_crs:
+                to_target = Transformer.from_crs(src_crs, target_crs, always_xy=True)
+                lon_x, lat_y = to_target.transform(lon, lat)
             else:
                 lon_x, lat_y = lon, lat
 
-            # project to Albers (meters), buffer, then back to 4326
-            to_albers = Transformer.from_crs("EPSG:4326", _ALBERS_EPSG, always_xy=True)
-            from_albers = Transformer.from_crs(_ALBERS_EPSG, "EPSG:4326", always_xy=True)
+            # project to Albers (meters), buffer, then back to target CRS
+            to_albers = Transformer.from_crs(target_crs, _ALBERS_EPSG, always_xy=True)
+            from_albers = Transformer.from_crs(_ALBERS_EPSG, target_crs, always_xy=True)
 
             pt_geo = Point(lon_x, lat_y)
             pt_alb = shapely_transform(lambda x, y: to_albers.transform(x, y), pt_geo)
             circ_alb = pt_alb.buffer(radius, resolution=buffer_resolution)
-            circ_4326 = shapely_transform(lambda x, y: from_albers.transform(x, y), circ_alb)
+            circ_target = shapely_transform(lambda x, y: from_albers.transform(x, y), circ_alb)
 
-            geom = GEOSGeometry(circ_4326.wkt, srid=4326)
+            geom = GEOSGeometry(circ_target.wkt, srid=settings.DEFAULT_SRID)
             return _result(geom.wkt if return_wkt else geom)
 
         except Exception as e:
@@ -3082,20 +3085,23 @@ def geometry_from_coords_factory(
             else:
                 source_epsg = "EPSG:4326"
 
-            # Transform coordinates to WGS84 if necessary
-            if source_epsg != "EPSG:4326":
+            target_epsg = f"EPSG:{settings.DEFAULT_SRID}"
+
+            # Transform coordinates to target CRS if necessary
+            if source_epsg != target_epsg:
                 try:
-                    transformer = Transformer.from_crs(source_epsg, "EPSG:4326", always_xy=True)
+                    transformer = Transformer.from_crs(source_epsg, target_epsg, always_xy=True)
                     lng, lat = transformer.transform(lng, lat)
                 except Exception as e:
                     logger.warning(
-                        "Failed to transform coordinates from %s to EPSG:4326: %s. Using as-is.",
+                        "Failed to transform coordinates from %s to %s: %s. Using as-is.",
                         source_epsg,
+                        target_epsg,
                         e,
                     )
 
             # Create a point from the coordinates
-            point = Point(lng, lat, srid=4326)
+            point = Point(lng, lat, srid=settings.DEFAULT_SRID)
 
             if point_only:
                 return _result(point)
@@ -3106,7 +3112,7 @@ def geometry_from_coords_factory(
             buffered = point.buffer(radius_degrees)
 
             # Ensure SRID is set
-            buffered.srid = 4326
+            buffered.srid = settings.DEFAULT_SRID
             return _result(buffered)
 
         except Exception as e:
@@ -3153,7 +3159,7 @@ def t_community_id_from_legacy(value, ctx):
 _TRANSFORMER_CACHE = {}
 
 
-def wkt_to_geometry_factory(source_srid: int = 4326, target_srid: int = 4326) -> str:
+def wkt_to_geometry_factory(source_srid: int = 4326, target_srid: int | None = None) -> str:
     """
     Factory that returns a registered transform name for parsing a WKT string into a GEOSGeometry.
 
@@ -3164,11 +3170,13 @@ def wkt_to_geometry_factory(source_srid: int = 4326, target_srid: int = 4326) ->
 
     Args:
         source_srid: The Spatial Reference ID of the input WKT (default: 4326 for WGS84)
-        target_srid: The Spatial Reference ID of the output Geometry (default: 4326 for WGS84)
+        target_srid: The Spatial Reference ID of the output Geometry (default: settings.DEFAULT_SRID)
 
     Returns:
         A registered transform name (str).
     """
+    if target_srid is None:
+        target_srid = settings.DEFAULT_SRID
     key = f"wkt_to_geometry_{source_srid}_{target_srid}"
     name = "wkt_to_geom_" + hashlib.sha1(key.encode()).hexdigest()[:8]
 

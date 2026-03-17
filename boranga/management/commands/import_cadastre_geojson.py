@@ -34,8 +34,8 @@ class Command(BaseCommand):
         parser.add_argument(
             "--srid",
             type=int,
-            default=4326,
-            help="Target SRID for the layer (default: 4326)",
+            default=settings.DEFAULT_SRID,
+            help=f"Target SRID for the layer (default: {settings.DEFAULT_SRID})",
         )
         parser.add_argument(
             "--overwrite",
@@ -50,7 +50,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--keep-temp",
             action="store_true",
-            help=("Do not delete the downloaded temp file after import " "(keeps file under .kb_layer_cache)."),
+            help=("Do not delete the downloaded temp file after import (keeps file under .kb_layer_cache)."),
         )
         parser.add_argument(
             "--chunk-size",
@@ -238,7 +238,7 @@ class Command(BaseCommand):
         if do_import:
             imported_any = False
             for i, chunk in enumerate(chunk_files):
-                self.stdout.write(f"Importing chunk {i+1}/{len(chunk_files)}: {os.path.basename(chunk)}")
+                self.stdout.write(f"Importing chunk {i + 1}/{len(chunk_files)}: {os.path.basename(chunk)}")
                 if not imported_any:
                     self._run_ogr2ogr(chunk, dst_pg, layer_name, srid, True, env)
                     imported_any = True

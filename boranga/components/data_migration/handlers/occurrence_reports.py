@@ -3037,8 +3037,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     # Pre-validate geometry extent (same check as model save())
                     geom_obj = geom_create_kwargs.get("geometry")
-                    if geom_obj and geom_obj.valid and not geom_obj.empty and geom_obj.srid == 4326:
-                        gis_bbox = GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=4326)
+                    if geom_obj and geom_obj.valid and not geom_obj.empty and geom_obj.srid == settings.DEFAULT_SRID:
+                        gis_bbox = GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=settings.DEFAULT_SRID)
                         if geom_obj.within(gis_bbox):
                             ocr_geom_batch_create.append(
                                 (
@@ -3384,8 +3384,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     # Pre-validate geometry extent (same check as model save())
                     geom_obj = geom_create_kwargs.get("geometry")
-                    if geom_obj and geom_obj.valid and not geom_obj.empty and geom_obj.srid == 4326:
-                        gis_bbox = GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=4326)
+                    if geom_obj and geom_obj.valid and not geom_obj.empty and geom_obj.srid == settings.DEFAULT_SRID:
+                        gis_bbox = GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=settings.DEFAULT_SRID)
                         if geom_obj.within(gis_bbox):
                             ocr_geom_batch_create.append(
                                 (

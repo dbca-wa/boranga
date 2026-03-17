@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 
+from django.conf import settings
+
 from boranga.components.data_migration.adapters.base import (
     ExtractionResult,
     ExtractionWarning,
@@ -148,7 +150,7 @@ def tec_site_geometry_transform(val, ctx):
             # Assuming WGS84 (SRID 4326) for lat/lon
             from django.contrib.gis.geos import Point
 
-            return Point(lon, lat, srid=4326)
+            return Point(lon, lat, srid=settings.DEFAULT_SRID)
         except (ValueError, TypeError):
             pass
     return None

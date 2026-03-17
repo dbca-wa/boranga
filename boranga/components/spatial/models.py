@@ -139,7 +139,7 @@ class PlausibilityGeometry(BaseModel):
         choices=CHECK_FOR_GEOMETRY_CHOICES,
         default=OCCURRENCE_GEOMETRY,
     )
-    geometry = gis_models.GeometryField(blank=True, null=True)
+    geometry = gis_models.GeometryField(srid=settings.DEFAULT_SRID, blank=True, null=True)
     warning_value = models.FloatField(blank=True, null=True)
     error_value = models.FloatField(blank=True, null=True)
     average_area = models.FloatField(blank=True, null=True)

@@ -7,6 +7,7 @@ import os
 from collections import defaultdict
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -1032,7 +1033,7 @@ class OccurrenceImporter(BaseSheetImporter):
                             point_proj = point.clone()
                             point_proj.transform(28350)  # GDA94 / MGA zone 50
                             circle = point_proj.buffer(1)
-                            circle.transform(4283)  # back to GDA94
+                            circle.transform(settings.DEFAULT_SRID)
                             defaults = {
                                 "geometry": circle,
                                 "original_geometry_ewkb": circle.ewkb,

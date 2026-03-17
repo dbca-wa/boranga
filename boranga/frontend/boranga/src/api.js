@@ -21,7 +21,7 @@ export default {
     districts: '/api/districts.json',
     document_categories_dict: '/api/document_categories_dict',
     filtered_organisations: '/api/filtered_organisations',
-    gis_extent: '/api/gis-extent/',
+    gis_settings: '/api/gis-settings/',
     help_text_entries: '/api/help_text_entries',
     lookup_schema_types:
         '/api/occurrence_report_bulk_import_schema_columns/get_lookup_filter_types/',

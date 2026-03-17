@@ -549,6 +549,18 @@ GIS_EXTENT = config(
     cast=Csv(float, post_process=tuple),
 )
 
+# ---------- Default Coordinate Reference System ----------
+# The SRID used by all geometry fields in the database and as the default
+# projection for the frontend map.  To switch CRS (e.g. from WGS 84 → GDA94
+# or GDA2020), change this value, create a data migration to transform existing
+# geometries (see boranga/migrations/README_CRS_MIGRATION.md), and deploy.
+#
+# Common values:
+#   4326  – WGS 84
+#   4283  – GDA94
+#   7844  – GDA2020
+DEFAULT_SRID = config("DEFAULT_SRID", default=4283, cast=int)
+
 DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES = config("DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES", default=30, cast=int)
 UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES = config(
     "UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES", default=30, cast=int

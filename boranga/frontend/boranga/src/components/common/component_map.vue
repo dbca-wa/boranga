@@ -1541,13 +1541,8 @@
                 >
                     <div class="col">
                         <alert
-                            >If you do not upload a .prj file, we will use
-                            <a
-                                href="https://en.wikipedia.org/wiki/World_Geodetic_System#WGS84"
-                                target="_blank"
-                                >WGS 84</a
-                            >
-                            / 'EPSG:4326'
+                            >If you do not upload a .prj file, we will assume
+                            EPSG:{{ effectiveMapSrid }}
                         </alert>
                     </div>
                 </div>
@@ -1643,7 +1638,8 @@ import { platformModifierKeyOnly } from 'ol/events/condition.js';
 import MeasureStyles, { formatLength } from '@/components/common/measure.js';
 import FileField from '@/components/forms/filefield_immediate.vue';
 import {
-    fetchGISExtent,
+    fetchGISSettings,
+    getDefaultSrid,
     fetchTileLayers,
     fetchProposals,
     set_mode,
@@ -1777,21 +1773,21 @@ export default {
                     // typeName
                     'kaartdijin-boodja-private:CPT_CADASTRE_SCDB': {
                         version: '2.0.0', // WFS version
-                        srsName: 'EPSG:4326',
+                        srsName: `EPSG:${getDefaultSrid()}`,
                         propertyName: 'SHAPE', // Default to query for feature geometries only
                         geometry: 'SHAPE', // Geometry name (not `the_geom`)
                         propertyNameForInfoTitle: null,
                     },
                     'kaartdijin-boodja-public:CPT_DBCA_REGIONS': {
                         version: '2.0.0', // WFS version
-                        srsName: 'EPSG:4326',
+                        srsName: `EPSG:${getDefaultSrid()}`,
                         propertyName: 'SHAPE', // Default to query for feature geometries only
                         geometry: 'SHAPE', // Geometry name (not `the_geom`)
                         propertyNameForInfoTitle: 'DRG_REGION_NAME',
                     },
                     'kaartdijin-boodja-public:CPT_DBCA_DISTRICTS': {
                         version: '2.0.0', // WFS version
-                        srsName: 'EPSG:4326',
+                        srsName: `EPSG:${getDefaultSrid()}`,
                         propertyName: 'SHAPE', // Default to query for feature geometries only
                         geometry: 'SHAPE', // Geometry name (not `the_geom`)
                         propertyNameForInfoTitle: 'DDT_DISTRICT_NAME',
@@ -1903,14 +1899,12 @@ export default {
         coordinateReferenceSystems: {
             type: Array,
             required: false,
-            default: () => {
-                return [{ id: 4326, value: 'EPSG:4326 - WGS 84' }];
-            },
+            default: null,
         },
         mapSrid: {
             type: Number,
             required: false,
-            default: 4326,
+            default: null,
         },
         spatialOperationsAllowed: {
             type: Array,
@@ -2004,6 +1998,7 @@ export default {
             map: null,
             mapDefaultZoom: 13.335, // ~1:5e4
             gisExtentArray: null,
+            _gisSettings: null,
             tileLayerMapbox: null,
             tileLayerSat: null,
             selectedBaseLayer: null,
@@ -2111,6 +2106,20 @@ export default {
         };
     },
     computed: {
+        effectiveMapSrid: function () {
+            return this.mapSrid !== null ? this.mapSrid : getDefaultSrid();
+        },
+        effectiveCoordinateReferenceSystems: function () {
+            if (this.coordinateReferenceSystems !== null) {
+                return this.coordinateReferenceSystems;
+            }
+            const srid = this.effectiveMapSrid;
+            const gisSettings = this._gisSettings;
+            const label = gisSettings
+                ? gisSettings.default_srid_name
+                : `EPSG:${srid}`;
+            return [{ id: srid, value: label }];
+        },
         shapefileDocumentUrl: function () {
             let endpoint;
             let obj_id;
@@ -2281,7 +2290,7 @@ export default {
             );
         },
         coordinateReferenceSystemsForSelectFilter: function () {
-            return this.coordinateReferenceSystems.map((crs) => {
+            return this.effectiveCoordinateReferenceSystems.map((crs) => {
                 return {
                     id: crs.id,
                     name: crs.name,
@@ -2474,8 +2483,8 @@ export default {
             ),
             // Tile Layers
             fetchTileLayers(this, this.tileLayerApiUrl),
-            // Fetch the GIS extent for the map
-            fetchGISExtent(api_endpoints.gis_extent),
+            // Fetch GIS settings (default SRID, extent, etc.)
+            fetchGISSettings(api_endpoints.gis_settings),
         ];
         // Addional Layers
         const additionalInitialisers = [];
@@ -2513,7 +2522,10 @@ export default {
         this.mapInitialisationPromise.then((initialised) => {
             const proposals = vm.initialiseProposals(initialised.shift()); // pop first element
             const baseLayers = vm.initialiseBaseLayers(initialised.shift());
-            vm.gisExtentArray = initialised.shift(); // pop the GIS extent tuple
+            vm._gisSettings = initialised.shift(); // pop the GIS settings
+            vm.gisExtentArray = vm._gisSettings
+                ? vm._gisSettings.gis_extent
+                : null;
             vm.createMap(baseLayers);
             vm.map.updateSize(); // Ensure map knows its size
             vm.addTileLayers();
@@ -3156,7 +3168,7 @@ export default {
             vm.initialisePointerMoveEvent();
             vm.snap = vm.initialiseSnap(vm.vectorLayersArray);
             vm.dragAndDrop = new DragAndDrop({
-                projection: `EPSG:${vm.mapSrid}`,
+                projection: `EPSG:${vm.effectiveMapSrid}`,
                 formatConstructors: [GeoJSON],
             });
             vm.dragAndDrop.on('addfeatures', function (event) {
@@ -4004,7 +4016,7 @@ export default {
             });
             const mousePositionControl = new MousePosition({
                 coordinateFormat: createStringXY(4),
-                projection: 'EPSG:4326',
+                projection: `EPSG:${this.effectiveMapSrid}`,
                 className: 'custom-mouse-position',
                 placeholder: 'Mouse Coordinates',
             });
@@ -4026,7 +4038,7 @@ export default {
                     view: new View({
                         center: [115.95, -31.95],
                         zoom: 7,
-                        projection: `EPSG:${this.mapSrid}`,
+                        projection: `EPSG:${this.effectiveMapSrid}`,
                         enableRotation: false,
                     }),
                 })
@@ -4686,10 +4698,10 @@ export default {
 
                     const original_srid = origGeom.properties.srid;
                     let coordinates = feature.getGeometry().getCoordinates();
-                    if (original_srid != vm.mapSrid) {
+                    if (original_srid != vm.effectiveMapSrid) {
                         coordinates = transformCoordinates(
                             coordinates,
-                            `EPSG:${vm.mapSrid}`,
+                            `EPSG:${vm.effectiveMapSrid}`,
                             `EPSG:${original_srid}`
                         );
                     }
@@ -4724,11 +4736,11 @@ export default {
 
                     const original_srid = origGeom.properties.srid;
                     let coordinates = feature.getGeometry().getCoordinates();
-                    if (original_srid != vm.mapSrid) {
+                    if (original_srid != vm.effectiveMapSrid) {
                         // Transform the coordinates from the map crs to the user input crs
                         coordinates = transformCoordinates(
                             coordinates,
-                            `EPSG:${vm.mapSrid}`,
+                            `EPSG:${vm.effectiveMapSrid}`,
                             `EPSG:${original_srid}`
                         );
                     }
@@ -5255,7 +5267,7 @@ export default {
             const coords = feature.getGeometry().getCoordinates();
             const original_geometry = properties.original_geometry || {
                 coordinates: coords,
-                properties: { srid: this.mapSrid },
+                properties: { srid: this.effectiveMapSrid },
             };
 
             const color =
@@ -5286,7 +5298,7 @@ export default {
             featureProperties['label'] ??= label;
             featureProperties['color'] ??= color;
             featureProperties['stroke'] ??= stroke;
-            featureProperties['srid'] ??= this.mapSrid;
+            featureProperties['srid'] ??= this.effectiveMapSrid;
             featureProperties['original_geometry'] ??= original_geometry;
 
             feature.setProperties(featureProperties);
@@ -5444,7 +5456,9 @@ export default {
                 request: vm.owsQuery[layerStr].request || 'GetFeature',
                 typeName: vm.owsQuery[layerStr].typeName,
                 maxFeatures: vm.owsQuery[layerStr].maxFeatures || '5000',
-                srsName: vm.owsQuery[layerStr].srsName || `EPSG:${vm.mapSrid}`,
+                srsName:
+                    vm.owsQuery[layerStr].srsName ||
+                    `EPSG:${vm.effectiveMapSrid}`,
                 outputFormat:
                     vm.owsQuery[layerStr].outputFormat || 'application/json',
                 propertyName:
@@ -5788,7 +5802,7 @@ export default {
                 return null;
             }
             if (!projection) {
-                projection = `EPSG:${this.mapSrid}`;
+                projection = `EPSG:${this.effectiveMapSrid}`;
             }
             return Math.round(
                 getArea(geometry, {
@@ -6177,7 +6191,7 @@ export default {
 
             // Store the new srid in the feature for backend transformation
             feature.set('srid', newSrid);
-            if (newSrid === this.mapSrid) {
+            if (newSrid === this.effectiveMapSrid) {
                 console.log('No need to transform');
                 this.setCoordinates(feature, inputCoordinates);
                 return inputCoordinates;
@@ -6196,7 +6210,7 @@ export default {
             const transformed = await this.transformFeature(
                 transformFeature,
                 newSrid,
-                this.mapSrid
+                this.effectiveMapSrid
             );
 
             console.log('coordinates after', transformed);

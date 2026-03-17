@@ -642,8 +642,8 @@ class OccurrenceReportViewSet(
     )
     def transform_geometry(self, request, *args, **kwargs):
         geometry = request.GET.get("geometry", None)
-        from_srid = int(request.GET.get("from", 4326))
-        to_srid = int(request.GET.get("to", 4326))
+        from_srid = int(request.GET.get("from", settings.DEFAULT_SRID))
+        to_srid = int(request.GET.get("to", settings.DEFAULT_SRID))
 
         if not geometry:
             return HttpResponse({}, content_type="application/json")

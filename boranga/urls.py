@@ -365,9 +365,9 @@ api_patterns = [
         name="get-list-items",
     ),
     re_path(
-        r"^api/gis-extent/$",
-        main_api.GetGISExtent.as_view(),
-        name="gis-extent",
+        r"^api/gis-settings/$",
+        main_api.GetGISSettings.as_view(),
+        name="gis-settings",
     ),
 ]
 

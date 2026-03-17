@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
@@ -105,7 +107,7 @@ def make_geometry(lat, lon):
         from django.contrib.gis.geos import Point
 
         p = Point(float(lon), float(lat), srid=4283)  # GDA94
-        p.transform(4326)  # Convert to WGS84
+        p.transform(settings.DEFAULT_SRID)
         return p
     except Exception:
         return None
