@@ -24,7 +24,7 @@ from django.conf import settings
 from django.contrib.contenttypes import fields
 from django.contrib.contenttypes import models as ct_models
 from django.contrib.gis.db import models as gis_models
-from django.contrib.gis.db.models.functions import Area
+from django.contrib.gis.db.models.functions import Area, Transform
 from django.contrib.gis.geos import GEOSGeometry, Polygon
 from django.core.cache import cache
 from django.core.exceptions import FieldDoesNotExist, FieldError, ValidationError
@@ -2055,7 +2055,12 @@ class GeometryManager(models.Manager):
             area=models.Case(
                 models.When(
                     models.Q(geometry__isnull=False) & models.Q(id__in=polygon_ids),
-                    then=Area(Cast("geometry", gis_models.PolygonField(geography=True))),
+                    then=Area(
+                        Cast(
+                            Transform("geometry", 4326),
+                            gis_models.PolygonField(geography=True),
+                        )
+                    ),
                 ),
                 default=None,
             )
