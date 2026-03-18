@@ -1430,13 +1430,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
                 ocr_threat.occurrence_report_threat = threat
                 ocr_threat.save()
 
-        # Clone the documents
-        for doc in self.documents.all():
-            ocr_doc = clone_model(OccurrenceReportDocument, OccurrenceReportDocument, doc)
-            if ocr_doc:
-                ocr_doc.occurrence_report = ocr_copy
-                ocr_doc.save()
-
         # Clone any observers
         observer_qs = self.observer_detail.all()
         if request_user_id == self.submitter:
