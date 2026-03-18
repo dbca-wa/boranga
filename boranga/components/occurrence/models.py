@@ -963,6 +963,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_DECLINED
         self.customer_status = OccurrenceReport.CUSTOMER_STATUS_DECLINED
         self.occurrence = None
+        self.approved_by = request.user.id
         self.save(version_user=request.user)
 
         # Log proposal action
