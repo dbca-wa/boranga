@@ -4693,13 +4693,6 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 occ_threat.occurrence_report_threat = threat
                 occ_threat.save()
 
-        # Clone the documents
-        for doc in occurrence_report.documents.all():
-            occ_doc = clone_model(OccurrenceReportDocument, OccurrenceDocument, doc)
-            if occ_doc:
-                occ_doc.occurrence = occurrence
-                occ_doc.save()
-
         return occurrence
 
     @property
