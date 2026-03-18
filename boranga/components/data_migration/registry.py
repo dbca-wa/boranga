@@ -3100,19 +3100,23 @@ def geometry_from_coords_factory(
                         e,
                     )
 
-            # Create a point from the coordinates
-            point = Point(lng, lat, srid=settings.DEFAULT_SRID)
-
             if point_only:
-                return _result(point)
+                # Return a GEOS Point for callers that need a point geometry
+                return _result(Point(lng, lat, srid=settings.DEFAULT_SRID))
 
-            # Create a small buffer. Convert radius in meters to degrees (approximate):
-            # 1 degree ≈ 111,320 meters at the equator
-            radius_degrees = radius_m / 111320.0
-            buffered = point.buffer(radius_degrees)
+            # Project to Australian Albers (EPSG:3577, metric), buffer in real
+            # metres, then project back — same approach as point_to_circle_factory.
+            # Use a Shapely Point for the transform chain (shapely_transform requires
+            # Shapely geometries; the local `Point` is the GEOS variant).
+            from shapely.geometry import Point as ShapelyPoint
 
-            # Ensure SRID is set
-            buffered.srid = settings.DEFAULT_SRID
+            target_crs = f"EPSG:{settings.DEFAULT_SRID}"
+            to_albers = Transformer.from_crs(target_crs, _ALBERS_EPSG, always_xy=True)
+            from_albers = Transformer.from_crs(_ALBERS_EPSG, target_crs, always_xy=True)
+            pt_alb = shapely_transform(lambda x, y: to_albers.transform(x, y), ShapelyPoint(lng, lat))
+            circ_alb = pt_alb.buffer(radius_m)
+            circ_target = shapely_transform(lambda x, y: from_albers.transform(x, y), circ_alb)
+            buffered = GEOSGeometry(circ_target.wkt, srid=settings.DEFAULT_SRID)
             return _result(buffered)
 
         except Exception as e:
