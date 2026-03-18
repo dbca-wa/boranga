@@ -8,17 +8,14 @@
         >
             <div class="row">
                 <div class="col-md-3">
-                    <div
-                        id="occurrence_name_lookup_form_group_id"
-                        class="form-group"
-                    >
-                        <label for="occurrence_name_lookup"
-                            >Occurrence Name:</label
+                    <div class="form-group">
+                        <label for="occ_community_id_lookup"
+                            >Community ID:</label
                         >
                         <select
-                            id="occurrence_name_lookup"
-                            ref="occurrence_name_lookup"
-                            name="occurrence_name_lookup"
+                            id="occ_community_id_lookup"
+                            ref="occ_community_id_lookup"
+                            name="occ_community_id_lookup"
                             class="form-control"
                         />
                     </div>
@@ -37,14 +34,17 @@
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="form-group">
-                        <label for="occ_community_id_lookup"
-                            >Community ID:</label
+                    <div
+                        id="occurrence_name_lookup_form_group_id"
+                        class="form-group"
+                    >
+                        <label for="occurrence_name_lookup"
+                            >Occurrence Name:</label
                         >
                         <select
-                            id="occ_community_id_lookup"
-                            ref="occ_community_id_lookup"
-                            name="occ_community_id_lookup"
+                            id="occurrence_name_lookup"
+                            ref="occurrence_name_lookup"
+                            name="occurrence_name_lookup"
                             class="form-control"
                         />
                     </div>
@@ -548,9 +548,9 @@ export default {
                 'Number',
                 'Occurrence Name',
                 'Community Name',
+                'Community ID',
                 'Wild Status',
                 'Number of Reports',
-                'Community ID',
                 'Migrated From ID',
                 'Region',
                 'District',
@@ -805,9 +805,9 @@ export default {
                     vm.column_number,
                     vm.column_occurrence_name,
                     vm.column_community_name,
+                    vm.column_community_common_id,
                     vm.column_wild_status,
                     vm.column_number_of_reports,
-                    vm.column_community_common_id,
                     vm.column_migrated_from_id,
                     vm.column_region,
                     vm.column_district,
