@@ -561,6 +561,10 @@ def save_geometry(
                 )
                 serializer = InstanceGeometrySaveSerializer(geometry, data=geometry_data)
                 is_new_geometry = False
+                # Capture existing state to detect whether geometry data actually changes
+                pre_save_geometry_wkb = geometry.geometry.ewkb if geometry.geometry else None
+                pre_save_original_ewkb = geometry.original_geometry_ewkb
+                pre_save_buffer_radius = geometry.buffer_radius
             else:
                 logger.info(f"Creating new geometry for {instance_model_name}: {instance}")
 
@@ -598,14 +602,21 @@ def save_geometry(
                         request.user.id,
                     )
                 else:
-                    OccurrenceUserAction.log_action(
-                        instance,
-                        OccurrenceUserAction.ACTION_UPDATE_GEOMETRY.format(
-                            geometry_instance.id,
-                            instance.occurrence_number,
-                        ),
-                        request.user.id,
+                    geometry_changed = (
+                        (geometry_instance.geometry.ewkb if geometry_instance.geometry else None)
+                        != pre_save_geometry_wkb
+                        or geometry_instance.original_geometry_ewkb != pre_save_original_ewkb
+                        or geometry_instance.buffer_radius != pre_save_buffer_radius
                     )
+                    if geometry_changed:
+                        OccurrenceUserAction.log_action(
+                            instance,
+                            OccurrenceUserAction.ACTION_UPDATE_GEOMETRY.format(
+                                geometry_instance.id,
+                                instance.occurrence_number,
+                            ),
+                            request.user.id,
+                        )
 
             geometry_id_intersect_data[geometry_instance.id] = intersect_data
 

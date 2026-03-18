@@ -557,8 +557,8 @@ export default {
                 'Review Due',
                 'Last Modified By',
                 'Last Modified Date',
-                'Activated Date',
                 'Created Date',
+                'Activated Date',
                 'Status',
                 'Action',
             ];
@@ -703,15 +703,6 @@ export default {
                 name: 'datetime_updated',
             };
         },
-        column_activated_date: function () {
-            return {
-                data: 'lodgement_date',
-                orderable: true,
-                searchable: false,
-                visible: true,
-                name: 'lodgement_date',
-            };
-        },
         column_created_date: function () {
             return {
                 data: 'datetime_created',
@@ -719,6 +710,15 @@ export default {
                 searchable: false,
                 visible: true,
                 name: 'datetime_created',
+            };
+        },
+        column_activated_date: function () {
+            return {
+                data: 'lodgement_date',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'lodgement_date',
             };
         },
         column_status: function () {
@@ -814,8 +814,8 @@ export default {
                     vm.column_review_due_date,
                     vm.column_last_modified_by,
                     vm.column_last_modified_date,
-                    vm.column_activated_date,
                     vm.column_created_date,
+                    vm.column_activated_date,
                     vm.column_status,
                     vm.column_action,
                 ];
