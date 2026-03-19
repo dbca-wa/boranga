@@ -4,14 +4,14 @@
         <label
             v-if="showTitle"
             :for="`select-filter-${id}`"
-            class="text-secondary mb-1"
+            class="text-secondary"
             >{{ title }}</label
         >
         <Multiselect
             :id="`select-filter-${id}`"
             ref="multiselectFilter"
             v-model="selectedFilterItem"
-            :mode="multiple ? 'multiple' : 'single'"
+            :mode="multiple ? 'tags' : 'single'"
             :options="optionsFormatted"
             :label="label"
             value-prop="value"
@@ -23,7 +23,19 @@
             @deselect="handleDeselect"
             @change="handleChange"
             @search-change="(...args) => $emit('search', ...args)"
-        />
+        >
+            <template #clear="{ clear }">
+                <span
+                    class="multiselect-clear"
+                    tabindex="-1"
+                    role="button"
+                    aria-label="Clear selection"
+                    @mousedown.prevent="clear"
+                >
+                    <span class="multiselect-clear-icon" />
+                </span>
+            </template>
+        </Multiselect>
     </div>
 </template>
 
@@ -284,5 +296,12 @@ export default {
     --ms-option-color-selected-pointed: #fff;
     --ms-border-color-active: #226fbb;
     --ms-ring-color: rgba(34, 111, 187, 0.2);
+    --ms-py: 0.375rem;
+    --ms-px: 0.75rem;
+    --ms-tag-py: 0.125rem;
+    --ms-tag-px: 0.5rem;
+    --ms-tag-my: 0.125rem;
+    --ms-tag-font-size: 0.8rem;
+    min-height: 0;
 }
 </style>
