@@ -113,39 +113,32 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Region:</label>
-                        <select
-                            v-model="filterFloraRegion"
-                            class="form-select"
-                            @change="filterDistrict($event)"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="region in region_list"
-                                :key="region.id"
-                                :value="region.id"
-                            >
-                                {{ region.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterFloraRegion"
+                            placeholder="Select Regions"
+                            @input="onRegionFilterChange"
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">District:</label>
-                        <select
-                            v-model="filterFloraDistrict"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="district in filtered_district_list"
-                                :value="district.id"
-                                :key="district.id"
-                            >
-                                {{ district.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterFloraDistrict"
+                            placeholder="Select Districts"
+                            @input="
+                                (val) => {
+                                    filterFloraDistrict = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -192,23 +185,22 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="wa-priority-category"
-                            >WA Priority Category:</label
-                        >
-                        <select
-                            id="wa-priority-category"
-                            v-model="filterFloraWAPriorityCategory"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="list in wa_priority_categories"
-                                :value="list.id"
-                                :key="list.id"
-                            >
-                                {{ list.code }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="wa-priority-category-filter"
+                            title="WA Priority Category:"
+                            :options="wa_priority_categories"
+                            :multiple="true"
+                            :pre-selected-filter-item="
+                                filterFloraWAPriorityCategory
+                            "
+                            placeholder="Select Categories"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterFloraWAPriorityCategory = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -303,6 +295,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import SpeciesHistory from '../internal/species_communities/species_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -311,6 +304,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         SpeciesHistory,
     },
     props: {
@@ -328,7 +322,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -481,17 +474,29 @@ export default {
                   )
                 : 'all',
 
-            filterFloraRegion: sessionStorage.getItem(
-                this.filterFloraRegion_cache
-            )
-                ? sessionStorage.getItem(this.filterFloraRegion_cache)
-                : 'all',
+            filterFloraRegion: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterFloraRegion_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
-            filterFloraDistrict: sessionStorage.getItem(
-                this.filterFloraDistrict_cache
-            )
-                ? sessionStorage.getItem(this.filterFloraDistrict_cache)
-                : 'all',
+            filterFloraDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterFloraDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterFloraWALegislativeList: sessionStorage.getItem(
                 this.filterFloraWALegislativeList_cache
@@ -509,13 +514,17 @@ export default {
                   )
                 : 'all',
 
-            filterFloraWAPriorityCategory: sessionStorage.getItem(
-                this.filterFloraWAPriorityCategory_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterFloraWAPriorityCategory_cache
-                  )
-                : 'all',
+            filterFloraWAPriorityCategory: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterFloraWAPriorityCategory_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterFloraCommonwealthRelevance: sessionStorage.getItem(
                 this.filterFloraCommonwealthRelevance_cache
@@ -585,11 +594,11 @@ export default {
                 this.filterFloraNameStatus === 'all' &&
                 this.filterFloraPublicationStatus === 'all' &&
                 this.filterFloraApplicationStatus === 'all' &&
-                this.filterFloraRegion === 'all' &&
-                this.filterFloraDistrict === 'all' &&
+                this.filterFloraRegion.length === 0 &&
+                this.filterFloraDistrict.length === 0 &&
                 this.filterFloraWALegislativeList === 'all' &&
                 this.filterFloraWALegislativeCategory === 'all' &&
-                this.filterFloraWAPriorityCategory === 'all' &&
+                this.filterFloraWAPriorityCategory.length === 0 &&
                 this.filterFloraCommonwealthRelevance === 'false' &&
                 this.filterFloraInternationalRelevance === 'false' &&
                 this.filterFloraConsevationCriteria === ''
@@ -995,14 +1004,22 @@ export default {
                             vm.filterFloraPublicationStatus;
                         d.filter_application_status =
                             vm.filterFloraApplicationStatus;
-                        d.filter_region = vm.filterFloraRegion;
-                        d.filter_district = vm.filterFloraDistrict;
+                        d.filter_region =
+                            vm.filterFloraRegion.length > 0
+                                ? vm.filterFloraRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterFloraDistrict.length > 0
+                                ? vm.filterFloraDistrict.join(',')
+                                : 'all';
                         d.filter_wa_legislative_list =
                             vm.filterFloraWALegislativeList;
                         d.filter_wa_legislative_category =
                             vm.filterFloraWALegislativeCategory;
                         d.filter_wa_priority_category =
-                            vm.filterFloraWAPriorityCategory;
+                            vm.filterFloraWAPriorityCategory.length > 0
+                                ? vm.filterFloraWAPriorityCategory.join(',')
+                                : 'all';
                         d.filter_commonwealth_relevance =
                             vm.filterFloraCommonwealthRelevance;
                         d.filter_international_relevance =
@@ -1117,27 +1134,33 @@ export default {
                 vm.filterFloraApplicationStatus
             );
         },
-        filterFloraRegion: function () {
-            let vm = this;
-            vm.$refs.flora_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterFloraRegion_cache,
-                vm.filterFloraRegion
-            );
+        filterFloraRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.flora_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterFloraRegion_cache,
+                    JSON.stringify(vm.filterFloraRegion)
+                );
+            },
+            deep: true,
         },
-        filterFloraDistrict: function () {
-            let vm = this;
-            vm.$refs.flora_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterFloraDistrict_cache,
-                vm.filterFloraDistrict
-            );
+        filterFloraDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.flora_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterFloraDistrict_cache,
+                    JSON.stringify(vm.filterFloraDistrict)
+                );
+            },
+            deep: true,
         },
         filterFloraWALegislativeList: function () {
             let vm = this;
@@ -1161,16 +1184,19 @@ export default {
                 vm.filterFloraWALegislativeCategory
             );
         },
-        filterFloraWAPriorityCategory: function () {
-            let vm = this;
-            vm.$refs.flora_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterFloraWAPriorityCategory_cache,
-                vm.filterFloraWAPriorityCategory
-            );
+        filterFloraWAPriorityCategory: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.flora_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterFloraWAPriorityCategory_cache,
+                    JSON.stringify(vm.filterFloraWAPriorityCategory)
+                );
+            },
+            deep: true,
         },
         filterFloraCommonwealthRelevance: function () {
             let vm = this;
@@ -1554,22 +1580,30 @@ export default {
             );
         },
         //-------filter district dropdown dependent on region selected
-        filterDistrict: function (event) {
+        filterDistrict: function () {
             this.$nextTick(() => {
-                if (event) {
-                    this.filterFloraDistrict = 'all'; //-----to remove the previous selection
+                if (this.filterFloraRegion.length === 0) {
+                    this.filtered_district_list = this.district_list;
+                } else {
+                    const regionIds = this.filterFloraRegion.map(String);
+                    this.filtered_district_list = this.district_list.filter(
+                        (d) => regionIds.includes(d.region_id.toString())
+                    );
                 }
-                this.filtered_district_list = [];
-                //---filter districts as per region selected
-                for (let choice of this.district_list) {
-                    if (
-                        choice.region_id.toString() ===
-                        this.filterFloraRegion.toString()
-                    ) {
-                        this.filtered_district_list.push(choice);
-                    }
+                // Remove selected districts that no longer match filtered regions
+                if (this.filterFloraDistrict.length > 0) {
+                    const validIds = new Set(
+                        this.filtered_district_list.map((d) => d.id.toString())
+                    );
+                    this.filterFloraDistrict = this.filterFloraDistrict.filter(
+                        (id) => validIds.has(id.toString())
+                    );
                 }
             });
+        },
+        onRegionFilterChange: function (val) {
+            this.filterFloraRegion = val || [];
+            this.filterDistrict();
         },
         createFlora: async function () {
             swal.fire({

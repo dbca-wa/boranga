@@ -71,39 +71,40 @@
             <div class="row">
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Region:</label>
-                        <select
-                            v-model="filterOCCCommunityRegion"
-                            class="form-select"
-                            @change="filterDistrict($event)"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="region in region_list"
-                                :key="region.id"
-                                :value="region.id"
-                            >
-                                {{ region.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCCCommunityRegion"
+                            placeholder="Select Regions"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    onRegionFilterChange(val || []);
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">District:</label>
-                        <select
-                            v-model="filterOCCCommunityDistrict"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="district in filtered_district_list"
-                                :value="district.id"
-                                :key="district.id"
-                            >
-                                {{ district.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="
+                                filterOCCCommunityDistrict
+                            "
+                            placeholder="Select Districts"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterOCCCommunityDistrict = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -245,6 +246,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import OccurrenceReportHistory from '../internal/occurrence/community_occurrence_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -253,6 +255,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         OccurrenceReportHistory,
     },
     props: {
@@ -270,7 +273,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -391,17 +393,29 @@ export default {
                 ? sessionStorage.getItem(this.filterOCCCommunityStatus_cache)
                 : 'all',
 
-            filterOCCCommunityRegion: sessionStorage.getItem(
-                this.filterOCCCommunityRegion_cache
-            )
-                ? sessionStorage.getItem(this.filterOCCCommunityRegion_cache)
-                : 'all',
+            filterOCCCommunityRegion: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCCCommunityRegion_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
-            filterOCCCommunityDistrict: sessionStorage.getItem(
-                this.filterOCCCommunityDistrict_cache
-            )
-                ? sessionStorage.getItem(this.filterOCCCommunityDistrict_cache)
-                : 'all',
+            filterOCCCommunityDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCCCommunityDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterOCCCommunityLastModifiedBy: sessionStorage.getItem(
                 this.filterOCCCommunityLastModifiedBy_cache
@@ -509,8 +523,8 @@ export default {
                 this.filterOCCCommunityOccurrenceName === 'all' &&
                 this.filterOCCCommunityName === 'all' &&
                 this.filterOCCCommunityStatus === 'all' &&
-                this.filterOCCCommunityRegion === 'all' &&
-                this.filterOCCCommunityDistrict === 'all' &&
+                this.filterOCCCommunityRegion.length === 0 &&
+                this.filterOCCCommunityDistrict.length === 0 &&
                 this.filterOCCCommunityLastModifiedBy === 'all' &&
                 this.filterOCCFromCommunityDueDate === '' &&
                 this.filterOCCToCommunityDueDate === '' &&
@@ -862,8 +876,14 @@ export default {
                         d.filter_from_due_date =
                             vm.filterOCCFromCommunityDueDate;
                         d.filter_to_due_date = vm.filterOCCToCommunityDueDate;
-                        d.filter_region = vm.filterOCCCommunityRegion;
-                        d.filter_district = vm.filterOCCCommunityDistrict;
+                        d.filter_region =
+                            vm.filterOCCCommunityRegion.length > 0
+                                ? vm.filterOCCCommunityRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterOCCCommunityDistrict.length > 0
+                                ? vm.filterOCCCommunityDistrict.join(',')
+                                : 'all';
                         d.filter_last_modified_by =
                             vm.filterOCCCommunityLastModifiedBy;
                         d.filter_created_from_date =
@@ -942,27 +962,33 @@ export default {
                 vm.filterOCCCommunityStatus
             );
         },
-        filterOCCCommunityRegion: function () {
-            let vm = this;
-            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCCCommunityRegion_cache,
-                vm.filterOCCCommunityRegion
-            );
+        filterOCCCommunityRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCCCommunityRegion_cache,
+                    JSON.stringify(vm.filterOCCCommunityRegion)
+                );
+            },
+            deep: true,
         },
-        filterOCCCommunityDistrict: function () {
-            let vm = this;
-            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCCCommunityDistrict_cache,
-                vm.filterOCCCommunityDistrict
-            );
+        filterOCCCommunityDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCCCommunityDistrict_cache,
+                    JSON.stringify(vm.filterOCCCommunityDistrict)
+                );
+            },
+            deep: true,
         },
         filterOCCCommunityLastModifiedBy: function () {
             let vm = this;
@@ -1322,25 +1348,36 @@ export default {
                 }
             );
         },
-        filterDistrict: function (event) {
+        filterDistrict: function () {
             this.$nextTick(() => {
-                if (event) {
-                    this.filterOCCCommunityDistrict = 'all';
-                }
                 this.filtered_district_list = [];
-                if (this.filterOCCCommunityRegion.toString() === 'all') {
+                if (this.filterOCCCommunityRegion.length === 0) {
                     this.filtered_district_list = this.district_list;
                 } else {
                     for (let choice of this.district_list) {
                         if (
-                            choice.region_id.toString() ===
-                            this.filterOCCCommunityRegion.toString()
+                            this.filterOCCCommunityRegion.includes(
+                                choice.region_id
+                            )
                         ) {
                             this.filtered_district_list.push(choice);
                         }
                     }
                 }
+                if (this.filterOCCCommunityDistrict.length > 0) {
+                    const validIds = this.filtered_district_list.map(
+                        (d) => d.id
+                    );
+                    this.filterOCCCommunityDistrict =
+                        this.filterOCCCommunityDistrict.filter((id) =>
+                            validIds.includes(id)
+                        );
+                }
             });
+        },
+        onRegionFilterChange: function (val) {
+            this.filterOCCCommunityRegion = val;
+            this.filterDistrict();
         },
         initialiseLastModifiedByLookup: function () {
             let vm = this;

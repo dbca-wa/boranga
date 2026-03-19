@@ -339,11 +339,11 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
 
             filter_region = request.POST.get("filter_region")
             if filter_region and not filter_region.lower() == "all":
-                queryset = queryset.filter(location__region__id=filter_region)
+                queryset = queryset.filter(location__region__id__in=filter_region.split(","))
 
             filter_district = request.POST.get("filter_district")
             if filter_district and not filter_district.lower() == "all":
-                queryset = queryset.filter(location__district__id=filter_district)
+                queryset = queryset.filter(location__district__id__in=filter_district.split(","))
 
             filter_last_modified_by = request.POST.get("filter_last_modified_by")
             if filter_last_modified_by and not filter_last_modified_by.lower() == "all":
@@ -2589,11 +2589,11 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
 
         filter_region = request.POST.get("filter_region")
         if filter_region and not filter_region.lower() == "all":
-            queryset = queryset.filter(location__region__id=filter_region)
+            queryset = queryset.filter(location__region__id__in=filter_region.split(","))
 
         filter_district = request.POST.get("filter_district")
         if filter_district and not filter_district.lower() == "all":
-            queryset = queryset.filter(location__district__id=filter_district)
+            queryset = queryset.filter(location__district__id__in=filter_district.split(","))
 
         filter_last_modified_by = request.POST.get("filter_last_modified_by")
         if filter_last_modified_by and not filter_last_modified_by.lower() == "all":

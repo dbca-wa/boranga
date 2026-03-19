@@ -79,38 +79,40 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Region:</label>
-                        <select
-                            v-model="filterOCRCommunityRegion"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="region in region_list"
-                                :value="region.id"
-                                :key="region.id"
-                            >
-                                {{ region.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCRCommunityRegion"
+                            placeholder="Select Regions"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    onRegionFilterChange(val || []);
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">District:</label>
-                        <select
-                            v-model="filterOCRCommunityDistrict"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="district in filtered_district_list"
-                                :value="district.id"
-                                :key="district.id"
-                            >
-                                {{ district.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="
+                                filterOCRCommunityDistrict
+                            "
+                            placeholder="Select Districts"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterOCRCommunityDistrict = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -286,6 +288,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import OccurrenceReportHistory from '../internal/occurrence/community_occurrence_report_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -294,6 +297,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         OccurrenceReportHistory,
     },
     props: {
@@ -311,7 +315,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -523,17 +526,29 @@ export default {
                   )
                 : 'all',
 
-            filterOCRCommunityRegion: sessionStorage.getItem(
-                this.filterOCRCommunityRegion_cache
-            )
-                ? sessionStorage.getItem(this.filterOCRCommunityRegion_cache)
-                : 'all',
+            filterOCRCommunityRegion: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCRCommunityRegion_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
-            filterOCRCommunityDistrict: sessionStorage.getItem(
-                this.filterOCRCommunityDistrict_cache
-            )
-                ? sessionStorage.getItem(this.filterOCRCommunityDistrict_cache)
-                : 'all',
+            filterOCRCommunityDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCRCommunityDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterOCRCommunityLastModifiedBy: sessionStorage.getItem(
                 this.filterOCRCommunityLastModifiedBy_cache
@@ -614,8 +629,8 @@ export default {
                 this.filterOCRCommunityAssessor === 'all' &&
                 this.filterOCRCommunitySubmitter === 'all' &&
                 this.filterOCRCommunityOccurrenceName === 'all' &&
-                this.filterOCRCommunityRegion === 'all' &&
-                this.filterOCRCommunityDistrict === 'all' &&
+                this.filterOCRCommunityRegion.length === 0 &&
+                this.filterOCRCommunityDistrict.length === 0 &&
                 this.filterOCRCommunityLastModifiedBy === 'all' &&
                 this.filterOCRCommunityApprovedFromDate === '' &&
                 this.filterOCRCommunityApprovedToDate === '' &&
@@ -980,8 +995,14 @@ export default {
                         d.filter_submitter = vm.filterOCRCommunitySubmitter;
                         d.filter_occurrence_name =
                             vm.filterOCRCommunityOccurrenceName;
-                        d.filter_region = vm.filterOCRCommunityRegion;
-                        d.filter_district = vm.filterOCRCommunityDistrict;
+                        d.filter_region =
+                            vm.filterOCRCommunityRegion.length > 0
+                                ? vm.filterOCRCommunityRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterOCRCommunityDistrict.length > 0
+                                ? vm.filterOCRCommunityDistrict.join(',')
+                                : 'all';
                         d.filter_last_modified_by =
                             vm.filterOCRCommunityLastModifiedBy;
                         d.filter_approved_from_date =
@@ -1154,28 +1175,33 @@ export default {
                 vm.filterOCRCommunityOccurrenceName
             );
         },
-        filterOCRCommunityRegion: function () {
-            let vm = this;
-            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCRCommunityRegion_cache,
-                vm.filterOCRCommunityRegion
-            );
-            vm.filterDistrict();
+        filterOCRCommunityRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCRCommunityRegion_cache,
+                    JSON.stringify(vm.filterOCRCommunityRegion)
+                );
+            },
+            deep: true,
         },
-        filterOCRCommunityDistrict: function () {
-            let vm = this;
-            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCRCommunityDistrict_cache,
-                vm.filterOCRCommunityDistrict
-            );
+        filterOCRCommunityDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCRCommunityDistrict_cache,
+                    JSON.stringify(vm.filterOCRCommunityDistrict)
+                );
+            },
+            deep: true,
         },
         filterOCRCommunityLastModifiedBy: function () {
             let vm = this;
@@ -1611,13 +1637,24 @@ export default {
         },
         filterDistrict: function () {
             let vm = this;
-            if (vm.filterOCRCommunityRegion === 'all') {
+            if (vm.filterOCRCommunityRegion.length === 0) {
                 vm.filtered_district_list = vm.district_list;
             } else {
-                vm.filtered_district_list = vm.district_list.filter(
-                    (d) => d.region_id === parseInt(vm.filterOCRCommunityRegion)
+                vm.filtered_district_list = vm.district_list.filter((d) =>
+                    vm.filterOCRCommunityRegion.includes(d.region_id)
                 );
             }
+            if (vm.filterOCRCommunityDistrict.length > 0) {
+                const validIds = vm.filtered_district_list.map((d) => d.id);
+                vm.filterOCRCommunityDistrict =
+                    vm.filterOCRCommunityDistrict.filter((id) =>
+                        validIds.includes(id)
+                    );
+            }
+        },
+        onRegionFilterChange: function (val) {
+            this.filterOCRCommunityRegion = val;
+            this.filterDistrict();
         },
         initialiseOccurrenceNameLookup: function () {
             let vm = this;

@@ -82,39 +82,38 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Region:</label>
-                        <select
-                            v-model="filterOCRFaunaRegion"
-                            class="form-select"
-                            @change="filterDistrict($event)"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="region in region_list"
-                                :key="region.id"
-                                :value="region.id"
-                            >
-                                {{ region.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCRFaunaRegion"
+                            placeholder="Select Regions"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    onRegionFilterChange(val || []);
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">District:</label>
-                        <select
-                            v-model="filterOCRFaunaDistrict"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="district in filtered_district_list"
-                                :value="district.id"
-                                :key="district.id"
-                            >
-                                {{ district.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCRFaunaDistrict"
+                            placeholder="Select Districts"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterOCRFaunaDistrict = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -286,6 +285,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import OccurrenceReportHistory from '../internal/occurrence/species_occurrence_report_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -294,6 +294,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         OccurrenceReportHistory,
     },
     props: {
@@ -311,7 +312,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -519,17 +519,29 @@ export default {
                   )
                 : 'all',
 
-            filterOCRFaunaRegion: sessionStorage.getItem(
-                this.filterOCRFaunaRegion_cache
-            )
-                ? sessionStorage.getItem(this.filterOCRFaunaRegion_cache)
-                : 'all',
+            filterOCRFaunaRegion: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCRFaunaRegion_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
-            filterOCRFaunaDistrict: sessionStorage.getItem(
-                this.filterOCRFaunaDistrict_cache
-            )
-                ? sessionStorage.getItem(this.filterOCRFaunaDistrict_cache)
-                : 'all',
+            filterOCRFaunaDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCRFaunaDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterOCRFaunaLastModifiedBy: sessionStorage.getItem(
                 this.filterOCRFaunaLastModifiedBy_cache
@@ -610,8 +622,8 @@ export default {
                 this.filterOCRFaunaSubmitter === 'all' &&
                 this.filterOCRFaunaCommonName === 'all' &&
                 this.filterOCRFaunaOccurrenceName === 'all' &&
-                this.filterOCRFaunaRegion === 'all' &&
-                this.filterOCRFaunaDistrict === 'all' &&
+                this.filterOCRFaunaRegion.length === 0 &&
+                this.filterOCRFaunaDistrict.length === 0 &&
                 this.filterOCRFaunaLastModifiedBy === 'all' &&
                 this.filterOCRFaunaApprovedFromDate === '' &&
                 this.filterOCRFaunaApprovedToDate === '' &&
@@ -1001,8 +1013,14 @@ export default {
                         d.filter_occurrence_name =
                             vm.filterOCRFaunaOccurrenceName;
                         d.filter_common_name = vm.filterOCRFaunaCommonName;
-                        d.filter_region = vm.filterOCRFaunaRegion;
-                        d.filter_district = vm.filterOCRFaunaDistrict;
+                        d.filter_region =
+                            vm.filterOCRFaunaRegion.length > 0
+                                ? vm.filterOCRFaunaRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterOCRFaunaDistrict.length > 0
+                                ? vm.filterOCRFaunaDistrict.join(',')
+                                : 'all';
                         d.filter_last_modified_by =
                             vm.filterOCRFaunaLastModifiedBy;
                         d.filter_approved_from_date =
@@ -1175,28 +1193,33 @@ export default {
                 vm.filterOCRFaunaOccurrenceName
             );
         },
-        filterOCRFaunaRegion: function () {
-            let vm = this;
-            vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCRFaunaRegion_cache,
-                vm.filterOCRFaunaRegion
-            );
-            vm.filterDistrict();
+        filterOCRFaunaRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCRFaunaRegion_cache,
+                    JSON.stringify(vm.filterOCRFaunaRegion)
+                );
+            },
+            deep: true,
         },
-        filterOCRFaunaDistrict: function () {
-            let vm = this;
-            vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCRFaunaDistrict_cache,
-                vm.filterOCRFaunaDistrict
-            );
+        filterOCRFaunaDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCRFaunaDistrict_cache,
+                    JSON.stringify(vm.filterOCRFaunaDistrict)
+                );
+            },
+            deep: true,
         },
         filterOCRFaunaLastModifiedBy: function () {
             let vm = this;
@@ -1578,13 +1601,23 @@ export default {
         },
         filterDistrict: function () {
             let vm = this;
-            if (vm.filterOCRFaunaRegion === 'all') {
+            if (vm.filterOCRFaunaRegion.length === 0) {
                 vm.filtered_district_list = vm.district_list;
             } else {
-                vm.filtered_district_list = vm.district_list.filter(
-                    (d) => d.region_id === parseInt(vm.filterOCRFaunaRegion)
+                vm.filtered_district_list = vm.district_list.filter((d) =>
+                    vm.filterOCRFaunaRegion.includes(d.region_id)
                 );
             }
+            if (vm.filterOCRFaunaDistrict.length > 0) {
+                const validIds = vm.filtered_district_list.map((d) => d.id);
+                vm.filterOCRFaunaDistrict = vm.filterOCRFaunaDistrict.filter(
+                    (id) => validIds.includes(id)
+                );
+            }
+        },
+        onRegionFilterChange: function (val) {
+            this.filterOCRFaunaRegion = val;
+            this.filterDistrict();
         },
         initialiseCommonNameLookup: function () {
             let vm = this;
