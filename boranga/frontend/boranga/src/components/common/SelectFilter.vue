@@ -52,11 +52,11 @@ export default {
 
                 return values.every((value) => {
                     const keys = Object.keys(value);
-                    if (keys.length != 2) return false;
                     return (
                         (keys.includes('key') && keys.includes('value')) ||
                         (keys.includes('value') && keys.includes('text')) ||
-                        (keys.includes('id') && keys.includes('name'))
+                        (keys.includes('id') && keys.includes('name')) ||
+                        (keys.includes('id') && keys.includes('code'))
                     );
                 });
             },
@@ -119,6 +119,20 @@ export default {
         optionsFormatted: function () {
             // Allows to pass in key-value pairs or value-text pairs
             return this.mapKeyValuePairs(this.options);
+        },
+    },
+    watch: {
+        preSelectedFilterItem: {
+            handler: function (newVal) {
+                const matched = this.getSelectedFilterItemByKey(newVal);
+                if (this.multiple) {
+                    this.selectedFilterItem = matched.map((opt) => opt.value);
+                } else {
+                    this.selectedFilterItem =
+                        matched.length > 0 ? matched[0].value : null;
+                }
+            },
+            deep: true,
         },
     },
     mounted: function () {
@@ -185,7 +199,9 @@ export default {
                         ? option.value.toString()
                         : Object.hasOwn(option, 'name')
                           ? option.name.toString()
-                          : option.text.toString(),
+                          : Object.hasOwn(option, 'code')
+                            ? option.code.toString()
+                            : option.text.toString(),
                 };
             });
         },
