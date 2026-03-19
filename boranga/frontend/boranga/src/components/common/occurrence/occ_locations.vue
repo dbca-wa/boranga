@@ -122,10 +122,10 @@
                                 label: 'Site',
                                 site_number: (feature) => {
                                     const siteNum =
-                                        feature.getProperties().model
-                                            ?.site_number || '';
+                                        feature.getProperties()?.site_number ||
+                                        '';
                                     const occNum =
-                                        feature.getProperties().model
+                                        feature.getProperties()
                                             ?.occurrence_number || '';
                                     return occNum
                                         ? `${siteNum} [${occNum}]`

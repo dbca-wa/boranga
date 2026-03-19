@@ -140,39 +140,32 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Region:</label>
-                        <select
-                            v-model="filterFaunaRegion"
-                            class="form-select"
-                            @change="filterDistrict($event)"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="region in region_list"
-                                :key="region.id"
-                                :value="region.id"
-                            >
-                                {{ region.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterFaunaRegion"
+                            placeholder="Select Regions"
+                            @input="onRegionFilterChange"
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">District:</label>
-                        <select
-                            v-model="filterFaunaDistrict"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="district in filtered_district_list"
-                                :value="district.id"
-                                :key="district.id"
-                            >
-                                {{ district.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterFaunaDistrict"
+                            placeholder="Select Districts"
+                            @input="
+                                (val) => {
+                                    filterFaunaDistrict = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -219,23 +212,22 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="wa-priority-category"
-                            >WA Priority Category:</label
-                        >
-                        <select
-                            id="wa-priority-category"
-                            v-model="filterFaunaWAPriorityCategory"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="list in wa_priority_categories"
-                                :value="list.id"
-                                :key="list.id"
-                            >
-                                {{ list.code }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="wa-priority-category-filter"
+                            title="WA Priority Category:"
+                            :options="wa_priority_categories"
+                            :multiple="true"
+                            :pre-selected-filter-item="
+                                filterFaunaWAPriorityCategory
+                            "
+                            placeholder="Select Categories"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterFaunaWAPriorityCategory = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -330,6 +322,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import SpeciesHistory from '../internal/species_communities/species_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -338,6 +331,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         SpeciesHistory,
     },
     props: {
@@ -355,7 +349,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -519,17 +512,29 @@ export default {
                   )
                 : 'all',
 
-            filterFaunaRegion: sessionStorage.getItem(
-                this.filterFaunaRegion_cache
-            )
-                ? sessionStorage.getItem(this.filterFaunaRegion_cache)
-                : 'all',
+            filterFaunaRegion: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterFaunaRegion_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
-            filterFaunaDistrict: sessionStorage.getItem(
-                this.filterFaunaDistrict_cache
-            )
-                ? sessionStorage.getItem(this.filterFaunaDistrict_cache)
-                : 'all',
+            filterFaunaDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterFaunaDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterFaunaWALegislativeList: sessionStorage.getItem(
                 this.filterFaunaWALegislativeList_cache
@@ -547,13 +552,17 @@ export default {
                   )
                 : 'all',
 
-            filterFaunaWAPriorityCategory: sessionStorage.getItem(
-                this.filterFaunaWAPriorityCategory_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterFaunaWAPriorityCategory_cache
-                  )
-                : 'all',
+            filterFaunaWAPriorityCategory: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterFaunaWAPriorityCategory_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterFaunaCommonwealthRelevance: sessionStorage.getItem(
                 this.filterFaunaCommonwealthRelevance_cache
@@ -625,11 +634,11 @@ export default {
                 this.filterFaunaNameStatus === 'all' &&
                 this.filterFaunaApplicationStatus === 'all' &&
                 this.filterFaunaPublicationStatus === 'all' &&
-                this.filterFaunaRegion === 'all' &&
-                this.filterFaunaDistrict === 'all' &&
+                this.filterFaunaRegion.length === 0 &&
+                this.filterFaunaDistrict.length === 0 &&
                 this.filterFaunaWALegislativeList === 'all' &&
                 this.filterFaunaWALegislativeCategory === 'all' &&
-                this.filterFaunaWAPriorityCategory === 'all' &&
+                this.filterFaunaWAPriorityCategory.length === 0 &&
                 this.filterFaunaCommonwealthRelevance === 'false' &&
                 this.filterFaunaInternationalRelevance === 'false' &&
                 this.filterFaunaConsevationCriteria === ''
@@ -1070,14 +1079,22 @@ export default {
                             vm.filterFaunaApplicationStatus;
                         d.filter_publication_status =
                             vm.filterFaunaPublicationStatus;
-                        d.filter_region = vm.filterFaunaRegion;
-                        d.filter_district = vm.filterFaunaDistrict;
+                        d.filter_region =
+                            vm.filterFaunaRegion.length > 0
+                                ? vm.filterFaunaRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterFaunaDistrict.length > 0
+                                ? vm.filterFaunaDistrict.join(',')
+                                : 'all';
                         d.filter_wa_legislative_list =
                             vm.filterFaunaWALegislativeList;
                         d.filter_wa_legislative_category =
                             vm.filterFaunaWALegislativeCategory;
                         d.filter_wa_priority_category =
-                            vm.filterFaunaWAPriorityCategory;
+                            vm.filterFaunaWAPriorityCategory.length > 0
+                                ? vm.filterFaunaWAPriorityCategory.join(',')
+                                : 'all';
                         d.filter_commonwealth_relevance =
                             vm.filterFaunaCommonwealthRelevance;
                         d.filter_international_relevance =
@@ -1204,27 +1221,33 @@ export default {
                 vm.filterFaunaPublicationStatus
             );
         },
-        filterFaunaRegion: function () {
-            let vm = this;
-            vm.$refs.fauna_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterFaunaRegion_cache,
-                vm.filterFaunaRegion
-            );
+        filterFaunaRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.fauna_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterFaunaRegion_cache,
+                    JSON.stringify(vm.filterFaunaRegion)
+                );
+            },
+            deep: true,
         },
-        filterFaunaDistrict: function () {
-            let vm = this;
-            vm.$refs.fauna_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterFaunaDistrict_cache,
-                vm.filterFaunaDistrict
-            );
+        filterFaunaDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.fauna_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterFaunaDistrict_cache,
+                    JSON.stringify(vm.filterFaunaDistrict)
+                );
+            },
+            deep: true,
         },
         filterFaunaWALegislativeList: function () {
             let vm = this;
@@ -1248,16 +1271,19 @@ export default {
                 vm.filterFaunaWALegislativeCategory
             );
         },
-        filterFaunaWAPriorityCategory: function () {
-            let vm = this;
-            vm.$refs.fauna_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterFaunaWAPriorityCategory_cache,
-                vm.filterFaunaWAPriorityCategory
-            );
+        filterFaunaWAPriorityCategory: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.fauna_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterFaunaWAPriorityCategory_cache,
+                    JSON.stringify(vm.filterFaunaWAPriorityCategory)
+                );
+            },
+            deep: true,
         },
         filterFaunaCommonwealthRelevance: function () {
             let vm = this;
@@ -1605,22 +1631,29 @@ export default {
             );
         },
         //-------filter district dropdown dependent on region selected
-        filterDistrict: function (event) {
+        filterDistrict: function () {
             this.$nextTick(() => {
-                if (event) {
-                    this.filterFaunaDistrict = 'all'; //-----to remove the previous selection
+                if (this.filterFaunaRegion.length === 0) {
+                    this.filtered_district_list = this.district_list;
+                } else {
+                    const regionIds = this.filterFaunaRegion.map(String);
+                    this.filtered_district_list = this.district_list.filter(
+                        (d) => regionIds.includes(d.region_id.toString())
+                    );
                 }
-                this.filtered_district_list = [];
-                //---filter districts as per region selected
-                for (let choice of this.district_list) {
-                    if (
-                        choice.region_id.toString() ===
-                        this.filterFaunaRegion.toString()
-                    ) {
-                        this.filtered_district_list.push(choice);
-                    }
+                if (this.filterFaunaDistrict.length > 0) {
+                    const validIds = new Set(
+                        this.filtered_district_list.map((d) => d.id.toString())
+                    );
+                    this.filterFaunaDistrict = this.filterFaunaDistrict.filter(
+                        (id) => validIds.has(id.toString())
+                    );
                 }
             });
+        },
+        onRegionFilterChange: function (val) {
+            this.filterFaunaRegion = val || [];
+            this.filterDistrict();
         },
         createFauna: async function () {
             swal.fire({

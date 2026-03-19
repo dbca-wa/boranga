@@ -4,14 +4,14 @@
         <label
             v-if="showTitle"
             :for="`select-filter-${id}`"
-            class="text-secondary mb-1"
+            class="text-secondary"
             >{{ title }}</label
         >
         <Multiselect
             :id="`select-filter-${id}`"
             ref="multiselectFilter"
             v-model="selectedFilterItem"
-            :mode="multiple ? 'multiple' : 'single'"
+            :mode="multiple ? 'tags' : 'single'"
             :options="optionsFormatted"
             :label="label"
             value-prop="value"
@@ -23,7 +23,19 @@
             @deselect="handleDeselect"
             @change="handleChange"
             @search-change="(...args) => $emit('search', ...args)"
-        />
+        >
+            <template #clear="{ clear }">
+                <span
+                    class="multiselect-clear"
+                    tabindex="-1"
+                    role="button"
+                    aria-label="Clear selection"
+                    @mousedown.prevent="clear"
+                >
+                    <span class="multiselect-clear-icon" />
+                </span>
+            </template>
+        </Multiselect>
     </div>
 </template>
 
@@ -52,11 +64,11 @@ export default {
 
                 return values.every((value) => {
                     const keys = Object.keys(value);
-                    if (keys.length != 2) return false;
                     return (
                         (keys.includes('key') && keys.includes('value')) ||
                         (keys.includes('value') && keys.includes('text')) ||
-                        (keys.includes('id') && keys.includes('name'))
+                        (keys.includes('id') && keys.includes('name')) ||
+                        (keys.includes('id') && keys.includes('code'))
                     );
                 });
             },
@@ -119,6 +131,20 @@ export default {
         optionsFormatted: function () {
             // Allows to pass in key-value pairs or value-text pairs
             return this.mapKeyValuePairs(this.options);
+        },
+    },
+    watch: {
+        preSelectedFilterItem: {
+            handler: function (newVal) {
+                const matched = this.getSelectedFilterItemByKey(newVal);
+                if (this.multiple) {
+                    this.selectedFilterItem = matched.map((opt) => opt.value);
+                } else {
+                    this.selectedFilterItem =
+                        matched.length > 0 ? matched[0].value : null;
+                }
+            },
+            deep: true,
         },
     },
     mounted: function () {
@@ -185,7 +211,9 @@ export default {
                         ? option.value.toString()
                         : Object.hasOwn(option, 'name')
                           ? option.name.toString()
-                          : option.text.toString(),
+                          : Object.hasOwn(option, 'code')
+                            ? option.code.toString()
+                            : option.text.toString(),
                 };
             });
         },
@@ -268,5 +296,12 @@ export default {
     --ms-option-color-selected-pointed: #fff;
     --ms-border-color-active: #226fbb;
     --ms-ring-color: rgba(34, 111, 187, 0.2);
+    --ms-py: 0.375rem;
+    --ms-px: 0.75rem;
+    --ms-tag-py: 0.125rem;
+    --ms-tag-px: 0.5rem;
+    --ms-tag-my: 0.125rem;
+    --ms-tag-font-size: 0.8rem;
+    min-height: 0;
 }
 </style>

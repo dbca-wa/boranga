@@ -97,23 +97,23 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="wa-priority-category"
-                            >WA Priority Category:</label
-                        >
-                        <select
-                            id="wa-priority-category"
-                            v-model="filterCSCommunityWAPriorityCategory"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="list in wa_priority_categories"
-                                :value="list.id"
-                                :key="list.id"
-                            >
-                                {{ list.code }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="wa-priority-category-filter"
+                            title="WA Priority Category:"
+                            :options="wa_priority_categories"
+                            :multiple="true"
+                            :pre-selected-filter-item="
+                                filterCSCommunityWAPriorityCategory
+                            "
+                            placeholder="Select Categories"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterCSCommunityWAPriorityCategory =
+                                        val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -350,6 +350,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import CommunityConservationStatusHistory from '../internal/conservation_status/community_conservation_status_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -358,6 +359,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         CommunityConservationStatusHistory,
     },
     props: {
@@ -375,7 +377,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -534,13 +535,17 @@ export default {
                   )
                 : 'all',
 
-            filterCSCommunityWAPriorityCategory: sessionStorage.getItem(
-                this.filterCSCommunityWAPriorityCategory_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterCSCommunityWAPriorityCategory_cache
-                  )
-                : 'all',
+            filterCSCommunityWAPriorityCategory: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterCSCommunityWAPriorityCategory_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterCSCommunityCommonwealthRelevance: sessionStorage.getItem(
                 this.filterCSCommunityCommonwealthRelevance_cache
@@ -738,7 +743,7 @@ export default {
                 this.filterCSCommunityChangeCode === 'all' &&
                 this.filterCSCommunityWALegislativeList === 'all' &&
                 this.filterCSCommunityWALegislativeCategory === 'all' &&
-                this.filterCSCommunityWAPriorityCategory === 'all' &&
+                this.filterCSCommunityWAPriorityCategory.length === 0 &&
                 this.filterCSCommunityCommonwealthRelevance === 'false' &&
                 this.filterCSCommunityInternationalRelevance === 'false' &&
                 this.filterCSCommunityAssessor === 'all' &&
@@ -1196,7 +1201,11 @@ export default {
                         d.filter_wa_legislative_category =
                             vm.filterCSCommunityWALegislativeCategory;
                         d.filter_wa_priority_category =
-                            vm.filterCSCommunityWAPriorityCategory;
+                            vm.filterCSCommunityWAPriorityCategory.length > 0
+                                ? vm.filterCSCommunityWAPriorityCategory.join(
+                                      ','
+                                  )
+                                : 'all';
                         d.filter_commonwealth_relevance =
                             vm.filterCSCommunityCommonwealthRelevance;
                         d.filter_international_relevance =
@@ -1384,16 +1393,19 @@ export default {
                 vm.filterCSCommunityWALegislativeCategory
             );
         },
-        filterCSCommunityWAPriorityCategory: function () {
-            let vm = this;
-            vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterCSCommunityWAPriorityCategory_cache,
-                vm.filterCSCommunityWAPriorityCategory
-            );
+        filterCSCommunityWAPriorityCategory: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.cs_communities_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterCSCommunityWAPriorityCategory_cache,
+                    JSON.stringify(vm.filterCSCommunityWAPriorityCategory)
+                );
+            },
+            deep: true,
         },
         filterCSCommunityCommonwealthRelevance: function () {
             let vm = this;

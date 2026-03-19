@@ -41,21 +41,20 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Region:</label>
-                        <select
-                            v-model="filterOCCFloraRegion"
-                            class="form-select"
-                            @change="filterDistrict($event)"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="region in region_list"
-                                :key="region.id"
-                                :value="region.id"
-                            >
-                                {{ region.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCCFloraRegion"
+                            placeholder="Select Regions"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    onRegionFilterChange(val || []);
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -80,20 +79,20 @@
             <div class="row">
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">District:</label>
-                        <select
-                            v-model="filterOCCFloraDistrict"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="district in filtered_district_list"
-                                :value="district.id"
-                                :key="district.id"
-                            >
-                                {{ district.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCCFloraDistrict"
+                            placeholder="Select Districts"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterOCCFloraDistrict = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -235,6 +234,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import OccurrenceHistory from '../internal/occurrence/species_occurrence_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -243,6 +243,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         OccurrenceHistory,
     },
     props: {
@@ -260,7 +261,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -376,17 +376,29 @@ export default {
                 ? sessionStorage.getItem(this.filterOCCFloraStatus_cache)
                 : 'all',
 
-            filterOCCFloraRegion: sessionStorage.getItem(
-                this.filterOCCFloraRegion_cache
-            )
-                ? sessionStorage.getItem(this.filterOCCFloraRegion_cache)
-                : 'all',
+            filterOCCFloraRegion: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCCFloraRegion_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
-            filterOCCFloraDistrict: sessionStorage.getItem(
-                this.filterOCCFloraDistrict_cache
-            )
-                ? sessionStorage.getItem(this.filterOCCFloraDistrict_cache)
-                : 'all',
+            filterOCCFloraDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCCFloraDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterOCCFloraLastModifiedBy: sessionStorage.getItem(
                 this.filterOCCFloraLastModifiedBy_cache
@@ -486,8 +498,8 @@ export default {
                 this.filterOCCFloraOccurrenceName === 'all' &&
                 this.filterOCCFloraScientificName === 'all' &&
                 this.filterOCCFloraStatus === 'all' &&
-                this.filterOCCFloraRegion === 'all' &&
-                this.filterOCCFloraDistrict === 'all' &&
+                this.filterOCCFloraRegion.length === 0 &&
+                this.filterOCCFloraDistrict.length === 0 &&
                 this.filterOCCFloraLastModifiedBy === 'all' &&
                 this.filterOCCFromFloraDueDate === '' &&
                 this.filterOCCToFloraDueDate === '' &&
@@ -841,8 +853,14 @@ export default {
                         d.filter_status = vm.filterOCCFloraStatus;
                         d.filter_from_due_date = vm.filterOCCFromFloraDueDate;
                         d.filter_to_due_date = vm.filterOCCToFloraDueDate;
-                        d.filter_region = vm.filterOCCFloraRegion;
-                        d.filter_district = vm.filterOCCFloraDistrict;
+                        d.filter_region =
+                            vm.filterOCCFloraRegion.length > 0
+                                ? vm.filterOCCFloraRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterOCCFloraDistrict.length > 0
+                                ? vm.filterOCCFloraDistrict.join(',')
+                                : 'all';
                         d.filter_last_modified_by =
                             vm.filterOCCFloraLastModifiedBy;
                         d.filter_created_from_date =
@@ -910,27 +928,33 @@ export default {
                 vm.filterOCCFloraStatus
             );
         },
-        filterOCCFloraRegion: function () {
-            let vm = this;
-            vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCCFloraRegion_cache,
-                vm.filterOCCFloraRegion
-            );
+        filterOCCFloraRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCCFloraRegion_cache,
+                    JSON.stringify(vm.filterOCCFloraRegion)
+                );
+            },
+            deep: true,
         },
-        filterOCCFloraDistrict: function () {
-            let vm = this;
-            vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCCFloraDistrict_cache,
-                vm.filterOCCFloraDistrict
-            );
+        filterOCCFloraDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCCFloraDistrict_cache,
+                    JSON.stringify(vm.filterOCCFloraDistrict)
+                );
+            },
+            deep: true,
         },
         filterOCCFloraLastModifiedBy: function () {
             let vm = this;
@@ -1236,25 +1260,35 @@ export default {
                 }
             );
         },
-        filterDistrict: function (event) {
+        filterDistrict: function () {
             this.$nextTick(() => {
-                if (event) {
-                    this.filterOCCFloraDistrict = 'all';
-                }
                 this.filtered_district_list = [];
-                if (this.filterOCCFloraRegion.toString() === 'all') {
+                if (this.filterOCCFloraRegion.length === 0) {
                     this.filtered_district_list = this.district_list;
                 } else {
                     for (let choice of this.district_list) {
                         if (
-                            choice.region_id.toString() ===
-                            this.filterOCCFloraRegion.toString()
+                            this.filterOCCFloraRegion.includes(choice.region_id)
                         ) {
                             this.filtered_district_list.push(choice);
                         }
                     }
                 }
+                // Remove selected districts that are no longer in filtered list
+                if (this.filterOCCFloraDistrict.length > 0) {
+                    const validIds = this.filtered_district_list.map(
+                        (d) => d.id
+                    );
+                    this.filterOCCFloraDistrict =
+                        this.filterOCCFloraDistrict.filter((id) =>
+                            validIds.includes(id)
+                        );
+                }
             });
+        },
+        onRegionFilterChange: function (val) {
+            this.filterOCCFloraRegion = val;
+            this.filterDistrict();
         },
         initialiseLastModifiedByLookup: function () {
             let vm = this;

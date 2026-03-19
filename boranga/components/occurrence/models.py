@@ -1430,13 +1430,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
                 ocr_threat.occurrence_report_threat = threat
                 ocr_threat.save()
 
-        # Clone the documents
-        for doc in self.documents.all():
-            ocr_doc = clone_model(OccurrenceReportDocument, OccurrenceReportDocument, doc)
-            if ocr_doc:
-                ocr_doc.occurrence_report = ocr_copy
-                ocr_doc.save()
-
         # Clone any observers
         observer_qs = self.observer_detail.all()
         if request_user_id == self.submitter:
@@ -4699,13 +4692,6 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                 occ_threat.occurrence = occurrence
                 occ_threat.occurrence_report_threat = threat
                 occ_threat.save()
-
-        # Clone the documents
-        for doc in occurrence_report.documents.all():
-            occ_doc = clone_model(OccurrenceReportDocument, OccurrenceDocument, doc)
-            if occ_doc:
-                occ_doc.occurrence = occurrence
-                occ_doc.save()
 
         return occurrence
 

@@ -1024,16 +1024,23 @@ class OccurrenceImporter(BaseSheetImporter):
                     tpfl_lon = merged.get("OccurrenceGeometry__longitude")
                     if tpfl_lat and tpfl_lon:
                         try:
-                            from django.contrib.gis.geos import GEOSGeometry, Point
+                            from django.contrib.gis.geos import GEOSGeometry
+                            from pyproj import Transformer
+                            from shapely.geometry import Point as ShapelyPoint
+                            from shapely.ops import transform as shapely_transform
 
                             tpfl_lat = float(tpfl_lat)
                             tpfl_lon = float(tpfl_lon)
-                            point = Point(tpfl_lon, tpfl_lat, srid=4283)  # GDA94
-                            # Project to a metric CRS (GDA94/MGA zone 50), buffer 1m, project back
-                            point_proj = point.clone()
-                            point_proj.transform(28350)  # GDA94 / MGA zone 50
-                            circle = point_proj.buffer(1)
-                            circle.transform(settings.DEFAULT_SRID)
+                            # Project to Australian Albers (EPSG:3577, metric), buffer 1m,
+                            # then project back — consistent with point_to_circle_factory.
+                            target_crs = f"EPSG:{settings.DEFAULT_SRID}"
+                            to_albers = Transformer.from_crs("EPSG:4283", "EPSG:3577", always_xy=True)
+                            from_albers = Transformer.from_crs("EPSG:3577", target_crs, always_xy=True)
+                            pt_sh = ShapelyPoint(tpfl_lon, tpfl_lat)
+                            pt_alb = shapely_transform(lambda x, y: to_albers.transform(x, y), pt_sh)
+                            circ_alb = pt_alb.buffer(1)
+                            circ_sh = shapely_transform(lambda x, y: from_albers.transform(x, y), circ_alb)
+                            circle = GEOSGeometry(circ_sh.wkt, srid=settings.DEFAULT_SRID)
                             defaults = {
                                 "geometry": circle,
                                 "original_geometry_ewkb": circle.ewkb,

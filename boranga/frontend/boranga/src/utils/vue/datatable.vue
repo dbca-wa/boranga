@@ -57,6 +57,39 @@ export default {
             let vm = this;
             let options = vm.dtOptions; // Use the original options
 
+            // Expand responsive: true into the default horizontal child-row
+            // renderer so that all tables share the same layout. To change the
+            // appearance for the whole application, edit only this block.
+            if (options.responsive === true) {
+                options.responsive = {
+                    details: {
+                        renderer: function (api, rowIdx, columns) {
+                            var hidden = columns.filter(function (col) {
+                                return col.hidden;
+                            });
+                            if (!hidden.length) return false;
+                            var cells = hidden
+                                .map(function (col) {
+                                    return (
+                                        '<span class="me-3"><strong>' +
+                                        col.title +
+                                        ':</strong> ' +
+                                        (col.data !== null &&
+                                        col.data !== undefined
+                                            ? col.data
+                                            : '') +
+                                        '</span>'
+                                    );
+                                })
+                                .join('');
+                            return $(
+                                '<div class="p-2 d-flex flex-wrap"/>'
+                            ).append(cells);
+                        },
+                    },
+                };
+            }
+
             // Only override ajax for serverSide tables
             if (options.serverSide && options.ajax) {
                 const originalAjax = options.ajax;

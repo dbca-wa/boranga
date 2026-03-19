@@ -269,10 +269,11 @@ class SpeciesConservationStatusFilterBackend(DatatablesFilterBackend):
 
         filter_wa_priority_category = request.POST.get("filter_wa_priority_category")
         if filter_wa_priority_category and not filter_wa_priority_category.lower() == "all":
+            wa_priority_ids = filter_wa_priority_category.split(",")
             if queryset.model is ConservationStatus:
-                queryset = queryset.filter(wa_priority_category=filter_wa_priority_category).distinct()
+                queryset = queryset.filter(wa_priority_category__in=wa_priority_ids).distinct()
             elif queryset.model is ConservationStatusReferral:
-                queryset = queryset.filter(conservation_status__wa_priority_category=filter_wa_priority_category)
+                queryset = queryset.filter(conservation_status__wa_priority_category__in=wa_priority_ids)
 
         filter_commonwealth_relevance = request.POST.get("filter_commonwealth_relevance")
         if filter_commonwealth_relevance == "true":
@@ -558,10 +559,11 @@ class CommunityConservationStatusFilterBackend(DatatablesFilterBackend):
 
         filter_wa_priority_category = request.POST.get("filter_wa_priority_category")
         if filter_wa_priority_category and not filter_wa_priority_category.lower() == "all":
+            wa_priority_ids = filter_wa_priority_category.split(",")
             if queryset.model is ConservationStatus:
-                queryset = queryset.filter(wa_priority_category=filter_wa_priority_category).distinct()
+                queryset = queryset.filter(wa_priority_category__in=wa_priority_ids).distinct()
             elif queryset.model is ConservationStatusReferral:
-                queryset = queryset.filter(conservation_status__wa_priority_category=filter_wa_priority_category)
+                queryset = queryset.filter(conservation_status__wa_priority_category__in=wa_priority_ids)
 
         filter_commonwealth_relevance = request.POST.get("filter_commonwealth_relevance")
         if filter_commonwealth_relevance == "true":

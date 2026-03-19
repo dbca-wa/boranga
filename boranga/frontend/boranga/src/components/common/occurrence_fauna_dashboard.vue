@@ -72,39 +72,38 @@
             <div class="row">
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Region:</label>
-                        <select
-                            v-model="filterOCCFaunaRegion"
-                            class="form-select"
-                            @change="filterDistrict($event)"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="region in region_list"
-                                :key="region.id"
-                                :value="region.id"
-                            >
-                                {{ region.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCCFaunaRegion"
+                            placeholder="Select Regions"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    onRegionFilterChange(val || []);
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">District:</label>
-                        <select
-                            v-model="filterOCCFaunaDistrict"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="district in filtered_district_list"
-                                :value="district.id"
-                                :key="district.id"
-                            >
-                                {{ district.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCCFaunaDistrict"
+                            placeholder="Select Districts"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterOCCFaunaDistrict = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -246,6 +245,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import OccurrenceHistory from '../internal/occurrence/species_occurrence_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -254,6 +254,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         OccurrenceHistory,
     },
     props: {
@@ -271,7 +272,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -398,17 +398,29 @@ export default {
                 ? sessionStorage.getItem(this.filterOCCFaunaStatus_cache)
                 : 'all',
 
-            filterOCCFaunaRegion: sessionStorage.getItem(
-                this.filterOCCFaunaRegion_cache
-            )
-                ? sessionStorage.getItem(this.filterOCCFaunaRegion_cache)
-                : 'all',
+            filterOCCFaunaRegion: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCCFaunaRegion_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
-            filterOCCFaunaDistrict: sessionStorage.getItem(
-                this.filterOCCFaunaDistrict_cache
-            )
-                ? sessionStorage.getItem(this.filterOCCFaunaDistrict_cache)
-                : 'all',
+            filterOCCFaunaDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCCFaunaDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterOCCFaunaLastModifiedBy: sessionStorage.getItem(
                 this.filterOCCFaunaLastModifiedBy_cache
@@ -512,8 +524,8 @@ export default {
                 this.filterOCCFaunaScientificName === 'all' &&
                 this.filterOCCFaunaCommonName === 'all' &&
                 this.filterOCCFaunaStatus === 'all' &&
-                this.filterOCCFaunaRegion === 'all' &&
-                this.filterOCCFaunaDistrict === 'all' &&
+                this.filterOCCFaunaRegion.length === 0 &&
+                this.filterOCCFaunaDistrict.length === 0 &&
                 this.filterOCCFaunaLastModifiedBy === 'all' &&
                 this.filterOCCFromFaunaDueDate === '' &&
                 this.filterOCCToFaunaDueDate === '' &&
@@ -894,8 +906,14 @@ export default {
                         d.filter_status = vm.filterOCCFaunaStatus;
                         d.filter_from_due_date = vm.filterOCCFromFaunaDueDate;
                         d.filter_to_due_date = vm.filterOCCToFaunaDueDate;
-                        d.filter_region = vm.filterOCCFaunaRegion;
-                        d.filter_district = vm.filterOCCFaunaDistrict;
+                        d.filter_region =
+                            vm.filterOCCFaunaRegion.length > 0
+                                ? vm.filterOCCFaunaRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterOCCFaunaDistrict.length > 0
+                                ? vm.filterOCCFaunaDistrict.join(',')
+                                : 'all';
                         d.filter_last_modified_by =
                             vm.filterOCCFaunaLastModifiedBy;
                         d.filter_created_from_date =
@@ -974,27 +992,33 @@ export default {
                 vm.filterOCCFaunaStatus
             );
         },
-        filterOCCFaunaRegion: function () {
-            let vm = this;
-            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCCFaunaRegion_cache,
-                vm.filterOCCFaunaRegion
-            );
+        filterOCCFaunaRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCCFaunaRegion_cache,
+                    JSON.stringify(vm.filterOCCFaunaRegion)
+                );
+            },
+            deep: true,
         },
-        filterOCCFaunaDistrict: function () {
-            let vm = this;
-            vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCCFaunaDistrict_cache,
-                vm.filterOCCFaunaDistrict
-            );
+        filterOCCFaunaDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.fauna_occ_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCCFaunaDistrict_cache,
+                    JSON.stringify(vm.filterOCCFaunaDistrict)
+                );
+            },
+            deep: true,
         },
         filterOCCFaunaLastModifiedBy: function () {
             let vm = this;
@@ -1311,25 +1335,34 @@ export default {
                 }
             );
         },
-        filterDistrict: function (event) {
+        filterDistrict: function () {
             this.$nextTick(() => {
-                if (event) {
-                    this.filterOCCFaunaDistrict = 'all';
-                }
                 this.filtered_district_list = [];
-                if (this.filterOCCFaunaRegion.toString() === 'all') {
+                if (this.filterOCCFaunaRegion.length === 0) {
                     this.filtered_district_list = this.district_list;
                 } else {
                     for (let choice of this.district_list) {
                         if (
-                            choice.region_id.toString() ===
-                            this.filterOCCFaunaRegion.toString()
+                            this.filterOCCFaunaRegion.includes(choice.region_id)
                         ) {
                             this.filtered_district_list.push(choice);
                         }
                     }
                 }
+                if (this.filterOCCFaunaDistrict.length > 0) {
+                    const validIds = this.filtered_district_list.map(
+                        (d) => d.id
+                    );
+                    this.filterOCCFaunaDistrict =
+                        this.filterOCCFaunaDistrict.filter((id) =>
+                            validIds.includes(id)
+                        );
+                }
             });
+        },
+        onRegionFilterChange: function (val) {
+            this.filterOCCFaunaRegion = val;
+            this.filterDistrict();
         },
         initialiseCommonNameLookup: function () {
             let vm = this;

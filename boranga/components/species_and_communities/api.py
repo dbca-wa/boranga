@@ -796,11 +796,11 @@ class SpeciesFilterBackend(DatatablesFilterBackend):
 
         filter_region = request.POST.get("filter_region")
         if filter_region and not filter_region.lower() == "all":
-            queryset = queryset.filter(regions__id=filter_region)
+            queryset = queryset.filter(regions__id__in=filter_region.split(","))
 
         filter_district = request.POST.get("filter_district")
         if filter_district and not filter_district.lower() == "all":
-            queryset = queryset.filter(districts__id=filter_district)
+            queryset = queryset.filter(districts__id__in=filter_district.split(","))
 
         filter_wa_legislative_list = request.POST.get("filter_wa_legislative_list")
         if filter_wa_legislative_list and not filter_wa_legislative_list.lower() == "all":
@@ -820,7 +820,7 @@ class SpeciesFilterBackend(DatatablesFilterBackend):
         if filter_wa_priority_category and not filter_wa_priority_category.lower() == "all":
             queryset = queryset.filter(
                 conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
-                conservation_status__wa_priority_category_id=filter_wa_priority_category,
+                conservation_status__wa_priority_category_id__in=filter_wa_priority_category.split(","),
             ).distinct()
 
         filter_commonwealth_relevance = request.POST.get("filter_commonwealth_relevance")
@@ -984,11 +984,11 @@ class CommunitiesFilterBackend(DatatablesFilterBackend):
 
         filter_region = request.GET.get("filter_region")
         if filter_region and not filter_region.lower() == "all":
-            queryset = queryset.filter(regions__id=filter_region)
+            queryset = queryset.filter(regions__id__in=filter_region.split(","))
 
         filter_district = request.GET.get("filter_district")
         if filter_district and not filter_district.lower() == "all":
-            queryset = queryset.filter(districts__id=filter_district)
+            queryset = queryset.filter(districts__id__in=filter_district.split(","))
 
         filter_wa_legislative_list = request.GET.get("filter_wa_legislative_list")
         if filter_wa_legislative_list and not filter_wa_legislative_list.lower() == "all":
@@ -1008,7 +1008,7 @@ class CommunitiesFilterBackend(DatatablesFilterBackend):
         if filter_wa_priority_category and not filter_wa_priority_category.lower() == "all":
             queryset = queryset.filter(
                 conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
-                conservation_status__wa_priority_category_id=filter_wa_priority_category,
+                conservation_status__wa_priority_category_id__in=filter_wa_priority_category.split(","),
             ).distinct()
 
         filter_commonwealth_relevance = request.GET.get("filter_commonwealth_relevance")

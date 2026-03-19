@@ -71,39 +71,38 @@
             <div class="row">
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">Region:</label>
-                        <select
-                            v-model="filterOCRFloraRegion"
-                            class="form-select"
-                            @change="filterDistrict($event)"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="region in region_list"
-                                :key="region.id"
-                                :value="region.id"
-                            >
-                                {{ region.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCRFloraRegion"
+                            placeholder="Select Regions"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    onRegionFilterChange(val || []);
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="">District:</label>
-                        <select
-                            v-model="filterOCRFloraDistrict"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="district in filtered_district_list"
-                                :value="district.id"
-                                :key="district.id"
-                            >
-                                {{ district.name }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCRFloraDistrict"
+                            placeholder="Select Districts"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterOCRFloraDistrict = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -277,6 +276,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import OccurrenceReportHistory from '../internal/occurrence/species_occurrence_report_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -285,6 +285,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         OccurrenceReportHistory,
     },
     props: {
@@ -302,7 +303,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -504,17 +504,29 @@ export default {
                   )
                 : 'all',
 
-            filterOCRFloraRegion: sessionStorage.getItem(
-                this.filterOCRFloraRegion_cache
-            )
-                ? sessionStorage.getItem(this.filterOCRFloraRegion_cache)
-                : 'all',
+            filterOCRFloraRegion: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCRFloraRegion_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
-            filterOCRFloraDistrict: sessionStorage.getItem(
-                this.filterOCRFloraDistrict_cache
-            )
-                ? sessionStorage.getItem(this.filterOCRFloraDistrict_cache)
-                : 'all',
+            filterOCRFloraDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCRFloraDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterOCRFloraLastModifiedBy: sessionStorage.getItem(
                 this.filterOCRFloraLastModifiedBy_cache
@@ -593,8 +605,8 @@ export default {
                 this.filterOCRFloraAssessor === 'all' &&
                 this.filterOCRFloraSubmitter === 'all' &&
                 this.filterOCRFloraOccurrenceName === 'all' &&
-                this.filterOCRFloraRegion === 'all' &&
-                this.filterOCRFloraDistrict === 'all' &&
+                this.filterOCRFloraRegion.length === 0 &&
+                this.filterOCRFloraDistrict.length === 0 &&
                 this.filterOCRFloraLastModifiedBy === 'all' &&
                 this.filterOCRFloraApprovedFromDate === '' &&
                 this.filterOCRFloraApprovedToDate === '' &&
@@ -909,33 +921,7 @@ export default {
                     [10, 25, 50, 100, 100000000],
                     [10, 25, 50, 100, 'All'],
                 ],
-                responsive: {
-                    details: {
-                        renderer: function (api, rowIdx, columns) {
-                            var hidden = columns.filter(function (col) {
-                                return col.hidden;
-                            });
-                            if (!hidden.length) return false;
-                            var cells = hidden
-                                .map(function (col) {
-                                    return (
-                                        '<span class="me-3"><strong>' +
-                                        col.title +
-                                        ':</strong> ' +
-                                        (col.data !== null &&
-                                        col.data !== undefined
-                                            ? col.data
-                                            : '') +
-                                        '</span>'
-                                    );
-                                })
-                                .join('');
-                            return $(
-                                '<div class="p-2 d-flex flex-wrap"/>'
-                            ).append(cells);
-                        },
-                    },
-                },
+                responsive: true,
                 serverSide: true,
                 searching: search,
                 //  to show the "workflow Status","Action" columns always in the last position
@@ -975,8 +961,14 @@ export default {
                         d.filter_submitter = vm.filterOCRFloraSubmitter;
                         d.filter_occurrence_name =
                             vm.filterOCRFloraOccurrenceName;
-                        d.filter_region = vm.filterOCRFloraRegion;
-                        d.filter_district = vm.filterOCRFloraDistrict;
+                        d.filter_region =
+                            vm.filterOCRFloraRegion.length > 0
+                                ? vm.filterOCRFloraRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterOCRFloraDistrict.length > 0
+                                ? vm.filterOCRFloraDistrict.join(',')
+                                : 'all';
                         d.filter_last_modified_by =
                             vm.filterOCRFloraLastModifiedBy;
                         d.filter_approved_from_date =
@@ -1138,27 +1130,33 @@ export default {
                 vm.filterOCRFloraOccurrenceName
             );
         },
-        filterOCRFloraRegion: function () {
-            let vm = this;
-            vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCRFloraRegion_cache,
-                vm.filterOCRFloraRegion
-            );
+        filterOCRFloraRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCRFloraRegion_cache,
+                    JSON.stringify(vm.filterOCRFloraRegion)
+                );
+            },
+            deep: true,
         },
-        filterOCRFloraDistrict: function () {
-            let vm = this;
-            vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            );
-            sessionStorage.setItem(
-                vm.filterOCRFloraDistrict_cache,
-                vm.filterOCRFloraDistrict
-            );
+        filterOCRFloraDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.flora_ocr_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterOCRFloraDistrict_cache,
+                    JSON.stringify(vm.filterOCRFloraDistrict)
+                );
+            },
+            deep: true,
         },
         filterOCRFloraLastModifiedBy: function () {
             let vm = this;
@@ -1587,25 +1585,34 @@ export default {
                 }
             );
         },
-        filterDistrict: function (event) {
+        filterDistrict: function () {
             this.$nextTick(() => {
-                if (event) {
-                    this.filterOCRFloraDistrict = 'all';
-                }
                 this.filtered_district_list = [];
-                if (this.filterOCRFloraRegion.toString() === 'all') {
+                if (this.filterOCRFloraRegion.length === 0) {
                     this.filtered_district_list = this.district_list;
                 } else {
                     for (let choice of this.district_list) {
                         if (
-                            choice.region_id.toString() ===
-                            this.filterOCRFloraRegion.toString()
+                            this.filterOCRFloraRegion.includes(choice.region_id)
                         ) {
                             this.filtered_district_list.push(choice);
                         }
                     }
                 }
+                if (this.filterOCRFloraDistrict.length > 0) {
+                    const validIds = this.filtered_district_list.map(
+                        (d) => d.id
+                    );
+                    this.filterOCRFloraDistrict =
+                        this.filterOCRFloraDistrict.filter((id) =>
+                            validIds.includes(id)
+                        );
+                }
             });
+        },
+        onRegionFilterChange: function (val) {
+            this.filterOCRFloraRegion = val;
+            this.filterDistrict();
         },
         fetchFilterLists: function () {
             let vm = this;

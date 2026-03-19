@@ -129,23 +129,22 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="wa-priority-category"
-                            >WA Priority Category:</label
-                        >
-                        <select
-                            id="wa-priority-category"
-                            v-model="filterCSFloraWAPriorityCategory"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="list in wa_priority_categories"
-                                :value="list.id"
-                                :key="list.id"
-                            >
-                                {{ list.code }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="wa-priority-category-filter"
+                            title="WA Priority Category:"
+                            :options="wa_priority_categories"
+                            :multiple="true"
+                            :pre-selected-filter-item="
+                                filterCSFloraWAPriorityCategory
+                            "
+                            placeholder="Select Categories"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterCSFloraWAPriorityCategory = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -377,6 +376,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import SpeciesConservationStatusHistory from '../internal/conservation_status/species_conservation_status_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -385,6 +385,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         SpeciesConservationStatusHistory,
     },
     props: {
@@ -402,7 +403,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -597,13 +597,17 @@ export default {
                   )
                 : 'all',
 
-            filterCSFloraWAPriorityCategory: sessionStorage.getItem(
-                this.filterCSFloraWAPriorityCategory_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterCSFloraWAPriorityCategory_cache
-                  )
-                : 'all',
+            filterCSFloraWAPriorityCategory: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterCSFloraWAPriorityCategory_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterCSFloraCommonwealthRelevance: sessionStorage.getItem(
                 this.filterCSFloraCommonwealthRelevance_cache
@@ -804,7 +808,7 @@ export default {
                 this.filterCSFloraChangeCode === 'all' &&
                 this.filterCSFloraWALegislativeList === 'all' &&
                 this.filterCSFloraWALegislativeCategory === 'all' &&
-                this.filterCSFloraWAPriorityCategory === 'all' &&
+                this.filterCSFloraWAPriorityCategory.length === 0 &&
                 this.filterCSFloraCommonwealthRelevance === 'false' &&
                 this.filterCSFloraInternationalRelevance === 'false' &&
                 this.filterCSFloraAssessor === 'all' &&
@@ -1284,7 +1288,9 @@ export default {
                         d.filter_wa_legislative_category =
                             vm.filterCSFloraWALegislativeCategory;
                         d.filter_wa_priority_category =
-                            vm.filterCSFloraWAPriorityCategory;
+                            vm.filterCSFloraWAPriorityCategory.length > 0
+                                ? vm.filterCSFloraWAPriorityCategory.join(',')
+                                : 'all';
                         d.filter_commonwealth_relevance =
                             vm.filterCSFloraCommonwealthRelevance;
                         d.filter_international_relevance =
@@ -1415,16 +1421,19 @@ export default {
                 vm.filterCSFloraWALegislativeCategory
             );
         },
-        filterCSFloraWAPriorityCategory: function () {
-            let vm = this;
-            vm.$refs.flora_cs_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterCSFloraWAPriorityCategory_cache,
-                vm.filterCSFloraWAPriorityCategory
-            );
+        filterCSFloraWAPriorityCategory: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.flora_cs_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterCSFloraWAPriorityCategory_cache,
+                    JSON.stringify(vm.filterCSFloraWAPriorityCategory)
+                );
+            },
+            deep: true,
         },
         filterCSFloraCommonwealthRelevance: function () {
             let vm = this;

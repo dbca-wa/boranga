@@ -135,23 +135,22 @@
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
-                        <label for="wa-priority-category"
-                            >WA Priority Category:</label
-                        >
-                        <select
-                            id="wa-priority-category"
-                            v-model="filterCSFaunaWAPriorityCategory"
-                            class="form-select"
-                        >
-                            <option value="all">All</option>
-                            <option
-                                v-for="list in wa_priority_categories"
-                                :value="list.id"
-                                :key="list.id"
-                            >
-                                {{ list.code }}
-                            </option>
-                        </select>
+                        <SelectFilter
+                            id="wa-priority-category-filter"
+                            title="WA Priority Category:"
+                            :options="wa_priority_categories"
+                            :multiple="true"
+                            :pre-selected-filter-item="
+                                filterCSFaunaWAPriorityCategory
+                            "
+                            placeholder="Select Categories"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterCSFaunaWAPriorityCategory = val || [];
+                                }
+                            "
+                        />
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -384,6 +383,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 import SpeciesConservationStatusHistory from '../internal/conservation_status/species_conservation_status_history.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
@@ -392,6 +392,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
         SpeciesConservationStatusHistory,
     },
     props: {
@@ -409,7 +410,6 @@ export default {
         },
         group_type_id: {
             type: Number,
-            required: true,
             default: 0,
         },
         url: {
@@ -601,13 +601,17 @@ export default {
                   )
                 : 'all',
 
-            filterCSFaunaWAPriorityCategory: sessionStorage.getItem(
-                this.filterCSFaunaWAPriorityCategory_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterCSFaunaWAPriorityCategory_cache
-                  )
-                : 'all',
+            filterCSFaunaWAPriorityCategory: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterCSFaunaWAPriorityCategory_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
 
             filterCSFaunaCommonwealthRelevance: sessionStorage.getItem(
                 this.filterCSFaunaCommonwealthRelevance_cache
@@ -820,7 +824,7 @@ export default {
                 this.filterCSFaunaChangeCode === 'all' &&
                 this.filterCSFaunaWALegislativeList === 'all' &&
                 this.filterCSFaunaWALegislativeCategory === 'all' &&
-                this.filterCSFaunaWAPriorityCategory === 'all' &&
+                this.filterCSFaunaWAPriorityCategory.length === 0 &&
                 this.filterCSFaunaCommonwealthRelevance === 'false' &&
                 this.filterCSFaunaInternationalRelevance === 'false' &&
                 this.filterCSFaunaAssessor === 'all' &&
@@ -1307,7 +1311,9 @@ export default {
                         d.filter_wa_legislative_category =
                             vm.filterCSFaunaWALegislativeCategory;
                         d.filter_wa_priority_category =
-                            vm.filterCSFaunaWAPriorityCategory;
+                            vm.filterCSFaunaWAPriorityCategory.length > 0
+                                ? vm.filterCSFaunaWAPriorityCategory.join(',')
+                                : 'all';
                         d.filter_commonwealth_relevance =
                             vm.filterCSFaunaCommonwealthRelevance;
                         d.filter_international_relevance =
@@ -1439,16 +1445,19 @@ export default {
                 vm.filterCSFaunaWALegislativeCategory
             );
         },
-        filterCSFaunaWAPriorityCategory: function () {
-            let vm = this;
-            vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
-                helpers.enablePopovers,
-                true
-            ); // This calls ajax() backend call.
-            sessionStorage.setItem(
-                vm.filterCSFaunaWAPriorityCategory_cache,
-                vm.filterCSFaunaWAPriorityCategory
-            );
+        filterCSFaunaWAPriorityCategory: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.fauna_cs_datatable.vmDataTable.ajax.reload(
+                    helpers.enablePopovers,
+                    true
+                );
+                sessionStorage.setItem(
+                    vm.filterCSFaunaWAPriorityCategory_cache,
+                    JSON.stringify(vm.filterCSFaunaWAPriorityCategory)
+                );
+            },
+            deep: true,
         },
         filterCSFaunaCommonwealthRelevance: function () {
             let vm = this;
