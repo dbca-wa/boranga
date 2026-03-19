@@ -938,33 +938,7 @@ export default {
                     [10, 25, 50, 100, 100000000],
                     [10, 25, 50, 100, 'All'],
                 ],
-                responsive: {
-                    details: {
-                        renderer: function (api, rowIdx, columns) {
-                            var hidden = columns.filter(function (col) {
-                                return col.hidden;
-                            });
-                            if (!hidden.length) return false;
-                            var cells = hidden
-                                .map(function (col) {
-                                    return (
-                                        '<span class="me-3"><strong>' +
-                                        col.title +
-                                        ':</strong> ' +
-                                        (col.data !== null &&
-                                        col.data !== undefined
-                                            ? col.data
-                                            : '') +
-                                        '</span>'
-                                    );
-                                })
-                                .join('');
-                            return $(
-                                '<div class="p-2 d-flex flex-wrap"/>'
-                            ).append(cells);
-                        },
-                    },
-                },
+                responsive: true,
                 serverSide: true,
                 searching: search,
                 //  to show the "workflow Status","Action" columns always in the last position
