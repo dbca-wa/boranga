@@ -1225,7 +1225,7 @@ export default {
                     },
                 })
                 .on('select2:select', function (e) {
-                    let data = e.params.data.text;
+                    let data = e.params.data.id;
                     vm.filterOCCFaunaOccurrenceName = data;
                     sessionStorage.setItem(
                         'filterOCCFaunaOccurrenceNameText',

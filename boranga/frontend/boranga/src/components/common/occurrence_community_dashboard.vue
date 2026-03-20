@@ -1200,7 +1200,7 @@ export default {
                     },
                 })
                 .on('select2:select', function (e) {
-                    let data = e.params.data.text;
+                    let data = e.params.data.id;
                     vm.filterOCCCommunityOccurrenceName = data;
                     sessionStorage.setItem(
                         'filterOCCCommunityOccurrenceNameText',
