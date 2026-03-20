@@ -1673,6 +1673,7 @@ export default {
                                 term: params.term,
                                 type: 'public',
                                 group_type_id: vm.group_type_id,
+                                active_only: false,
                             };
                             return query;
                         },
