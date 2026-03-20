@@ -33,6 +33,7 @@
                         />
 
                         <ActivatedBy
+                            v-if="occurrence.lodgement_date"
                             :submitter_first_name="submitter_first_name"
                             :submitter_last_name="submitter_last_name"
                             :lodgement_date="occurrence.lodgement_date"

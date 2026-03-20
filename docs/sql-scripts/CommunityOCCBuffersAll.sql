@@ -6,12 +6,16 @@
 -- One row per BufferGeometry for Community Occurrences.
 -- Returns ALL processing statuses.
 --
--- NOTE: OCC_MOD_BY returns an integer user ID from the ledger accounts_emailuser
--- table which lives in a separate database (ledger_db). A cross-database join is
--- not possible in standard PostgreSQL. If human-readable names are required,
--- either use dblink / postgres_fdw, or resolve IDs in application code.
+-- NOTE: OCC_MOD_BY is resolved via accounts_emailuser and returns
+-- first_name || ' ' || last_name for the last user to modify the record.
 --
 -- NOTE: OBS_DATE is sourced from boranga_occhabitatcondition (habitat.obs_date).
+--
+-- IMPORTANT — KB does not allow comments in SQL queries. Before pasting this
+-- script into KB, strip all comments using:
+--   python scripts/strip_sql_comments.py docs/sql-scripts/CommunityOCCBuffersAll.sql
+-- Or write the result to a file for easy copying:
+--   python scripts/strip_sql_comments.py docs/sql-scripts/CommunityOCCBuffersAll.sql > tmp.sql
 -- =============================================================================
 
 WITH
@@ -218,7 +222,7 @@ SELECT
     END                                            AS OCC_SOURCE,
     occ.processing_status                          AS OCC_STATUS,
     TO_CHAR(occ.datetime_updated, 'YYYY-MM-DD HH24:MI:SS') AS OCC_MOD_DA,
-    occ.last_modified_by                           AS OCC_MOD_BY,
+    (u_mod.first_name || ' ' || u_mod.last_name)   AS OCC_MOD_BY,
     occ.lodgement_date                             AS LODG_DATE,
 
     -- Region / District
@@ -250,4 +254,5 @@ LEFT JOIN loc            ON occ.id = loc.occurrence_id
 LEFT JOIN obs_detail     ON occ.id = obs_detail.occurrence_id
 LEFT JOIN identification ON occ.id = identification.occurrence_id
 LEFT JOIN habitat        ON occ.id = habitat.occurrence_id
+LEFT JOIN accounts_emailuser u_mod ON occ.last_modified_by = u_mod.id
 ORDER BY occ.occurrence_number, buf.occ_geom_id;

@@ -118,3 +118,5 @@ private-media/
 **/data_migration/legacy_data/
 
 .db-backups/
+
+docs/sql-scripts/kb/

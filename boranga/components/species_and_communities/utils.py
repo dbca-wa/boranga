@@ -48,13 +48,13 @@ def species_form_submit(species_instance, request, split=False, rename=False):
 
     # Create a log entry for the proposal
     species_instance.log_user_action(
-        SpeciesUserAction.ACTION_CREATE_SPECIES.format(species_instance.species_number),
+        SpeciesUserAction.ACTION_ACTIVATE_SPECIES.format(species_instance.species_number),
         request,
     )
 
     # Create a log entry for the user
     request.user.log_user_action(
-        SpeciesUserAction.ACTION_CREATE_SPECIES.format(species_instance.species_number),
+        SpeciesUserAction.ACTION_ACTIVATE_SPECIES.format(species_instance.species_number),
         request,
     )
 
@@ -80,13 +80,13 @@ def community_form_submit(community_instance, request):
 
     # Create a log entry for the proposal
     community_instance.log_user_action(
-        CommunityUserAction.ACTION_CREATE_COMMUNITY.format(community_instance.community_number),
+        CommunityUserAction.ACTION_ACTIVATE_COMMUNITY.format(community_instance.community_number),
         request,
     )
 
     # Create a log entry for the user
     request.user.log_user_action(
-        CommunityUserAction.ACTION_CREATE_COMMUNITY.format(community_instance.community_number),
+        CommunityUserAction.ACTION_ACTIVATE_COMMUNITY.format(community_instance.community_number),
         request,
     )
 

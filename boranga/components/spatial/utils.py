@@ -563,8 +563,11 @@ def save_geometry(
                 is_new_geometry = False
                 # Capture existing state to detect whether geometry data actually changes
                 pre_save_geometry_wkb = geometry.geometry.ewkb if geometry.geometry else None
-                pre_save_original_ewkb = geometry.original_geometry_ewkb
-                pre_save_buffer_radius = geometry.buffer_radius
+                # BinaryField returns memoryview from DB; normalise to bytes for comparison
+                pre_save_original_ewkb = (
+                    bytes(geometry.original_geometry_ewkb) if geometry.original_geometry_ewkb else None
+                )
+                pre_save_buffer_radius = getattr(geometry, "buffer_radius", None)
             else:
                 logger.info(f"Creating new geometry for {instance_model_name}: {instance}")
 
@@ -605,7 +608,12 @@ def save_geometry(
                     geometry_changed = (
                         (geometry_instance.geometry.ewkb if geometry_instance.geometry else None)
                         != pre_save_geometry_wkb
-                        or geometry_instance.original_geometry_ewkb != pre_save_original_ewkb
+                        or (
+                            bytes(geometry_instance.original_geometry_ewkb)
+                            if geometry_instance.original_geometry_ewkb
+                            else None
+                        )
+                        != pre_save_original_ewkb
                         or geometry_instance.buffer_radius != pre_save_buffer_radius
                     )
                     if geometry_changed:
