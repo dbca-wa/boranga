@@ -331,7 +331,7 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
 
             filter_occurrence_name = request.POST.get("filter_occurrence_name")
             if filter_occurrence_name and not filter_occurrence_name.lower() == "all":
-                queryset = queryset.filter(occurrence__occurrence_name__icontains=filter_occurrence_name)
+                queryset = queryset.filter(occurrence__id=filter_occurrence_name)
 
             filter_common_name = request.POST.get("filter_common_name")
             if filter_common_name and not filter_common_name.lower() == "all":
@@ -2569,7 +2569,7 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
 
         filter_occurrence_name = request.POST.get("filter_occurrence_name")
         if filter_occurrence_name and not filter_occurrence_name.lower() == "all":
-            queryset = queryset.filter(occurrence_name__icontains=filter_occurrence_name)
+            queryset = queryset.filter(id=filter_occurrence_name)
 
         filter_scientific_name = request.POST.get("filter_scientific_name")
         if filter_scientific_name and not filter_scientific_name.lower() == "all":
