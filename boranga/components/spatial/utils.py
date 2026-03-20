@@ -564,7 +564,7 @@ def save_geometry(
                 # Capture existing state to detect whether geometry data actually changes
                 pre_save_geometry_wkb = geometry.geometry.ewkb if geometry.geometry else None
                 pre_save_original_ewkb = geometry.original_geometry_ewkb
-                pre_save_buffer_radius = geometry.buffer_radius
+                pre_save_buffer_radius = getattr(geometry, "buffer_radius", None)
             else:
                 logger.info(f"Creating new geometry for {instance_model_name}: {instance}")
 
