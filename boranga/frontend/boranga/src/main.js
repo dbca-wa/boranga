@@ -127,14 +127,12 @@ window.fetch = ((orig) => {
                     title: 'Read-Only Mode',
                     text: 'The system is currently in read-only mode for data verification. No changes can be made at this time.',
                 });
-                return new Response(
-                    JSON.stringify({
-                        detail: 'The system is currently in read-only mode for data verification.',
-                    }),
-                    {
-                        status: 503,
-                        headers: { 'Content-Type': 'application/json' },
-                    }
+                // Throw an AbortError so the fetch promise rejects silently —
+                // component reject handlers typically just log and show nothing,
+                // preventing a second error dialog from overwriting the lock dialog.
+                throw new DOMException(
+                    'Request blocked: system is in read-only mode.',
+                    'AbortError'
                 );
             }
         }
