@@ -1463,6 +1463,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     has_main_observer = serializers.BooleanField(read_only=True)
     is_submitter = serializers.SerializerMethodField()
     can_user_edit = serializers.SerializerMethodField()
+    can_user_copy = serializers.SerializerMethodField()
     common_names = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
@@ -1514,6 +1515,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
             "number_of_observers",
             "has_main_observer",
             "is_submitter",
+            "can_user_copy",
             "record_source",
             "comments",
             "ocr_for_occ_number",
@@ -1622,6 +1624,10 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     def get_can_user_edit(self, obj):
         request = self.context["request"]
         return obj.can_user_edit(request)
+
+    def get_can_user_copy(self, obj):
+        request = self.context["request"]
+        return obj.submitter == request.user.id or is_occurrence_assessor(request)
 
 
 class OccurrenceReportSerializer(BaseOccurrenceReportSerializer):
