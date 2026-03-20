@@ -6,10 +6,8 @@
 -- One row per OccurrenceReportGeometry (Polygon type) for Community OCRs.
 -- Returns ALL processing statuses.
 --
--- NOTE: ORF_MOD_BY returns an integer user ID from the ledger accounts_emailuser
--- table which lives in a separate database (ledger_db). A cross-database join is
--- not possible in standard PostgreSQL. If human-readable names are required,
--- either use dblink / postgres_fdw, or resolve IDs in application code.
+-- NOTE: ORF_MOD_BY is resolved via accounts_emailuser and returns
+-- first_name || ' ' || last_name for the last user to modify the record.
 --
 -- IMPORTANT — KB does not allow comments in SQL queries. Before pasting this
 -- script into KB, strip all comments using:
@@ -231,7 +229,7 @@ SELECT
     ocr.record_source                              AS OCR_SOURCE,
     ocr.processing_status                          AS ORF_STATUS,
     TO_CHAR(ocr.datetime_updated, 'YYYY-MM-DD HH24:MI:SS') AS ORF_MOD_DA,
-    ocr.last_modified_by                           AS ORF_MOD_BY,
+    (u_mod.first_name || ' ' || u_mod.last_name)   AS ORF_MOD_BY,
     ocr.lodgement_date                             AS LODG_DATE,
 
     -- Region / District
@@ -262,4 +260,5 @@ LEFT JOIN observer  ON ocr.id = observer.occurrence_report_id
 LEFT JOIN obs_detail ON ocr.id = obs_detail.occurrence_report_id
 LEFT JOIN identification ON ocr.id = identification.occurrence_report_id
 LEFT JOIN habitat   ON ocr.id = habitat.occurrence_report_id
+LEFT JOIN accounts_emailuser u_mod ON ocr.last_modified_by = u_mod.id
 ORDER BY ocr.occurrence_report_number, geom.geom_id;
