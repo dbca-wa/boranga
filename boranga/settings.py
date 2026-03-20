@@ -28,6 +28,7 @@ SYSTEM_MAINTENANCE_WARNING = env("SYSTEM_MAINTENANCE_WARNING", 24)  # hours
 DISABLE_EMAIL = env("DISABLE_EMAIL", False)
 SHOW_TESTS_URL = env("SHOW_TESTS_URL", False)
 SHOW_DEBUG_TOOLBAR = env("SHOW_DEBUG_TOOLBAR", False)
+DATA_VERIFICATION_READ_ONLY = env("DATA_VERIFICATION_READ_ONLY", False)
 TIME_ZONE = "Australia/Perth"
 
 SILENCE_SYSTEM_CHECKS = env("SILENCE_SYSTEM_CHECKS", False)
@@ -156,6 +157,7 @@ REST_FRAMEWORK = {
 }
 
 MIDDLEWARE_CLASSES += [
+    "boranga.middleware.ReadOnlyMiddleware",
     "boranga.middleware.FirstTimeNagScreenMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
 ]

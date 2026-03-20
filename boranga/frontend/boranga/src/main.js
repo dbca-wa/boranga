@@ -34,8 +34,59 @@ const app = createApp(App);
 
 const originalFetch = window.fetch.bind(window);
 
+// --- Read-only mode helpers ---
+const READ_ONLY_TOAST_ID = 'boranga-read-only-toast';
+
+function showReadOnlyBanner() {
+    if (document.getElementById(READ_ONLY_TOAST_ID)) return;
+
+    // Toast container — fixed top-right, no page height impact
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;top:6px;right:1rem;z-index:9999;';
+
+    container.innerHTML = `
+        <div id="${READ_ONLY_TOAST_ID}" class="toast align-items-center border-0 show" role="alert" aria-live="assertive" aria-atomic="true" style="background-color:#92400e;color:#fff;">
+            <div class="d-flex">
+                <div class="toast-body fw-semibold">
+                    \u{1F512} System READ-ONLY for data verification
+                </div>
+            </div>
+        </div>`;
+
+    document.body.appendChild(container);
+}
+
+function hideReadOnlyBanner() {
+    document
+        .getElementById(READ_ONLY_TOAST_ID)
+        ?.closest('div[style]')
+        ?.remove();
+}
+
+/** Fetches the current read-only status from the server and updates window.env + banner. */
+function refreshReadOnlyStatus() {
+    return originalFetch('/api/read_only_status')
+        .then((r) => r.json())
+        .then((data) => {
+            window.env = window.env || {};
+            window.env.read_only = !!data.read_only;
+            if (window.env.read_only) {
+                showReadOnlyBanner();
+            } else {
+                hideReadOnlyBanner();
+            }
+            return window.env.read_only;
+        })
+        .catch(() => false);
+}
+
+// Check on initial page load.
+refreshReadOnlyStatus();
+
 // Do NOT make the outer wrapper async; otherwise window.fetch becomes a Promise.
 window.fetch = ((orig) => {
+    const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
     return async (...args) => {
         // Normalize URL (string | URL | Request)
         let url;
@@ -48,6 +99,45 @@ window.fetch = ((orig) => {
         }
         const sameOrigin = url.origin === window.location.origin;
         const isApi = sameOrigin && url.pathname.startsWith('/api');
+
+        // Determine request method
+        const method = (
+            (args.length > 1 && args[1]?.method) ||
+            (args[0] instanceof Request && args[0].method) ||
+            'GET'
+        ).toUpperCase();
+
+        // Re-check read-only status from the server on every write attempt.
+        // DataTables uses POST on _paginated endpoints when the querystring is too
+        // long — these are read-only list queries and must not be blocked.
+        if (
+            isApi &&
+            WRITE_METHODS.has(method) &&
+            !url.pathname.includes('_paginated')
+        ) {
+            const isReadOnly = await refreshReadOnlyStatus();
+            if (isReadOnly) {
+                swal.fire({
+                    iconHtml:
+                        '<i class="bi bi-lock-fill" style="font-size:3rem;color:#92400e;"></i>',
+                    customClass: {
+                        icon: 'border-0',
+                        confirmButton: 'btn btn-primary',
+                    },
+                    title: 'Read-Only Mode',
+                    text: 'The system is currently in read-only mode for data verification. No changes can be made at this time.',
+                });
+                return new Response(
+                    JSON.stringify({
+                        detail: 'The system is currently in read-only mode for data verification.',
+                    }),
+                    {
+                        status: 503,
+                        headers: { 'Content-Type': 'application/json' },
+                    }
+                );
+            }
+        }
 
         // Merge headers
         let headers = new Headers();

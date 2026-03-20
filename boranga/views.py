@@ -5,9 +5,10 @@ import os
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.management import call_command
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views import View
 from django.views.generic import DetailView
 from django.views.generic.base import TemplateView
 
@@ -165,6 +166,15 @@ class BorangaContactView(TemplateView):
 
 class BorangaFurtherInformationView(TemplateView):
     template_name = "boranga/further_info.html"
+
+
+class ReadOnlyStatusView(View):
+    """Returns the current read-only status. Never cached."""
+
+    def get(self, request):
+        response = JsonResponse({"read_only": getattr(settings, "DATA_VERIFICATION_READ_ONLY", False)})
+        response["Cache-Control"] = "no-store"
+        return response
 
 
 class ManagementCommandsView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):

@@ -42,6 +42,50 @@ class FirstTimeNagScreenMiddleware:
         return redirect(path_ft + "?next=" + quote_plus(request.get_full_path()))
 
 
+class ReadOnlyMiddleware:
+    """Blocks all write requests (POST/PUT/PATCH/DELETE) to the API when
+    settings.DATA_VERIFICATION_READ_ONLY is truthy.  Django admin, authentication,
+    and other non-API paths are exempt so that admin and ORM-level operations still
+    work.  POST requests to *_paginated endpoints are also allowed through because
+    DataTables uses POST when the querystring is too long — these are read-only
+    list queries, not writes."""
+
+    EXEMPT_PATH_PREFIXES = (
+        "/admin/",
+        "/ledger/",
+        "/sso/",
+        "/logout",
+        "/ssologin",
+    )
+    WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from django.conf import settings as django_settings
+
+        if (
+            getattr(django_settings, "DATA_VERIFICATION_READ_ONLY", False)
+            and request.method in self.WRITE_METHODS
+            and request.path.startswith("/api/")
+            and not any(request.path.startswith(p) for p in self.EXEMPT_PATH_PREFIXES)
+            # Allow DataTables POST queries on paginated endpoints (read-only list queries)
+            and "_paginated" not in request.path
+        ):
+            from django.http import JsonResponse
+
+            return JsonResponse(
+                {
+                    "detail": "The system is currently in read-only mode for data verification. "
+                    "No changes can be made at this time."
+                },
+                status=503,
+            )
+
+        return self.get_response(request)
+
+
 class RevisionOverrideMiddleware(RevisionMiddleware):
     """
     Wraps the entire request in a revision.
