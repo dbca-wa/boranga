@@ -10,6 +10,12 @@
 -- table which lives in a separate database (ledger_db). A cross-database join is
 -- not possible in standard PostgreSQL. If human-readable names are required,
 -- either use dblink / postgres_fdw, or resolve IDs in application code.
+--
+-- IMPORTANT — KB does not allow comments in SQL queries. Before pasting this
+-- script into KB, strip all comments using:
+--   python scripts/strip_sql_comments.py docs/sql-scripts/CommunityORFPoints.sql
+-- Or write the result to a file for easy copying:
+--   python scripts/strip_sql_comments.py docs/sql-scripts/CommunityORFPoints.sql > tmp.sql
 -- =============================================================================
 
 WITH

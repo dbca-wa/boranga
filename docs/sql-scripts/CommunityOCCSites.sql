@@ -8,6 +8,12 @@
 --
 -- NOTE: OBS_DATE (observation_date) is not available on the Occurrence model
 -- and has been excluded from all OCC reports pending further review.
+--
+-- IMPORTANT — KB does not allow comments in SQL queries. Before pasting this
+-- script into KB, strip all comments using:
+--   python scripts/strip_sql_comments.py docs/sql-scripts/CommunityOCCSites.sql
+-- Or write the result to a file for easy copying:
+--   python scripts/strip_sql_comments.py docs/sql-scripts/CommunityOCCSites.sql > tmp.sql
 -- =============================================================================
 
 WITH

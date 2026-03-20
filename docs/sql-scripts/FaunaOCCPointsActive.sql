@@ -18,6 +18,12 @@
 -- NOTE: primary_detection_method, secondary_sign, and reproductive_state are
 -- MultiSelectFields that store comma-separated IDs. They are resolved to
 -- display names via lateral unnest joins to their respective lookup tables.
+--
+-- IMPORTANT — KB does not allow comments in SQL queries. Before pasting this
+-- script into KB, strip all comments using:
+--   python scripts/strip_sql_comments.py docs/sql-scripts/FaunaOCCPointsActive.sql
+-- Or write the result to a file for easy copying:
+--   python scripts/strip_sql_comments.py docs/sql-scripts/FaunaOCCPointsActive.sql > tmp.sql
 -- =============================================================================
 
 WITH
