@@ -70,6 +70,142 @@
                     </div>
                 </div>
             </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <div id="ext_select_common_name" class="form-group">
+                        <label for="ext_ocr_common_name_lookup"
+                            >Common Name:</label
+                        >
+                        <select
+                            id="ext_ocr_common_name_lookup"
+                            ref="ext_ocr_common_name_lookup"
+                            name="ext_ocr_common_name_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="ext_ocr_community_id_lookup"
+                            >Community ID:</label
+                        >
+                        <select
+                            id="ext_ocr_community_id_lookup"
+                            ref="ext_ocr_community_id_lookup"
+                            name="ext_ocr_community_id_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div id="ext_select_occurrence_name" class="form-group">
+                        <label for="ext_ocr_occurrence_name_lookup"
+                            >Occurrence Name:</label
+                        >
+                        <select
+                            id="ext_ocr_occurrence_name_lookup"
+                            ref="ext_ocr_occurrence_name_lookup"
+                            name="ext_ocr_occurrence_name_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div id="ext_select_occurrence" class="form-group">
+                        <label for="ext_ocr_occurrence_lookup"
+                            >Occurrence Number:</label
+                        >
+                        <select
+                            id="ext_ocr_occurrence_lookup"
+                            ref="ext_ocr_occurrence_lookup"
+                            name="ext_ocr_occurrence_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <SelectFilter
+                            id="ext-region-filter"
+                            title="Region:"
+                            :options="region_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCRRegion"
+                            placeholder="Select Regions"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    onRegionFilterChange(val || []);
+                                }
+                            "
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <SelectFilter
+                            id="ext-district-filter"
+                            title="District:"
+                            :options="filtered_district_list"
+                            :multiple="true"
+                            :pre-selected-filter-item="filterOCRDistrict"
+                            placeholder="Select Districts"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterOCRDistrict = val || [];
+                                }
+                            "
+                        />
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Observation Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCRObservationFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCRObservationToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label for="" class="form-label px-2"
+                        >Submitted Date Range:</label
+                    >
+                    <div class="input-group px-2 mb-2">
+                        <span class="input-group-text">From </span>
+                        <input
+                            v-model="filterOCRSubmittedFromDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                        <span class="input-group-text"> to </span>
+                        <input
+                            v-model="filterOCRSubmittedToDate"
+                            type="date"
+                            class="form-control"
+                            placeholder="DD/MM/YYYY"
+                        />
+                    </div>
+                </div>
+            </div>
         </CollapsibleFilters>
         <div v-if="addOCRVisibility" class="col-md-12 dropdown">
             <div class="text-end">
@@ -112,6 +248,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
 export default {
@@ -119,6 +256,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
     },
     props: {
         level: {
@@ -160,6 +298,56 @@ export default {
             required: false,
             default: 'filterOCRApplicationStatus',
         },
+        filterOCRCommonName_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommonName',
+        },
+        filterOCRCommunityId_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityId',
+        },
+        filterOCROccurrenceName_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCROccurrenceName',
+        },
+        filterOCROccurrence_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCROccurrence',
+        },
+        filterOCRRegion_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRRegion',
+        },
+        filterOCRDistrict_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRDistrict',
+        },
+        filterOCRObservationFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRObservationFromDate',
+        },
+        filterOCRObservationToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRObservationToDate',
+        },
+        filterOCRSubmittedFromDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRSubmittedFromDate',
+        },
+        filterOCRSubmittedToDate_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRSubmittedToDate',
+        },
     },
     data() {
         return {
@@ -190,8 +378,84 @@ export default {
                 ? sessionStorage.getItem(this.filterOCRApplicationStatus_cache)
                 : 'all',
 
+            filterOCRCommonName: sessionStorage.getItem(
+                this.filterOCRCommonName_cache
+            )
+                ? sessionStorage.getItem(this.filterOCRCommonName_cache)
+                : 'all',
+
+            filterOCRCommunityId: sessionStorage.getItem(
+                this.filterOCRCommunityId_cache
+            )
+                ? sessionStorage.getItem(this.filterOCRCommunityId_cache)
+                : 'all',
+
+            filterOCROccurrenceName: sessionStorage.getItem(
+                this.filterOCROccurrenceName_cache
+            )
+                ? sessionStorage.getItem(this.filterOCROccurrenceName_cache)
+                : 'all',
+
+            filterOCROccurrence: sessionStorage.getItem(
+                this.filterOCROccurrence_cache
+            )
+                ? sessionStorage.getItem(this.filterOCROccurrence_cache)
+                : 'all',
+
+            filterOCRRegion: (() => {
+                const raw = sessionStorage.getItem(this.filterOCRRegion_cache);
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
+
+            filterOCRDistrict: (() => {
+                const raw = sessionStorage.getItem(
+                    this.filterOCRDistrict_cache
+                );
+                if (!raw || raw === 'all') return [];
+                try {
+                    return JSON.parse(raw);
+                } catch {
+                    return [];
+                }
+            })(),
+
+            filterOCRObservationFromDate: sessionStorage.getItem(
+                this.filterOCRObservationFromDate_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterOCRObservationFromDate_cache
+                  )
+                : '',
+
+            filterOCRObservationToDate: sessionStorage.getItem(
+                this.filterOCRObservationToDate_cache
+            )
+                ? sessionStorage.getItem(this.filterOCRObservationToDate_cache)
+                : '',
+
+            filterOCRSubmittedFromDate: sessionStorage.getItem(
+                this.filterOCRSubmittedFromDate_cache
+            )
+                ? sessionStorage.getItem(this.filterOCRSubmittedFromDate_cache)
+                : '',
+
+            filterOCRSubmittedToDate: sessionStorage.getItem(
+                this.filterOCRSubmittedToDate_cache
+            )
+                ? sessionStorage.getItem(this.filterOCRSubmittedToDate_cache)
+                : '',
+
             //Filter list for scientific name and common name
             group_types: [],
+            region_list: [],
+            district_list: [],
+            filtered_district_list: [],
+            filterRegionDistrict: {},
 
             // filtering options
             external_status: [
@@ -211,7 +475,17 @@ export default {
                 this.filterOCRGroupType === 'all' &&
                 this.filterOCRScientificName === 'all' &&
                 this.filterOCRExCommunityName === 'all' &&
-                this.filterOCRApplicationStatus === 'all'
+                this.filterOCRApplicationStatus === 'all' &&
+                this.filterOCRCommonName === 'all' &&
+                this.filterOCRCommunityId === 'all' &&
+                this.filterOCROccurrenceName === 'all' &&
+                this.filterOCROccurrence === 'all' &&
+                this.filterOCRRegion.length === 0 &&
+                this.filterOCRDistrict.length === 0 &&
+                this.filterOCRObservationFromDate === '' &&
+                this.filterOCRObservationToDate === '' &&
+                this.filterOCRSubmittedFromDate === '' &&
+                this.filterOCRSubmittedToDate === ''
             ) {
                 return false;
             } else {
@@ -386,6 +660,26 @@ export default {
                         d.filter_application_status =
                             vm.filterOCRApplicationStatus;
                         d.is_internal = vm.is_internal;
+                        d.filter_common_name = vm.filterOCRCommonName;
+                        d.filter_community_common_id = vm.filterOCRCommunityId;
+                        d.filter_occurrence_name = vm.filterOCROccurrenceName;
+                        d.filter_occurrence = vm.filterOCROccurrence;
+                        d.filter_region =
+                            vm.filterOCRRegion.length > 0
+                                ? vm.filterOCRRegion.join(',')
+                                : 'all';
+                        d.filter_district =
+                            vm.filterOCRDistrict.length > 0
+                                ? vm.filterOCRDistrict.join(',')
+                                : 'all';
+                        d.filter_observation_from_date =
+                            vm.filterOCRObservationFromDate;
+                        d.filter_observation_to_date =
+                            vm.filterOCRObservationToDate;
+                        d.filter_submitted_from_date =
+                            vm.filterOCRSubmittedFromDate;
+                        d.filter_submitted_to_date =
+                            vm.filterOCRSubmittedToDate;
                     },
                 },
                 dom:
@@ -437,9 +731,96 @@ export default {
                 vm.filterOCRApplicationStatus
             );
         },
+        filterOCRCommonName: function () {
+            let vm = this;
+            vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterOCRCommonName_cache,
+                vm.filterOCRCommonName
+            );
+        },
+        filterOCRCommunityId: function () {
+            let vm = this;
+            vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterOCRCommunityId_cache,
+                vm.filterOCRCommunityId
+            );
+        },
+        filterOCROccurrenceName: function () {
+            let vm = this;
+            vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterOCROccurrenceName_cache,
+                vm.filterOCROccurrenceName
+            );
+        },
+        filterOCROccurrence: function () {
+            let vm = this;
+            vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterOCROccurrence_cache,
+                vm.filterOCROccurrence
+            );
+        },
+        filterOCRRegion: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+                sessionStorage.setItem(
+                    vm.filterOCRRegion_cache,
+                    JSON.stringify(vm.filterOCRRegion)
+                );
+            },
+            deep: true,
+        },
+        filterOCRDistrict: {
+            handler: function () {
+                let vm = this;
+                vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+                sessionStorage.setItem(
+                    vm.filterOCRDistrict_cache,
+                    JSON.stringify(vm.filterOCRDistrict)
+                );
+            },
+            deep: true,
+        },
+        filterOCRObservationFromDate: function () {
+            let vm = this;
+            vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterOCRObservationFromDate_cache,
+                vm.filterOCRObservationFromDate
+            );
+        },
+        filterOCRObservationToDate: function () {
+            let vm = this;
+            vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterOCRObservationToDate_cache,
+                vm.filterOCRObservationToDate
+            );
+        },
+        filterOCRSubmittedFromDate: function () {
+            let vm = this;
+            vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterOCRSubmittedFromDate_cache,
+                vm.filterOCRSubmittedFromDate
+            );
+        },
+        filterOCRSubmittedToDate: function () {
+            let vm = this;
+            vm.$refs.occurrence_report_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterOCRSubmittedToDate_cache,
+                vm.filterOCRSubmittedToDate
+            );
+        },
     },
     mounted: function () {
         this.fetchFilterLists();
+        this.fetchRegionDistricts();
         let vm = this;
         $('a[data-toggle="collapse"]').on('click', function () {
             var chev = $(this).children()[0];
@@ -452,6 +833,10 @@ export default {
         this.$nextTick(() => {
             vm.initialiseScientificNameLookup();
             vm.initialiseCommunityNameLookup();
+            vm.initialiseCommonNameLookup();
+            vm.initialiseCommunityIdLookup();
+            vm.initialiseOccurrenceNameLookup();
+            vm.initialiseOccurrenceLookup();
             vm.addEventListeners();
             var newOption;
             if (
@@ -477,6 +862,54 @@ export default {
                     true
                 );
                 $('#ocr_community_name_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterOCRCommonName') != 'all' &&
+                sessionStorage.getItem('filterOCRCommonName') != null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem('filterOCRCommonNameText'),
+                    vm.filterOCRCommonName,
+                    false,
+                    true
+                );
+                $('#ext_ocr_common_name_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterOCRCommunityId') != 'all' &&
+                sessionStorage.getItem('filterOCRCommunityId') != null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem('filterOCRCommunityIdText'),
+                    vm.filterOCRCommunityId,
+                    false,
+                    true
+                );
+                $('#ext_ocr_community_id_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterOCROccurrenceName') != 'all' &&
+                sessionStorage.getItem('filterOCROccurrenceName') != null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem('filterOCROccurrenceNameText'),
+                    vm.filterOCROccurrenceName,
+                    false,
+                    true
+                );
+                $('#ext_ocr_occurrence_name_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterOCROccurrence') != 'all' &&
+                sessionStorage.getItem('filterOCROccurrence') != null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem('filterOCROccurrenceText'),
+                    vm.filterOCROccurrence,
+                    false,
+                    true
+                );
+                $('#ext_ocr_occurrence_lookup').append(newOption);
             }
         });
     },
@@ -572,6 +1005,201 @@ export default {
                     console.log(error);
                 }
             );
+        },
+        fetchRegionDistricts: function () {
+            let vm = this;
+            fetch(api_endpoints.region_district_filter_dict).then(
+                async (response) => {
+                    vm.filterRegionDistrict = await response.json();
+                    vm.region_list = vm.filterRegionDistrict.region_list;
+                    vm.district_list = vm.filterRegionDistrict.district_list;
+                    vm.filtered_district_list = vm.district_list;
+                    vm.filterDistrict();
+                },
+                (error) => {
+                    console.log(error);
+                }
+            );
+        },
+        filterDistrict: function () {
+            let vm = this;
+            if (vm.filterOCRRegion.length === 0) {
+                vm.filtered_district_list = vm.district_list;
+            } else {
+                vm.filtered_district_list = vm.district_list.filter((d) =>
+                    vm.filterOCRRegion.includes(d.region_id)
+                );
+            }
+            if (vm.filterOCRDistrict.length > 0) {
+                const validIds = vm.filtered_district_list.map((d) => d.id);
+                vm.filterOCRDistrict = vm.filterOCRDistrict.filter((id) =>
+                    validIds.includes(id)
+                );
+            }
+        },
+        onRegionFilterChange: function (val) {
+            this.filterOCRRegion = val;
+            this.filterDistrict();
+        },
+        initialiseCommonNameLookup: function () {
+            let vm = this;
+            $(vm.$refs.ext_ocr_common_name_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    dropdownParent: $('#ext_select_common_name'),
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Common Name',
+                    ajax: {
+                        url: api_endpoints.common_name_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCRCommonName = data;
+                    sessionStorage.setItem(
+                        'filterOCRCommonNameText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCRCommonName = 'all';
+                    sessionStorage.setItem('filterOCRCommonNameText', '');
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-ext_ocr_common_name_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
+        },
+        initialiseCommunityIdLookup: function () {
+            let vm = this;
+            $(vm.$refs.ext_ocr_community_id_lookup)
+                .select2({
+                    minimumInputLength: 1,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Community ID',
+                    ajax: {
+                        url: api_endpoints.community_id_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCRCommunityId = data;
+                    sessionStorage.setItem(
+                        'filterOCRCommunityIdText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCRCommunityId = 'all';
+                    sessionStorage.setItem('filterOCRCommunityIdText', '');
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-ext_ocr_community_id_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
+        },
+        initialiseOccurrenceNameLookup: function () {
+            let vm = this;
+            $(vm.$refs.ext_ocr_occurrence_name_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    dropdownParent: $('#ext_select_occurrence_name'),
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Occurrence Name',
+                    ajax: {
+                        url: api_endpoints.occurrence_name_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                                active_only: false,
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCROccurrenceName = data;
+                    sessionStorage.setItem(
+                        'filterOCROccurrenceNameText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCROccurrenceName = 'all';
+                    sessionStorage.setItem('filterOCROccurrenceNameText', '');
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-ext_ocr_occurrence_name_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
+        },
+        initialiseOccurrenceLookup: function () {
+            let vm = this;
+            $(vm.$refs.ext_ocr_occurrence_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    dropdownParent: $('#ext_select_occurrence'),
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Occurrence',
+                    ajax: {
+                        url: api_endpoints.occurrence_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterOCROccurrence = data;
+                    sessionStorage.setItem(
+                        'filterOCROccurrenceText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterOCROccurrence = 'all';
+                    sessionStorage.setItem('filterOCROccurrenceText', '');
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-ext_ocr_occurrence_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
         },
         createOccurrenceReport: async function (group_type, group_type_name) {
             swal.fire({

@@ -384,6 +384,52 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
             if filter_application_status and not filter_application_status.lower() == "all":
                 queryset = queryset.filter(customer_status=filter_application_status)
 
+            filter_common_name = request.GET.get("filter_common_name")
+            if filter_common_name and not filter_common_name.lower() == "all":
+                queryset = queryset.filter(species__taxonomy__vernaculars__id=filter_common_name)
+
+            filter_community_common_id = request.GET.get("filter_community_common_id")
+            if filter_community_common_id and not filter_community_common_id.lower() == "all":
+                queryset = queryset.filter(community__taxonomy__id=filter_community_common_id)
+
+            filter_occurrence_name = request.GET.get("filter_occurrence_name")
+            if filter_occurrence_name and not filter_occurrence_name.lower() == "all":
+                queryset = queryset.filter(occurrence__id=filter_occurrence_name)
+
+            filter_occurrence = request.GET.get("filter_occurrence")
+            if filter_occurrence and not filter_occurrence.lower() == "all":
+                queryset = queryset.filter(occurrence_id=filter_occurrence)
+
+            filter_region = request.GET.get("filter_region")
+            if filter_region and not filter_region.lower() == "all":
+                queryset = queryset.filter(location__region__id__in=filter_region.split(","))
+
+            filter_district = request.GET.get("filter_district")
+            if filter_district and not filter_district.lower() == "all":
+                queryset = queryset.filter(location__district__id__in=filter_district.split(","))
+
+            filter_observation_from_date = request.GET.get("filter_observation_from_date")
+            filter_observation_to_date = request.GET.get("filter_observation_to_date")
+            if filter_observation_from_date:
+                queryset = queryset.filter(observation_date__gte=filter_observation_from_date)
+            if filter_observation_to_date:
+                queryset = queryset.filter(observation_date__lte=filter_observation_to_date)
+
+            filter_submitted_from_date = request.GET.get("filter_submitted_from_date")
+            filter_submitted_to_date = request.GET.get("filter_submitted_to_date")
+            if filter_submitted_from_date:
+                try:
+                    submitted_from = datetime.strptime(filter_submitted_from_date, "%Y-%m-%d")
+                    queryset = queryset.filter(lodgement_date__gte=submitted_from)
+                except ValueError:
+                    pass
+            if filter_submitted_to_date:
+                try:
+                    submitted_to = datetime.combine(datetime.strptime(filter_submitted_to_date, "%Y-%m-%d"), time.max)
+                    queryset = queryset.filter(lodgement_date__lte=submitted_to)
+                except ValueError:
+                    pass
+
         fields = self.get_fields(request)
 
         search_text = request.POST.get("search[value]")
