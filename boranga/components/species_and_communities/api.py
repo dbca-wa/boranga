@@ -319,9 +319,9 @@ class GetCommonName(views.APIView):
         if not search_term:
             return Response()
 
-        queryset = TaxonVernacular.objects.filter(
-            taxonomy__kingdom_fk__grouptype=group_type_id,
-        ).values("id", "vernacular_name")
+        queryset = TaxonVernacular.objects.all().values("id", "vernacular_name")
+        if group_type_id:
+            queryset = queryset.filter(taxonomy__kingdom_fk__grouptype=group_type_id)
 
         # Allow internal users to perform wildcard search
         if is_internal(request):
