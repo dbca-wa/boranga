@@ -93,18 +93,19 @@ $MANAGE dumpdata \
     \
     boranga.TileLayer \
     boranga.GeoserverUrl \
-    boranga.PlausibilityGeometry
+    boranga.PlausibilityGeometry \
+    \
+    ledger_api_client.SystemGroup
 
-# ── Ledger (System Groups) ────────────────────────────────────────────────────
-# SystemGroup lives in the ledger_api_client package. Dumped separately because
-# it may not be present in all environments — failure is non-fatal.
-$MANAGE dumpdata ledger_api_client.SystemGroup \
-    --indent 2 \
-    --natural-foreign \
-    --natural-primary \
-    --output "${OUT_FILE%.json}_system_groups.json" 2>/dev/null && \
-    echo "  Note: ledger_api_client.SystemGroup written to ${OUT_FILE%.json}_system_groups.json" || \
-    echo "  WARNING: Could not dump SystemGroup — skipping (check the app label for your ledger installation)."
+# ── Normalise geometry SRIDs ──────────────────────────────────────────────────
+# UAT data may contain PlausibilityGeometry records written with SRID=4326 from
+# before the CRS migration to GDA94 (SRID=4283). Fix the SRID tag in the
+# fixture so loading it never introduces wrong coordinates into the system.
+DEFAULT_SRID=$(python -c "from boranga.settings import DEFAULT_SRID; print(DEFAULT_SRID)" 2>/dev/null || echo "4283")
+if [ "$DEFAULT_SRID" != "4326" ]; then
+    sed -i "s/SRID=4326;/SRID=${DEFAULT_SRID};/g" "$OUT_FILE"
+    echo "  Note: Replaced SRID=4326 → SRID=${DEFAULT_SRID} in geometry fields"
+fi
 
 echo ""
 echo "=== Done. Fixtures written to ${OUT_FILE} ==="
