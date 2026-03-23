@@ -180,14 +180,20 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
                 )
                 raise Exception("local-cadastre-empty")
 
-            # Ensure db_geom is in the correct SRID (CadastreLayer uses 4326)
+            # Ensure db_geom is in the same SRID as CadastreLayer.geom.
+            # CadastreLayer.geom uses DEFAULT_SRID (4283 after the CRS migration);
+            # do NOT hardcode 4326 here or ST_Intersects will raise an SRID mismatch.
+            cadastre_srid = CadastreLayer._meta.get_field("geom").srid
             geom_for_query = db_geom
-            if getattr(db_geom, "srid", None) and db_geom.srid != 4326:
+            if getattr(db_geom, "srid", None) and db_geom.srid != cadastre_srid:
                 geom_for_query = GEOSGeometry(db_geom.wkt, srid=db_geom.srid)
-                geom_for_query.transform(4326)
+                geom_for_query.transform(cadastre_srid)
 
-            qs = CadastreLayer.objects.filter(geom__intersects=geom_for_query)
-            count = qs.count()
+            from django.db import transaction as _tx
+
+            with _tx.atomic():
+                qs = CadastreLayer.objects.filter(geom__intersects=geom_for_query)
+                count = qs.count()
             logger.debug(
                 "intersect_geometry_with_layer: local cadastre count=%s for geometry extent=%s",
                 count,
