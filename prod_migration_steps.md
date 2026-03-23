@@ -82,13 +82,17 @@ Make sure fixtures copied from UAT exist in the boranga/fixtures/uat folder.
 
 ```
 
-## Step 17: Import Taxonomies from NOMOS (Can take up to ~30 minutes)
+## Step 17: Populate the Proxy record
+
+The proxy fixture is not imported automatically as it contains credentials. Manually create the Proxy record via the Django admin or shell using the credentials from the secrets store.
+
+## Step 18: Import Taxonomies from NOMOS (Can take up to ~30 minutes)
 
 Ensure NOMOS_BLOB_URL secret is set
 
 ./manage.py fetch_nomos_blob_data
 
-## Step 18: Import the Cadastre Layer from KB (Can take up to ~12 minutes)
+## Step 19: Import the Cadastre Layer from KB (Can take up to ~12 minutes)
 
 Make sure KB_CADASTRE_LAYER_URL, KB_AUTH_USER, KB_AUTH_PASS secrets are set
 
@@ -96,9 +100,9 @@ Make sure KB_CADASTRE_LAYER_URL, KB_AUTH_USER, KB_AUTH_PASS secrets are set
 
 ./manage.py import_cadastre_geojson
 
-## Step 19: Run full TPFL legacy data migration — outlined in boranga/components/data_migration/MIGRATION_ORDER.md (Can take up to 3 hours)
+## Step 20: Run full TPFL legacy data migration — outlined in boranga/components/data_migration/MIGRATION_ORDER.md (Can take up to 3 hours)
 
-## Step 20: Once the web application is stable, enable sentry
+## Step 21: Once the web application is stable, enable sentry
 
 Rename the secret SENTRY_DSN_DISABLED to SENTRY_DSN
 
