@@ -73,14 +73,13 @@ patch -R venv/lib/python3.12/site-packages/reversion/migrations/0001_squashed_00
 
 ## Step 16: Install all required fixtures (previously created based on data from the UAT environment)
 
-1. Upload `boranga/fixtures/uat/uat_fixtures.json` to blob storage using Microsoft Azure Storage Explorer (drag and drop)
-2. From the Rancher workload shell, copy the file into the container using the `AZCOPY_PATH` env var:
+Upload `uat_fixtures.json` to blob storage using Microsoft Azure Storage Explorer, then copy it into the container from the Rancher workload shell:
 
 ```
 azcopy copy "${AZCOPY_PATH}/uat_fixtures.json" boranga/fixtures/uat/uat_fixtures.json
 ```
 
-3. Load the fixtures:
+Then load the fixtures:
 
 ```
 ./manage.py loaddata boranga/fixtures/uat/uat_fixtures.json
