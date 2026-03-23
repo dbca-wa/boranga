@@ -174,7 +174,11 @@ export function getDefaultSrid() {
  * @param {Proxy} map_component A map component instance
  * @param {string} tileLayerApiUrl The url to the tile layer API
  */
-export async function fetchTileLayers(map_component, tileLayerApiUrl) {
+export async function fetchTileLayers(
+    map_component,
+    tileLayerApiUrl,
+    signal = undefined
+) {
     // let parser = new WMSCapabilities();
     if (!tileLayerApiUrl) {
         console.error('No tile layer API url provided');
@@ -182,7 +186,7 @@ export async function fetchTileLayers(map_component, tileLayerApiUrl) {
     }
     let tileLayers = [];
 
-    await fetch(tileLayerApiUrl)
+    await fetch(tileLayerApiUrl, { signal })
         .then(async (response) => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');
@@ -191,10 +195,15 @@ export async function fetchTileLayers(map_component, tileLayerApiUrl) {
         })
         .then(async (layers) => {
             console.log('tilelayer', layers);
-            tileLayers = await _helper.tileLayerFromLayerDefinitions(layers);
+            tileLayers = await _helper.tileLayerFromLayerDefinitions(
+                layers,
+                signal
+            );
         })
         .catch((error) => {
-            console.error('Error fetching tilelayer:', error);
+            if (error.name !== 'AbortError') {
+                console.error('Error fetching tilelayer:', error);
+            }
         });
     return tileLayers;
 }
@@ -694,7 +703,7 @@ const _helper = {
 
         return features;
     },
-    tileLayerFromLayerDefinitions: async function (layers) {
+    tileLayerFromLayerDefinitions: async function (layers, signal = undefined) {
         const tileLayers = [];
 
         // --- Pre-flight: deduplicate and fetch capabilities URLs with retry ---
@@ -720,8 +729,9 @@ const _helper = {
             let lastError = null;
 
             for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                if (signal?.aborted) break;
                 try {
-                    const response = await fetch(url);
+                    const response = await fetch(url, { signal });
                     if (!response.ok) {
                         const body = await response.text();
                         lastError = new Error(
@@ -732,6 +742,7 @@ const _helper = {
                         break;
                     }
                 } catch (err) {
+                    if (err.name === 'AbortError') break;
                     lastError = err;
                 }
                 if (attempt < MAX_RETRIES) {
@@ -742,6 +753,11 @@ const _helper = {
                         setTimeout(r, RETRY_DELAYS[attempt - 1])
                     );
                 }
+            }
+
+            if (signal?.aborted) {
+                capabilitiesCache.set(url, { ok: false, text: null });
+                continue;
             }
 
             if (text) {

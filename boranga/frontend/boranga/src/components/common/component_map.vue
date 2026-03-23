@@ -2473,6 +2473,7 @@ export default {
         },
     },
     created: function () {
+        this._tileAbortController = new AbortController();
         let initialisers = [
             // Query Layer
             this.fetchProposals(
@@ -2482,7 +2483,11 @@ export default {
                 this.queryLayerDefinition.query_param_key
             ),
             // Tile Layers
-            fetchTileLayers(this, this.tileLayerApiUrl),
+            fetchTileLayers(
+                this,
+                this.tileLayerApiUrl,
+                this._tileAbortController.signal
+            ),
             // Fetch GIS settings (default SRID, extent, etc.)
             fetchGISSettings(api_endpoints.gis_settings),
         ];
@@ -2577,6 +2582,9 @@ export default {
         });
     },
     beforeUnmount() {
+        // Cancel any in-flight tile capabilities fetches (prevents stale error
+        // dialogs appearing after the user has navigated away from the map page)
+        this._tileAbortController?.abort();
         // Clean up listeners if needed
         document.removeEventListener('keydown', this.handleKeyDown);
         this.editableFeatureCollection.un('add', this.onFeatureChanged);
