@@ -69,3 +69,17 @@ class CronJobImportCadastreGeoJSONDaily(django_cron.CronJobBase):
         log.info("Import cadastre GeoJSON cron job triggered, running...")
         management.call_command("import_cadastre_geojson", skip_if_unchanged=True)
         return "Job Completed Successfully"
+
+
+class CronJobClearCronJobLogs(django_cron.CronJobBase):
+    """Delete CronJobLog entries older than one month, running once per day."""
+
+    RUN_ON_DAYS = [0, 1, 2, 3, 4, 5, 6]
+    RUN_AT_TIMES = [settings.CLEAR_CRON_JOB_LOGS_TIME_OF_DAY]
+    schedule = django_cron.Schedule(run_weekly_on_days=RUN_ON_DAYS, run_at_times=RUN_AT_TIMES)
+    code = "boranga.clear_cron_job_logs"
+
+    def do(self) -> None:
+        log.info("Clear cron job logs cron job triggered, running...")
+        management.call_command("clear_cron_job_logs")
+        return "Job Completed Successfully"
