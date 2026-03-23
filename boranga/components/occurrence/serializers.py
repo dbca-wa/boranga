@@ -462,11 +462,22 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
     group_type = serializers.SerializerMethodField()
     scientific_name = serializers.SerializerMethodField()
     community_name = serializers.SerializerMethodField()
+    community_common_id = serializers.CharField(
+        source="community.taxonomy.community_common_id",
+        allow_null=True,
+        read_only=True,
+    )
     customer_status = serializers.CharField(source="get_customer_status_display")
     observation_date = serializers.DateField(format="%d/%m/%Y", allow_null=True)
     observation_time = serializers.CharField(source="observation_time.name", allow_null=True)
+    lodgement_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", allow_null=True)
     main_observer = serializers.SerializerMethodField()
     can_user_edit = serializers.SerializerMethodField()
+    common_name = serializers.SerializerMethodField()
+    occurrence_name = serializers.CharField(source="occurrence.occurrence_number", allow_null=True)
+    occurrence_name_text = serializers.CharField(source="occurrence.occurrence_name", allow_null=True)
+    region = serializers.SerializerMethodField()
+    district = serializers.SerializerMethodField()
 
     class Meta:
         model = OccurrenceReport
@@ -476,13 +487,20 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
             "group_type",
             "scientific_name",
             "community_name",
+            "community_common_id",
             "processing_status",
             "customer_status",
             "can_user_view",
             "can_user_edit",
             "observation_date",
             "observation_time",
+            "lodgement_date",
             "main_observer",
+            "common_name",
+            "occurrence_name",
+            "occurrence_name_text",
+            "region",
+            "district",
         )
         datatables_always_serialize = (
             "id",
@@ -490,6 +508,7 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
             "group_type",
             "scientific_name",
             "community_name",
+            "community_common_id",
             "processing_status",
             "customer_status",
             "can_user_view",
@@ -525,6 +544,29 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
     def get_can_user_edit(self, obj):
         request = self.context["request"]
         return obj.can_user_edit(request)
+
+    def get_common_name(self, obj):
+        if obj.species and obj.species.taxonomy:
+            vernacular = obj.species.taxonomy.vernaculars.first()
+            if vernacular:
+                return vernacular.vernacular_name
+        return ""
+
+    def get_region(self, obj):
+        try:
+            if obj.location and obj.location.region:
+                return obj.location.region.name
+        except Exception:
+            pass
+        return None
+
+    def get_district(self, obj):
+        try:
+            if obj.location and obj.location.district:
+                return obj.location.district.name
+        except Exception:
+            pass
+        return None
 
 
 class ListInternalOccurrenceReportSerializer(BaseModelSerializer):

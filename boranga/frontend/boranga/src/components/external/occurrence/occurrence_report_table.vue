@@ -504,6 +504,14 @@ export default {
                 'Type',
                 'Scientific Name',
                 'Community Name',
+                'Common Name',
+                'Community ID',
+                'Occurrence Name',
+                'Occurrence Number',
+                'Region',
+                'District',
+                'Observation Date',
+                'Submitted Date',
                 'Status',
                 'Action',
             ];
@@ -559,6 +567,84 @@ export default {
                     return type == 'export' ? value : result;
                 },
                 name: 'community__taxonomy__community_name',
+            };
+        },
+        column_community_common_id: function () {
+            return {
+                data: 'community_common_id',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'community__taxonomy__community_common_id',
+            };
+        },
+        column_common_name: function () {
+            return {
+                data: 'common_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'common_name',
+            };
+        },
+        column_occurrence: function () {
+            return {
+                data: 'occurrence_name',
+                orderable: true,
+                searchable: true,
+                visible: true,
+                render: function (data, type, full) {
+                    if (full.occurrence_name) {
+                        return full.occurrence_name;
+                    }
+                    return '';
+                },
+                name: 'occurrence__occurrence_number',
+            };
+        },
+        column_occurrence_name_text: function () {
+            return {
+                data: 'occurrence_name_text',
+                orderable: true,
+                searchable: true,
+                visible: true,
+                name: 'occurrence__occurrence_name',
+            };
+        },
+        column_region: function () {
+            return {
+                data: 'region',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'location__region__name',
+            };
+        },
+        column_district: function () {
+            return {
+                data: 'district',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'location__district__name',
+            };
+        },
+        column_observation_date: function () {
+            return {
+                data: 'observation_date',
+                orderable: true,
+                searchable: true,
+                visible: true,
+                name: 'observation_date',
+            };
+        },
+        column_lodgement_date: function () {
+            return {
+                data: 'lodgement_date',
+                orderable: true,
+                searchable: true,
+                visible: true,
+                name: 'lodgement_date',
             };
         },
         column_status: function () {
@@ -624,6 +710,14 @@ export default {
                 vm.column_type,
                 vm.column_scientific_name,
                 vm.column_community_name,
+                vm.column_common_name,
+                vm.column_community_common_id,
+                vm.column_occurrence_name_text,
+                vm.column_occurrence,
+                vm.column_region,
+                vm.column_district,
+                vm.column_observation_date,
+                vm.column_lodgement_date,
                 vm.column_status,
                 vm.column_action,
             ];
