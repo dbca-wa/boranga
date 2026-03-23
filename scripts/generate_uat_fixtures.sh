@@ -9,94 +9,85 @@
 # Usage (from the project root):
 #   bash scripts/generate_uat_fixtures.sh
 #
-# Fixtures are written to boranga/fixtures/uat/ (one JSON file per model).
-# Pass a custom output directory as the first argument, e.g.:
-#   bash scripts/generate_uat_fixtures.sh /tmp/my_fixtures
+# All fixtures are written to a single file: boranga/fixtures/uat/uat_fixtures.json
+# Pass a custom output path as the first argument, e.g.:
+#   bash scripts/generate_uat_fixtures.sh /tmp/my_fixtures.json
 
 set -euo pipefail
 
 MANAGE="python manage.py"
-OUT_DIR="${1:-boranga/fixtures/uat}"
-mkdir -p "$OUT_DIR"
+OUT_FILE="${1:-boranga/fixtures/uat/uat_fixtures.json}"
+mkdir -p "$(dirname "$OUT_FILE")"
 
-dump() {
-    local label="$1"   # app_label.ModelName
-    local slug="$2"    # filename-friendly slug
-    echo "  Dumping $label → ${slug}.json"
-    $MANAGE dumpdata "$label" \
-        --indent 2 \
-        --natural-foreign \
-        --natural-primary \
-        --output "${OUT_DIR}/${slug}.json"
-}
+echo "=== Generating UAT fixtures into ${OUT_FILE} ==="
 
-echo "=== Generating UAT fixtures into ${OUT_DIR}/ ==="
-
-# ── Species & Communities ──────────────────────────────────────────────────────
-dump boranga.GroupType                  group_types
-dump boranga.Region                     regions
-dump boranga.District                   districts
-dump boranga.DocumentCategory           document_categories
-dump boranga.DocumentSubCategory        document_sub_categories
-dump boranga.FaunaGroup                 fauna_groups
-dump boranga.FaunaSubGroup              fauna_sub_groups
-dump boranga.ThreatCategory             threat_categories
-dump boranga.ThreatAgent                threat_agents
-dump boranga.CurrentImpact              current_impacts
-dump boranga.PotentialImpact            potential_impacts
-dump boranga.PotentialThreatOnset       potential_threat_onsets
-dump boranga.SystemEmailGroup           system_email_groups
-
-# ── Conservation Status ────────────────────────────────────────────────────────
-dump boranga.ConservationChangeCode         conservation_change_codes
-dump boranga.WALegislativeList              wa_legislative_lists
-dump boranga.WALegislativeCategory          wa_legislative_categories
-dump boranga.WAPriorityList                 wa_priority_lists
-dump boranga.WAPriorityCategory             wa_priority_categories
-dump boranga.IUCNVersion                    iucn_versions
-dump boranga.CommonwealthConservationList   commonwealth_conservation_lists
-dump boranga.OtherConservationAssessmentList other_conservation_assessment_lists
-dump boranga.ProposalAmendmentReason        proposal_amendment_reasons
-
-# ── Occurrence ─────────────────────────────────────────────────────────────────
-dump boranga.ObservationTime            observation_times
-dump boranga.ObserverCategory           observer_categories
-dump boranga.ObserverRole               observer_roles
-dump boranga.LocationAccuracy           location_accuracies
-dump boranga.CoordinateSource           coordinate_sources
-dump boranga.Datum                      datums
-dump boranga.LandForm                   land_forms
-dump boranga.RockType                   rock_types
-dump boranga.SoilType                   soil_types
-dump boranga.SoilColour                 soil_colours
-dump boranga.SoilCondition              soil_conditions
-dump boranga.Drainage                   drainages
-dump boranga.Intensity                  intensities
-dump boranga.SpeciesListRelatesTo       species_list_relates_to
-dump boranga.SpeciesRole                species_roles
-dump boranga.ObservationMethod          observation_methods
-dump boranga.AreaAssessment             area_assessments
-dump boranga.IdentificationCertainty    identification_certainties
-dump boranga.SampleType                 sample_types
-dump boranga.SampleDestination          sample_destinations
-dump boranga.PermitType                 permit_types
-dump boranga.PlantCountMethod           plant_count_methods
-dump boranga.PlantCountAccuracy         plant_count_accuracies
-dump boranga.CountedSubject             counted_subjects
-dump boranga.PlantCondition             plant_conditions
-dump boranga.AnimalBehaviour            animal_behaviours
-dump boranga.PrimaryDetectionMethod     primary_detection_methods
-dump boranga.SecondarySign              secondary_signs
-dump boranga.ReproductiveState          reproductive_states
-dump boranga.AnimalHealth               animal_health
-dump boranga.DeathReason                death_reasons
-dump boranga.WildStatus                 wild_statuses
-dump boranga.SiteType                   site_types
-dump boranga.OccurrenceTenurePurpose    occurrence_tenure_purposes
-dump boranga.OccurrenceTenureVesting    occurrence_tenure_vestings
-
-# ── Users ──────────────────────────────────────────────────────────────────────
-dump boranga.SubmitterCategory          submitter_categories
+$MANAGE dumpdata \
+    --indent 2 \
+    --natural-foreign \
+    --natural-primary \
+    --output "$OUT_FILE" \
+    \
+    boranga.GroupType \
+    boranga.Region \
+    boranga.District \
+    boranga.DocumentCategory \
+    boranga.DocumentSubCategory \
+    boranga.FaunaGroup \
+    boranga.FaunaSubGroup \
+    boranga.ThreatCategory \
+    boranga.ThreatAgent \
+    boranga.CurrentImpact \
+    boranga.PotentialImpact \
+    boranga.PotentialThreatOnset \
+    boranga.SystemEmailGroup \
+    \
+    boranga.ConservationChangeCode \
+    boranga.WALegislativeList \
+    boranga.WALegislativeCategory \
+    boranga.WAPriorityList \
+    boranga.WAPriorityCategory \
+    boranga.IUCNVersion \
+    boranga.CommonwealthConservationList \
+    boranga.OtherConservationAssessmentList \
+    boranga.ProposalAmendmentReason \
+    \
+    boranga.ObservationTime \
+    boranga.ObserverCategory \
+    boranga.ObserverRole \
+    boranga.LocationAccuracy \
+    boranga.CoordinateSource \
+    boranga.Datum \
+    boranga.LandForm \
+    boranga.RockType \
+    boranga.SoilType \
+    boranga.SoilColour \
+    boranga.SoilCondition \
+    boranga.Drainage \
+    boranga.Intensity \
+    boranga.SpeciesListRelatesTo \
+    boranga.SpeciesRole \
+    boranga.ObservationMethod \
+    boranga.AreaAssessment \
+    boranga.IdentificationCertainty \
+    boranga.SampleType \
+    boranga.SampleDestination \
+    boranga.PermitType \
+    boranga.PlantCountMethod \
+    boranga.PlantCountAccuracy \
+    boranga.CountedSubject \
+    boranga.PlantCondition \
+    boranga.AnimalBehaviour \
+    boranga.PrimaryDetectionMethod \
+    boranga.SecondarySign \
+    boranga.ReproductiveState \
+    boranga.AnimalHealth \
+    boranga.DeathReason \
+    boranga.WildStatus \
+    boranga.SiteType \
+    boranga.OccurrenceTenurePurpose \
+    boranga.OccurrenceTenureVesting \
+    \
+    boranga.SubmitterCategory
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 dump boranga.FileExtensionWhitelist     file_extension_whitelists
@@ -104,7 +95,6 @@ dump boranga.HelpTextEntry              help_text_entries
 
 # ── Spatial ───────────────────────────────────────────────────────────────────
 dump boranga.TileLayer                  tile_layers
-dump boranga.Proxy                      proxies
 dump boranga.GeoserverUrl               geoserver_urls
 dump boranga.PlausibilityGeometry       plausibility_geometries
 
