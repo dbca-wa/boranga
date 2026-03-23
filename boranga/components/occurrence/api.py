@@ -438,7 +438,7 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
         if is_occurrence_report_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_ocr_ids)).distinct()
+            return qs.filter(submitter=self.request.user.id)
         elif is_occurrence_report_referee(self.request):
             qs = qs.filter(id__in=active_referral_ocr_ids).distinct()
         elif is_contributor(self.request):

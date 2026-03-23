@@ -436,7 +436,7 @@ class SpeciesConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
         if is_conservation_status_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_cs_ids)).distinct()
+            return qs.filter(submitter=self.request.user.id)
         elif is_conservation_status_referee(self.request):
             qs = qs.filter(id__in=active_referral_cs_ids).distinct()
         elif is_contributor(self.request):
@@ -721,7 +721,7 @@ class CommunityConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet)
         )
 
         if is_conservation_status_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_cs_ids)).distinct()
+            return qs.filter(submitter=self.request.user.id)
         elif is_conservation_status_referee(self.request):
             qs = qs.filter(id__in=active_referral_cs_ids).distinct()
         elif is_contributor(self.request):
