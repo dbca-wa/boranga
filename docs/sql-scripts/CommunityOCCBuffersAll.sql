@@ -195,6 +195,9 @@ SELECT
     approved_cs.wa_cons_code                       AS WACONSCODE,
     active_cs.commonwealth_conservation_code       AS COMWLTH_CS,
 
+    -- Dates & status
+    habitat.obs_date                               AS OBS_DATE,
+
     -- Location
     loc.location_description                       AS LOC_DESC,
     loc.locality                                   AS LOCALITY,
@@ -236,7 +239,6 @@ SELECT
     habitat.very_good                              AS VERY_GOOD,
     habitat.excellent                              AS EXCELLENT,
     habitat.pristine                               AS PRISTINE,
-    habitat.obs_date                               AS OBS_DATE,
 
     -- WISH fields
     'Buffer Geometry'                              AS G_DATATYPE,

@@ -246,6 +246,9 @@ SELECT
     approved_cs.wa_cons_code                       AS WACONSCODE,
     active_cs.commonwealth_conservation_code       AS COMWLTH_CS,
 
+    -- Dates & status
+    animal_obs.obs_date                            AS OBS_DATE,
+
     -- Location
     loc.location_description                       AS LOC_DESC,
     loc.locality                                   AS LOCALITY,
@@ -267,7 +270,6 @@ SELECT
     animal_obs.secondary_sign                      AS SEC_SIGN,
     animal_obs.reproductive_state                  AS BREEDING,
     animal_obs.animal_observation_detail_comment   AS AN_OBS_COM,
-    animal_obs.obs_date                            AS OBS_DATE,
 
     -- Identification
     identification.identification_certainty        AS IDENT_CRTY,
