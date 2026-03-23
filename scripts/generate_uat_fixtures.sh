@@ -87,28 +87,24 @@ $MANAGE dumpdata \
     boranga.OccurrenceTenurePurpose \
     boranga.OccurrenceTenureVesting \
     \
-    boranga.SubmitterCategory
-
-# ── Main ───────────────────────────────────────────────────────────────────────
-dump boranga.FileExtensionWhitelist     file_extension_whitelists
-dump boranga.HelpTextEntry              help_text_entries
-
-# ── Spatial ───────────────────────────────────────────────────────────────────
-dump boranga.TileLayer                  tile_layers
-dump boranga.GeoserverUrl               geoserver_urls
-dump boranga.PlausibilityGeometry       plausibility_geometries
+    boranga.SubmitterCategory \
+    boranga.FileExtensionWhitelist \
+    boranga.HelpTextEntry \
+    \
+    boranga.TileLayer \
+    boranga.GeoserverUrl \
+    boranga.PlausibilityGeometry
 
 # ── Ledger (System Groups) ────────────────────────────────────────────────────
-# SystemGroup lives in the ledger_api_client package. Use the app label
-# registered there (typically "ledger_api_client"). Adjust if your
-# INSTALLED_APPS registers it under a different label.
-echo "  Dumping ledger_api_client.SystemGroup → system_groups.json"
+# SystemGroup lives in the ledger_api_client package. Dumped separately because
+# it may not be present in all environments — failure is non-fatal.
 $MANAGE dumpdata ledger_api_client.SystemGroup \
     --indent 2 \
     --natural-foreign \
     --natural-primary \
-    --output "${OUT_DIR}/system_groups.json" || \
-    echo "  WARNING: Could not dump SystemGroup — check the app label for your ledger installation."
+    --output "${OUT_FILE%.json}_system_groups.json" 2>/dev/null && \
+    echo "  Note: ledger_api_client.SystemGroup written to ${OUT_FILE%.json}_system_groups.json" || \
+    echo "  WARNING: Could not dump SystemGroup — skipping (check the app label for your ledger installation)."
 
 echo ""
-echo "=== Done. Fixtures written to ${OUT_DIR}/ ==="
+echo "=== Done. Fixtures written to ${OUT_FILE} ==="
