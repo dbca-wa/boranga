@@ -15,6 +15,8 @@ _Note: External ingress (https://boranga.dbca.wa.gov.au/) will be configured at 
 
 ## Step 6: Migrate the auth and ledger api client apps
 
+_Note: Steps 6–13 are run by opening a shell on the boranga-prod workload in the Rancher UI_
+
 ```
 ./manage.py migrate auth && ./manage.py migrate ledger_api_client
 ```
@@ -71,15 +73,17 @@ patch -R venv/lib/python3.12/site-packages/reversion/migrations/0001_squashed_00
 
 ## Step 16: Install all required fixtures (previously created based on data from the UAT environment)
 
+1. Upload `boranga/fixtures/uat/uat_fixtures.json` to blob storage using Microsoft Azure Storage Explorer (drag and drop)
+2. From the Rancher workload shell, copy the file into the container using the `AZCOPY_PATH` env var:
+
+```
+azcopy copy "${AZCOPY_PATH}/uat_fixtures.json" boranga/fixtures/uat/uat_fixtures.json
 ```
 
-Make sure fixtures copied from UAT exist in the boranga/fixtures/uat folder.
+3. Load the fixtures:
 
-./manage.py load_uat_fixtures --dry-run
-
-./manage.py load_uat_fixtures
-
-
+```
+./manage.py loaddata boranga/fixtures/uat/uat_fixtures.json
 ```
 
 ## Step 17: Populate the Proxy record
