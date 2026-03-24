@@ -4588,7 +4588,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if _all_pop_ids:
                 # Occurrence.migrated_from_id follows the "tpfl-{POP_ID}" pattern
                 _pop_mig_ids = [f"tpfl-{pid}" for pid in _all_pop_ids]
-                for _occ in Occurrence.objects.only("id", "migrated_from_id").filter(migrated_from_id__in=_pop_mig_ids):
+                for _occ in (
+                    Occurrence.objects.only("id", "migrated_from_id")
+                    .select_related(None)
+                    .filter(migrated_from_id__in=_pop_mig_ids)
+                ):
                     _bare = (
                         _occ.migrated_from_id.split("-", 1)[1]
                         if "-" in _occ.migrated_from_id
