@@ -2264,7 +2264,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if "organisation" not in si_create or si_create.get("organisation") is None:
                     si_create["organisation"] = "DBCA"
 
-                if "submitter_category_id" not in si_create or si_create.get("submitter_category_id") is None:
+                # Pipeline stores FK value under "submitter_category" (field name), not "submitter_category_id"
+                if not si_create.get("submitter_category") and not si_create.get("submitter_category_id"):
                     try:
                         from boranga.components.users.models import SubmitterCategory
 
@@ -2335,8 +2336,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if "organisation" not in si_create or si_create.get("organisation") is None:
                     si_create["organisation"] = "DBCA"
 
-                # Ensure submitter_category defaults to DBCA category if not provided
-                if "submitter_category_id" not in si_create or si_create.get("submitter_category_id") is None:
+                # Ensure submitter_category defaults to DBCA category if not provided.
+                # Pipeline stores FK value under "submitter_category" (field name), not "submitter_category_id".
+                if not si_create.get("submitter_category") and not si_create.get("submitter_category_id"):
                     try:
                         from boranga.components.users.models import SubmitterCategory
 
@@ -2363,10 +2365,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
             for si in submitter_info_to_update:
                 for f in SubmitterInformation._meta.fields:
                     if f.name not in ("id", "occurrence_report"):
-                        val = getattr(si, f.name, None)
+                        val = getattr(si, f.attname, None)  # use attname (_id) to avoid lazy FK queries
                         if val is not None or f.name in (
                             "organisation",
-                            "submitter_category_id",
+                            "submitter_category",  # Django FK field name (not submitter_category_id)
                         ):
                             update_fields.add(f.name)
 
