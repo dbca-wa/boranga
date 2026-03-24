@@ -4569,6 +4569,35 @@ class OccurrenceReportImporter(BaseSheetImporter):
             ocr_ids = [ocr.pk for ocr in all_processed_ocrs]
             occ_ids = [ocr.occurrence_id for ocr in all_processed_ocrs if ocr.occurrence_id]
 
+            # Build a lookup of Occurrences by bare POP_ID (from DRF_POP_SECTION_MAP).
+            # The map says: for OCR with SHEETNO, copy SECT_CODE data into the Occurrence
+            # identified by POP_ID — NOT into the Occurrence already linked to that OCR.
+            _all_pop_ids: set[str] = set()
+            for _ocr in all_processed_ocrs:
+                _sheetno = _ocr.migrated_from_id
+                if not _sheetno:
+                    continue
+                _entries = pop_section_map.get(_sheetno)
+                if not _entries and "-" in _sheetno:
+                    _entries = pop_section_map.get(_sheetno.split("-", 1)[1])
+                if _entries:
+                    for _pid, _ in _entries:
+                        _all_pop_ids.add(_pid)
+
+            occ_by_pop_id: dict[str, Occurrence] = {}
+            if _all_pop_ids:
+                # Occurrence.migrated_from_id follows the "tpfl-{POP_ID}" pattern
+                _pop_mig_ids = [f"tpfl-{pid}" for pid in _all_pop_ids]
+                for _occ in Occurrence.objects.only("id", "migrated_from_id").filter(migrated_from_id__in=_pop_mig_ids):
+                    _bare = (
+                        _occ.migrated_from_id.split("-", 1)[1]
+                        if "-" in _occ.migrated_from_id
+                        else _occ.migrated_from_id
+                    )
+                    occ_by_pop_id[_bare] = _occ
+                # Include these occurrences in the target_lookup pre-fetch below
+                occ_ids = list(set(occ_ids) | {o.pk for o in occ_by_pop_id.values()})
+
             source_lookup = {}
             target_lookup = {}
 
@@ -4635,12 +4664,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         if not source_obj:
                             continue
 
-                        # 2. Find or create the target OCC child object
-                        occurrence = ocr.occurrence
+                        # 2. Find the target Occurrence using POP_ID from DRF_POP_SECTION_MAP.
+                        # The map says: copy SECT_CODE data from OCR (SHEETNO) into Occurrence (POP_ID).
+                        occurrence = occ_by_pop_id.get(pop_id)
                         if not occurrence:
                             logger.warning(
-                                f"OCR {ocr.pk} (SHEETNO={sheetno}) has no parent Occurrence. "
-                                f"Skipping clone for {sect_code}."
+                                f"OCR {sheetno} -> POP_ID={pop_id}: target Occurrence not found "
+                                f"(migrated_from_id=tpfl-{pop_id}). Skipping clone for {sect_code}."
                             )
                             continue
 
