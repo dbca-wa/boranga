@@ -115,6 +115,11 @@ class BasicConservationStatusSerializer(BaseModelSerializer):
 class ListConservationStatusSerializer(BaseModelSerializer):
     scientific_name = serializers.CharField(source="species_taxonomy.scientific_name", allow_null=True)
     community_name = serializers.SerializerMethodField()
+    common_name = serializers.SerializerMethodField()
+    community_common_id = serializers.SerializerMethodField()
+    change_code = serializers.CharField(source="change_code.code", read_only=True, allow_null=True)
+    wa_legislative_category = serializers.CharField(source="wa_legislative_category.code", allow_null=True)
+    wa_priority_category = serializers.CharField(source="wa_priority_category.code", allow_null=True)
     customer_status = serializers.CharField(source="get_customer_status_display")
     is_new_contributor = serializers.SerializerMethodField()
 
@@ -126,6 +131,11 @@ class ListConservationStatusSerializer(BaseModelSerializer):
             "group_type",
             "scientific_name",
             "community_name",
+            "common_name",
+            "community_common_id",
+            "change_code",
+            "wa_legislative_category",
+            "wa_priority_category",
             "processing_status",
             "customer_status",
             "can_user_edit",
@@ -141,6 +151,11 @@ class ListConservationStatusSerializer(BaseModelSerializer):
             "group_type",
             "scientific_name",
             "community_name",
+            "common_name",
+            "community_common_id",
+            "change_code",
+            "wa_legislative_category",
+            "wa_priority_category",
             "processing_status",
             "customer_status",
             "can_user_edit",
@@ -156,6 +171,22 @@ class ListConservationStatusSerializer(BaseModelSerializer):
             try:
                 taxonomy = CommunityTaxonomy.objects.get(community=obj.community)
                 return taxonomy.community_name
+            except CommunityTaxonomy.DoesNotExist:
+                return ""
+        return ""
+
+    def get_common_name(self, obj):
+        if obj.species:
+            if obj.species.taxonomy.vernaculars:
+                names_list = obj.species.taxonomy.vernaculars.all().values_list("vernacular_name", flat=True)
+                return ",".join(names_list)
+        return ""
+
+    def get_community_common_id(self, obj):
+        if obj.community:
+            try:
+                taxonomy = CommunityTaxonomy.objects.get(community=obj.community)
+                return taxonomy.community_common_id
             except CommunityTaxonomy.DoesNotExist:
                 return ""
         return ""
