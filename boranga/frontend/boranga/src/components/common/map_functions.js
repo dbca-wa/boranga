@@ -144,9 +144,12 @@ export async function fetchGISSettings(gisSettingsApiUrl) {
         const data = await response.json();
         if (data && typeof data.default_srid === 'number') {
             _gisSettingsCache = data;
-            // Register the projection with OpenLayers if it isn't already known
+            // Always register/overwrite the projection definition so that the
+            // backend-supplied +towgs84 datum-shift parameters (e.g. for
+            // GDA94 / EPSG:4283) are applied even if OL already has a bare
+            // definition without those parameters.
             const epsgCode = `EPSG:${data.default_srid}`;
-            if (!getProjection(epsgCode) && data.proj4_string) {
+            if (data.proj4_string) {
                 proj4.defs(epsgCode, data.proj4_string);
                 registerProj4(proj4);
             }
