@@ -417,7 +417,7 @@ def _parse_datetime_iso(value: Any, default_tz: Any = None) -> TransformResult:
 
     # fallback to explicit legacy formats
     if dt is None:
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y", "%Y-%m-%d"):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d"):
             try:
                 dt = datetime.strptime(s, fmt)
                 break
