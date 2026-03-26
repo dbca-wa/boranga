@@ -19,7 +19,7 @@ This process is completed until data verification is complete for a full legacy 
 
 python3 scripts/partition_migration_data.py \
  --adapter boranga.components.data_migration.adapters.conservation_status.tpfl.ConservationStatusTpflAdapter \
- --input private-media/legacy_data/TPFL/SAMPLE_CS_Data_Dec2025.csv \
+ --input private-media/legacy_data/TPFL/FLORA_CS_Migration_Template_FULL.csv \
  --output private-media/legacy_data/TPFL/conservation-status-partitioned.csv \
  --report private-media/legacy_data/TPFL/conservation-status-partitioned-report.csv \
  --max-cardinality 50 \
