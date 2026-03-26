@@ -884,6 +884,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
         if occ_mig_ids:
             occ_map = {o.migrated_from_id: o for o in Occurrence.objects.filter(migrated_from_id__in=occ_mig_ids)}
 
+        _tec_sources = {
+            Source.TEC.value,
+            Source.TEC_SITE_VISITS.value,
+            Source.TEC_SITE_SPECIES.value,
+            Source.TEC_SURVEYS.value,
+            Source.TEC_SURVEY_THREATS.value,
+            Source.TEC_BOUNDARIES.value,
+        }
+        is_tec_run = bool(_tec_sources.intersection(sources))
+
         for op in ops:
             row = op["canonical"]
             defaults = op["defaults"]
@@ -898,7 +908,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     defaults.pop("occurrence", None)
 
                     # Copy name and number if not present (TEC requirement)
-                    if not defaults.get("ocr_for_occ_name"):
+                    if is_tec_run and not defaults.get("ocr_for_occ_name"):
                         defaults["ocr_for_occ_name"] = occ.occurrence_name
                     if not defaults.get("ocr_for_occ_number"):
                         defaults["ocr_for_occ_number"] = occ.occurrence_number
