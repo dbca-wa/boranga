@@ -164,12 +164,12 @@ export async function fetchGISSettings(gisSettingsApiUrl) {
 }
 
 /**
- * Returns the cached default SRID, or 4283 if settings haven't been fetched yet.
+ * Returns the cached default SRID, or 7844 if settings haven't been fetched yet.
  * Prefer calling fetchGISSettings first during component initialisation.
  * @returns {number}
  */
 export function getDefaultSrid() {
-    return _gisSettingsCache ? _gisSettingsCache.default_srid : 4283;
+    return _gisSettingsCache ? _gisSettingsCache.default_srid : 7844;
 }
 
 /**
