@@ -158,6 +158,9 @@ class ConservationStatusTpflAdapter(SourceAdapter):
             else:
                 canonical["approval_level"] = "minister"
 
+            # approved_by always mirrors submitter
+            canonical["approved_by"] = canonical.get("submitter")
+
             # 6. Static values
             canonical["locked"] = True
             canonical["internal_application"] = True
