@@ -19,6 +19,5 @@ tests
 docs
 logs
 diagrams
-scripts
 Dockerfile
 docker-compose*.yml
