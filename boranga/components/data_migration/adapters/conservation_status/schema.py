@@ -31,8 +31,9 @@ COLUMN_MAP = {
     "customer_status": "customer_status",
     "internal_application": "internal_application",
     "locked": "locked",
-    # TFAUNA format additions
-    "species_taxonomy": "species_taxonomy_taxon_name_id",  # Nomos taxon_name_id
+    # TFAUNA/TPFL format additions
+    "species_taxonomy": "species_taxonomy_taxon_name_id",  # Nomos taxon_name_id (TFAUNA)
+    "TAXONID": "species_taxonomy_taxon_name_id",  # Nomos taxon_name_id (TPFL)
     "other_conservation_assessment": "other_conservation_assessment",
     # TEC format (community conservation status)
     "COM_NO": "migrated_from_id",  # TEC uses COM_NO as the unique identifier

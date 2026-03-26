@@ -219,6 +219,7 @@ def load_csv_mapping(
     *,
     delimiter: str = ",",
     case_insensitive: bool = True,
+    filters: dict[str, str] | None = None,
 ) -> tuple[dict[str, str] | None, str]:
     """
     Load a simple CSV mapping file (headers include key_column and value_column).
@@ -233,6 +234,8 @@ def load_csv_mapping(
         If `path` is a directory the csv_filename will be joined to it. If it
         already points to a .csv file it will be used as-is.
       - delimiter, case_insensitive: parsing options.
+      - filters: optional dict of {column: expected_value} to skip rows that
+        don't match (e.g. {"IS_ACTIVE": "Y"} to only load active records).
 
     Returns (mapping_dict, resolved_path) or (None, resolved_path) if file not found
     or could not be read.
@@ -270,6 +273,9 @@ def load_csv_mapping(
                 )
                 return None, resolved_str
             for row in rdr:
+                if filters:
+                    if any(str(row.get(col, "")).strip() != val for col, val in filters.items()):
+                        continue
                 k = row.get(key_column)
                 v = row.get(value_column)
                 if k is None:
@@ -333,6 +339,7 @@ def preload_sheetno_pop_map(legacy_system: str = "TPFL", path: str | None = None
         legacy_system=legacy_system,
         path=path,
         case_insensitive=True,
+        filters={"IS_ACTIVE": "Y"},
     )
     if not mapping:
         logger.debug(

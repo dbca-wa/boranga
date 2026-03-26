@@ -884,6 +884,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
         if occ_mig_ids:
             occ_map = {o.migrated_from_id: o for o in Occurrence.objects.filter(migrated_from_id__in=occ_mig_ids)}
 
+        _tec_sources = {
+            Source.TEC.value,
+            Source.TEC_SITE_VISITS.value,
+            Source.TEC_SITE_SPECIES.value,
+            Source.TEC_SURVEYS.value,
+            Source.TEC_SURVEY_THREATS.value,
+            Source.TEC_BOUNDARIES.value,
+        }
+        is_tec_run = bool(_tec_sources.intersection(sources))
+
         for op in ops:
             row = op["canonical"]
             defaults = op["defaults"]
@@ -898,7 +908,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     defaults.pop("occurrence", None)
 
                     # Copy name and number if not present (TEC requirement)
-                    if not defaults.get("ocr_for_occ_name"):
+                    if is_tec_run and not defaults.get("ocr_for_occ_name"):
                         defaults["ocr_for_occ_name"] = occ.occurrence_name
                     if not defaults.get("ocr_for_occ_number"):
                         defaults["ocr_for_occ_number"] = occ.occurrence_number
@@ -2264,7 +2274,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if "organisation" not in si_create or si_create.get("organisation") is None:
                     si_create["organisation"] = "DBCA"
 
-                if "submitter_category_id" not in si_create or si_create.get("submitter_category_id") is None:
+                # Pipeline stores FK value under "submitter_category" (field name), not "submitter_category_id"
+                if not si_create.get("submitter_category") and not si_create.get("submitter_category_id"):
                     try:
                         from boranga.components.users.models import SubmitterCategory
 
@@ -2335,8 +2346,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 if "organisation" not in si_create or si_create.get("organisation") is None:
                     si_create["organisation"] = "DBCA"
 
-                # Ensure submitter_category defaults to DBCA category if not provided
-                if "submitter_category_id" not in si_create or si_create.get("submitter_category_id") is None:
+                # Ensure submitter_category defaults to DBCA category if not provided.
+                # Pipeline stores FK value under "submitter_category" (field name), not "submitter_category_id".
+                if not si_create.get("submitter_category") and not si_create.get("submitter_category_id"):
                     try:
                         from boranga.components.users.models import SubmitterCategory
 
@@ -2363,10 +2375,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
             for si in submitter_info_to_update:
                 for f in SubmitterInformation._meta.fields:
                     if f.name not in ("id", "occurrence_report"):
-                        val = getattr(si, f.name, None)
+                        val = getattr(si, f.attname, None)  # use attname (_id) to avoid lazy FK queries
                         if val is not None or f.name in (
                             "organisation",
-                            "submitter_category_id",
+                            "submitter_category",  # Django FK field name (not submitter_category_id)
                         ):
                             update_fields.add(f.name)
 
@@ -4567,6 +4579,39 @@ class OccurrenceReportImporter(BaseSheetImporter):
             ocr_ids = [ocr.pk for ocr in all_processed_ocrs]
             occ_ids = [ocr.occurrence_id for ocr in all_processed_ocrs if ocr.occurrence_id]
 
+            # Build a lookup of Occurrences by bare POP_ID (from DRF_POP_SECTION_MAP).
+            # The map says: for OCR with SHEETNO, copy SECT_CODE data into the Occurrence
+            # identified by POP_ID — NOT into the Occurrence already linked to that OCR.
+            _all_pop_ids: set[str] = set()
+            for _ocr in all_processed_ocrs:
+                _sheetno = _ocr.migrated_from_id
+                if not _sheetno:
+                    continue
+                _entries = pop_section_map.get(_sheetno)
+                if not _entries and "-" in _sheetno:
+                    _entries = pop_section_map.get(_sheetno.split("-", 1)[1])
+                if _entries:
+                    for _pid, _ in _entries:
+                        _all_pop_ids.add(_pid)
+
+            occ_by_pop_id: dict[str, Occurrence] = {}
+            if _all_pop_ids:
+                # Occurrence.migrated_from_id follows the "tpfl-{POP_ID}" pattern
+                _pop_mig_ids = [f"tpfl-{pid}" for pid in _all_pop_ids]
+                for _occ in (
+                    Occurrence.objects.only("id", "migrated_from_id")
+                    .select_related(None)
+                    .filter(migrated_from_id__in=_pop_mig_ids)
+                ):
+                    _bare = (
+                        _occ.migrated_from_id.split("-", 1)[1]
+                        if "-" in _occ.migrated_from_id
+                        else _occ.migrated_from_id
+                    )
+                    occ_by_pop_id[_bare] = _occ
+                # Include these occurrences in the target_lookup pre-fetch below
+                occ_ids = list(set(occ_ids) | {o.pk for o in occ_by_pop_id.values()})
+
             source_lookup = {}
             target_lookup = {}
 
@@ -4633,12 +4678,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         if not source_obj:
                             continue
 
-                        # 2. Find or create the target OCC child object
-                        occurrence = ocr.occurrence
+                        # 2. Find the target Occurrence using POP_ID from DRF_POP_SECTION_MAP.
+                        # The map says: copy SECT_CODE data from OCR (SHEETNO) into Occurrence (POP_ID).
+                        occurrence = occ_by_pop_id.get(pop_id)
                         if not occurrence:
                             logger.warning(
-                                f"OCR {ocr.pk} (SHEETNO={sheetno}) has no parent Occurrence. "
-                                f"Skipping clone for {sect_code}."
+                                f"OCR {sheetno} -> POP_ID={pop_id}: target Occurrence not found "
+                                f"(migrated_from_id=tpfl-{pop_id}). Skipping clone for {sect_code}."
                             )
                             continue
 

@@ -95,6 +95,11 @@ RUN python3 -m venv $VIRTUAL_ENV_PATH && \
 # 2) Now copy the rest of the application code (changes here won't bust the pip cache).
 COPY --chown=oim:oim gunicorn.ini.py manage.py python-cron ./
 COPY --chown=oim:oim boranga ./boranga
+COPY --chown=oim:oim scripts/combine_csvs.py \
+                      scripts/dedupe_errors.py \
+                      scripts/generate_uat_fixtures.sh \
+                      scripts/partition_migration_data.py \
+                      ./scripts/
 
 FROM python_dependencies_boranga AS build_vue_boranga
 

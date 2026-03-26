@@ -216,14 +216,16 @@ class MigratedHistorySeeder:
         total += self._seed_parent_objects(qs, follow_names, lambda s: _source_comment(s.migrated_from_id), "Species")
 
         # Sub-records
-        sub_qs = SpeciesDocument.objects.filter(species__migrated_from_id__gt="")
+        sub_qs = SpeciesDocument.objects.filter(species__migrated_from_id__gt="").select_related("species")
         total += self._seed_simple_objects(
             sub_qs,
             lambda d: _source_comment(d.species.migrated_from_id),
             "SpeciesDocument",
         )
 
-        threat_qs = ConservationThreat.objects.filter(species__migrated_from_id__gt="", species__isnull=False)
+        threat_qs = ConservationThreat.objects.filter(
+            species__migrated_from_id__gt="", species__isnull=False
+        ).select_related("species")
         total += self._seed_simple_objects(
             threat_qs,
             lambda t: _source_comment(t.species.migrated_from_id),
@@ -258,14 +260,16 @@ class MigratedHistorySeeder:
         ]
         total += self._seed_parent_objects(qs, follow_names, lambda c: _source_comment(c.migrated_from_id), "Community")
 
-        sub_qs = CommunityDocument.objects.filter(community__migrated_from_id__gt="")
+        sub_qs = CommunityDocument.objects.filter(community__migrated_from_id__gt="").select_related("community")
         total += self._seed_simple_objects(
             sub_qs,
             lambda d: _source_comment(d.community.migrated_from_id),
             "CommunityDocument",
         )
 
-        threat_qs = ConservationThreat.objects.filter(community__migrated_from_id__gt="", community__isnull=False)
+        threat_qs = ConservationThreat.objects.filter(
+            community__migrated_from_id__gt="", community__isnull=False
+        ).select_related("community")
         total += self._seed_simple_objects(
             threat_qs,
             lambda t: _source_comment(t.community.migrated_from_id),
@@ -290,7 +294,9 @@ class MigratedHistorySeeder:
             "ConservationStatus",
         )
 
-        sub_qs = ConservationStatusDocument.objects.filter(conservation_status__migrated_from_id__gt="")
+        sub_qs = ConservationStatusDocument.objects.filter(conservation_status__migrated_from_id__gt="").select_related(
+            "conservation_status"
+        )
         total += self._seed_simple_objects(
             sub_qs,
             lambda d: _source_comment(d.conservation_status.migrated_from_id),
@@ -346,8 +352,10 @@ class MigratedHistorySeeder:
         )
 
         # Sub-records
-        doc_qs = OccurrenceReportDocument.objects.filter(occurrence_report__migrated_from_id__isnull=False).exclude(
-            occurrence_report__migrated_from_id=""
+        doc_qs = (
+            OccurrenceReportDocument.objects.filter(occurrence_report__migrated_from_id__isnull=False)
+            .exclude(occurrence_report__migrated_from_id="")
+            .select_related("occurrence_report")
         )
         total += self._seed_simple_objects(
             doc_qs,
@@ -355,8 +363,10 @@ class MigratedHistorySeeder:
             "OccurrenceReportDocument",
         )
 
-        threat_qs = OCRConservationThreat.objects.filter(occurrence_report__migrated_from_id__isnull=False).exclude(
-            occurrence_report__migrated_from_id=""
+        threat_qs = (
+            OCRConservationThreat.objects.filter(occurrence_report__migrated_from_id__isnull=False)
+            .exclude(occurrence_report__migrated_from_id="")
+            .select_related("occurrence_report")
         )
         total += self._seed_simple_objects(
             threat_qs,
@@ -364,8 +374,10 @@ class MigratedHistorySeeder:
             "OCRConservationThreat",
         )
 
-        observer_qs = OCRObserverDetail.objects.filter(occurrence_report__migrated_from_id__isnull=False).exclude(
-            occurrence_report__migrated_from_id=""
+        observer_qs = (
+            OCRObserverDetail.objects.filter(occurrence_report__migrated_from_id__isnull=False)
+            .exclude(occurrence_report__migrated_from_id="")
+            .select_related("occurrence_report")
         )
         total += self._seed_simple_objects(
             observer_qs,
@@ -423,8 +435,10 @@ class MigratedHistorySeeder:
             "Occurrence",
         )
 
-        doc_qs = OccurrenceDocument.objects.filter(occurrence__migrated_from_id__isnull=False).exclude(
-            occurrence__migrated_from_id=""
+        doc_qs = (
+            OccurrenceDocument.objects.filter(occurrence__migrated_from_id__isnull=False)
+            .exclude(occurrence__migrated_from_id="")
+            .select_related("occurrence")
         )
         total += self._seed_simple_objects(
             doc_qs,
@@ -432,8 +446,10 @@ class MigratedHistorySeeder:
             "OccurrenceDocument",
         )
 
-        threat_qs = OCCConservationThreat.objects.filter(occurrence__migrated_from_id__isnull=False).exclude(
-            occurrence__migrated_from_id=""
+        threat_qs = (
+            OCCConservationThreat.objects.filter(occurrence__migrated_from_id__isnull=False)
+            .exclude(occurrence__migrated_from_id="")
+            .select_related("occurrence")
         )
         total += self._seed_simple_objects(
             threat_qs,
@@ -441,8 +457,10 @@ class MigratedHistorySeeder:
             "OCCConservationThreat",
         )
 
-        contact_qs = OCCContactDetail.objects.filter(occurrence__migrated_from_id__isnull=False).exclude(
-            occurrence__migrated_from_id=""
+        contact_qs = (
+            OCCContactDetail.objects.filter(occurrence__migrated_from_id__isnull=False)
+            .exclude(occurrence__migrated_from_id="")
+            .select_related("occurrence")
         )
         total += self._seed_simple_objects(
             contact_qs,
@@ -450,8 +468,10 @@ class MigratedHistorySeeder:
             "OCCContactDetail",
         )
 
-        site_qs = OccurrenceSite.objects.filter(occurrence__migrated_from_id__isnull=False).exclude(
-            occurrence__migrated_from_id=""
+        site_qs = (
+            OccurrenceSite.objects.filter(occurrence__migrated_from_id__isnull=False)
+            .exclude(occurrence__migrated_from_id="")
+            .select_related("occurrence")
         )
         total += self._seed_simple_objects(
             site_qs,
@@ -531,7 +551,7 @@ class MigratedHistorySeeder:
             if not to_seed_pks:
                 continue
 
-            objects = list(queryset.model._default_manager.filter(pk__in=to_seed_pks))
+            objects = list(queryset.filter(pk__in=to_seed_pks))
             if not objects:
                 continue
 

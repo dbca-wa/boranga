@@ -436,7 +436,7 @@ class SpeciesConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
         if is_conservation_status_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_cs_ids)).distinct()
+            return qs.filter(submitter=self.request.user.id)
         elif is_conservation_status_referee(self.request):
             qs = qs.filter(id__in=active_referral_cs_ids).distinct()
         elif is_contributor(self.request):
@@ -721,7 +721,7 @@ class CommunityConservationStatusPaginatedViewSet(viewsets.ReadOnlyModelViewSet)
         )
 
         if is_conservation_status_referee(self.request) and is_contributor(self.request):
-            return qs.filter(Q(submitter=self.request.user.id) | Q(id__in=active_referral_cs_ids)).distinct()
+            return qs.filter(submitter=self.request.user.id)
         elif is_conservation_status_referee(self.request):
             qs = qs.filter(id__in=active_referral_cs_ids).distinct()
         elif is_contributor(self.request):
@@ -877,6 +877,27 @@ class ConservationStatusFilterBackend(DatatablesFilterBackend):
             filter_community_name = request.GET.get("filter_community_name")
             if filter_community_name and not filter_community_name.lower() == "all":
                 queryset = queryset.filter(community=filter_community_name)
+
+            filter_common_name = request.GET.get("filter_common_name")
+            if filter_common_name and not filter_common_name.lower() == "all":
+                queryset = queryset.filter(species__taxonomy__vernaculars__id=filter_common_name)
+
+            filter_community_common_id = request.GET.get("filter_community_common_id")
+            if filter_community_common_id and not filter_community_common_id.lower() == "all":
+                queryset = queryset.filter(community__taxonomy__id=filter_community_common_id)
+
+            filter_change_code = request.GET.get("filter_change_code")
+            if filter_change_code and not filter_change_code.lower() == "all":
+                queryset = queryset.filter(change_code__id=filter_change_code)
+
+            filter_wa_legislative_category = request.GET.get("filter_wa_legislative_category")
+            if filter_wa_legislative_category and not filter_wa_legislative_category.lower() == "all":
+                queryset = queryset.filter(wa_legislative_category=filter_wa_legislative_category).distinct()
+
+            filter_wa_priority_category = request.GET.get("filter_wa_priority_category")
+            if filter_wa_priority_category and not filter_wa_priority_category.lower() == "all":
+                wa_priority_ids = filter_wa_priority_category.split(",")
+                queryset = queryset.filter(wa_priority_category__in=wa_priority_ids).distinct()
 
             filter_application_status = request.GET.get("filter_application_status")
             if filter_application_status and not filter_application_status.lower() == "all":

@@ -67,6 +67,92 @@
                     </div>
                 </div>
             </div>
+            <div class="row mt-2">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="cs_common_name_lookup">Common Name:</label>
+                        <select
+                            id="cs_common_name_lookup"
+                            ref="cs_common_name_lookup"
+                            name="cs_common_name_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="cs_community_id_lookup"
+                            >Community ID:</label
+                        >
+                        <select
+                            id="cs_community_id_lookup"
+                            ref="cs_community_id_lookup"
+                            name="cs_community_id_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="cs-change-type">Change Type:</label>
+                        <select
+                            id="cs-change-type"
+                            v-model="filterCSChangeCode"
+                            class="form-select"
+                        >
+                            <option value="all">All</option>
+                            <option
+                                v-for="change_code in change_codes"
+                                :value="change_code.id"
+                                :key="change_code.id"
+                            >
+                                {{ change_code.code }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="cs-wa-legislative-category"
+                            >WA Legislative Category:</label
+                        >
+                        <select
+                            id="cs-wa-legislative-category"
+                            v-model="filterCSWALegislativeCategory"
+                            class="form-select"
+                        >
+                            <option value="all">All</option>
+                            <option
+                                v-for="cat in wa_legislative_categories"
+                                :value="cat.id"
+                                :key="cat.id"
+                            >
+                                {{ cat.code }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <SelectFilter
+                            id="cs-wa-priority-category-filter"
+                            title="WA Priority Category:"
+                            :options="wa_priority_categories"
+                            :multiple="true"
+                            :pre-selected-filter-item="
+                                filterCSWAPriorityCategory
+                            "
+                            placeholder="Select Categories"
+                            label="text"
+                            @input="
+                                (val) => {
+                                    filterCSWAPriorityCategory = val || [];
+                                }
+                            "
+                        />
+                    </div>
+                </div>
+            </div>
         </CollapsibleFilters>
         <div v-if="addCSVisibility" class="col-md-12 dropdown">
             <div class="text-end">
@@ -112,6 +198,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
+import SelectFilter from '@/components/common/SelectFilter.vue';
 
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
 export default {
@@ -119,6 +206,7 @@ export default {
     components: {
         datatable,
         CollapsibleFilters,
+        SelectFilter,
     },
     props: {
         level: {
@@ -170,6 +258,31 @@ export default {
             required: false,
             default: 'filterCSApplicationStatus',
         },
+        filterCSCommonName_cache: {
+            type: String,
+            required: false,
+            default: 'filterCSCommonName',
+        },
+        filterCSCommunityId_cache: {
+            type: String,
+            required: false,
+            default: 'filterCSCommunityId',
+        },
+        filterCSChangeCode_cache: {
+            type: String,
+            required: false,
+            default: 'filterCSChangeCode',
+        },
+        filterCSWALegislativeCategory_cache: {
+            type: String,
+            required: false,
+            default: 'filterCSWALegislativeCategory',
+        },
+        filterCSWAPriorityCategory_cache: {
+            type: String,
+            required: false,
+            default: 'filterCSWAPriorityCategory',
+        },
     },
     data() {
         return {
@@ -214,7 +327,43 @@ export default {
                 ? sessionStorage.getItem(this.filterCSApplicationStatus_cache)
                 : 'all',
 
+            filterCSCommonName: sessionStorage.getItem(
+                this.filterCSCommonName_cache
+            )
+                ? sessionStorage.getItem(this.filterCSCommonName_cache)
+                : 'all',
+
+            filterCSCommunityId: sessionStorage.getItem(
+                this.filterCSCommunityId_cache
+            )
+                ? sessionStorage.getItem(this.filterCSCommunityId_cache)
+                : 'all',
+
+            filterCSChangeCode: sessionStorage.getItem(
+                this.filterCSChangeCode_cache
+            )
+                ? sessionStorage.getItem(this.filterCSChangeCode_cache)
+                : 'all',
+
+            filterCSWALegislativeCategory: sessionStorage.getItem(
+                this.filterCSWALegislativeCategory_cache
+            )
+                ? sessionStorage.getItem(
+                      this.filterCSWALegislativeCategory_cache
+                  )
+                : 'all',
+
+            filterCSWAPriorityCategory: (() => {
+                const stored = sessionStorage.getItem(
+                    this.filterCSWAPriorityCategory_cache
+                );
+                return stored ? JSON.parse(stored) : [];
+            })(),
+
             group_types: [],
+            change_codes: [],
+            wa_legislative_categories: [],
+            wa_priority_categories: [],
 
             customer_statuses: [
                 { value: 'draft', name: 'Draft' },
@@ -235,7 +384,12 @@ export default {
                 this.filterCSExCommunityName === 'all' &&
                 this.filterCSConservationList === 'all' &&
                 this.filterCSConservationCategory === 'all' &&
-                this.filterCSApplicationStatus === 'all'
+                this.filterCSApplicationStatus === 'all' &&
+                this.filterCSCommonName === 'all' &&
+                this.filterCSCommunityId === 'all' &&
+                this.filterCSChangeCode === 'all' &&
+                this.filterCSWALegislativeCategory === 'all' &&
+                this.filterCSWAPriorityCategory.length === 0
             ) {
                 return false;
             } else {
@@ -253,6 +407,11 @@ export default {
                 'Type',
                 'Scientific Name',
                 'Community Name',
+                'Common Name',
+                'Community ID',
+                'Change Type',
+                'WA Legislative Category',
+                'WA Priority Category',
                 'Status',
                 'Action',
             ];
@@ -317,6 +476,67 @@ export default {
                     return type == 'export' ? value : result;
                 },
                 name: 'community__taxonomy__community_name',
+            };
+        },
+        column_common_name: function () {
+            return {
+                data: 'common_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                render: function (value, type) {
+                    let result = helpers.dtPopover(value, 30, 'hover');
+                    return type == 'export' ? value : result;
+                },
+                name: 'common_name',
+            };
+        },
+        column_community_id: function () {
+            return {
+                data: 'community_common_id',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                render: function (data, type, full) {
+                    return full.community_common_id || '';
+                },
+                name: 'community_common_id',
+            };
+        },
+        column_change_code: function () {
+            return {
+                data: 'change_code',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                render: function (data, type, full) {
+                    return full.change_code || '';
+                },
+                name: 'change_code',
+            };
+        },
+        column_wa_legislative_category: function () {
+            return {
+                data: 'wa_legislative_category',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                render: function (data, type, full) {
+                    return full.wa_legislative_category || '';
+                },
+                name: 'wa_legislative_category__code',
+            };
+        },
+        column_wa_priority_category: function () {
+            return {
+                data: 'wa_priority_category',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                render: function (data, type, full) {
+                    return full.wa_priority_category || '';
+                },
+                name: 'wa_priority_category__code',
             };
         },
         column_status: function () {
@@ -387,6 +607,11 @@ export default {
                 vm.column_type,
                 vm.column_scientific_name,
                 vm.column_community_name,
+                vm.column_common_name,
+                vm.column_community_id,
+                vm.column_change_code,
+                vm.column_wa_legislative_category,
+                vm.column_wa_priority_category,
                 vm.column_status,
                 vm.column_action,
             ];
@@ -426,6 +651,13 @@ export default {
                             vm.filterCSConservationCategory;
                         d.filter_application_status =
                             vm.filterCSApplicationStatus;
+                        d.filter_common_name = vm.filterCSCommonName;
+                        d.filter_community_common_id = vm.filterCSCommunityId;
+                        d.filter_change_code = vm.filterCSChangeCode;
+                        d.filter_wa_legislative_category =
+                            vm.filterCSWALegislativeCategory;
+                        d.filter_wa_priority_category =
+                            vm.filterCSWAPriorityCategory.join(',');
                     },
                 },
                 dom:
@@ -493,6 +725,46 @@ export default {
                 vm.filterCSApplicationStatus
             );
         },
+        filterCSCommonName: function () {
+            let vm = this;
+            vm.$refs.conservation_status_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterCSCommonName_cache,
+                vm.filterCSCommonName
+            );
+        },
+        filterCSCommunityId: function () {
+            let vm = this;
+            vm.$refs.conservation_status_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterCSCommunityId_cache,
+                vm.filterCSCommunityId
+            );
+        },
+        filterCSChangeCode: function () {
+            let vm = this;
+            vm.$refs.conservation_status_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterCSChangeCode_cache,
+                vm.filterCSChangeCode
+            );
+        },
+        filterCSWALegislativeCategory: function () {
+            let vm = this;
+            vm.$refs.conservation_status_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterCSWALegislativeCategory_cache,
+                vm.filterCSWALegislativeCategory
+            );
+        },
+        filterCSWAPriorityCategory: function () {
+            let vm = this;
+            vm.$refs.conservation_status_datatable.vmDataTable.ajax.reload();
+            sessionStorage.setItem(
+                vm.filterCSWAPriorityCategory_cache,
+                JSON.stringify(vm.filterCSWAPriorityCategory)
+            );
+        },
     },
     mounted: function () {
         this.fetchFilterLists();
@@ -508,6 +780,8 @@ export default {
         this.$nextTick(() => {
             vm.initialiseScientificNameLookup();
             vm.initialiseCommunityNameLookup();
+            vm.initialiseCommonNameLookup();
+            vm.initialiseCommunityIdLookup();
             vm.addEventListeners();
             var newOption;
             // -- to set the select2 field with the session value if exists onload()
@@ -536,6 +810,30 @@ export default {
                     true
                 );
                 $('#cs_community_name_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterCSCommonName') != 'all' &&
+                sessionStorage.getItem('filterCSCommonName') != null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem('filterCSCommonNameText'),
+                    vm.filterCSCommonName,
+                    false,
+                    true
+                );
+                $('#cs_common_name_lookup').append(newOption);
+            }
+            if (
+                sessionStorage.getItem('filterCSCommunityId') != 'all' &&
+                sessionStorage.getItem('filterCSCommunityId') != null
+            ) {
+                newOption = new Option(
+                    sessionStorage.getItem('filterCSCommunityIdText'),
+                    vm.filterCSCommunityId,
+                    false,
+                    true
+                );
+                $('#cs_community_id_lookup').append(newOption);
             }
         });
     },
@@ -620,11 +918,101 @@ export default {
                     searchField[0].focus();
                 });
         },
+        initialiseCommonNameLookup: function () {
+            let vm = this;
+            $(vm.$refs.cs_common_name_lookup)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Common Name',
+                    ajax: {
+                        url: api_endpoints.common_name_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterCSCommonName = data;
+                    sessionStorage.setItem(
+                        'filterCSCommonNameText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterCSCommonName = 'all';
+                    sessionStorage.setItem('filterCSCommonNameText', '');
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-cs_common_name_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
+        },
+        initialiseCommunityIdLookup: function () {
+            let vm = this;
+            $(vm.$refs.cs_community_id_lookup)
+                .select2({
+                    minimumInputLength: 1,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Select Community ID',
+                    ajax: {
+                        url: api_endpoints.community_id_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            var query = {
+                                term: params.term,
+                                type: 'public',
+                            };
+                            return query;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    let data = e.params.data.id;
+                    vm.filterCSCommunityId = data;
+                    sessionStorage.setItem(
+                        'filterCSCommunityIdText',
+                        e.params.data.text
+                    );
+                })
+                .on('select2:unselect', function () {
+                    vm.filterCSCommunityId = 'all';
+                    sessionStorage.setItem('filterCSCommunityIdText', '');
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        '[aria-controls="select2-cs_community_id_lookup-results"]'
+                    );
+                    searchField[0].focus();
+                });
+        },
         fetchFilterLists: function () {
             let vm = this;
             fetch(api_endpoints.group_types_dict).then(
                 async (response) => {
                     vm.group_types = await response.json();
+                },
+                (error) => {
+                    console.log(error);
+                }
+            );
+            fetch(api_endpoints.filter_lists_species).then(
+                async (response) => {
+                    const data = await response.json();
+                    vm.change_codes = data.change_codes;
+                    vm.wa_legislative_categories =
+                        data.wa_legislative_categories;
+                    vm.wa_priority_categories = data.wa_priority_categories;
                 },
                 (error) => {
                     console.log(error);

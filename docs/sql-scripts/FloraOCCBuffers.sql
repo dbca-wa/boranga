@@ -198,6 +198,9 @@ SELECT
     approved_cs.wa_cons_code                       AS WACONSCODE,
     active_cs.commonwealth_conservation_code       AS COMWLTH_CS,
 
+    -- Dates & status
+    plant_count.obs_date                           AS OBS_DATE,
+
     -- Location
     loc.location_description                       AS LOC_DESC,
     loc.locality                                   AS LOCALITY,
@@ -217,7 +220,6 @@ SELECT
     plant_count.comment                            AS PLCNT_COMM,
     plant_count.flower_present                     AS IN_FLOWER,
     plant_count.plant_condition                    AS PLNT_COND,
-    plant_count.obs_date                           AS OBS_DATE,
 
     -- Identification
     identification.identification_certainty        AS IDENT_CRTY,

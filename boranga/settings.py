@@ -240,6 +240,7 @@ CRON_CLASSES = [
     "boranga.cron.CronJobOCRProcessBulkImportQueue",
     "boranga.cron.CronJobAutoLockConservationStatusRecords",
     "boranga.cron.CronJobAutoLockUnlockedOccurrenceRecords",
+    "boranga.cron.CronJobClearCronJobLogs",
 ]
 
 
@@ -573,7 +574,7 @@ GIS_EXTENT = config(
 #   4326  – WGS 84
 #   4283  – GDA94
 #   7844  – GDA2020
-DEFAULT_SRID = config("DEFAULT_SRID", default=4283, cast=int)
+DEFAULT_SRID = config("DEFAULT_SRID", default=7844, cast=int)
 
 DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES = config("DEFAULT_UNLOCKED_EDITING_WINDOW_MINUTES", default=30, cast=int)
 UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES = config(
@@ -582,6 +583,8 @@ UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES = config(
 UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES = config("UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES", default=30, cast=int)
 
 FETCH_NOMOS_DATA_TIME_OF_DAY = config("FETCH_NOMOS_DATA_TIME_OF_DAY", default="03:00")  # 24 hour format HH:MM
+CLEAR_CRON_JOB_LOGS_TIME_OF_DAY = config("CLEAR_CRON_JOB_LOGS_TIME_OF_DAY", default="00:30")  # 24 hour format HH:MM
+CLEAR_CRON_JOB_LOGS_DAYS_TO_KEEP = config("CLEAR_CRON_JOB_LOGS_DAYS_TO_KEEP", default=30, cast=int)
 
 INCLUDE_ROOT_VIEW = env("INCLUDE_ROOT_VIEW", False)
 

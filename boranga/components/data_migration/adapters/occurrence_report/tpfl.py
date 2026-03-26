@@ -818,10 +818,14 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             # Build occurrence_name: concat POP_NUMBER + SUBPOP_CODE (no space)
             pop = str(canonical.get("SHEET_POP_NUMBER", "") or "").strip()
             sub = str(canonical.get("SHEET_SUBPOP_CODE", "") or "").strip()
-            ocr_for_occ_name = (pop + sub).strip()
-            # If only a single digit (e.g. "1"), pad with leading zero -> "01"
-            if ocr_for_occ_name and len(ocr_for_occ_name) == 1 and ocr_for_occ_name.isdigit():
-                ocr_for_occ_name = ocr_for_occ_name.zfill(2)
+            # Ignore ocr_for_occ_name when there is a sub-population but no population number
+            if sub and not pop:
+                ocr_for_occ_name = None
+            else:
+                ocr_for_occ_name = (pop + sub).strip()
+                # If only a single digit (e.g. "1"), pad with leading zero -> "01"
+                if ocr_for_occ_name and len(ocr_for_occ_name) == 1 and ocr_for_occ_name.isdigit():
+                    ocr_for_occ_name = ocr_for_occ_name.zfill(2)
             canonical["ocr_for_occ_name"] = ocr_for_occ_name
             canonical["OCRObserverDetail__main_observer"] = True
             canonical["internal_application"] = True

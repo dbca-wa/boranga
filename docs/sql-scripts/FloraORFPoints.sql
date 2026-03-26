@@ -249,7 +249,7 @@ SELECT
     identification.collector_number                AS COLL_NUM,
 
     -- Report metadata
-    ocr.record_source                              AS OCR_SOURCE,
+    ocr.record_source                              AS ORF_SOURCE,
     ocr.processing_status                          AS ORF_STATUS,
     TO_CHAR(ocr.datetime_updated, 'YYYY-MM-DD HH24:MI:SS') AS ORF_MOD_DA,
     (u_mod.first_name || ' ' || u_mod.last_name)   AS ORF_MOD_BY,

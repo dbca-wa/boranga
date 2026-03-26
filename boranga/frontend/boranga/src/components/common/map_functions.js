@@ -144,9 +144,12 @@ export async function fetchGISSettings(gisSettingsApiUrl) {
         const data = await response.json();
         if (data && typeof data.default_srid === 'number') {
             _gisSettingsCache = data;
-            // Register the projection with OpenLayers if it isn't already known
+            // Always register/overwrite the projection definition so that the
+            // backend-supplied +towgs84 datum-shift parameters (e.g. for
+            // GDA94 / EPSG:4283) are applied even if OL already has a bare
+            // definition without those parameters.
             const epsgCode = `EPSG:${data.default_srid}`;
-            if (!getProjection(epsgCode) && data.proj4_string) {
+            if (data.proj4_string) {
                 proj4.defs(epsgCode, data.proj4_string);
                 registerProj4(proj4);
             }
@@ -161,12 +164,12 @@ export async function fetchGISSettings(gisSettingsApiUrl) {
 }
 
 /**
- * Returns the cached default SRID, or 4283 if settings haven't been fetched yet.
+ * Returns the cached default SRID, or 7844 if settings haven't been fetched yet.
  * Prefer calling fetchGISSettings first during component initialisation.
  * @returns {number}
  */
 export function getDefaultSrid() {
-    return _gisSettingsCache ? _gisSettingsCache.default_srid : 4283;
+    return _gisSettingsCache ? _gisSettingsCache.default_srid : 7844;
 }
 
 /**
@@ -174,7 +177,11 @@ export function getDefaultSrid() {
  * @param {Proxy} map_component A map component instance
  * @param {string} tileLayerApiUrl The url to the tile layer API
  */
-export async function fetchTileLayers(map_component, tileLayerApiUrl) {
+export async function fetchTileLayers(
+    map_component,
+    tileLayerApiUrl,
+    signal = undefined
+) {
     // let parser = new WMSCapabilities();
     if (!tileLayerApiUrl) {
         console.error('No tile layer API url provided');
@@ -182,7 +189,7 @@ export async function fetchTileLayers(map_component, tileLayerApiUrl) {
     }
     let tileLayers = [];
 
-    await fetch(tileLayerApiUrl)
+    await fetch(tileLayerApiUrl, { signal })
         .then(async (response) => {
             if (!response.ok) {
                 throw new Error('Network response was not ok');
@@ -191,10 +198,15 @@ export async function fetchTileLayers(map_component, tileLayerApiUrl) {
         })
         .then(async (layers) => {
             console.log('tilelayer', layers);
-            tileLayers = await _helper.tileLayerFromLayerDefinitions(layers);
+            tileLayers = await _helper.tileLayerFromLayerDefinitions(
+                layers,
+                signal
+            );
         })
         .catch((error) => {
-            console.error('Error fetching tilelayer:', error);
+            if (error.name !== 'AbortError') {
+                console.error('Error fetching tilelayer:', error);
+            }
         });
     return tileLayers;
 }
@@ -694,7 +706,7 @@ const _helper = {
 
         return features;
     },
-    tileLayerFromLayerDefinitions: async function (layers) {
+    tileLayerFromLayerDefinitions: async function (layers, signal = undefined) {
         const tileLayers = [];
 
         // --- Pre-flight: deduplicate and fetch capabilities URLs with retry ---
@@ -720,8 +732,9 @@ const _helper = {
             let lastError = null;
 
             for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+                if (signal?.aborted) break;
                 try {
-                    const response = await fetch(url);
+                    const response = await fetch(url, { signal });
                     if (!response.ok) {
                         const body = await response.text();
                         lastError = new Error(
@@ -732,6 +745,7 @@ const _helper = {
                         break;
                     }
                 } catch (err) {
+                    if (err.name === 'AbortError') break;
                     lastError = err;
                 }
                 if (attempt < MAX_RETRIES) {
@@ -742,6 +756,11 @@ const _helper = {
                         setTimeout(r, RETRY_DELAYS[attempt - 1])
                     );
                 }
+            }
+
+            if (signal?.aborted) {
+                capabilitiesCache.set(url, { ok: false, text: null });
+                continue;
             }
 
             if (text) {
