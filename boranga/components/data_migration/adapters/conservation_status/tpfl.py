@@ -12,7 +12,7 @@ from boranga.components.data_migration.registry import (
     datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     fk_lookup,
-    taxonomy_lookup_legacy_mapping_species,
+    taxonomy_lookup_legacy_id_mapping,
 )
 from boranga.components.species_and_communities.models import GroupType
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 # TPFL-specific transforms and pipelines
-SPECIES_LOOKUP = taxonomy_lookup_legacy_mapping_species("TPFL", return_field="taxonomy_id")
+SPECIES_LOOKUP = taxonomy_lookup_legacy_id_mapping("TPFL")
 EMAIL_USER_TPFL = emailuser_by_legacy_username_factory("TPFL")
 
 COMMONWEALTH_LOOKUP = fk_lookup(CommonwealthConservationList, "code")
@@ -92,6 +92,11 @@ class ConservationStatusTpflAdapter(SourceAdapter):
 
             # Group Type
             canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FLORA)
+
+            # Move TAXONID value into species_id for pipeline resolution
+            tni = canonical.pop("species_taxonomy_taxon_name_id", None)
+            if tni not in (None, ""):
+                canonical["species_id"] = tni
 
             # Processing Status
             p_status = canonical.get("processing_status")
