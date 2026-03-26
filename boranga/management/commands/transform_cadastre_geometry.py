@@ -30,6 +30,16 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
+            "--source-srid",
+            type=int,
+            default=4283,
+            help=(
+                "The CRS the geometries are actually stored in (default: 4283 / GDA94). "
+                "This is used as the source for ST_Transform and cannot be inferred "
+                "reliably from the PostGIS metadata after a prior UpdateGeometrySRID call."
+            ),
+        )
+        parser.add_argument(
             "--target-srid",
             type=int,
             default=settings.DEFAULT_SRID,
@@ -42,8 +52,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        source_srid = options["source_srid"]
         target_srid = options["target_srid"]
         dry_run = options["dry_run"]
+
+        if source_srid == target_srid:
+            self.stdout.write(self.style.SUCCESS("Source and target SRIDs are identical. Nothing to do."))
+            return
 
         with connection.cursor() as cursor:
             # Check the table exists
@@ -56,27 +71,20 @@ class Command(BaseCommand):
                     f'Table "{_SCHEMA}"."{_TABLE}" does not exist. Run import_cadastre_geojson first to populate it.'
                 )
 
-            # Detect the current SRID from PostGIS geometry_columns
+            # Verify the geometry column exists, but do NOT rely on the reported
+            # SRID as the true coordinate CRS — UpdateGeometrySRID() updates that
+            # metadata independently of the actual coordinate values, so it can
+            # be stale or wrong after a previous failed/partial migration.
             cursor.execute(
                 "SELECT srid FROM geometry_columns "
                 "WHERE f_table_schema = %s AND f_table_name = %s AND f_geometry_column = %s",
                 [_SCHEMA, _TABLE, _COLUMN],
             )
-            row = cursor.fetchone()
-            if not row:
+            if not cursor.fetchone():
                 raise CommandError(
                     f'Column "{_COLUMN}" not found in geometry_columns for '
                     f'"{_SCHEMA}"."{_TABLE}". The table may not be a PostGIS geometry table.'
                 )
-            current_srid = row[0]
-
-            if current_srid == target_srid:
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f'"{_SCHEMA}"."{_TABLE}".{_COLUMN} is already EPSG:{target_srid}. Nothing to do.'
-                    )
-                )
-                return
 
             # Count rows to give the user an idea of how long this will take
             cursor.execute(f'SELECT COUNT(*) FROM "{_SCHEMA}"."{_TABLE}" WHERE {_COLUMN} IS NOT NULL')
@@ -84,7 +92,7 @@ class Command(BaseCommand):
 
             self.stdout.write(
                 f'Transforming "{_SCHEMA}"."{_TABLE}".{_COLUMN}: '
-                f"EPSG:{current_srid} → EPSG:{target_srid} "
+                f"EPSG:{source_srid} → EPSG:{target_srid} "
                 f"({row_count:,} non-null rows)"
             )
 
@@ -92,24 +100,38 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING("Dry run — no changes made."))
                 return
 
-            # 1. Update the SRID constraint on the column FIRST so PostGIS
-            #    accepts writes with the new SRID.
+            # 1. Transform all non-NULL geometries in-place.
+            #
+            # NOTE: We intentionally do NOT call UpdateGeometrySRID() before
+            # this UPDATE.  In PostGIS, UpdateGeometrySRID() relabels the SRID
+            # stored in every geometry binary (via ST_SetSRID) in addition to
+            # updating the type constraint.  If we called it first, all rows
+            # would immediately report ST_SRID = target_srid, making the
+            # subsequent ST_Transform a no-op (0 rows matched).
+            #
+            # Instead we use ST_SetSRID(geom, source_srid) inside the UPDATE
+            # to _force_ the declared source CRS regardless of whatever SRID is
+            # currently embedded in the binary (handles SRID=0 from ogr2ogr,
+            # or geometries that were previously mislabelled by an earlier
+            # UpdateGeometrySRID call).  No WHERE guard is used — we always
+            # apply the transform unconditionally because the embedded SRID
+            # cannot be trusted after a prior UpdateGeometrySRID call.
+            self.stdout.write("  Running ST_Transform (this may take a while for large datasets)...")
+            cursor.execute(
+                f'UPDATE "{_SCHEMA}"."{_TABLE}" '
+                f"SET {_COLUMN} = ST_Transform(ST_SetSRID({_COLUMN}, %s), %s) "
+                f"WHERE {_COLUMN} IS NOT NULL",
+                [source_srid, target_srid],
+            )
+            updated = cursor.rowcount
+
+            # 2. Update the column type constraint AFTER the data is correct.
             self.stdout.write(f"  Updating geometry column SRID constraint to {target_srid}...")
             cursor.execute(
                 "SELECT UpdateGeometrySRID(%s, %s, %s, %s)",
                 [_SCHEMA, _TABLE, _COLUMN, target_srid],
             )
 
-            # 2. Transform all non-NULL geometries in-place.
-            self.stdout.write("  Running ST_Transform (this may take a while for large datasets)...")
-            cursor.execute(
-                f'UPDATE "{_SCHEMA}"."{_TABLE}" '
-                f"SET {_COLUMN} = ST_Transform({_COLUMN}, %s) "
-                f"WHERE {_COLUMN} IS NOT NULL AND ST_SRID({_COLUMN}) = %s",
-                [target_srid, current_srid],
-            )
-            updated = cursor.rowcount
-
         self.stdout.write(
-            self.style.SUCCESS(f"Done. {updated:,} rows transformed from EPSG:{current_srid} to EPSG:{target_srid}.")
+            self.style.SUCCESS(f"Done. {updated:,} rows transformed from EPSG:{source_srid} to EPSG:{target_srid}.")
         )
