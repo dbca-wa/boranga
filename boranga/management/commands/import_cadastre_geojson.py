@@ -250,7 +250,7 @@ class Command(BaseCommand):
             for i, chunk in enumerate(chunk_files):
                 self.stdout.write(f"Importing chunk {i + 1}/{len(chunk_files)}: {os.path.basename(chunk)}")
                 if not imported_any:
-                    self._run_ogr2ogr(chunk, dst_pg, layer_name, srid, True, env)
+                    self._run_ogr2ogr(chunk, dst_pg, layer_name, srid, True, env, cachemax=cachemax)
                     imported_any = True
                 else:
                     cmd = [
