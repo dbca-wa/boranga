@@ -6,8 +6,12 @@ from django.conf import settings
 
 
 def meta_dir():
-    base = getattr(settings, "BASE_DIR", None) or os.getcwd()
-    d = os.path.join(base, ".kb_layer_cache")
+    private_media = getattr(settings, "PRIVATE_MEDIA_STORAGE_LOCATION", None)
+    if private_media:
+        d = os.path.join(private_media, "kb_layer_cache")
+    else:
+        base = getattr(settings, "BASE_DIR", None) or os.getcwd()
+        d = os.path.join(base, ".kb_layer_cache")
     try:
         os.makedirs(d, exist_ok=True)
     except Exception:
@@ -129,7 +133,7 @@ def find_geometry_column(conn, schema, table):
     # conn is a Django connection object
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT f_geometry_column FROM geometry_columns " "WHERE f_table_schema=%s AND f_table_name=%s",
+            "SELECT f_geometry_column FROM geometry_columns WHERE f_table_schema=%s AND f_table_name=%s",
             [schema, table],
         )
         row = cursor.fetchone()

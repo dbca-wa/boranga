@@ -82,6 +82,15 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--gdal-cachemax",
+            type=int,
+            default=64,
+            help=(
+                "Value passed to ogr2ogr's GDAL_CACHEMAX config option (MB). "
+                "Applied consistently to all chunk invocations. Default: 64."
+            ),
+        )
+        parser.add_argument(
             "--skip-if-unchanged",
             action="store_true",
             help=(
@@ -180,6 +189,7 @@ class Command(BaseCommand):
         chunk_size,
         do_import=True,
         keep_chunks=False,
+        cachemax=64,
     ):
         import decimal
         import json
@@ -240,7 +250,7 @@ class Command(BaseCommand):
             for i, chunk in enumerate(chunk_files):
                 self.stdout.write(f"Importing chunk {i + 1}/{len(chunk_files)}: {os.path.basename(chunk)}")
                 if not imported_any:
-                    self._run_ogr2ogr(chunk, dst_pg, layer_name, srid, True, env)
+                    self._run_ogr2ogr(chunk, dst_pg, layer_name, srid, True, env, cachemax=cachemax)
                     imported_any = True
                 else:
                     cmd = [
@@ -250,7 +260,7 @@ class Command(BaseCommand):
                         "YES",
                         "--config",
                         "GDAL_CACHEMAX",
-                        "256",
+                        str(cachemax),
                         "-append",
                         "-f",
                         "PostgreSQL",
@@ -496,6 +506,7 @@ class Command(BaseCommand):
         if chunk_size:
             try:
                 keep_chunks = bool(chunks_only and options.get("keep_temp"))
+                gdal_cachemax = options.get("gdal_cachemax", 64)
                 self._import_chunks(
                     tmp_name,
                     dst_pg,
@@ -506,6 +517,7 @@ class Command(BaseCommand):
                     int(chunk_size),
                     do_import=not chunks_only,
                     keep_chunks=keep_chunks,
+                    cachemax=gdal_cachemax,
                 )
                 self.stdout.write(self.style.SUCCESS(f"Chunks created under {self._meta_dir()}"))
                 if chunks_only:
@@ -518,7 +530,8 @@ class Command(BaseCommand):
             except Exception as e:
                 raise CommandError(f"Chunked import failed: {e}")
         else:
-            self._run_ogr2ogr(tmp_name, dst_pg, f"{schema}.{table}", srid, overwrite, env)
+            gdal_cachemax = options.get("gdal_cachemax", 64)
+            self._run_ogr2ogr(tmp_name, dst_pg, f"{schema}.{table}", srid, overwrite, env, cachemax=gdal_cachemax)
 
         if not options.get("keep_temp"):
             try:
