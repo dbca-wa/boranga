@@ -1366,6 +1366,11 @@ export default {
             $(vm.$refs.ocr_scientific_name_lookup_by_groupname)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#select_scientific_name_by_groupname'),
                     theme: 'bootstrap-5',
                     allowClear: true,

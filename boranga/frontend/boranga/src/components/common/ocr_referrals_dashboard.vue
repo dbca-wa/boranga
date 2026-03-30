@@ -575,6 +575,11 @@ export default {
             $(vm.$refs.ocr_referrals_scientific_name_lookup_by_groupname)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $(
                         '#ocr_referrals_select_scientific_name_by_groupname'
                     ),
@@ -621,6 +626,11 @@ export default {
             $(vm.$refs.ocr_referrals_community_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#select_ocr_referrals_community_name'),
                     theme: 'bootstrap-5',
                     allowClear: true,

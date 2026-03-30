@@ -624,6 +624,11 @@ export default {
             $(vm.$refs.cs_ref_scientific_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     theme: 'bootstrap-5',
                     allowClear: true,
                     placeholder: 'Select Scientific Name',
@@ -669,6 +674,11 @@ export default {
             $(vm.$refs.cs_ref_common_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     theme: 'bootstrap-5',
                     allowClear: true,
                     placeholder: 'Select Common Name',

@@ -1405,6 +1405,13 @@ export default {
             $(vm.$refs.scientific_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return vm.is_internal
+                                ? 'Use % for wildcard search'
+                                : 'Please enter 2 or more characters';
+                        },
+                    },
                     theme: 'bootstrap-5',
                     allowClear: true,
                     placeholder: 'Select Scientific Name',
@@ -1446,6 +1453,13 @@ export default {
             $(vm.$refs.common_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return vm.is_internal
+                                ? 'Use % for wildcard search'
+                                : 'Please enter 2 or more characters';
+                        },
+                    },
                     theme: 'bootstrap-5',
                     allowClear: true,
                     placeholder: 'Select Common Name',

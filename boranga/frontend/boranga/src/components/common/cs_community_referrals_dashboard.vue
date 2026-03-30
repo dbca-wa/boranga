@@ -477,6 +477,11 @@ export default {
             $(vm.$refs.cs_ref_community_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     theme: 'bootstrap-5',
                     allowClear: true,
                     placeholder: 'Select Community Name',

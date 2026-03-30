@@ -1226,6 +1226,11 @@ export default {
             $(vm.$refs.occ_community_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#select_occ_community_name'),
                     theme: 'bootstrap-5',
                     allowClear: true,
