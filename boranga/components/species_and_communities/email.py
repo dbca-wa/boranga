@@ -37,12 +37,6 @@ class CreateSpeciesSendNotificationEmail(TemplateEmailBase):
     txt_template = "boranga/emails/send_create_notification.txt"
 
 
-class UserCreateSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = f"{settings.DEP_NAME} - Confirmation - Species submitted."
-    html_template = "boranga/emails/send_user_create_notification.html"
-    txt_template = "boranga/emails/send_user_create_notification.txt"
-
-
 class SplitSpeciesSendNotificationEmail(TemplateEmailBase):
     subject = "A Species has been split."
     html_template = "boranga/emails/send_split_notification.html"
@@ -73,12 +67,6 @@ class CreateCommunitySendNotificationEmail(TemplateEmailBase):
     txt_template = "boranga/emails/send_create_notification.txt"
 
 
-class UserCreateCommunitySendNotificationEmail(TemplateEmailBase):
-    subject = f"{settings.DEP_NAME} - Confirmation - Community submitted."
-    html_template = "boranga/emails/send_user_create_notification.html"
-    txt_template = "boranga/emails/send_user_create_notification.txt"
-
-
 class NomosScriptFailedEmail(TemplateEmailBase):
     subject = "Failed: NOMOS API Management Script"
     html_template = "boranga/emails/send_nomos_api_failed_notification.html"
@@ -104,44 +92,6 @@ def send_species_create_email_notification(request, species_proposal):
     )
 
     msg = email.send(recipients, context=context)
-    sender = request.user if request else settings.DEFAULT_FROM_EMAIL
-
-    _log_species_email(msg, species_proposal, sender=sender)
-
-    return msg
-
-
-# created email send to the user who is internal not external
-def send_user_species_create_email_notification(request, species_proposal):
-    email = UserCreateSpeciesSendNotificationEmail()
-    url = request.build_absolute_uri(
-        reverse(
-            "internal-species-detail",
-            kwargs={"species_proposal_pk": species_proposal.id},
-        )
-    )
-    # add the extra query params as need to load the species detail page
-    url = url + f"?group_type_name={species_proposal.group_type.name}&action=view"
-
-    url = convert_external_url_to_internal_url(url)
-
-    if species_proposal.submitter:
-        submitter_name = EmailUser.objects.get(id=species_proposal.submitter).get_full_name()
-    else:
-        submitter_name = "Unknown"
-
-    context = {
-        "species_community_proposal": species_proposal,
-        "submitter": submitter_name,
-        "url": url,
-    }
-    all_ccs = []
-
-    msg = email.send(
-        request.user.email,
-        cc=all_ccs,
-        context=context,
-    )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
 
     _log_species_email(msg, species_proposal, sender=sender)
@@ -344,47 +294,6 @@ def send_community_create_email_notification(request, community_proposal):
     )
 
     msg = email.send(recipients, context=context)
-    sender = request.user if request else settings.DEFAULT_FROM_EMAIL
-
-    _log_community_email(msg, community_proposal, sender=sender)
-
-    return msg
-
-
-# created email send to the user who is internal not external
-def send_user_community_create_email_notification(request, community_proposal):
-    email = UserCreateCommunitySendNotificationEmail()
-    url = request.build_absolute_uri(
-        reverse(
-            "internal-community-detail",
-            kwargs={"community_proposal_pk": community_proposal.id},
-        )
-    )
-    # add the extra query params as need to load the species detail page
-    url = url + f"?group_type_name={community_proposal.group_type.name}&action=view"
-
-    url = convert_external_url_to_internal_url(url)
-
-    if community_proposal.submitter:
-        submitter_user = EmailUser.objects.get(id=community_proposal.submitter)
-        submitter_name = submitter_user.get_full_name()
-        submitter_email = submitter_user.email
-    else:
-        submitter_name = "Unknown"
-        submitter_email = request.user.email if request else None
-
-    context = {
-        "species_community_proposal": community_proposal,
-        "submitter": submitter_name,
-        "url": url,
-    }
-    all_ccs = []
-
-    msg = email.send(
-        submitter_email,
-        cc=all_ccs,
-        context=context,
-    )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
 
     _log_community_email(msg, community_proposal, sender=sender)
