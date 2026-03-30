@@ -25,7 +25,10 @@ class ExternalContributorBlacklistForm(forms.ModelForm):
         fields = "__all__"
 
     def clean(self):
-        email = self.cleaned_data["email"]
+        email = self.cleaned_data.get("email")
+
+        if not email:
+            return super().clean()
 
         try:
             EmailUser.objects.get(email=email)
