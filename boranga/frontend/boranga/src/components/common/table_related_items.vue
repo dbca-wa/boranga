@@ -21,7 +21,7 @@
                             >
                                 <option value="all">All</option>
                                 <option
-                                    v-for="option in related_type_filter_list"
+                                    v-for="option in filtered_type_filter_list"
                                     :value="option[0]"
                                     :key="option[0]"
                                 >
@@ -70,6 +70,10 @@ export default {
             type: Boolean,
             default: true,
         },
+        filter_exclusions: {
+            type: Array,
+            default: () => [],
+        },
     },
     data() {
         return {
@@ -79,6 +83,14 @@ export default {
         };
     },
     computed: {
+        filtered_type_filter_list: function () {
+            if (this.filter_exclusions.length === 0) {
+                return this.related_type_filter_list;
+            }
+            return this.related_type_filter_list.filter(
+                (option) => !this.filter_exclusions.includes(option[0])
+            );
+        },
         column_lodgement_number: function () {
             return {
                 data: 'identifier',
