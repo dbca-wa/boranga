@@ -75,6 +75,8 @@ class NomosScriptFailedEmail(TemplateEmailBase):
 
 def send_species_create_email_notification(request, species_proposal):
     email = CreateSpeciesSendNotificationEmail()
+    scientific_name = species_proposal.taxonomy.scientific_name if species_proposal.taxonomy else ""
+    email.subject = f"A new Species Profile has been created: {species_proposal.species_number} - {scientific_name}."
     url = request.build_absolute_uri(
         reverse(
             "internal-species-detail",
@@ -277,6 +279,7 @@ def send_species_rename_email_notification(request, species_proposal, new_specie
 
 def send_community_create_email_notification(request, community_proposal):
     email = CreateCommunitySendNotificationEmail()
+    email.subject = f"A new Community Profile has been created: {community_proposal.community_number}."
     url = request.build_absolute_uri(
         reverse(
             "internal-community-detail",
