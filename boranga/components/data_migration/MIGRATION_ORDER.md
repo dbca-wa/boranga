@@ -71,7 +71,7 @@ or, if combined into one file:
 
 ## Conservation Status
 
-./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TPFL/SAMPLE_CS_Data_Dec2025.csv --sources TPFL --wipe-targets --seed-history
+./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TPFL/FLORA_CS_Migration_Template_FULL.csv --sources TPFL --wipe-targets --seed-history
 
 ## Occurrences
 

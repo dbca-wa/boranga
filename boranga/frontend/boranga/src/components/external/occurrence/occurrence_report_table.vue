@@ -747,6 +747,10 @@ export default {
                 ajax: {
                     url: this.url,
                     dataSrc: 'data',
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': helpers.getCookie('csrftoken'),
+                    },
                     data: function (d) {
                         d.filter_group_type = vm.filterOCRGroupType;
                         d.filter_scientific_name = vm.filterOCRScientificName;
