@@ -26,6 +26,7 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
+from boranga.ledger_api_utils import retrieve_email_user
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,10 @@ class ConservationStatusImporter(BaseSheetImporter):
         submitter_infos = []
         cs_objects = []
 
+        # Cache EmailUserRO full-name lookups so repeated submitters don't
+        # trigger redundant external DB queries.
+        name_cache: dict = {}
+
         for row in all_rows:
             # Run pipeline transformations
             pipelines = pipelines_by_source.get(row.get("_source"), [])
@@ -301,9 +306,17 @@ class ConservationStatusImporter(BaseSheetImporter):
                 # Pipeline returns ID for 'submitter'
                 si_email_user_id = row.get("submitter")
 
+                # Resolve full name from EmailUserRO, using cache to avoid
+                # redundant lookups for the same user across many CS records.
+                if si_email_user_id is not None and si_email_user_id not in name_cache:
+                    email_user = retrieve_email_user(si_email_user_id)
+                    name_cache[si_email_user_id] = email_user.get_full_name() if email_user else None
+                si_name = name_cache.get(si_email_user_id) if si_email_user_id is not None else None
+
                 # Create SubmitterInformation instance (do not save yet)
                 sub_info = SubmitterInformation(
                     email_user=si_email_user_id,
+                    name=si_name,
                     organisation="DBCA",
                     submitter_category=submitter_category_dbca,
                 )
