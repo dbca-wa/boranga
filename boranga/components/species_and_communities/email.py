@@ -110,6 +110,7 @@ def send_species_split_email_notification(
     occurrence_assignments_dict,
 ):
     email = SplitSpeciesSendNotificationEmail()
+    email.subject = f"A Species has been split into two (or more) Species: {original_species.species_number}"
     url = request.build_absolute_uri(reverse("internal-conservation-status-dashboard", kwargs={}))
     url = convert_external_url_to_internal_url(url)
 
@@ -170,8 +171,7 @@ def send_species_split_email_notification(
     all_ccs = list(set(all_ccs))
 
     msg = email.send(
-        request.user.email,
-        cc=all_ccs,
+        all_ccs,
         context=context,
     )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
@@ -184,6 +184,8 @@ def send_species_split_email_notification(
 #  here species_proposal is the new species created in combine species functionality
 def send_species_combine_email_notification(request, combine_species_qs, resulting_species_instance, actions):
     email = CombineSpeciesSendNotificationEmail()
+    original_ids = " ".join(s.species_number for s in combine_species_qs)
+    email.subject = f"Two (or more) Species have been combined: {original_ids}"
 
     url = request.build_absolute_uri(reverse("internal-conservation-status-dashboard", kwargs={}))
     url = convert_external_url_to_internal_url(url)
@@ -209,16 +211,8 @@ def send_species_combine_email_notification(request, combine_species_qs, resulti
 
     all_ccs = list(set(all_ccs))
 
-    if resulting_species_instance.submitter:
-        submitter_email = EmailUser.objects.get(id=resulting_species_instance.submitter).email
-    else:
-        submitter_email = None
-
-    to = request.user.email if request else submitter_email
-
     msg = email.send(
-        to,
-        cc=all_ccs,
+        all_ccs,
         context=context,
     )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
@@ -258,16 +252,10 @@ def send_species_rename_email_notification(request, species_proposal, new_specie
         "new_species": new_species,
     }
 
-    if species_proposal.submitter:
-        submitter_email = EmailUser.objects.get(id=species_proposal.submitter).email
-    else:
-        submitter_email = None
-
-    to = request.user.email if request else submitter_email
+    all_ccs = list(set(all_ccs))
 
     msg = email.send(
-        to,
-        cc=all_ccs,
+        all_ccs,
         context=context,
     )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
@@ -342,16 +330,10 @@ def send_community_rename_email_notification(
         "original_made_historical": original_made_historical,
     }
 
-    if original_community.submitter:
-        submitter_email = EmailUser.objects.get(id=original_community.submitter).email
-    else:
-        submitter_email = None
-
-    to = request.user.email if request else submitter_email
+    all_ccs = list(set(all_ccs))
 
     msg = email.send(
-        to,
-        cc=all_ccs,
+        all_ccs,
         context=context,
     )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
