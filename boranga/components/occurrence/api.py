@@ -366,57 +366,57 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
         else:
             total_count = queryset.count()
 
-            filter_group_type = request.GET.get("filter_group_type")
+            filter_group_type = request.POST.get("filter_group_type")
             if filter_group_type and not filter_group_type.lower() == "all":
                 queryset = queryset.filter(group_type__name=filter_group_type)
 
             # filter_scientific_name is the species_id
-            filter_scientific_name = request.GET.get("filter_scientific_name")
+            filter_scientific_name = request.POST.get("filter_scientific_name")
             if filter_scientific_name and not filter_scientific_name.lower() == "all":
                 queryset = queryset.filter(species=filter_scientific_name)
 
             # filter_community_name is the community_id
-            filter_community_name = request.GET.get("filter_community_name")
+            filter_community_name = request.POST.get("filter_community_name")
             if filter_community_name and not filter_community_name.lower() == "all":
                 queryset = queryset.filter(community=filter_community_name)
 
-            filter_application_status = request.GET.get("filter_application_status")
+            filter_application_status = request.POST.get("filter_application_status")
             if filter_application_status and not filter_application_status.lower() == "all":
                 queryset = queryset.filter(customer_status=filter_application_status)
 
-            filter_common_name = request.GET.get("filter_common_name")
+            filter_common_name = request.POST.get("filter_common_name")
             if filter_common_name and not filter_common_name.lower() == "all":
                 queryset = queryset.filter(species__taxonomy__vernaculars__id=filter_common_name)
 
-            filter_community_common_id = request.GET.get("filter_community_common_id")
+            filter_community_common_id = request.POST.get("filter_community_common_id")
             if filter_community_common_id and not filter_community_common_id.lower() == "all":
                 queryset = queryset.filter(community__taxonomy__id=filter_community_common_id)
 
-            filter_occurrence_name = request.GET.get("filter_occurrence_name")
+            filter_occurrence_name = request.POST.get("filter_occurrence_name")
             if filter_occurrence_name and not filter_occurrence_name.lower() == "all":
                 queryset = queryset.filter(occurrence__id=filter_occurrence_name)
 
-            filter_occurrence = request.GET.get("filter_occurrence")
+            filter_occurrence = request.POST.get("filter_occurrence")
             if filter_occurrence and not filter_occurrence.lower() == "all":
                 queryset = queryset.filter(occurrence_id=filter_occurrence)
 
-            filter_region = request.GET.get("filter_region")
+            filter_region = request.POST.get("filter_region")
             if filter_region and not filter_region.lower() == "all":
                 queryset = queryset.filter(location__region__id__in=filter_region.split(","))
 
-            filter_district = request.GET.get("filter_district")
+            filter_district = request.POST.get("filter_district")
             if filter_district and not filter_district.lower() == "all":
                 queryset = queryset.filter(location__district__id__in=filter_district.split(","))
 
-            filter_observation_from_date = request.GET.get("filter_observation_from_date")
-            filter_observation_to_date = request.GET.get("filter_observation_to_date")
+            filter_observation_from_date = request.POST.get("filter_observation_from_date")
+            filter_observation_to_date = request.POST.get("filter_observation_to_date")
             if filter_observation_from_date:
                 queryset = queryset.filter(observation_date__gte=filter_observation_from_date)
             if filter_observation_to_date:
                 queryset = queryset.filter(observation_date__lte=filter_observation_to_date)
 
-            filter_submitted_from_date = request.GET.get("filter_submitted_from_date")
-            filter_submitted_to_date = request.GET.get("filter_submitted_to_date")
+            filter_submitted_from_date = request.POST.get("filter_submitted_from_date")
+            filter_submitted_to_date = request.POST.get("filter_submitted_to_date")
             if filter_submitted_from_date:
                 try:
                     submitted_from = datetime.strptime(filter_submitted_from_date, "%Y-%m-%d")
@@ -495,6 +495,7 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     @list_route(
         methods=[
             "GET",
+            "POST",
         ],
         detail=False,
         permission_classes=[OccurrenceReportPermission | ExternalOccurrenceReportPermission],
