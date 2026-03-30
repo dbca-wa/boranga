@@ -2,6 +2,7 @@ from typing import Any
 
 from django import forms
 from django.apps import apps
+from django.contrib.admin import SimpleListFilter
 from django.contrib.gis import admin
 from django.http import HttpRequest
 
@@ -30,7 +31,7 @@ class ModelForm(forms.ModelForm):
     choices = (
         (
             "all",
-            "all",
+            "Applicable to all MODELS",
         ),
     ) + tuple(
         map(
@@ -45,6 +46,23 @@ class ModelForm(forms.ModelForm):
     model = forms.ChoiceField(choices=choices)
 
 
+class ModelListFilter(SimpleListFilter):
+    title = "model"
+    parameter_name = "model"
+
+    _DISPLAY_MAP = {"all": "Applicable to all MODELS"}
+
+    def lookups(self, request, model_admin):
+        qs = model_admin.get_queryset(request)
+        values = qs.values_list("model", flat=True).distinct().order_by("model")
+        return [(v, self._DISPLAY_MAP.get(v, v)) for v in values]
+
+    def queryset(self, request, queryset):
+        if self.value() is not None:
+            return queryset.filter(model=self.value())
+        return queryset
+
+
 class FileExtensionWhitelistAdmin(DeleteProtectedModelAdmin):
     fields = (
         "name",
@@ -53,12 +71,18 @@ class FileExtensionWhitelistAdmin(DeleteProtectedModelAdmin):
     )
     list_display = (
         "name",
-        "model",
+        "model_display",
         "compressed",
     )
     form = ModelForm
     search_fields = ["name", "model"]
-    list_filter = ["compressed", "model"]
+    list_filter = ["compressed", ModelListFilter]
+
+    @admin.display(description="model")
+    def model_display(self, obj):
+        if obj.model == "all":
+            return "Applicable to all MODELS"
+        return obj.model
 
 
 class HelpTextEntryAdmin(CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin):
