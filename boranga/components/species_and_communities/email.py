@@ -32,37 +32,37 @@ def get_sender_user():
 
 
 class CreateSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = "A new Species has been created."
+    subject = "A new Species has been created"
     html_template = "boranga/emails/send_create_notification.html"
     txt_template = "boranga/emails/send_create_notification.txt"
 
 
 class SplitSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = "A Species has been split."
+    subject = "A Species has been split"
     html_template = "boranga/emails/send_split_notification.html"
     txt_template = "boranga/emails/send_split_notification.txt"
 
 
 class CombineSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = "The Species has been combined."
+    subject = "The Species has been combined"
     html_template = "boranga/emails/send_combine_notification.html"
     txt_template = "boranga/emails/send_combine_notification.txt"
 
 
 class RenameSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = "A Species has been renamed."
+    subject = "A Species has been renamed"
     html_template = "boranga/emails/send_rename_notification.html"
     txt_template = "boranga/emails/send_rename_notification.txt"
 
 
 class RenameCommunitySendNotificationEmail(TemplateEmailBase):
-    subject = "A Community has been renamed."
+    subject = "A Community has been renamed"
     html_template = "boranga/emails/send_rename_community_notification.html"
     txt_template = "boranga/emails/send_rename_community_notification.txt"
 
 
 class CreateCommunitySendNotificationEmail(TemplateEmailBase):
-    subject = "A new Community has been created."
+    subject = "A new Community has been created"
     html_template = "boranga/emails/send_create_notification.html"
     txt_template = "boranga/emails/send_create_notification.txt"
 
@@ -76,7 +76,7 @@ class NomosScriptFailedEmail(TemplateEmailBase):
 def send_species_create_email_notification(request, species_proposal):
     email = CreateSpeciesSendNotificationEmail()
     scientific_name = species_proposal.taxonomy.scientific_name if species_proposal.taxonomy else ""
-    email.subject = f"A new Species Profile has been created: {species_proposal.species_number} - {scientific_name}."
+    email.subject = f"A new Species Profile has been created: {species_proposal.species_number} - {scientific_name}"
     url = request.build_absolute_uri(
         reverse(
             "internal-species-detail",
@@ -279,7 +279,7 @@ def send_species_rename_email_notification(request, species_proposal, new_specie
 
 def send_community_create_email_notification(request, community_proposal):
     email = CreateCommunitySendNotificationEmail()
-    email.subject = f"A new Community Profile has been created: {community_proposal.community_number}."
+    email.subject = f"A new Community Profile has been created: {community_proposal.community_number}"
     url = request.build_absolute_uri(
         reverse(
             "internal-community-detail",

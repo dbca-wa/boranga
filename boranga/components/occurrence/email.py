@@ -32,37 +32,37 @@ def get_sender_user():
 
 
 class SubmitSendNotificationEmail(TemplateEmailBase):
-    subject = "A new Occurrence Report has been submitted."
+    subject = "A new Occurrence Report has been submitted"
     html_template = "boranga/emails/ocr_proposals/send_submit_notification.html"
     txt_template = "boranga/emails/ocr_proposals/send_submit_notification.txt"
 
 
 class ExternalSubmitSendNotificationEmail(TemplateEmailBase):
-    subject = f"{settings.DEP_NAME} - Confirmation - Occurrence Report submitted."
+    subject = f"{settings.DEP_NAME} - Confirmation - Occurrence Report submitted"
     html_template = "boranga/emails/ocr_proposals/send_external_submit_notification.html"
     txt_template = "boranga/emails/ocr_proposals/send_external_submit_notification.txt"
 
 
 class OccurrenceReportReferralSendNotificationEmail(TemplateEmailBase):
-    subject = "A referral for an occurrence report has been sent to you."
+    subject = "A referral for an occurrence report has been sent to you"
     html_template = "boranga/emails/ocr_proposals/send_referral_notification.html"
     txt_template = "boranga/emails/ocr_proposals/send_referral_notification.txt"
 
 
 class OccurrenceReportReferralRecallNotificationEmail(TemplateEmailBase):
-    subject = "A referral for an occurrence report has been recalled."
+    subject = "A referral for an occurrence report has been recalled"
     html_template = "boranga/emails/ocr_proposals/send_referral_recall_notification.html"
     txt_template = "boranga/emails/ocr_proposals/send_referral_recall_notification.txt"
 
 
 class OccurrenceReportReferralCompleteNotificationEmail(TemplateEmailBase):
-    subject = "A referral for an occurrence report has been completed."
+    subject = "A referral for an occurrence report has been completed"
     html_template = "boranga/emails/ocr_proposals/send_referral_complete_notification.html"
     txt_template = "boranga/emails/ocr_proposals/send_referral_complete_notification.txt"
 
 
 class OccurrenceReportAmendmentRequestSendNotificationEmail(TemplateEmailBase):
-    subject = "An amendment to your occurrence report is required."
+    subject = "An amendment to your occurrence report is required"
     html_template = "boranga/emails/ocr_proposals/send_amendment_notification.html"
     txt_template = "boranga/emails/ocr_proposals/send_amendment_notification.txt"
 
@@ -86,13 +86,13 @@ class ApproveSendNotificationEmail(TemplateEmailBase):
 
 
 class ApproverApproveSendNotificationEmail(TemplateEmailBase):
-    subject = "An Occurrence Report has been recommended for approval."
+    subject = "An Occurrence Report has been recommended for approval"
     html_template = "boranga/emails/ocr_proposals/send_approver_approve_notification.html"
     txt_template = "boranga/emails/ocr_proposals/send_approver_approve_notification.txt"
 
 
 class ApproverBackToAssessorSendNotificationEmail(TemplateEmailBase):
-    subject = "An Occurrence Report has been sent back to the Assessor."
+    subject = "An Occurrence Report has been sent back to the Assessor"
     html_template = "boranga/emails/ocr_proposals/send_approver_back_to_assessor_notification.html"
     txt_template = "boranga/emails/ocr_proposals/send_approver_back_to_assessor_notification.txt"
 
@@ -173,8 +173,7 @@ def send_external_referee_invite_email(occurrence_report, request, external_refe
     """Recipient: Always an external user"""
 
     subject = (
-        f"Referral Request for DBCA's Boranga System "
-        f"Occurrence Report: {occurrence_report.occurrence_report_number}"
+        f"Referral Request for DBCA's Boranga System Occurrence Report: {occurrence_report.occurrence_report_number}"
     )
     if reminder:
         subject = f"Reminder: {subject}"
