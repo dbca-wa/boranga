@@ -215,6 +215,20 @@ td {
     word-wrap: break-word;
 }
 
+td.dt-wrap-two-lines {
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 250px;
+}
+
+td.dt-wrap-two-lines > span {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
 table.dataTable {
     margin-top: 8px;
     margin-bottom: 8px !important;

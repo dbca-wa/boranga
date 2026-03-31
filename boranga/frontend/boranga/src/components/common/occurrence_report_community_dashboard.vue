@@ -720,10 +720,11 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (data, type, full) {
                     if (full.community_name) {
                         let value = full.community_name;
-                        let result = helpers.dtPopover(value, 30, 'hover');
+                        let result = helpers.dtPopover(value, 80, 'hover');
                         return type == 'export' ? value : result;
                     }
                     return '';
@@ -737,10 +738,11 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (data, type, full) {
                     if (full.community_common_id) {
                         let value = full.community_common_id;
-                        let result = helpers.dtPopover(value, 30, 'hover');
+                        let result = helpers.dtPopover(value, 80, 'hover');
                         return type == 'export' ? value : result;
                     }
                     return '';
