@@ -222,6 +222,7 @@ class LimitedEmailUserSerializer(EmailUserSerializer):
 
 
 class HelpTextEntrySerializer(BaseModelSerializer):
+    SANITIZE_OUTPUT = True
     user_can_administer = serializers.SerializerMethodField()
 
     class Meta:
