@@ -84,3 +84,4 @@ wheel~=0.46
 whitenoise~=6.6
 xlsxwriter~=3.2
 ftfy~=6.3.1
+jsonschema~=4.23

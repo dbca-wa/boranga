@@ -32,51 +32,39 @@ def get_sender_user():
 
 
 class CreateSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = "A new Species has been created."
+    subject = "A new Species has been created"
     html_template = "boranga/emails/send_create_notification.html"
     txt_template = "boranga/emails/send_create_notification.txt"
 
 
-class UserCreateSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = f"{settings.DEP_NAME} - Confirmation - Species submitted."
-    html_template = "boranga/emails/send_user_create_notification.html"
-    txt_template = "boranga/emails/send_user_create_notification.txt"
-
-
 class SplitSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = "A Species has been split."
+    subject = "A Species has been split"
     html_template = "boranga/emails/send_split_notification.html"
     txt_template = "boranga/emails/send_split_notification.txt"
 
 
 class CombineSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = "The Species has been combined."
+    subject = "The Species has been combined"
     html_template = "boranga/emails/send_combine_notification.html"
     txt_template = "boranga/emails/send_combine_notification.txt"
 
 
 class RenameSpeciesSendNotificationEmail(TemplateEmailBase):
-    subject = "A Species has been renamed."
+    subject = "A Species has been renamed"
     html_template = "boranga/emails/send_rename_notification.html"
     txt_template = "boranga/emails/send_rename_notification.txt"
 
 
 class RenameCommunitySendNotificationEmail(TemplateEmailBase):
-    subject = "A Community has been renamed."
+    subject = "A Community has been renamed"
     html_template = "boranga/emails/send_rename_community_notification.html"
     txt_template = "boranga/emails/send_rename_community_notification.txt"
 
 
 class CreateCommunitySendNotificationEmail(TemplateEmailBase):
-    subject = "A new Community has been created."
+    subject = "A new Community has been created"
     html_template = "boranga/emails/send_create_notification.html"
     txt_template = "boranga/emails/send_create_notification.txt"
-
-
-class UserCreateCommunitySendNotificationEmail(TemplateEmailBase):
-    subject = f"{settings.DEP_NAME} - Confirmation - Community submitted."
-    html_template = "boranga/emails/send_user_create_notification.html"
-    txt_template = "boranga/emails/send_user_create_notification.txt"
 
 
 class NomosScriptFailedEmail(TemplateEmailBase):
@@ -87,6 +75,8 @@ class NomosScriptFailedEmail(TemplateEmailBase):
 
 def send_species_create_email_notification(request, species_proposal):
     email = CreateSpeciesSendNotificationEmail()
+    scientific_name = species_proposal.taxonomy.scientific_name if species_proposal.taxonomy else ""
+    email.subject = f"A new Species Profile has been created: {species_proposal.species_number} - {scientific_name}"
     url = request.build_absolute_uri(
         reverse(
             "internal-species-detail",
@@ -111,44 +101,6 @@ def send_species_create_email_notification(request, species_proposal):
     return msg
 
 
-# created email send to the user who is internal not external
-def send_user_species_create_email_notification(request, species_proposal):
-    email = UserCreateSpeciesSendNotificationEmail()
-    url = request.build_absolute_uri(
-        reverse(
-            "internal-species-detail",
-            kwargs={"species_proposal_pk": species_proposal.id},
-        )
-    )
-    # add the extra query params as need to load the species detail page
-    url = url + f"?group_type_name={species_proposal.group_type.name}&action=view"
-
-    url = convert_external_url_to_internal_url(url)
-
-    if species_proposal.submitter:
-        submitter_name = EmailUser.objects.get(id=species_proposal.submitter).get_full_name()
-    else:
-        submitter_name = "Unknown"
-
-    context = {
-        "species_community_proposal": species_proposal,
-        "submitter": submitter_name,
-        "url": url,
-    }
-    all_ccs = []
-
-    msg = email.send(
-        request.user.email,
-        cc=all_ccs,
-        context=context,
-    )
-    sender = request.user if request else settings.DEFAULT_FROM_EMAIL
-
-    _log_species_email(msg, species_proposal, sender=sender)
-
-    return msg
-
-
 # here species_proposal is the original species from split functionality
 def send_species_split_email_notification(
     request,
@@ -158,6 +110,7 @@ def send_species_split_email_notification(
     occurrence_assignments_dict,
 ):
     email = SplitSpeciesSendNotificationEmail()
+    email.subject = f"A Species has been split into two (or more) Species: {original_species.species_number}"
     url = request.build_absolute_uri(reverse("internal-conservation-status-dashboard", kwargs={}))
     url = convert_external_url_to_internal_url(url)
 
@@ -218,8 +171,7 @@ def send_species_split_email_notification(
     all_ccs = list(set(all_ccs))
 
     msg = email.send(
-        request.user.email,
-        cc=all_ccs,
+        all_ccs,
         context=context,
     )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
@@ -232,6 +184,8 @@ def send_species_split_email_notification(
 #  here species_proposal is the new species created in combine species functionality
 def send_species_combine_email_notification(request, combine_species_qs, resulting_species_instance, actions):
     email = CombineSpeciesSendNotificationEmail()
+    original_ids = " ".join(s.species_number for s in combine_species_qs)
+    email.subject = f"Two (or more) Species have been combined: {original_ids}"
 
     url = request.build_absolute_uri(reverse("internal-conservation-status-dashboard", kwargs={}))
     url = convert_external_url_to_internal_url(url)
@@ -257,16 +211,8 @@ def send_species_combine_email_notification(request, combine_species_qs, resulti
 
     all_ccs = list(set(all_ccs))
 
-    if resulting_species_instance.submitter:
-        submitter_email = EmailUser.objects.get(id=resulting_species_instance.submitter).email
-    else:
-        submitter_email = None
-
-    to = request.user.email if request else submitter_email
-
     msg = email.send(
-        to,
-        cc=all_ccs,
+        all_ccs,
         context=context,
     )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
@@ -306,16 +252,10 @@ def send_species_rename_email_notification(request, species_proposal, new_specie
         "new_species": new_species,
     }
 
-    if species_proposal.submitter:
-        submitter_email = EmailUser.objects.get(id=species_proposal.submitter).email
-    else:
-        submitter_email = None
-
-    to = request.user.email if request else submitter_email
+    all_ccs = list(set(all_ccs))
 
     msg = email.send(
-        to,
-        cc=all_ccs,
+        all_ccs,
         context=context,
     )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
@@ -327,6 +267,7 @@ def send_species_rename_email_notification(request, species_proposal, new_specie
 
 def send_community_create_email_notification(request, community_proposal):
     email = CreateCommunitySendNotificationEmail()
+    email.subject = f"A new Community Profile has been created: {community_proposal.community_number}"
     url = request.build_absolute_uri(
         reverse(
             "internal-community-detail",
@@ -344,47 +285,6 @@ def send_community_create_email_notification(request, community_proposal):
     )
 
     msg = email.send(recipients, context=context)
-    sender = request.user if request else settings.DEFAULT_FROM_EMAIL
-
-    _log_community_email(msg, community_proposal, sender=sender)
-
-    return msg
-
-
-# created email send to the user who is internal not external
-def send_user_community_create_email_notification(request, community_proposal):
-    email = UserCreateCommunitySendNotificationEmail()
-    url = request.build_absolute_uri(
-        reverse(
-            "internal-community-detail",
-            kwargs={"community_proposal_pk": community_proposal.id},
-        )
-    )
-    # add the extra query params as need to load the species detail page
-    url = url + f"?group_type_name={community_proposal.group_type.name}&action=view"
-
-    url = convert_external_url_to_internal_url(url)
-
-    if community_proposal.submitter:
-        submitter_user = EmailUser.objects.get(id=community_proposal.submitter)
-        submitter_name = submitter_user.get_full_name()
-        submitter_email = submitter_user.email
-    else:
-        submitter_name = "Unknown"
-        submitter_email = request.user.email if request else None
-
-    context = {
-        "species_community_proposal": community_proposal,
-        "submitter": submitter_name,
-        "url": url,
-    }
-    all_ccs = []
-
-    msg = email.send(
-        submitter_email,
-        cc=all_ccs,
-        context=context,
-    )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL
 
     _log_community_email(msg, community_proposal, sender=sender)
@@ -430,16 +330,10 @@ def send_community_rename_email_notification(
         "original_made_historical": original_made_historical,
     }
 
-    if original_community.submitter:
-        submitter_email = EmailUser.objects.get(id=original_community.submitter).email
-    else:
-        submitter_email = None
-
-    to = request.user.email if request else submitter_email
+    all_ccs = list(set(all_ccs))
 
     msg = email.send(
-        to,
-        cc=all_ccs,
+        all_ccs,
         context=context,
     )
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL

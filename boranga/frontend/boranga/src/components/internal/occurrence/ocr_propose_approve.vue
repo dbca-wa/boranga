@@ -65,12 +65,11 @@
                                     v-if="occurrence_report.ocr_for_occ_number"
                                     class="form-group mb-3"
                                 >
-                                    <label
-                                        for="occurrence_report_is_for_occurrence_number"
+                                    <label for="ORF_OCC_Number"
                                         >Proposed / Suggested OCC Number:</label
                                     >
                                     <input
-                                        id="occurrence_report_is_for_occurrence_number"
+                                        id="ORF_OCC_Number"
                                         v-model="
                                             occurrence_report.ocr_for_occ_number
                                         "
@@ -84,13 +83,12 @@
                                     v-if="occurrence_report.ocr_for_occ_name"
                                     class="form-group mb-3"
                                 >
-                                    <label
-                                        for="occurrence_report_for_occurrence_name"
+                                    <label for="ORF_OCC_Name"
                                         >Proposed / Suggested Occurrence
                                         Name:</label
                                     >
                                     <input
-                                        id="occurrence_report_for_occurrence_name"
+                                        id="ORF_OCC_Name"
                                         v-model="
                                             occurrence_report.ocr_for_occ_name
                                         "

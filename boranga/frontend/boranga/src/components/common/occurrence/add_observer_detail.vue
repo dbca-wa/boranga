@@ -231,8 +231,11 @@
                                 >
                                     <div class="col-sm-3">
                                         <label class="control-label"
-                                            >Contact Details</label
-                                        >
+                                            >Contact Details
+                                            <HelpText
+                                                section_id="pii_privacy_notice"
+                                            />
+                                        </label>
                                     </div>
                                     <div class="col-sm-9">
                                         <textarea
@@ -408,6 +411,7 @@
 <script>
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { api_endpoints, helpers } from '@/utils/hooks.js';
 import swal from 'sweetalert2';
 
@@ -416,6 +420,7 @@ export default {
     components: {
         modal,
         alert,
+        HelpText,
     },
     props: {
         url: {

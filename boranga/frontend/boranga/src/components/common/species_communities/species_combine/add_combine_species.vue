@@ -126,6 +126,11 @@ export default {
             $(vm.$refs[vm.scientificNameLookup])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#' + vm.selectScientificName),
                     theme: 'bootstrap-5',
                     allowClear: true,

@@ -11,6 +11,7 @@ from boranga.components.conservation_status import models
 @admin.register(models.ProposalAmendmentReason)
 class ProposalAmendmentReasonAdmin(CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin):
     list_display = ["reason"]
+    search_fields = ["reason"]
 
 
 class AbstractListAdmin(DeleteProtectedModelAdmin):
@@ -21,10 +22,12 @@ class AbstractListAdmin(DeleteProtectedModelAdmin):
         "applies_to_fauna",
         "applies_to_communities",
     ]
+    search_fields = ["code", "label"]
 
 
 class AbstractCategoryAdmin(DeleteProtectedModelAdmin):
     list_display = ["code", "label"]
+    search_fields = ["code", "label"]
 
 
 class WAPriorityListAdmin(CsvExportMixin, ArchivableModelAdminMixin, AbstractListAdmin):
@@ -57,6 +60,7 @@ class OtherConservationAssessmentListAdmin(CsvExportMixin, ArchivableModelAdminM
 
 class ConservationChangeCodeAdmin(CsvExportMixin, ArchivableModelAdminMixin, DeleteProtectedModelAdmin):
     list_display = ["code", "label"]
+    search_fields = ["code", "label"]
 
 
 admin.site.register(models.WAPriorityList, WAPriorityListAdmin)

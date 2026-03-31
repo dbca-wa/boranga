@@ -69,8 +69,10 @@
                                 <div class="row mb-3">
                                     <div class="col-sm-3">
                                         <label class="control-label pull-left"
-                                            >Contact Details</label
-                                        >
+                                            >Contact Details
+                                            <HelpText
+                                                section_id="pii_privacy_notice"
+                                        /></label>
                                     </div>
                                     <div class="col-sm-9">
                                         <textarea
@@ -191,6 +193,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 import { helpers } from '@/utils/hooks.js';
+import HelpText from '@/components/common/help_text.vue';
 import swal from 'sweetalert2';
 
 export default {
@@ -198,6 +201,7 @@ export default {
     components: {
         modal,
         alert,
+        HelpText,
     },
     props: {
         url: {

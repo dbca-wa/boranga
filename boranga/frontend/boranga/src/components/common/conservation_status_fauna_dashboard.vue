@@ -1726,6 +1726,11 @@ export default {
             $(vm.$refs.cs_scientific_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#select_scientific_name'),
                     theme: 'bootstrap-5',
                     allowClear: true,
@@ -1771,6 +1776,11 @@ export default {
             $(vm.$refs.cs_common_name_lookup)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#select_common_name'),
                     theme: 'bootstrap-5',
                     allowClear: true,

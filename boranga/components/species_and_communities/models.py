@@ -356,7 +356,7 @@ class Taxonomy(BaseModel):
             previous_names_list = TaxonPreviousName.objects.filter(taxonomy=self.id).values_list(
                 "previous_scientific_name", flat=True
             )
-            return ",".join(previous_names_list)
+            return ", ".join(previous_names_list)
         else:
             return ""
 

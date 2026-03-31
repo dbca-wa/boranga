@@ -1,10 +1,7 @@
 <template lang="html">
     <div id="occ_documents">
         <FormSection :form-collapse="false" label="Documents" Index="documents">
-            <alert type="warning"
-                ><i class="bi bi-ban fs-6 fw-bold me-2"></i>Do not upload
-                Management or Recovery Plans here</alert
-            >
+            <HelpText section_id="OCC_Documents" />
             <form class="form-horizontal" action="index.html" method="post">
                 <div class="col-sm-12">
                     <div class="text-end">
@@ -47,18 +44,18 @@
 </template>
 <script>
 import { v4 as uuid } from 'uuid';
-import alert from '@vue-utils/alert.vue';
-import datatable from '@vue-utils/datatable.vue';
 import DocumentDetail from '@/components/common/add_document.vue';
+import datatable from '@vue-utils/datatable.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
+import HelpText from '@/components/common/help_text.vue';
 import OccurenceDocumentHistory from '../../internal/occurrence/occ_document_history.vue';
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
 
 export default {
     name: 'OCCDocuments',
     components: {
-        alert,
         FormSection,
+        HelpText,
         datatable,
         DocumentDetail,
         OccurenceDocumentHistory,

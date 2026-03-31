@@ -361,7 +361,7 @@ export default {
             document.querySelectorAll('[data-bs-toggle="popover"]')
         );
         popoverTriggerList.map(function (popoverTriggerEl) {
-            new bootstrap.Popover(popoverTriggerEl);
+            new bootstrap.Popover(popoverTriggerEl, { container: 'body' });
         });
     },
     checkForChange: function (before, after) {

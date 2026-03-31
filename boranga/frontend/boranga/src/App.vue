@@ -23,4 +23,7 @@ textarea {
 .select2-container--focus {
     z-index: 1;
 }
+.popover {
+    z-index: 20001 !important;
+}
 </style>

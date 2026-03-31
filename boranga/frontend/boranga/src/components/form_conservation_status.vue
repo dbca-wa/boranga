@@ -140,6 +140,7 @@
                         ref="cs_related_items"
                         :ajax_url="related_items_ajax_url"
                         :filter_list_url="related_items_filter_list_url"
+                        :filter_exclusions="related_items_filter_exclusions"
                         :display_profile_column="true"
                     >
                     </RelatedItems>
@@ -213,6 +214,12 @@ export default {
         },
         related_items_filter_list_url: function () {
             return '/api/conservation_status/filter_list.json';
+        },
+        related_items_filter_exclusions: function () {
+            if (this.conservation_status_obj.group_type === 'community') {
+                return ['species'];
+            }
+            return ['community'];
         },
     },
     mounted: function () {

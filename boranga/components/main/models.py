@@ -299,7 +299,7 @@ class FileExtensionWhitelist(BaseModel):
         self._meta.get_field("model").choices = (
             (
                 "all",
-                "all",
+                "Applicable to all MODELS",
             ),
         ) + tuple(
             map(

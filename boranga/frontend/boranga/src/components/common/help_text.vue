@@ -3,7 +3,7 @@
         <template v-if="helpTextEntry">
             <template v-if="helpTextEntry.icon_with_popover">
                 <i
-                    :id="helpTextEntry.section_id"
+                    ref="popoverIcon"
                     class="bi bi-info-circle-fill text-primary help-text-popover"
                     data-bs-toggle="popover"
                     data-bs-trigger="hover focus"
@@ -81,10 +81,9 @@ export default {
                     vm.helpTextEntry = data;
                     this.$nextTick(() => {
                         if (vm.helpTextEntry.icon_with_popover) {
-                            var helpTextEntryElement = document.getElementById(
-                                this.section_id
-                            );
-                            new bootstrap.Popover(helpTextEntryElement);
+                            new bootstrap.Popover(vm.$refs.popoverIcon, {
+                                container: 'body',
+                            });
                         }
                     });
                 });

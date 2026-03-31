@@ -14,8 +14,6 @@ from boranga.components.species_and_communities.email import (
     send_community_create_email_notification,
     send_species_create_email_notification,
     send_species_rename_email_notification,
-    send_user_community_create_email_notification,
-    send_user_species_create_email_notification,
 )
 from boranga.components.species_and_communities.models import (
     Community,
@@ -58,15 +56,11 @@ def species_form_submit(species_instance, request, split=False, rename=False):
         request,
     )
 
-    ret1 = send_species_create_email_notification(request, species_instance)
-    ret2 = send_user_species_create_email_notification(request, species_instance)
+    send_species_create_email_notification(request, species_instance)
 
-    if ret1 and ret2:
-        species_instance.processing_status = Species.PROCESSING_STATUS_ACTIVE
-        # all functions that call this save after - otherwise we can parametise this if need be
-        species_instance.save(no_revision=True)
-    else:
-        raise ValidationError("An error occurred while submitting proposal (Submit email notifications failed)")
+    species_instance.processing_status = Species.PROCESSING_STATUS_ACTIVE
+    # all functions that call this save after - otherwise we can parametise this if need be
+    species_instance.save(no_revision=True)
     return species_instance
 
 
@@ -90,14 +84,10 @@ def community_form_submit(community_instance, request):
         request,
     )
 
-    ret1 = send_community_create_email_notification(request, community_instance)
-    ret2 = send_user_community_create_email_notification(request, community_instance)
+    send_community_create_email_notification(request, community_instance)
 
-    if ret1 and ret2:
-        community_instance.processing_status = Community.PROCESSING_STATUS_ACTIVE
-        community_instance.save(no_revision=True)
-    else:
-        raise ValidationError("An error occurred while submitting proposal (Submit email notifications failed)")
+    community_instance.processing_status = Community.PROCESSING_STATUS_ACTIVE
+    community_instance.save(no_revision=True)
 
     return community_instance
 

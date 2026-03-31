@@ -180,8 +180,7 @@
                 <label for="" class="col-sm-3 control-label fw-bold"
                     >Location Description:
                     <span class="text-danger pe-1">*</span>
-                    <HelpText
-                        section_id="occurrence_report_location_description"
+                    <HelpText section_id="ORF_Location"
                 /></label>
                 <div class="col-sm-9">
                     <textarea
@@ -196,7 +195,10 @@
                 </div>
             </div>
             <div class="row mb-3">
-                <label for="" class="col-sm-3 control-label">Locality:</label>
+                <label for="" class="col-sm-3 control-label"
+                    >Locality:
+                    <HelpText section_id="ORF_Locality" />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="locality"
@@ -209,9 +211,7 @@
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Boundary Description:
-                    <HelpText
-                        section_id="occurrence_report_boundary_description"
+                    >Boundary Description: <HelpText section_id="ORF_Boundary"
                 /></label>
                 <div class="col-sm-9">
                     <textarea

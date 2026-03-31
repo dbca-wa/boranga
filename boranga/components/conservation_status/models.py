@@ -481,8 +481,6 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
         ("species", "Species"),
         ("community", "Community"),
         ("agendaitem", "Meeting Agenda Item"),
-        ("occurrences", "Occurrence"),
-        ("occurrence_report", "Occurrence Report"),
     ]
 
     # group_type of application
@@ -1841,8 +1839,6 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
                 "species",
                 "community",
                 "agendaitem",
-                "occurrences",
-                "occurrence_report",
             ]
         else:
             related_field_names = [
@@ -1888,20 +1884,6 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
                             ):
                                 continue
                         return_list.append(related_item)
-
-        # Handle nested related items for species/community
-        species_filter = []
-        if "occurrences" in related_field_names:
-            species_filter.append("occurrences")
-        if "occurrence_report" in related_field_names:
-            species_filter.append("occurrence_report")
-        for occ_filter_type in species_filter:
-            if self.species:
-                items = self.species.get_related_items(occ_filter_type, search_value=search_value)
-                return_list.extend(items)
-            if self.community:
-                items = self.community.get_related_items(occ_filter_type, search_value=search_value)
-                return_list.extend(items)
 
         # Sort
         if ordering_column:

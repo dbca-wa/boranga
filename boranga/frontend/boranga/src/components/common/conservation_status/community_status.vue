@@ -500,9 +500,8 @@
                                         filterWALegislativeCategories($event)
                                     "
                                 >
-                                    <option :value="null" disabled>
-                                        Select the appropriate WA Legislative
-                                        List
+                                    <option :value="null">
+                                        &mdash; None &mdash;
                                     </option>
                                     <option
                                         v-for="option in wa_legislative_lists"
@@ -575,9 +574,8 @@
                                     :disabled="isReadOnly"
                                     class="form-select"
                                 >
-                                    <option :value="null" disabled>
-                                        Select the appropriate WA Legislative
-                                        Category
+                                    <option :value="null">
+                                        &mdash; None &mdash;
                                     </option>
                                     <option
                                         v-for="option in filtered_wa_legislative_categories"
@@ -646,8 +644,8 @@
                                     :disabled="isReadOnly"
                                     class="form-select"
                                 >
-                                    <option :value="null" disabled>
-                                        Select the appropriate IUCN Version
+                                    <option :value="null">
+                                        &mdash; None &mdash;
                                     </option>
                                     <option
                                         v-for="option in iucn_versions"
@@ -741,8 +739,8 @@
                                     class="form-select"
                                     @change="filterWAPriorityCategories($event)"
                                 >
-                                    <option :value="null" disabled>
-                                        Select the appropriate WA Priority List
+                                    <option :value="null">
+                                        &mdash; None &mdash;
                                     </option>
                                     <option
                                         v-for="option in wa_priority_lists"
@@ -815,9 +813,8 @@
                                     :disabled="isReadOnly"
                                     class="form-select"
                                 >
-                                    <option :value="null" disabled>
-                                        Select the appropriate WA Priority
-                                        Category
+                                    <option :value="null">
+                                        &mdash; None &mdash;
                                     </option>
                                     <option
                                         v-for="option in filtered_wa_priority_categories"
@@ -888,9 +885,8 @@
                                     :disabled="isReadOnly"
                                     class="form-select"
                                 >
-                                    <option :value="null" disabled>
-                                        Select the appropriate Commonwealth
-                                        Conservation Category
+                                    <option :value="null">
+                                        &mdash; None &mdash;
                                     </option>
                                     <option
                                         v-for="option in commonwealth_conservation_categories"
@@ -960,9 +956,8 @@
                                     :disabled="isReadOnly"
                                     class="form-select"
                                 >
-                                    <option :value="null" disabled>
-                                        Select the appropriate Other
-                                        Conservation Assessment
+                                    <option :value="null">
+                                        &mdash; None &mdash;
                                     </option>
                                     <option
                                         v-for="option in other_conservation_assessments"
@@ -1872,6 +1867,11 @@ export default {
             $(vm.$refs[vm.community_name_lookup])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#' + vm.select_community_name),
                     theme: 'bootstrap-5',
                     allowClear: true,

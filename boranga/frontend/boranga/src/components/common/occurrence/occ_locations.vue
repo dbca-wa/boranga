@@ -219,8 +219,9 @@
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Location Description:</label
-                >
+                    >Location Description:
+                    <HelpText section_id="OCC_Location" />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="loc_description"
@@ -233,7 +234,10 @@
                 </div>
             </div>
             <div class="row mb-3">
-                <label for="" class="col-sm-3 control-label">Locality:</label>
+                <label for="" class="col-sm-3 control-label"
+                    >Locality:
+                    <HelpText section_id="OCC_Locality" />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="locality"
@@ -247,8 +251,9 @@
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Boundary Description:</label
-                >
+                    >Boundary Description:
+                    <HelpText section_id="OCC_Boundary" />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="boundary_descr"
@@ -452,6 +457,7 @@
                 label="Occurrence Sites"
                 Index="occurrence_sites_datatable"
             >
+                <HelpText section_id="OCC_OccurrenceSites" />
                 <div>
                     <OccurrenceSiteDatatable
                         v-if="occurrence_obj"
@@ -469,6 +475,7 @@
                 label="Occurrence Tenures"
                 Index="occurrence_tenure_datatable"
             >
+                <HelpText section_id="OCC_OccurrenceTenures" />
                 <div>
                     <OccurrenceTenureDatatable
                         v-if="occurrence_obj"
@@ -504,6 +511,7 @@
 <script>
 import { v4 as uuid } from 'uuid';
 import FormSection from '@/components/forms/section_toggle.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { api_endpoints, helpers } from '@/utils/hooks';
 import MapComponent from '../component_map.vue';
 import OccurrenceSiteDatatable from '@/components/internal/occurrence/occurrence_site_datatable.vue';
@@ -518,6 +526,7 @@ export default {
     components: {
         MapComponent,
         FormSection,
+        HelpText,
         OccurrenceSiteDatatable,
         OccurrenceTenureDatatable,
         RelatedReports,

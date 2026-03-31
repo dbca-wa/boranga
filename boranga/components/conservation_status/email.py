@@ -38,91 +38,91 @@ def get_sender_user():
 
 
 class SubmitSendNotificationEmail(TemplateEmailBase):
-    subject = "A new conservation status proposal has been submitted."
+    subject = "A new conservation status proposal has been submitted"
     html_template = "boranga/emails/cs_proposals/send_submit_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_submit_notification.txt"
 
 
 class ExternalSubmitSendNotificationEmail(TemplateEmailBase):
-    subject = f"{settings.DEP_NAME} - confirmation - conservation status proposal submitted."
+    subject = f"{settings.DEP_NAME} - confirmation - conservation status proposal submitted"
     html_template = "boranga/emails/cs_proposals/send_external_submit_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_external_submit_notification.txt"
 
 
 class ConservationStatusReferralSendNotificationEmail(TemplateEmailBase):
-    subject = "A referral for a conservation status proposal has been sent to you."
+    subject = "A referral for a conservation status proposal has been sent to you"
     html_template = "boranga/emails/cs_proposals/send_referral_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_referral_notification.txt"
 
 
 class ConservationStatusReferralRecallNotificationEmail(TemplateEmailBase):
-    subject = "A referral for a conservation status proposal has been recalled."
+    subject = "A referral for a conservation status proposal has been recalled"
     html_template = "boranga/emails/cs_proposals/send_referral_recall_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_referral_recall_notification.txt"
 
 
 class ConservationStatusReferralCompleteNotificationEmail(TemplateEmailBase):
-    subject = "A referral for a conservation status has been completed."
+    subject = "A referral for a conservation status has been completed"
     html_template = "boranga/emails/cs_proposals/send_referral_complete_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_referral_complete_notification.txt"
 
 
 class ConservationStatusAmendmentRequestSendNotificationEmail(TemplateEmailBase):
-    subject = "An amendment to your conservation status proposal is required."
+    subject = "An amendment to your conservation status proposal is required"
     html_template = "boranga/emails/cs_proposals/send_amendment_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_amendment_notification.txt"
 
 
 class ApproverDeclineSendNotificationEmail(TemplateEmailBase):
-    subject = "A conservation status proposal has been recommended for decline."
+    subject = "A conservation status proposal has been recommended for decline"
     html_template = "boranga/emails/cs_proposals/send_approver_decline_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approver_decline_notification.txt"
 
 
 class ApproverProposeDelistNotificationEmail(TemplateEmailBase):
-    subject = "A conservation status proposal has been proposed for delisting."
+    subject = "A conservation status proposal has been proposed for delisting"
     html_template = "boranga/emails/cs_proposals/send_approver_propose_delist_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approver_propose_delist_notification.txt"
 
 
 class ApproverApproveSendNotificationEmail(TemplateEmailBase):
-    subject = "A conservation status proposal has been recommended for approval."
+    subject = "A conservation status proposal has been recommended for approval"
     html_template = "boranga/emails/cs_proposals/send_approver_approve_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approver_approve_notification.txt"
 
 
 class ApproverProposedForAgendaSendNotificationEmail(TemplateEmailBase):
-    subject = "A conservation status proposal has been proposed for agenda."
+    subject = "A conservation status proposal has been proposed for agenda"
     html_template = "boranga/emails/cs_proposals/send_approver_proposed_for_agenda_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approver_proposed_for_agenda_notification.txt"
 
 
 class AssessorReadyForAgendaSendNotificationEmail(TemplateEmailBase):
-    subject = "A conservation status proposal is ready for agenda."
+    subject = "A conservation status proposal is ready for agenda"
     html_template = "boranga/emails/cs_proposals/send_assessor_ready_for_agenda_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_assessor_ready_for_agenda_notification.txt"
 
 
 class ApproverSendBackNotificationEmail(TemplateEmailBase):
-    subject = "A conservation status proposal has been sent back by approver."
+    subject = "A conservation status proposal has been sent back by approver"
     html_template = "boranga/emails/cs_proposals/send_approver_sendback_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approver_sendback_notification.txt"
 
 
 class ConservationStatusDeferNotificationEmail(TemplateEmailBase):
-    subject = "A conservation status proposal has been deferred."
+    subject = "A conservation status proposal has been deferred"
     html_template = "boranga/emails/cs_proposals/send_defer_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_defer_notification.txt"
 
 
 class ConservationStatusDeclineSendNotificationEmail(TemplateEmailBase):
-    subject = "Your conservation status proposal has been declined."
+    subject = "Your conservation status proposal has been declined"
     html_template = "boranga/emails/cs_proposals/send_decline_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_decline_notification.txt"
 
 
 class ConservationStatusApprovalSendNotificationEmail(TemplateEmailBase):
-    subject = "Your conservation status proposal has been approved."
+    subject = "Your conservation status proposal has been approved"
     html_template = "boranga/emails/cs_proposals/send_approval_notification.html"
     txt_template = "boranga/emails/cs_proposals/send_approval_notification.txt"
 

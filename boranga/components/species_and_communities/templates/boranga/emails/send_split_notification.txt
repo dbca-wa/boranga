@@ -1,5 +1,7 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{%  block greetings %}Hello Team,{% endblock %}
+
 {%  block content %}
     The Boranga Species {{ original_species.species_number }} - {{ original_species.taxonomy.scientific_name }}
     has been split into the following species:

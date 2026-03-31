@@ -1,5 +1,7 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{%  block greetings %}Hello Team,{% endblock %}
+
 {%  block content %}
     Species
 

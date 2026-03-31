@@ -2,6 +2,8 @@
 
 {% load utils %}
 
+{%  block greetings %}Hello Team,{% endblock %}
+
 {%  block content %}
     The following species have been combined:
 
@@ -19,6 +21,6 @@
 
     Any and all occurrences from the combined species have been transferred to the resulting species.
 
-    Any approved conservation statuses for the combined species have been closed.
-    (excepting the case that a combine species is retained as the resulting species)
+    Any approved conservation statuses for the combined species have been closed
+    (with exception for cases where a combined species is retained as the resulting species)
 {%  endblock %}
