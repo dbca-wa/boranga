@@ -75,6 +75,13 @@ class Command(BaseCommand):
                 "No-op in dry-run mode."
             ),
         )
+        p_run.add_argument(
+            "--seed-history-batch-size",
+            type=int,
+            default=500,
+            metavar="N",
+            help="Number of records to process per batch during history seeding (default: 500). Reduce if the seed step runs out of memory.",
+        )
         p_multi.add_argument(
             "--seed-history",
             action="store_true",
@@ -83,6 +90,13 @@ class Command(BaseCommand):
                 "for every migrated record that does not already have one. "
                 "No-op in dry-run mode."
             ),
+        )
+        p_multi.add_argument(
+            "--seed-history-batch-size",
+            type=int,
+            default=500,
+            metavar="N",
+            help="Number of records to process per batch during history seeding (default: 500). Reduce if the seed step runs out of memory.",
         )
 
         # Manually add --sources to allow any value (avoid conflicts between importers)
@@ -197,7 +211,7 @@ class Command(BaseCommand):
                 if ctx.dry_run:
                     self.stdout.write(self.style.WARNING("dry-run: would seed migrated history (skipped)."))
                 else:
-                    self._run_history_seeder()
+                    self._run_history_seeder(batch_size=opts.get("seed_history_batch_size", 500))
             self.stdout.write(self.style.SUCCESS("Done."))
             return
 
@@ -284,20 +298,20 @@ class Command(BaseCommand):
                 if ctx.dry_run:
                     self.stdout.write(self.style.WARNING("dry-run: would seed migrated history (skipped)."))
                 else:
-                    self._run_history_seeder()
+                    self._run_history_seeder(batch_size=opts.get("seed_history_batch_size", 500))
             self.stdout.write(self.style.SUCCESS(f"All done: {ctx.stats}"))
             return
 
         raise CommandError("Unknown action")
 
-    def _run_history_seeder(self) -> None:
+    def _run_history_seeder(self, batch_size: int = 500) -> None:
         """Invoke the MigratedHistorySeeder and report results to stdout."""
         from boranga.components.data_migration.history_seeding.reversion_seeder import (
             MigratedHistorySeeder,
         )
 
         self.stdout.write("Seeding initial reversion history for all migrated records…")
-        seeder = MigratedHistorySeeder()
+        seeder = MigratedHistorySeeder(batch_size=batch_size)
         stats = seeder.seed_all()
         total = sum(stats.values())
         self.stdout.write(
