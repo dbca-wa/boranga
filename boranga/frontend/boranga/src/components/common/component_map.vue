@@ -872,38 +872,6 @@
                         </div>
                     </div>
                     <div
-                        v-if="editable"
-                        class="optional-layers-button-wrapper"
-                        :title="
-                            isEditingALayer
-                                ? 'No geometries to transform'
-                                : 'To transform features first toggle on layer editing'
-                        "
-                    >
-                        <div
-                            :title="
-                                mode == 'transform'
-                                    ? 'Deactivate transform tool'
-                                    : 'Transform an existing feature'
-                            "
-                            class="btn"
-                            :class="[
-                                mode == 'transform'
-                                    ? 'optional-layers-button-active'
-                                    : 'optional-layers-button',
-                                drawable && featureCount && isEditingALayer
-                                    ? ''
-                                    : 'disabled',
-                            ]"
-                            @click="callSetMode('transform')"
-                        >
-                            <SvgIcon
-                                class="svg-object"
-                                name="transform-polygon"
-                            />
-                        </div>
-                    </div>
-                    <div
                         class="optional-layers-button-wrapper"
                         title="Zoom map to layer(s)"
                     >
