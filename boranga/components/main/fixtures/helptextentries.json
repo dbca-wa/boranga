@@ -562,5 +562,29 @@
       "authenticated_users_only": true,
       "internal_users_only": true
     }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 51,
+    "fields": {
+      "archived": false,
+      "section_id": "internal_home_card_left",
+      "text": "<h5>Section 1</h5><p>Section 1 text goes here.</p>",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 52,
+    "fields": {
+      "archived": false,
+      "section_id": "internal_home_card_right",
+      "text": "<h5>Section 2</h5><ul><li><a href='#'>Link 1</a></li><li><a href='#'>Link 2</a></li><li><a href='#'>Link 3</a></li></ul>",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
   }
 ]
