@@ -1,12 +1,14 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{% block greetings %}
+Dear {{ submitter }},
+{% endblock %}
+
 {%  block content %}
-    Your proposal for a {% if occurrence_report.is_flora_application %}flora{% elif occurrence_report.is_fauna_application %}fauna{% else %}community{% endif %} occurrence report form has been submitted, the occurrence report form number is {{ occurrence_report.occurrence_report_number }}
+    Your proposal for a {% if occurrence_report.is_flora_application %}flora{% elif occurrence_report.is_fauna_application %}fauna{% else %}community{% endif %} Occurrence Report form has been submitted, the Occurrence Report form number is {{ occurrence_report.occurrence_report_number }} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %}
 
     Submitter: {{ submitter }}
     Lodgement date: {{ occurrence_report.lodgement_date }}
 
-    Please note it may take up to 21 days to process your occurrence report form.
-
-    You will receive a notification email if there is any incomplete information or documents missing from the occurrence report form.
+    You will receive an email notification if there is any incomplete information or documents missing from the occurrence report form.
 {%  endblock %}

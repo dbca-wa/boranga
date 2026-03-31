@@ -1,7 +1,11 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>{{ submitter }},</p>
+{% endblock %}
+
 {%  block content %}
 
-        <p>Occurrence Report <strong>{{occurrence_report.occurrence_report_number}}</strong> has been approved</p>
+        <p>Occurrence Report form <strong>{{occurrence_report.occurrence_report_number}}</strong> has been approved</p>
 
 {%  endblock %}

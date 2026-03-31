@@ -1,7 +1,11 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>Dear {{ submitter }},</p>
+{% endblock %}
+
 {%  block content %}
-	Your Occurrence Report {{ occurrence_report.conservation_status_number }} has been reviewed and requires an amendment before further assessment.
+	Your Occurrence Report form {{ occurrence_report.occurrence_report_number }} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %} has been reviewed and requires an amendment before further assessment.
 
     {% if reason %}
         <p>

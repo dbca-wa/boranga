@@ -1,7 +1,11 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{% block greetings %}
+Hello Team,
+{% endblock %}
+
 {%  block content %}
-    An assessor has proposed to decline occurrence report {{ occurrence_report.occurrence_report_number }}
+    An assessor has proposed to decline Occurrence Report form {{ occurrence_report.occurrence_report_number }} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %}
     {% if reason %}
     Propose Decline Reason:
 

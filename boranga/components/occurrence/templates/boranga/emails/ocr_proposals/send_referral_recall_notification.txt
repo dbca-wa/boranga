@@ -1,7 +1,11 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{% block greetings %}
+{{ referral_name }},
+{% endblock %}
+
 {%  block content %}
-    A referral for Occurrence Report {{occurrence_report.occurrence_report_number}} has been recalled.
+    A referral for Occurrence Report form {{occurrence_report.occurrence_report_number}} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %} has been recalled.
 
     No further action from you is required.
 {%  endblock %}

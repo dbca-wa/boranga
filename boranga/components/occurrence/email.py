@@ -73,12 +73,6 @@ class ApproverDeclineSendNotificationEmail(TemplateEmailBase):
     txt_template = "boranga/emails/ocr_proposals/send_approver_decline_notification.txt"
 
 
-class DeclineSendNotificationEmail(TemplateEmailBase):
-    subject = "Occurrence Report Declined"
-    html_template = "boranga/emails/ocr_proposals/send_decline_notification.html"
-    txt_template = "boranga/emails/ocr_proposals/send_decline_notification.txt"
-
-
 class ApproveSendNotificationEmail(TemplateEmailBase):
     subject = "Occurrence Report Approved"
     html_template = "boranga/emails/ocr_proposals/send_approval_notification.html"
@@ -101,6 +95,7 @@ def send_submit_email_notification(request, occurrence_report):
     """Recipient: Always internal users"""
 
     email = SubmitSendNotificationEmail()
+    email.subject = f"A new Occurrence Report form has been submitted: " f"{occurrence_report.occurrence_report_number}"
     url = request.build_absolute_uri(
         reverse(
             "internal-occurrence-report-detail",
@@ -130,6 +125,10 @@ def send_submitter_submit_email_notification(request, occurrence_report):
     """Recipient: Maybe internal or external user"""
 
     email = ExternalSubmitSendNotificationEmail()
+    email.subject = (
+        f"{settings.DEP_NAME} - Confirmation - Occurrence Report form submitted: "
+        f"{occurrence_report.occurrence_report_number}"
+    )
 
     to_user = EmailUser.objects.get(id=occurrence_report.submitter)
 
@@ -173,7 +172,8 @@ def send_external_referee_invite_email(occurrence_report, request, external_refe
     """Recipient: Always an external user"""
 
     subject = (
-        f"Referral Request for DBCA's Boranga System Occurrence Report: {occurrence_report.occurrence_report_number}"
+        f"Referral Request for DBCA's Boranga System Occurrence Report form: "
+        f"{occurrence_report.occurrence_report_number}"
     )
     if reminder:
         subject = f"Reminder: {subject}"
@@ -211,6 +211,10 @@ def send_occurrence_report_referral_email_notification(referral, request, remind
     """Recipient: May be internal or external user"""
 
     email = OccurrenceReportReferralSendNotificationEmail()
+    email.subject = (
+        f"A referral for an Occurrence Report form in DBCA's Boranga System "
+        f"has been sent to you: {referral.occurrence_report.occurrence_report_number}"
+    )
 
     to_user = EmailUser.objects.get(id=referral.referral)
 
@@ -237,6 +241,7 @@ def send_occurrence_report_referral_email_notification(referral, request, remind
         "url": url,
         "reminder": reminder,
         "comments": referral.text,
+        "referral_name": to_user.get_full_name(),
     }
 
     msg = email.send(to_user.email, context=context)
@@ -254,6 +259,10 @@ def send_occurrence_report_referral_recall_email_notification(referral, request)
     """Recipient: May be internal or external user"""
 
     email = OccurrenceReportReferralRecallNotificationEmail()
+    email.subject = (
+        f"A referral for an Occurrence Report form in DBCA's Boranga System "
+        f"has been recalled: {referral.occurrence_report.occurrence_report_number}"
+    )
 
     to_user = EmailUser.objects.get(id=referral.referral)
 
@@ -278,6 +287,7 @@ def send_occurrence_report_referral_recall_email_notification(referral, request)
     context = {
         "occurrence_report": referral.occurrence_report,
         "url": url,
+        "referral_name": to_user.get_full_name(),
     }
 
     msg = email.send(to_user.email, context=context)
@@ -295,6 +305,10 @@ def send_occurrence_report_referral_complete_email_notification(referral, reques
     """Recipient: Always an internal user"""
 
     email = OccurrenceReportReferralCompleteNotificationEmail()
+    email.subject = (
+        f"A referral for an Occurrence Report form has been completed: "
+        f"{referral.occurrence_report.occurrence_report_number}"
+    )
     url = request.build_absolute_uri(
         reverse(
             "internal-occurrence-report-detail",
@@ -302,15 +316,16 @@ def send_occurrence_report_referral_complete_email_notification(referral, reques
         )
     )
 
-    email_address = EmailUser.objects.get(id=referral.sent_by).email
+    to_user = EmailUser.objects.get(id=referral.sent_by)
 
     context = {
         "occurrence_report": referral.occurrence_report,
         "url": url,
         "referral_comments": referral.referral_comment,
+        "referral_name": to_user.get_full_name(),
     }
 
-    msg = email.send(email_address, context=context)
+    msg = email.send(to_user.email, context=context)
 
     sender = get_sender_user()
 
@@ -323,6 +338,9 @@ def send_occurrence_report_amendment_email_notification(amendment_request, reque
     """Recipient: May be internal or external user"""
 
     email = OccurrenceReportAmendmentRequestSendNotificationEmail()
+    email.subject = (
+        f"An amendment to your Occurrence Report form is required: " f"{occurrence_report.occurrence_report_number}"
+    )
     reason = amendment_request.reason.reason
 
     to_user = EmailUser.objects.get(id=occurrence_report.submitter)
@@ -355,6 +373,7 @@ def send_occurrence_report_amendment_email_notification(amendment_request, reque
         "reason": reason,
         "amendment_request_text": amendment_request.text,
         "url": url,
+        "submitter": to_user.get_full_name(),
     }
 
     msg = email.send(
@@ -378,6 +397,10 @@ def send_approver_decline_email_notification(reason, request, occurrence_report)
     """Recipient: Always internal users"""
 
     email = ApproverDeclineSendNotificationEmail()
+    email.subject = (
+        f"An Assessor has proposed to decline an Occurrence Report form: "
+        f"{occurrence_report.occurrence_report_number}"
+    )
     url = request.build_absolute_uri(
         reverse(
             "internal-occurrence-report-detail",
@@ -400,43 +423,20 @@ def send_approver_decline_email_notification(reason, request, occurrence_report)
     return msg
 
 
-def send_decline_email_notification(reason, occurrence_report):
-    """Recipient: May be internal or external user Note: Currently does not include a url
-    If a url is added in future it must be able to handle both internal and external users
-    """
-
-    email = DeclineSendNotificationEmail()
-
-    context = {"occurrence_report": occurrence_report, "reason": reason}
-
-    to_user = EmailUser.objects.get(id=occurrence_report.submitter)
-
-    cc_list = occurrence_report.declined_details.cc_email
-    all_ccs = []
-    if cc_list:
-        all_ccs = cc_list.split(",")
-
-    msg = email.send(to_user.email, context=context, cc=all_ccs)
-
-    sender = get_sender_user()
-
-    _log_occurrence_report_email(msg, occurrence_report, sender=sender)
-
-    _log_user_email(msg, to_user, to_user, sender=sender)
-
-    return msg
-
-
 def send_approve_email_notification(occurrence_report):
     """Recipient: May be internal or external user Note: Currently does not include a url
     If a url is added in future it must be able to handle both internal and external users
     """
 
     email = ApproveSendNotificationEmail()
-
-    context = {"occurrence_report": occurrence_report}
+    email.subject = f"Occurrence Report form Approved: " f"{occurrence_report.occurrence_report_number}"
 
     to_user = EmailUser.objects.get(id=occurrence_report.submitter)
+
+    context = {
+        "occurrence_report": occurrence_report,
+        "submitter": to_user.get_full_name(),
+    }
 
     cc_list = occurrence_report.approval_details.cc_email
     all_ccs = []
@@ -459,6 +459,9 @@ def send_approver_approve_email_notification(request, occurrence_report):
     """Recipient: Always internal users"""
 
     email = ApproverApproveSendNotificationEmail()
+    email.subject = (
+        f"An Occurrence Report form has been recommended for approval: " f"{occurrence_report.occurrence_report_number}"
+    )
     url = request.build_absolute_uri(
         reverse(
             "internal-occurrence-report-detail",
@@ -471,6 +474,7 @@ def send_approver_approve_email_notification(request, occurrence_report):
         "occurrence_report": occurrence_report,
         "approval_details": approval_details,
         "url": url,
+        "assessor": EmailUser.objects.get(id=request.user.id).get_full_name(),
     }
 
     recipients = SystemEmailGroup.emails_by_group_and_area(
@@ -491,6 +495,10 @@ def send_approver_back_to_assessor_email_notification(request, occurrence_report
     """Recipient: Always internal users"""
 
     email = ApproverBackToAssessorSendNotificationEmail()
+    email.subject = (
+        f"An Occurrence Report form has been sent back to the Assessor: "
+        f"{occurrence_report.occurrence_report_number}"
+    )
     url = request.build_absolute_uri(
         reverse(
             "internal-occurrence-report-detail",
@@ -628,6 +636,10 @@ class OccurrenceReportSpeciesRenamedEmail(TemplateEmailBase):
 
 def send_occurrence_report_species_renamed_email(request, occurrence_report, original_species, resultant_species):
     email = OccurrenceReportSpeciesRenamedEmail()
+    email.subject = (
+        f"The Species Name for your Occurrence Report form has been amended: "
+        f"{occurrence_report.occurrence_report_number}"
+    )
 
     to_user = EmailUser.objects.get(id=occurrence_report.submitter)
     url_name_prefix = "internal"
@@ -648,6 +660,7 @@ def send_occurrence_report_species_renamed_email(request, occurrence_report, ori
         "original_species": original_species,
         "resultant_species": resultant_species,
         "occurrence_report_url": url,
+        "submitter": to_user.get_full_name(),
     }
 
     sender = request.user if request else settings.DEFAULT_FROM_EMAIL

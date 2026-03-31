@@ -1,10 +1,14 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>{{ referral_name }},</p>
+{% endblock %}
+
 {%  block content %}
     {% if reminder %}
-        <p>This is a reminder for a referral for Conservation Status Proposal <strong>{{cs_proposal.conservation_status_number}}</strong> that has been sent to you:</p>
+        <p>This is a reminder for a referral for Conservation Status Proposal <strong>{{cs_proposal.conservation_status_number}}</strong> {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} that has been sent to you:</p>
     {% else %}
-        <p>A referral for Conservation Status Proposal <strong>CS{{cs_proposal.id}}</strong> has been sent to you:</p>
+        <p>A referral for Conservation Status Proposal <strong>{{cs_proposal.conservation_status_number}}</strong> {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} has been sent to you:</p>
         <p>Comments: {{comments}}</p>
     {% endif %}
     <p>You can access this referral using the following link:</p>
