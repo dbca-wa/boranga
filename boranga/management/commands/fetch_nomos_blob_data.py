@@ -1,5 +1,6 @@
 import logging
 
+import jsonschema
 import requests
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -37,7 +38,104 @@ class Command(BaseCommand):
             count = 0
             if taxon_res.status_code == 200:
                 logger.info("{}".format("Done Fetching NOMOS data"))
-                taxon = taxon_res.json()
+
+                # 2) Validate response is parseable JSON
+                try:
+                    taxon = taxon_res.json()
+                except Exception as e:
+                    err_msg = f"NOMOS response is not valid JSON: {e}"
+                    logger.error(err_msg)
+                    send_nomos_script_failed([err_msg])
+                    return
+
+                # 3) Schema validation against every record
+                taxon_record_schema = {
+                    "type": "object",
+                    "required": ["taxon_name_id", "canonical_name", "kingdom_id", "rank_id", "is_current"],
+                    "properties": {
+                        "taxon_name_id": {"type": ["integer", "null"]},
+                        "canonical_name": {"type": ["string", "null"]},
+                        "kingdom_id": {"type": ["integer", "null"]},
+                        "kingdom_name": {"type": ["string", "null"]},
+                        "rank_id": {"type": ["integer", "null"]},
+                        "rank_name": {"type": ["string", "null"]},
+                        "is_current": {"type": ["boolean", "null"]},
+                        "author": {"type": ["string", "null"]},
+                        "notes": {"type": ["string", "null"]},
+                        "family_id": {"type": ["integer", "null"]},
+                        "family_canonical_name": {"type": ["string", "null"]},
+                        "genus_id": {"type": ["integer", "null"]},
+                        "genus_canonical_name": {"type": ["string", "null"]},
+                        "vernaculars": {
+                            "type": ["array", "null"],
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "name"],
+                                "properties": {
+                                    "id": {"type": "integer"},
+                                    "name": {"type": ["string", "null"]},
+                                },
+                            },
+                        },
+                        "class_desc": {
+                            "type": ["array", "null"],
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "name"],
+                                "properties": {
+                                    "id": {"type": "integer"},
+                                    "name": {"type": ["string", "null"]},
+                                },
+                            },
+                        },
+                        "previous_names": {
+                            "type": ["array", "null"],
+                            "items": {
+                                "type": "object",
+                                "required": ["id", "canonical_name"],
+                                "properties": {
+                                    "id": {"type": "integer"},
+                                    "canonical_name": {"type": ["string", "null"]},
+                                },
+                            },
+                        },
+                    },
+                }
+
+                if not isinstance(taxon, list) or not taxon:
+                    err_msg = "NOMOS schema validation failed: expected a non-empty JSON array"
+                    logger.error(err_msg)
+                    send_nomos_script_failed([err_msg])
+                    return
+
+                logger.info(f"Starting schema validation of {len(taxon)} records...")
+                schema_errors = []
+                validator = jsonschema.Draft7Validator(taxon_record_schema)
+                for idx, record in enumerate(taxon):
+                    record_errors = list(validator.iter_errors(record))
+                    if record_errors:
+                        for ve in record_errors:
+                            schema_errors.append(
+                                f"Record index {idx} (taxon_name_id={record.get('taxon_name_id')}): "
+                                f"{ve.json_path}: {ve.message}"
+                            )
+                    if (idx + 1) % 10000 == 0:
+                        logger.info(
+                            f"Schema validation progress: {idx + 1}/{len(taxon)} records checked, {len(schema_errors)} errors so far"
+                        )
+
+                logger.info(
+                    f"Schema validation complete: {len(taxon)} records checked, {len(schema_errors)} error(s) found"
+                )
+                if schema_errors:
+                    logger.error(f"Schema validation failed with {len(schema_errors)} error(s)")
+                    for err in schema_errors[:10]:
+                        logger.error(f"  {err}")
+                    if len(schema_errors) > 10:
+                        logger.error(f"  ... and {len(schema_errors) - 10} more")
+                    send_nomos_script_failed(schema_errors)
+                    return
+
                 try:
                     for t in taxon:
                         kingdom_id = t["kingdom_id"] if "kingdom_id" in t else None
@@ -223,8 +321,11 @@ class Command(BaseCommand):
                     errors.append(str(e))
 
             else:
-                err_msg = f"Login failed with status code {taxon_res.status_code}"
-                logger.error(f"{err_msg}")
+                # 1) HTTP status check failed
+                err_msg = f"NOMOS fetch failed with HTTP status {taxon_res.status_code}"
+                logger.error(err_msg)
+                send_nomos_script_failed([err_msg])
+                return
 
         except Exception as e:
             err_msg = "Error at the end"
