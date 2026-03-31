@@ -109,8 +109,9 @@
                         <label
                             for="contact_details"
                             class="col-sm-2 col-form-label"
-                            >Contact Details</label
-                        >
+                            >Contact Details
+                            <HelpText section_id="pii_privacy_notice" />
+                        </label>
                         <div class="col-sm-6">
                             <textarea
                                 id="contact_details"
@@ -210,6 +211,7 @@
 
 <script>
 import FormSection from '@/components/forms/section_toggle.vue';
+import HelpText from '@/components/common/help_text.vue';
 
 import { api_endpoints } from '@/utils/hooks.js';
 
@@ -217,6 +219,7 @@ export default {
     name: 'SubmitterInformation',
     components: {
         FormSection,
+        HelpText,
     },
     props: {
         submitter_information: {

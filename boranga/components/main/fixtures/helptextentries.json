@@ -118,5 +118,17 @@
       "authenticated_users_only": true,
       "internal_users_only": false
     }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 14,
+    "fields": {
+      "archived": false,
+      "section_id": "pii_privacy_notice",
+      "text": "DBCA will only use personal identifiable information in line with DBCA's Privacy Policy",
+      "icon_with_popover": true,
+      "authenticated_users_only": false,
+      "internal_users_only": false
+    }
   }
 ]
