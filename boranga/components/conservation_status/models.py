@@ -24,6 +24,7 @@ from boranga.components.conservation_status.email import (
     send_conservation_status_referral_email_notification,
     send_conservation_status_referral_recall_email_notification,
     send_proposal_approver_sendback_email_notification,
+    send_proposal_approver_sendback_from_proposed_for_agenda_notification,
 )
 from boranga.components.main.models import (
     ArchivableModel,
@@ -1265,6 +1266,8 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
                 self.approver_comment = approver_comment
                 self.save()
                 send_proposal_approver_sendback_email_notification(request, self)
+                if self.processing_status == ConservationStatus.PROCESSING_STATUS_PROPOSED_FOR_AGENDA:
+                    send_proposal_approver_sendback_from_proposed_for_agenda_notification(request, self)
 
         previous_status = self.processing_status
         self.processing_status = status

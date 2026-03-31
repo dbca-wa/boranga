@@ -109,6 +109,12 @@ class ApproverSendBackNotificationEmail(TemplateEmailBase):
     txt_template = "boranga/emails/cs_proposals/send_approver_sendback_notification.txt"
 
 
+class ApproverSendBackFromProposedForAgendaNotificationEmail(TemplateEmailBase):
+    subject = "A Conservation Status Proposal has been sent back by approver"
+    html_template = "boranga/emails/cs_proposals/send_approver_sendback_from_proposed_for_agenda_notification.html"
+    txt_template = "boranga/emails/cs_proposals/send_approver_sendback_from_proposed_for_agenda_notification.txt"
+
+
 class ConservationStatusDeferNotificationEmail(TemplateEmailBase):
     subject = "A conservation status proposal has been deferred"
     html_template = "boranga/emails/cs_proposals/send_defer_notification.html"
@@ -599,6 +605,47 @@ def send_proposal_approver_sendback_email_notification(request, conservation_sta
     sender = get_sender_user()
 
     _log_conservation_status_email(msg, conservation_status, sender=sender)
+
+    return msg
+
+
+def send_proposal_approver_sendback_from_proposed_for_agenda_notification(request, conservation_status):
+    """Recipient: Individual CS assessor that proposed the CS for agenda"""
+
+    email = ApproverSendBackFromProposedForAgendaNotificationEmail()
+    email.subject = (
+        f"A Conservation Status Proposal has been sent back by approver: "
+        f"{conservation_status.conservation_status_number}"
+    )
+
+    url = request.build_absolute_uri(
+        reverse(
+            "internal-conservation-status-detail",
+            kwargs={"cs_proposal_pk": conservation_status.id},
+        )
+    )
+
+    if "test-emails" in request.path_info:
+        approver_comment = "This is my test comment"
+        to_user = EmailUser.objects.get(id=request.user.id)
+    else:
+        approver_comment = conservation_status.approver_comment
+        to_user = EmailUser.objects.get(id=conservation_status.assigned_officer)
+
+    context = {
+        "cs_proposal": conservation_status,
+        "url": url,
+        "approver_comment": approver_comment,
+        "assessor": to_user.get_full_name(),
+    }
+
+    msg = email.send(to_user.email, context=context)
+
+    sender = get_sender_user()
+
+    _log_conservation_status_email(msg, conservation_status, sender=sender)
+
+    _log_user_email(msg, to_user, to_user, sender=sender)
 
     return msg
 
