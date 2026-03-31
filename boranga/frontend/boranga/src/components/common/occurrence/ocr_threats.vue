@@ -1,6 +1,7 @@
 <template lang="html">
     <div id="ocr_threats">
         <FormSection :form-collapse="false" label="Threats" :Index="threatBody">
+            <HelpText section_id="ORF_Threats" />
             <CollapsibleFilters
                 ref="collapsible_filters"
                 component_title="Filters"
@@ -155,6 +156,7 @@ import { v4 as uuid } from 'uuid';
 import datatable from '@vue-utils/datatable.vue';
 import ThreatDetail from '@/components/common/species_communities/add_threat.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
+import HelpText from '@/components/common/help_text.vue';
 import ConservationThreatHistory from '../../internal/occurrence/ocr_conservation_threat_history.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
@@ -163,6 +165,7 @@ export default {
     name: 'OCRThreats',
     components: {
         FormSection,
+        HelpText,
         datatable,
         ThreatDetail,
         ConservationThreatHistory,

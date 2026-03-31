@@ -784,8 +784,15 @@
         </div>
         <div class="row mb-3">
             <label for="" class="col-sm-3 control-label"
-                >Pollinator Observations:</label
-            >
+                >Pollinator Observations:
+                <HelpText
+                    :section_id="
+                        is_report
+                            ? 'ORF_Plant_pollinator_obs'
+                            : 'OCC_Plant_pollinator_obs'
+                    "
+                />
+            </label>
             <div class="col-sm-9">
                 <textarea
                     id="pollinator_obs"
@@ -798,8 +805,15 @@
         </div>
         <div class="row mb-3">
             <label for="" class="col-sm-3 control-label"
-                >Plant Count Comments:</label
-            >
+                >Plant Count Comments:
+                <HelpText
+                    :section_id="
+                        is_report
+                            ? 'ORF_Plant_Count_comment'
+                            : 'OCC_Plant_Count_comment'
+                    "
+                />
+            </label>
             <div class="col-sm-9">
                 <textarea
                     id="plant_count_comment"
@@ -857,8 +871,12 @@
 
 <script>
 import { api_endpoints, helpers } from '@/utils/hooks';
+import HelpText from '@/components/common/help_text.vue';
 export default {
     name: 'PlantCount',
+    components: {
+        HelpText,
+    },
     props: {
         plant_count: {
             type: Object,

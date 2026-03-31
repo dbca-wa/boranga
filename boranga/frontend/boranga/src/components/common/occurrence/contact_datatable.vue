@@ -1,5 +1,6 @@
 <template lang="html">
     <div id="contactTable">
+        <HelpText section_id="OCC_Key_Contacts" />
         <div class="row mb-3">
             <label for="" class="col-sm-3 control-label fw-bold"
                 >Key Contacts:</label
@@ -45,6 +46,7 @@
 import datatable from '@vue-utils/datatable.vue';
 import ContactDetail from './add_contact_detail.vue';
 import OCCContactDetailHistory from '../../internal/occurrence/occ_contact_detail_history.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
 
 export default {
@@ -53,6 +55,7 @@ export default {
         datatable,
         ContactDetail,
         OCCContactDetailHistory,
+        HelpText,
     },
     props: {
         occurrence_obj: {

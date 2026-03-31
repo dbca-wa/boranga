@@ -7,8 +7,11 @@
         >
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label fw-bold"
-                    >Occurrence Name: <span class="text-danger">*</span></label
-                >
+                    >Occurrence Name:
+                    <span class="text-danger">*</span>&nbsp;<HelpText
+                        section_id="OCC_OCC_Name"
+                    />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="occurrence_name"
@@ -94,8 +97,9 @@
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Wild Status:</label
-                >
+                    >Wild Status:
+                    <HelpText section_id="OCC_Wild_Status" />
+                </label>
                 <div class="col-sm-9">
                     <template
                         v-if="
@@ -155,7 +159,10 @@
                 </div>
             </div>
             <div class="row mb-3">
-                <label for="" class="col-sm-3 control-label">Comments:</label>
+                <label for="" class="col-sm-3 control-label"
+                    >Comments:
+                    <HelpText section_id="OCC_OCC_Comments" />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="occurrence_comments"
@@ -189,6 +196,7 @@ import { v4 as uuid } from 'uuid';
 import FormSection from '@/components/forms/section_toggle.vue';
 import ContactDatatable from './contact_datatable.vue';
 import RelatedReports from '@/components/common/occurrence/occ_related_ocr_table.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { api_endpoints, helpers } from '@/utils/hooks';
 
 export default {
@@ -197,6 +205,7 @@ export default {
         FormSection,
         RelatedReports,
         ContactDatatable,
+        HelpText,
     },
     props: {
         occurrence_obj: {

@@ -1,12 +1,8 @@
 <template lang="html">
     <div id="observerTable">
+        <HelpText section_id="ORF_observation_details" />
         <div v-if="!isReadOnly" class="row mb-3">
-            <label for="" class="col-sm-6 control-label"
-                ><span class="text-danger fw-bold">*</span>
-                <span class="text-muted ms-1"
-                    >You must add at least one observer</span
-                ></label
-            >
+            <label for="" class="col-sm-6 control-label"> </label>
 
             <div class="col-sm-6 text-end">
                 <button
@@ -49,6 +45,7 @@
 import datatable from '@vue-utils/datatable.vue';
 import ObserverDetail from './add_observer_detail.vue';
 import OCRObserverDetailHistory from '../../internal/occurrence/ocr_observer_detail_history.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
 
 export default {
@@ -57,6 +54,7 @@ export default {
         datatable,
         ObserverDetail,
         OCRObserverDetailHistory,
+        HelpText,
     },
     props: {
         occurrence_report_obj: {

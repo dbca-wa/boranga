@@ -248,8 +248,15 @@
 
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Actions Taken:</label
-                >
+                    >Actions Taken:
+                    <HelpText
+                        :section_id="
+                            is_report
+                                ? 'ORF_Animal_actions_taken'
+                                : 'OCC_Animal_actions_taken'
+                        "
+                    />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="distinct_features"
@@ -263,8 +270,15 @@
 
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Actions Required:</label
-                >
+                    >Actions Required:
+                    <HelpText
+                        :section_id="
+                            is_report
+                                ? 'ORF_Animal_actions_required'
+                                : 'OCC_Animal_actions_required'
+                        "
+                    />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="distinct_features"
@@ -278,8 +292,15 @@
 
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
-                    >Animal Observation Comments:</label
-                >
+                    >Animal Observation Comments:
+                    <HelpText
+                        :section_id="
+                            is_report
+                                ? 'ORF_Animal_Obs_comment'
+                                : 'OCC_Animal_Obs_comment'
+                        "
+                    />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="distinct_features"
@@ -738,7 +759,11 @@
 
 <script>
 import { api_endpoints, helpers } from '@/utils/hooks';
+import HelpText from '@/components/common/help_text.vue';
 export default {
+    components: {
+        HelpText,
+    },
     props: {
         animal_observation: {
             type: Object,

@@ -76,11 +76,11 @@
     "pk": 10,
     "fields": {
       "archived": false,
-      "section_id": "occurrence_report_is_for_occurrence_number",
+      "section_id": "ORF_OCC_Number",
       "text": "The proposed or suggested occurrence number to link the occurence report to. For legacy OCRs the Population ID may be used.",
       "icon_with_popover": true,
       "authenticated_users_only": true,
-      "internal_users_only": false
+      "internal_users_only": true
     }
   },
   {
@@ -88,11 +88,11 @@
     "pk": 11,
     "fields": {
       "archived": false,
-      "section_id": "occurrence_report_for_occurrence_name",
+      "section_id": "ORF_OCC_Name",
       "text": "The occurrence name to the link the occurrence report to (or a suggested name if a new occurrence is to be created).",
       "icon_with_popover": true,
       "authenticated_users_only": true,
-      "internal_users_only": false
+      "internal_users_only": true
     }
   },
   {
@@ -100,11 +100,11 @@
     "pk": 12,
     "fields": {
       "archived": false,
-      "section_id": "occurrence_report_location_description",
+      "section_id": "ORF_Location",
       "text": "Some help text for the OCR location description field",
       "icon_with_popover": true,
       "authenticated_users_only": true,
-      "internal_users_only": false
+      "internal_users_only": true
     }
   },
   {
@@ -112,11 +112,11 @@
     "pk": 13,
     "fields": {
       "archived": false,
-      "section_id": "occurrence_report_boundary_description",
+      "section_id": "ORF_Boundary",
       "text": "Some help text for the OCR boundary description field.",
       "icon_with_popover": true,
       "authenticated_users_only": true,
-      "internal_users_only": false
+      "internal_users_only": true
     }
   },
   {
@@ -141,6 +141,426 @@
       "icon_with_popover": false,
       "authenticated_users_only": true,
       "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 16,
+    "fields": {
+      "archived": false,
+      "section_id": "Occurrence_dashboard",
+      "text": "Help text about OCC should not be added directly instead come from ORF where possible",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 17,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Assessor_Comments",
+      "text": "Help text for submitter assessor about how to use this field.",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 18,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Site_Name",
+      "text": "Help text about what is/when to use",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 19,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Record_Source",
+      "text": "Help text about what is/when to use",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 20,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_observation_details",
+      "text": "Help text about at least one main observer",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 21,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Locality",
+      "text": "Help text about what to put here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 22,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Plant_pollinator_obs",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 23,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Plant_Count_comment",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 24,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Animal_actions_taken",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 25,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Animal_actions_required",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 26,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Animal_Obs_comment",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 27,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Habitat_condition",
+      "text": "Help text about Keighery Scale",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 28,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Fire_History_comments",
+      "text": "Help text about what information here relates to",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 29,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Associated_species",
+      "text": "Help text about when to use this",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 30,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Documents",
+      "text": "Help text about what to upload here",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 31,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Threats",
+      "text": "Help text about what/when to use",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 32,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_OCC_Name",
+      "text": "Help text about naming",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 33,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Wild_Status",
+      "text": "Help text about what this is",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 34,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_OCC_Comments",
+      "text": "Help text about what is/when to use, and about where to add confidential info",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 35,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Key_Contacts",
+      "text": "Help text about what when to use this",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 36,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Location",
+      "text": "Help text about what to put here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 37,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Locality",
+      "text": "Help text about what to put here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 38,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Boundary",
+      "text": "Help text about what to put here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 39,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_OccurrenceSites",
+      "text": "Help text about when to use sites",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 40,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_OccurrenceTenures",
+      "text": "Help text about how these are generated/edit",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 41,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Plant_pollinator_obs",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 42,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Plant_Count_comment",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 43,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Animal_actions_taken",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 44,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Animal_actions_required",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 45,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Animal_Obs_comment",
+      "text": "Help text about what goes here",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 46,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Habitat_condition",
+      "text": "Help text about Keighery Scale",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 47,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Comments",
+      "text": "Help text about what information here relates to",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 48,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Associated_species",
+      "text": "Help text about when to use this",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 49,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Documents",
+      "text": "Help text about what to upload here",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 50,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Threats",
+      "text": "Help text about what/when to use",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
     }
   }
 ]

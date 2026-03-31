@@ -416,6 +416,7 @@
             "
             :show-subtitle-icon="true"
         >
+            <HelpText section_id="ORF_Habitat_condition" />
             <label for="" class="col-lg-3 control-label fs-5 fw-bold mb-3"
                 >Keighery Scale</label
             >
@@ -852,7 +853,10 @@
                 </div>
             </div>
             <div class="row mb-3">
-                <label for="" class="col-sm-3 control-label">Comments:</label>
+                <label for="" class="col-sm-3 control-label"
+                    >Comments:
+                    <HelpText section_id="ORF_Fire_History_comments" />
+                </label>
                 <div class="col-sm-9">
                     <textarea
                         id="fire_history_comment"
@@ -909,6 +913,7 @@
             "
             :show-subtitle-icon="true"
         >
+            <HelpText section_id="ORF_Associated_species" />
             <div class="row mb-3 border-bottom pb-3">
                 <label for="" class="col-sm-3 control-label"
                     >Species List Relates To:</label
@@ -1048,12 +1053,14 @@
 import { v4 as uuid } from 'uuid';
 import FormSection from '@/components/forms/section_toggle.vue';
 import RelatedSpecies from '@/components/common/occurrence/ocr_related_species_table.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { api_endpoints, helpers } from '@/utils/hooks';
 export default {
     name: 'OCRHabitat',
     components: {
         FormSection,
         RelatedSpecies,
+        HelpText,
     },
     props: {
         occurrence_report_obj: {

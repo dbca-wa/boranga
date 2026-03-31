@@ -1,5 +1,6 @@
 <template>
     <div id="internal-occurrence-dash" class="container">
+        <HelpText section_id="Occurrence_dashboard" />
         <ul id="pills-tab" class="nav nav-pills" role="tablist">
             <li class="nav-item">
                 <a
@@ -338,6 +339,7 @@ import OccurrenceReportCommunityDashTable from '@common-utils/occurrence_report_
 import OccurrenceReportReferredToMeDashTable from '@common-utils/ocr_referrals_dashboard.vue';
 
 import FormSection from '@/components/forms/section_toggle.vue';
+import HelpText from '@/components/common/help_text.vue';
 
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
 export default {
@@ -351,6 +353,7 @@ export default {
         OccurrenceReportCommunityDashTable,
         OccurrenceReportReferredToMeDashTable,
         FormSection,
+        HelpText,
     },
     data() {
         return {

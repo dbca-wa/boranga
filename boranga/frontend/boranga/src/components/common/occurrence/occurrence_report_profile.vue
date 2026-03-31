@@ -35,8 +35,12 @@
                                             <label
                                                 for=""
                                                 class="col-sm-4 col-form-label"
-                                                >Assessor Comments</label
-                                            >
+                                                >Assessor Comments
+                                                <HelpText
+                                                    section_id="ORF_Assessor_Comments"
+                                                    style="pointer-events: auto"
+                                                />
+                                            </label>
                                         </div>
                                     </div>
                                 </div>
@@ -293,8 +297,9 @@
                 </div>
                 <div class="row mb-3">
                     <label for="" class="col-sm-3 col-form-label"
-                        >Site Name:</label
-                    >
+                        >Site Name:
+                        <HelpText section_id="ORF_Site_Name" />
+                    </label>
                     <div class="col-sm-9">
                         <textarea
                             id="site"
@@ -307,17 +312,13 @@
                     </div>
                 </div>
                 <div class="row mb-3">
-                    <label
-                        for="occurrence_report_is_for_occurrence_number"
-                        class="col-sm-3 col-form-label"
+                    <label for="ORF_OCC_Number" class="col-sm-3 col-form-label"
                         >ORF is for OCC Number:
-                        <HelpText
-                            section_id="occurrence_report_is_for_occurrence_number"
-                        />
+                        <HelpText section_id="ORF_OCC_Number" />
                     </label>
                     <div class="col-sm-9">
                         <input
-                            id="occurrence_report_is_for_occurrence_number"
+                            id="ORF_OCC_Number"
                             v-model="occurrence_report_obj.ocr_for_occ_number"
                             type="text"
                             :disabled="isReadOnly"
@@ -328,17 +329,13 @@
                     </div>
                 </div>
                 <div class="row mb-3">
-                    <label
-                        for="occurrence_report_for_occurrence_name"
-                        class="col-sm-3 col-form-label"
+                    <label for="ORF_OCC_Name" class="col-sm-3 col-form-label"
                         >Suggested Occurrence Name:
-                        <HelpText
-                            section_id="occurrence_report_for_occurrence_name"
-                        />
+                        <HelpText section_id="ORF_OCC_Name" />
                     </label>
                     <div class="col-sm-9">
                         <input
-                            id="occurrence_report_for_occurrence_name"
+                            id="ORF_OCC_Name"
                             v-model="occurrence_report_obj.ocr_for_occ_name"
                             type="text"
                             :disabled="isReadOnly"
@@ -460,6 +457,7 @@
                 <div class="row mb-3">
                     <label for="" class="col-sm-3 col-form-label"
                         >Record Source:
+                        <HelpText section_id="ORF_Record_Source" />
                     </label>
                     <div class="col-sm-9">
                         <textarea
