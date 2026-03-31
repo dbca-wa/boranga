@@ -42,11 +42,15 @@
                     "
                     :selectable="true"
                     :coordinate-reference-systems="coordinateReferenceSystems"
+                    :spatial-operations-allowed="
+                        formulaAvailable ? ['__all__'] : []
+                    "
                     :tile-layer-api-url="tileLayerApiUrl"
                     :query-layer-definition="{
                         name: 'query_layer',
                         title: 'Occurrence Report',
                         default: true,
+                        processed: formulaAvailable,
                         can_edit: canEditGeometry,
                         api_url: proposalApiUrl,
                         ids: [occurrence_report_obj.id],
@@ -548,6 +552,26 @@ export default {
             } else {
                 return false;
             }
+        },
+        formulaAvailable: function () {
+            if (this.is_external) {
+                return false;
+            }
+            const mode = this.occurrence_report_obj.assessor_mode || {};
+            const isAssessor =
+                mode.assessor_level === 'assessor' &&
+                mode.assessor_mode &&
+                mode.assessor_can_assess;
+            const isReferee =
+                mode.assessor_level === 'referral' &&
+                mode.assessor_mode &&
+                mode.assessor_can_assess;
+            return (
+                (isAssessor || isReferee) &&
+                ['With Assessor', 'With Referral'].includes(
+                    this.occurrence_report_obj.processing_status
+                )
+            );
         },
         canEditGeometry: function () {
             const mode = this.occurrence_report_obj.assessor_mode || {};
