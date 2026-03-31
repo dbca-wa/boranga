@@ -130,5 +130,17 @@
       "authenticated_users_only": false,
       "internal_users_only": false
     }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 15,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Comments",
+      "text": "Personal Identifiable Information (PII) can be included in the Comments field below, do not include PII in any other free text fields except for designated contact information fields.",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
   }
 ]

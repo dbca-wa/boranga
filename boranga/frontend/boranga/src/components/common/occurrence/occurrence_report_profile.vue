@@ -472,6 +472,9 @@
                     </div>
                 </div>
                 <div v-if="show_comments" class="row mb-3">
+                    <div class="col-sm-12">
+                        <HelpText section_id="ORF_Comments" />
+                    </div>
                     <label for="" class="col-sm-3 col-form-label"
                         >Comments:
                     </label>
