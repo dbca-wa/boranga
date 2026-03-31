@@ -30,6 +30,7 @@ from boranga.components.species_and_communities.models import (
     ThreatAgent,
     ThreatCategory,
 )
+from boranga.helpers import is_django_admin
 
 
 class DocumentCategoryAdmin(
@@ -363,7 +364,9 @@ class SystemEmailGroupAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
             return []
-        return [f.name for f in obj._meta.fields]
+        if is_django_admin(request) and obj is not None:
+            return [f.name for f in obj._meta.fields]
+        return [f.name for f in obj._meta.fields] if obj else []
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -378,4 +381,4 @@ class SystemEmailGroupAdmin(admin.ModelAdmin):
         return request.user.is_superuser
 
     def has_change_permission(self, request, obj=None, **kwargs):
-        return request.user.is_superuser
+        return request.user.is_superuser or is_django_admin(request)
