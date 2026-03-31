@@ -416,19 +416,17 @@ export default {
             $(vm.$refs[vm.scientific_name_lookup])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#' + vm.select_scientific_name),
                     theme: 'bootstrap-5',
                     allowClear: true,
                     placeholder: 'Select Scientific Name',
                     ajax: {
                         url: api_endpoints.scientific_name_lookup,
-                        dataType: 'json',
-                        data: function (params) {
-                            var query = {
-                                term: params.term,
-                                type: 'public',
-                            };
-                            return query;
                         },
                         // results: function (data, page) { // parse the results into the format expected by Select2.
                         //     // since we are using custom formatting functions we do not need to alter remote JSON data

@@ -95,6 +95,10 @@ export default {
             type: Boolean,
             default: false,
         },
+        is_internal: {
+            type: Boolean,
+            default: false,
+        },
     },
     data() {
         let vm = this;
@@ -429,6 +433,13 @@ export default {
             $(vm.$refs[vm.scientific_name_lookup])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return vm.is_internal
+                                ? 'Use % for wildcard search'
+                                : 'Please enter 2 or more characters';
+                        },
+                    },
                     dropdownParent: $('#' + vm.select_scientific_name),
                     theme: 'bootstrap-5',
                     allowClear: true,

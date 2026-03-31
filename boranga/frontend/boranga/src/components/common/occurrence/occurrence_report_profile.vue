@@ -686,6 +686,13 @@ export default {
             $(vm.$refs[vm.scientific_name_lookup])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return !vm.is_external
+                                ? 'Use % for wildcard search'
+                                : 'Please enter 2 or more characters';
+                        },
+                    },
                     dropdownParent: $('#' + vm.select_scientific_name),
                     theme: 'bootstrap-5',
                     allowClear: true,
@@ -895,6 +902,13 @@ export default {
             $(vm.$refs[vm.community_name_lookup])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return !vm.is_external
+                                ? 'Use % for wildcard search'
+                                : 'Please enter 2 or more characters';
+                        },
+                    },
                     dropdownParent: $('#' + vm.select_community_name),
                     theme: 'bootstrap-5',
                     allowClear: true,

@@ -983,6 +983,7 @@
             <RelatedSpecies
                 ref="related_species"
                 :is-read-only="isReadOnly"
+                :is_internal="is_internal"
                 :occurrence_report_obj="occurrence_report_obj"
                 class="mb-3"
             />

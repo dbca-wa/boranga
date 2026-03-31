@@ -682,6 +682,11 @@ export default {
             $(el)
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#rename_community_select2_parent'),
                     theme: 'bootstrap-5',
                     allowClear: true,
