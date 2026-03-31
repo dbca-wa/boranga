@@ -2029,22 +2029,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 return v.value
             return v
 
-        # Build target map: migrated_from_id -> OccurrenceReport
-        target_mig_ids = [op["migrated_from_id"] for op in ops]
-        target_ocrs_for_update = {
-            o.migrated_from_id: o for o in OccurrenceReport.objects.filter(migrated_from_id__in=target_mig_ids)
-        }
-
         # Get existing OCRAssociatedSpecies
         existing_assoc_for_update = {
-            a.occurrence_report_id: a
-            for a in OCRAssociatedSpecies.objects.filter(occurrence_report__in=list(target_ocrs_for_update.values()))
+            a.occurrence_report_id: a for a in OCRAssociatedSpecies.objects.filter(occurrence_report__in=target_occs)
         }
 
         assoc_to_update_species_list = []
         for op in ops:
             mig_id = op["migrated_from_id"]
-            ocr = target_ocrs_for_update.get(mig_id)
+            ocr = target_map.get(mig_id)
             if not ocr or ocr.pk not in existing_assoc_for_update:
                 continue
 
@@ -2200,6 +2193,29 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     logger.info(f"Created {len(through_objs)} TEC associated species links.")
                 except Exception:
                     logger.exception("Failed to bulk create TEC associated species")
+
+        # Slim op_map down to only the fields still needed from here onward.
+        # Kept fields (used after this point):
+        #   - identification_data: create_meta loop (~line 3240)
+        #   - merged: documents (temp_sv_photo, temp_document_description, lodgement_date),
+        #             observer detail, user-action history patches (~lines 2539, 2618, 4187, 4305)
+        #   - animal_observation_data: create_meta loop for fauna OCRs (~line 3347)
+        # All other large per-op fields (defaults, habitat_data, location_data, etc.)
+        # are no longer needed and are dropped here to free memory.
+        op_map = {
+            k: {
+                "identification_data": v.get("identification_data"),
+                "merged": v.get("merged"),
+                "animal_observation_data": v.get("animal_observation_data"),
+            }
+            for k, v in op_map.items()
+        }
+
+        # Free ops — no longer accessed after this point. The sub-dicts
+        # referenced by create_meta/to_update tuples (habitat_data etc.) survive
+        # via those references; what is freed here are the op dict containers
+        # themselves plus the slimmed merged dicts (~14 keys × 54k ops).
+        del ops
 
         # SubmitterInformation: OneToOne - create or update submitter information
         # Note: OneToOne relationship is defined on OccurrenceReport side (submitter_information field)
@@ -2493,6 +2509,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 ocr.pk,
                             )
 
+        # Free SubmitterInformation temp structures — no longer needed.
+        del existing_submitter_info, submitter_info_to_create, submitter_info_create_map, submitter_info_to_update
+
         # OccurrenceReportDocument: Create from SV_PHOTO (Task 12502-12508)
         # Note: We create a text file containing the reference if no file is provided.
         doc_cat_photo = DocumentCategory.objects.filter(document_category_name="ORF Document").first()
@@ -2591,6 +2610,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             except Exception:
                                 pass
 
+        # Free document temp structures — no longer needed.
+        del existing_doc_keys, docs_to_create, docs_need_uploaded_date
+
         # OCRObserverDetail: ensure a main observer exists for each occurrence_report;
         # also update organisation on existing observers when it is missing.
         want_obs_create = []
@@ -2682,6 +2704,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                         errors += 1
 
+        # Free observer temp structures — no longer needed.
+        del existing_obs, want_obs_create, want_obs_update
+
         # OCRHabitatComposition: OneToOne - create or update all fields
         # Fetch existing habitat comps
         existing_habs = {
@@ -2718,6 +2743,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
         }
         intensity_map = {i.name: i for i in Intensity.objects.all()}
         intensity_id_map = {i.id: i for i in Intensity.objects.all()}
+
+        # -------------------------------------------------------------------
+        # Child-record instance lists — initialised before the flush helper
+        # so that the closure captures names already bound in scope.
+        # -------------------------------------------------------------------
         habs_to_create = []
         habs_to_update = []
         conds_to_create = []
@@ -2738,6 +2768,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
         fire_history_to_update = []
         ocr_geom_batch_create = []  # list of (migrated_from_id, ocr_pk, OccurrenceReportGeometry)
 
+        # -------------------------------------------------------------------
+        # Periodic-flush helper for child-record instance lists
+        # -------------------------------------------------------------------
+        # Building child records for all 54 k OCRs at once fills ~10 large lists
+        # simultaneously (OCRLocation, OCRHabitatComposition, …), each with 54 k
+        # Django model instances. That can push peak RSS above 5 GB. Flushing
+        # every CHILD_FLUSH_EACH items keeps each list bounded in size.
+        CHILD_FLUSH_EACH = 5000
+
         # Fetch ContentType once before processing geometries
         from django.contrib.contenttypes.models import ContentType
 
@@ -2755,6 +2794,96 @@ class OccurrenceReportImporter(BaseSheetImporter):
             g.occurrence_report_id: g
             for g in OccurrenceReportGeometry.objects.filter(occurrence_report_id__in=all_ocr_ids)
         }
+
+        # -------------------------------------------------------------------
+        # Periodic-flush helper for child-record instance lists
+        # -------------------------------------------------------------------
+        # Defined here (after all referenced variables are initialised) so that
+        # ruff can verify every name used inside the closure is already bound.
+
+        def _flush_child_lists():
+            """Flush accumulated child-record lists to the DB and clear them in place.
+
+            Accesses child-instance lists from the enclosing scope via closure;
+            calling `.clear()` on each list is visible to the enclosing scope.
+            """
+            nonlocal errors
+            if ocr_geom_batch_create:
+                _geom_instances = [g for _, _, g in ocr_geom_batch_create]
+                logger.info(
+                    "Child-list flush: bulk-creating %d OccurrenceReportGeometry (RSS=%.0fMB)",
+                    len(_geom_instances),
+                    _rss_mb(),
+                )
+                try:
+                    OccurrenceReportGeometry.objects.bulk_create(_geom_instances, batch_size=BATCH)
+                    for _mig_id, _ocr_pk, _geom_inst in ocr_geom_batch_create:
+                        existing_ocr_geoms[_ocr_pk] = _geom_inst
+                except Exception:
+                    logger.exception("Periodic flush: bulk_create OccurrenceReportGeometry failed")
+                    errors += len(_geom_instances)
+                ocr_geom_batch_create.clear()
+            for _model_cls, _create_list, _update_list, _fixed_fields in [
+                (
+                    OCRHabitatComposition,
+                    habs_to_create,
+                    habs_to_update,
+                    [
+                        "land_form",
+                        "rock_type",
+                        "loose_rock_percent",
+                        "soil_type",
+                        "soil_colour",
+                        "soil_condition",
+                        "drainage",
+                        "water_quality",
+                        "habitat_notes",
+                    ],
+                ),
+                (OCRHabitatCondition, conds_to_create, conds_to_update, None),
+                (OCRIdentification, idents_to_create, idents_to_update, None),
+                (OCRLocation, locs_to_create, locs_to_update, None),
+                (OCRObservationDetail, obs_to_create, obs_to_update, None),
+                (OCRPlantCount, plant_counts_to_create, plant_counts_to_update, None),
+                (OCRAnimalObservation, animal_obs_to_create, animal_obs_to_update, None),
+                (OCRVegetationStructure, vegetation_structures_to_create, vegetation_structures_to_update, None),
+                (OCRFireHistory, fire_history_to_create, fire_history_to_update, None),
+            ]:
+                if _create_list:
+                    try:
+                        _model_cls.objects.bulk_create(_create_list, batch_size=BATCH)
+                    except Exception:
+                        logger.exception(
+                            "Periodic flush: bulk_create %s failed (%d items)",
+                            _model_cls.__name__,
+                            len(_create_list),
+                        )
+                        errors += len(_create_list)
+                    _create_list.clear()
+                if _update_list:
+                    if _fixed_fields:
+                        _fields_to_use = list(_fixed_fields)
+                    else:
+                        _dyn_fields: set = set()
+                        for _inst in _update_list:
+                            for _f in _inst._meta.fields:
+                                if getattr(_inst, _f.name, None) is not None and _f.name not in (
+                                    "id",
+                                    "occurrence_report",
+                                    "occurrence_report_id",
+                                ):
+                                    _dyn_fields.add(_f.name)
+                        _fields_to_use = list(_dyn_fields)
+                    if _fields_to_use:
+                        try:
+                            _model_cls.objects.bulk_update(_update_list, _fields_to_use, batch_size=BATCH)
+                        except Exception:
+                            logger.exception(
+                                "Periodic flush: bulk_update %s failed (%d items)",
+                                _model_cls.__name__,
+                                len(_update_list),
+                            )
+                    _update_list.clear()
 
         for up in to_update:
             (
@@ -3092,6 +3221,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                 # If there is a related Occurrence, logic for copying geometry has been moved
                 # to the final population phase based on DRF_POP_SECTION_MAP (SECT_CODE='LOCATION')
+
+        # Flush child records accumulated during the to_update loop before starting
+        # the (potentially much larger) create_meta pass.
+        _flush_child_lists()
 
         # Handle created ones
         logger.debug(f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}")
@@ -3438,6 +3571,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         errors += 1
 
             # Geometry copying to Occurrence is handled in the final population phase
+
+            # Periodic flush: keeps peak memory proportional to CHILD_FLUSH_EACH instead
+            # of accumulating all 54 k instances for every child model type at once.
+            if cm_processed % CHILD_FLUSH_EACH == 0:
+                logger.info(
+                    "OccurrenceReportImporter: periodic child-list flush at item %d/%d (RSS=%.0fMB)",
+                    cm_processed,
+                    len(create_meta),
+                    _rss_mb(),
+                )
+                _flush_child_lists()
 
         # Bulk-create all collected OccurrenceReportGeometry instances
         if ocr_geom_batch_create:
@@ -4059,6 +4203,30 @@ class OccurrenceReportImporter(BaseSheetImporter):
         created += len(created_map)
         updated += len(to_update)
 
+        # Free child-record prefetch dicts and instance lists — all flushed to DB.
+        del existing_habs, existing_conds, existing_idents, existing_locations
+        del existing_observations, existing_plant_counts, existing_animal_observations
+        del existing_vegetation_structures, existing_fire_histories, existing_ocr_geoms
+        del habs_to_create, habs_to_update, conds_to_create, conds_to_update
+        del idents_to_create, idents_to_update, locs_to_create, locs_to_update
+        del obs_to_create, obs_to_update, plant_counts_to_create, plant_counts_to_update
+        del animal_obs_to_create, animal_obs_to_update
+        del vegetation_structures_to_create, vegetation_structures_to_update
+        del fire_history_to_create, fire_history_to_update, ocr_geom_batch_create
+
+        # Slim to_update: only OCR instances are needed from here (for pop_section_map).
+        # Dropping the 9 sub-dicts per tuple releases habitat/location/etc data.
+        to_update_instances = [t[0] for t in to_update]
+        del to_update
+
+        # Free create_meta — sub-dicts consumed during the loop above.
+        del create_meta
+
+        logger.info(
+            "OccurrenceReportImporter: freed child-record structures (RSS=%.0fMB)",
+            _rss_mb(),
+        )
+
         # OccurrenceReportUserAction: TPFL-only — record MODIFIED_BY/MODIFIED_DATE as an action log
         # Tasks 14837, 14838, 14839
         # Only create when both MODIFIED_BY (modified_by) and MODIFIED_DATE are present.
@@ -4250,6 +4418,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             getattr(ua.occurrence_report, "pk", None),
                             exc,
                         )
+
+        # Free op_map and target_mig_ids — no longer accessed after user-action creation.
+        del op_map, target_mig_ids
 
         # ---------------------------------------------------------------------
         # TFAUNA: Create Occurrence records from approved OccurrenceReports
@@ -4532,8 +4703,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
             all_processed_ocrs = []
             if created_map:
                 all_processed_ocrs.extend(created_map.values())
-            if to_update:
-                all_processed_ocrs.extend([t[0] for t in to_update])
+            if to_update_instances:
+                all_processed_ocrs.extend(to_update_instances)
 
             # Map SECT_CODE to list of (OCR_Model, OCC_Model, copied_ocr_field_name)
             section_config = {
