@@ -2292,12 +2292,6 @@ export default {
                     number_params: 0,
                 },
                 {
-                    id: 'voronoi',
-                    name: 'Voronoi',
-                    icon: 'voronoi',
-                    number_params: 0,
-                },
-                {
                     id: 'centroid',
                     name: 'Centroid',
                     icon: 'centroid',
@@ -2308,12 +2302,6 @@ export default {
                     id: 'mean_center',
                     name: 'Mean Center',
                     icon: 'mean-center.svg',
-                    number_params: 0,
-                },
-                {
-                    id: 'standard_distance',
-                    name: 'Standard Distance',
-                    icon: 'standard-distance.svg',
                     number_params: 0,
                 },
             ];
