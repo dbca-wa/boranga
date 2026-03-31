@@ -939,14 +939,13 @@
                         Numbers:</label
                     >
                     <div class="col-sm-8">
-                        <input
+                        <textarea
                             id="combine-department-file-numbers"
                             v-model="species.department_file_numbers"
                             :disabled="true"
-                            type="text"
                             class="form-control"
                             placeholder=""
-                        />
+                        ></textarea>
                     </div>
                     <div class="col-sm-1">
                         <div class="form-check form-check-inline">
@@ -980,13 +979,12 @@
                     >Department File Numbers:
                 </label>
                 <div class="col-sm-8">
-                    <input
+                    <textarea
                         id="combine-department-file-numbers"
                         ref="combine_department_file_numbers"
                         v-model="species_community.department_file_numbers"
-                        type="text"
                         class="form-control"
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div
@@ -1171,17 +1169,16 @@
                         Reference:</label
                     >
                     <div class="col-sm-8">
-                        <input
+                        <textarea
                             :id="
                                 'combine-conservation-plan-reference-' +
                                 species.id
                             "
                             v-model="species.conservation_plan_reference"
                             :disabled="true"
-                            type="text"
                             class="form-control"
                             placeholder=""
-                        />
+                        ></textarea>
                     </div>
                     <div class="col-sm-1">
                         <div class="form-check form-check-inline">

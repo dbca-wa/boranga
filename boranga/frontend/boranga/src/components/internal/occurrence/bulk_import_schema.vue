@@ -191,15 +191,14 @@
                                             >Name</label
                                         >
                                         <div class="col-sm-7">
-                                            <input
+                                            <textarea
                                                 id="schema-name"
                                                 ref="schema-name"
                                                 v-model="schema.name"
-                                                type="text"
                                                 class="form-control"
                                                 placeholder="Enter Schema Name"
                                                 autofocus
-                                            />
+                                            ></textarea>
                                         </div>
                                     </div>
                                 </div>

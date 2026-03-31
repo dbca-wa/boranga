@@ -38,15 +38,14 @@
                                         >
                                     </div>
                                     <div class="col-sm-9">
-                                        <input
+                                        <textarea
                                             ref="observer_name"
                                             v-model="observerObj.observer_name"
-                                            type="text"
                                             class="form-control"
                                             :disabled="isReadOnly"
                                             required
                                             autofocus
-                                        />
+                                        ></textarea>
                                     </div>
                                 </div>
                                 <div class="row mb-3">
@@ -217,12 +216,11 @@
                                         >
                                     </div>
                                     <div class="col-sm-9">
-                                        <input
+                                        <textarea
                                             v-model="observerObj.organisation"
-                                            type="text"
                                             class="form-control"
                                             :disabled="isReadOnly"
-                                        />
+                                        ></textarea>
                                     </div>
                                 </div>
                                 <div

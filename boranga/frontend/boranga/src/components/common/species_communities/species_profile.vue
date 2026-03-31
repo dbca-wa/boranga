@@ -820,14 +820,13 @@
                         >Department File Numbers:</label
                     >
                     <div class="col-sm-9">
-                        <input
+                        <textarea
                             id="department_file_numbers"
                             v-model="species_community.department_file_numbers"
                             :disabled="isReadOnly"
-                            type="text"
                             class="form-control"
                             placeholder=""
-                        />
+                        ></textarea>
                     </div>
                 </div>
                 <div class="row mb-3">

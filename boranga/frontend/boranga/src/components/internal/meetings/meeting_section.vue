@@ -12,16 +12,15 @@
                     >Title: <span class="text-danger">*</span></label
                 >
                 <div class="col-sm-8">
-                    <input
+                    <textarea
                         id="title"
                         ref="title"
                         v-model="meeting_obj.title"
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
                         placeholder=""
                         autofocus
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div class="row mb-3">
@@ -82,14 +81,13 @@
                     >Attendees: <span class="text-danger">*</span></label
                 >
                 <div class="col-sm-8">
-                    <input
+                    <textarea
                         id="title"
                         v-model="meeting_obj.attendees"
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
                         placeholder=""
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div v-show="isCommitteeMeeting">

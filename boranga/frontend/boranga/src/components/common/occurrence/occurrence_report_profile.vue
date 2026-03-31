@@ -334,14 +334,13 @@
                         <HelpText section_id="ORF_OCC_Name" />
                     </label>
                     <div class="col-sm-9">
-                        <input
+                        <textarea
                             id="ORF_OCC_Name"
                             v-model="occurrence_report_obj.ocr_for_occ_name"
-                            type="text"
                             :disabled="isReadOnly"
                             class="form-control"
                             autocomplete="new-password"
-                        />
+                        ></textarea>
                     </div>
                 </div>
                 <div

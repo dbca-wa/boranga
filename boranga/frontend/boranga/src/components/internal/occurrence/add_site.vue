@@ -27,13 +27,12 @@
                                     >
                                 </div>
                                 <div class="col-sm-9">
-                                    <input
+                                    <textarea
                                         ref="site_name"
                                         v-model="siteObj.site_name"
                                         :disabled="isReadOnly"
-                                        type="text"
                                         class="form-control"
-                                    />
+                                    ></textarea>
                                 </div>
                             </div>
                             <div class="row mb-3">
