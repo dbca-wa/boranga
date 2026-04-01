@@ -10,6 +10,7 @@ Invoked by ``CronJobProcessReportQueue`` (every 2 minutes via django-cron).
 import json
 import logging
 
+from django.conf import settings
 from django.core import management
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -18,14 +19,22 @@ from boranga.components.main.models import JobQueue
 
 logger = logging.getLogger(__name__)
 
-NUMBER_OF_QUEUE_JOBS = 3
+NUMBER_OF_QUEUE_JOBS = settings.NUMBER_OF_QUEUE_JOBS
 
 
 class Command(BaseCommand):
     help = "Process pending jobs in the JobQueue."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--limit",
+            type=int,
+            default=NUMBER_OF_QUEUE_JOBS,
+            help=f"Maximum number of jobs to process (default: {NUMBER_OF_QUEUE_JOBS}).",
+        )
+
     def handle(self, *args, **options):
-        job_queue = JobQueue.objects.filter(status=JobQueue.STATUS_PENDING).order_by("created")[:NUMBER_OF_QUEUE_JOBS]
+        job_queue = JobQueue.objects.filter(status=JobQueue.STATUS_PENDING).order_by("created")[: options["limit"]]
 
         for jq in job_queue:
             jq.status = JobQueue.STATUS_RUNNING

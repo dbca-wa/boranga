@@ -161,7 +161,7 @@ def get_species_export(filters, limit):
     return list(qs[:limit])
 
 
-def get_species_export_fields(data):
+def get_species_export_fields(data, include_group_type=False):
     rows = []
     for obj in data:
         try:
@@ -182,27 +182,31 @@ def get_species_export_fields(data):
             pub = obj.species_publishing_status.species_public
         except Exception:
             pass
-        rows.append(
-            [
-                _safe(obj.species_number),
-                _safe(getattr(t, "scientific_name", "")),
-                common_names,
-                _safe(getattr(t, "family_name", "")),
-                _safe(getattr(t, "genera_name", "")),
-                informal,
-                regions,
-                districts,
-                _approved_cs_field(cs, "wa_legislative_list.code"),
-                _approved_cs_field(cs, "wa_legislative_category.code"),
-                _approved_cs_field(cs, "wa_priority_category.code"),
-                _approved_cs_field(cs, "commonwealth_conservation_category.code"),
-                _approved_cs_field(cs, "other_conservation_assessment.code"),
-                _approved_cs_field(cs, "conservation_criteria"),
-                _safe(obj.get_processing_status_display()),
-                pub,
-            ]
-        )
-    return list(SPECIES_HEADER), rows
+        row = [
+            _safe(obj.species_number),
+            _safe(getattr(t, "scientific_name", "")),
+            common_names,
+            _safe(getattr(t, "family_name", "")),
+            _safe(getattr(t, "genera_name", "")),
+            informal,
+            regions,
+            districts,
+            _approved_cs_field(cs, "wa_legislative_list.code"),
+            _approved_cs_field(cs, "wa_legislative_category.code"),
+            _approved_cs_field(cs, "wa_priority_category.code"),
+            _approved_cs_field(cs, "commonwealth_conservation_category.code"),
+            _approved_cs_field(cs, "other_conservation_assessment.code"),
+            _approved_cs_field(cs, "conservation_criteria"),
+            _safe(obj.get_processing_status_display()),
+            pub,
+        ]
+        if include_group_type:
+            row.insert(1, _safe(obj.group_type.name if obj.group_type else ""))
+        rows.append(row)
+    header = list(SPECIES_HEADER)
+    if include_group_type:
+        header.insert(1, "Group Type")
+    return header, rows
 
 
 # ── Communities ──────────────────────────────────────────────────────────────
@@ -241,7 +245,7 @@ def get_community_export(filters, limit):
     return list(qs[:limit])
 
 
-def get_community_export_fields(data):
+def get_community_export_fields(data, include_group_type=False):
     rows = []
     for obj in data:
         try:
@@ -274,6 +278,136 @@ def get_community_export_fields(data):
             ]
         )
     return list(COMMUNITY_HEADER), rows
+
+
+# ── Species & Communities (combined "all" view) ───────────────────────────────
+
+SPECIES_AND_COMMUNITIES_HEADER = [
+    "Number",
+    "Group Type",
+    "Scientific Name",
+    "Common Name",
+    "Community ID",
+    "Community Name",
+    "Family",
+    "Genus",
+    "Informal Group(s)",
+    "Region(s)",
+    "District(s)",
+    "WA Legislative List",
+    "WA Legislative Category",
+    "WA Priority Category",
+    "Commonwealth Conservation Category",
+    "Other Conservation Assessment",
+    "Conservation Criteria",
+    "Processing Status",
+    "Publishing Status",
+]
+
+
+def get_species_and_communities_export(filters, limit):
+    from boranga.components.species_and_communities.models import Community, Species
+
+    species_limit = limit // 2
+    community_limit = limit - species_limit
+    species_qs = Species.objects.select_related(
+        "taxonomy",
+        "group_type",
+        "species_publishing_status",
+    ).prefetch_related(
+        "taxonomy__vernaculars",
+        "taxonomy__informal_groups__classification_system_fk",
+        "regions",
+        "districts",
+        "conservation_status",
+    )
+    community_qs = Community.objects.select_related(
+        "taxonomy",
+        "group_type",
+        "community_publishing_status",
+    ).prefetch_related(
+        "regions",
+        "districts",
+        "conservation_status",
+    )
+    if filters.get("processing_status") and filters["processing_status"] != "all":
+        ps = filters["processing_status"]
+        species_qs = species_qs.filter(processing_status=ps)
+        community_qs = community_qs.filter(processing_status=ps)
+    return list(species_qs[:species_limit]) + list(community_qs[:community_limit])
+
+
+def get_species_and_communities_export_fields(data, include_group_type=False):
+    from boranga.components.species_and_communities.models import Community
+
+    rows = []
+    for obj in data:
+        is_community = isinstance(obj, Community)
+        try:
+            t = obj.taxonomy
+        except Exception:
+            t = None
+        cs = _approved_cs(obj)
+        if is_community:
+            group_type_name = "Community"
+            scientific_name = ""
+            common_name = ""
+            community_id = _safe(getattr(t, "community_common_id", ""))
+            community_name = _safe(getattr(t, "community_name", ""))
+            family = ""
+            genus = ""
+            informal = ""
+            pub = ""
+            try:
+                pub = obj.community_publishing_status.community_public
+            except Exception:
+                pass
+            number = _safe(obj.community_number)
+        else:
+            group_type_name = _safe(obj.group_type.name if obj.group_type else "")
+            common_name = ", ".join(t.vernaculars.all().values_list("vernacular_name", flat=True)) if t else ""
+            informal = ", ".join(
+                ig.classification_system_fk.class_desc
+                for ig in (t.informal_groups.all() if t else [])
+                if ig.classification_system_fk
+            )
+            scientific_name = _safe(getattr(t, "scientific_name", ""))
+            community_id = ""
+            community_name = ""
+            family = _safe(getattr(t, "family_name", ""))
+            genus = _safe(getattr(t, "genera_name", ""))
+            pub = ""
+            try:
+                pub = obj.species_publishing_status.species_public
+            except Exception:
+                pass
+            number = _safe(obj.species_number)
+        regions = ", ".join(obj.regions.all().values_list("name", flat=True))
+        districts = ", ".join(obj.districts.all().values_list("name", flat=True))
+        rows.append(
+            [
+                number,
+                group_type_name,
+                scientific_name,
+                common_name,
+                community_id,
+                community_name,
+                family,
+                genus,
+                informal,
+                regions,
+                districts,
+                _approved_cs_field(cs, "wa_legislative_list.code"),
+                _approved_cs_field(cs, "wa_legislative_category.code"),
+                _approved_cs_field(cs, "wa_priority_category.code"),
+                _approved_cs_field(cs, "commonwealth_conservation_category.code"),
+                _approved_cs_field(cs, "other_conservation_assessment.code"),
+                _approved_cs_field(cs, "conservation_criteria"),
+                _safe(obj.get_processing_status_display()),
+                pub,
+            ]
+        )
+    return list(SPECIES_AND_COMMUNITIES_HEADER), rows
 
 
 # ── Conservation Status (Species) ────────────────────────────────────────────
@@ -336,7 +470,7 @@ def get_conservation_status_species_export(filters, limit):
     return list(qs[:limit])
 
 
-def get_conservation_status_species_export_fields(data):
+def get_conservation_status_species_export_fields(data, include_group_type=False):
     rows = []
     user_cache = {}
     for obj in data:
@@ -349,40 +483,42 @@ def get_conservation_status_species_export_fields(data):
             if ig.classification_system_fk
         )
         si = getattr(obj, "submitter_information", None)
-        rows.append(
-            [
-                _safe(obj.conservation_status_number),
-                _safe(getattr(sp, "species_number", "")),
-                _safe(getattr(t, "scientific_name", "")),
-                common_names,
-                _safe(getattr(t, "family_name", "")),
-                _safe(getattr(t, "genera_name", "")),
-                informal,
-                _safe(getattr(obj.change_code, "code", "") if obj.change_code else ""),
-                _safe(getattr(obj.wa_priority_list, "code", "") if obj.wa_priority_list else ""),
-                _safe(getattr(obj.wa_priority_category, "code", "") if obj.wa_priority_category else ""),
-                _safe(getattr(obj.wa_legislative_list, "code", "") if obj.wa_legislative_list else ""),
-                _safe(getattr(obj.wa_legislative_category, "code", "") if obj.wa_legislative_category else ""),
-                _safe(
-                    getattr(obj.commonwealth_conservation_category, "code", "")
-                    if obj.commonwealth_conservation_category
-                    else ""
-                ),
-                _safe(
-                    getattr(obj.other_conservation_assessment, "code", "") if obj.other_conservation_assessment else ""
-                ),
-                _safe(obj.conservation_criteria),
-                _user_name(obj.submitter, user_cache),
-                _safe(getattr(getattr(si, "submitter_category", None), "name", "")) if si else "",
-                _safe(getattr(si, "organisation", "")) if si else "",
-                _user_name(obj.assigned_officer, user_cache),
-                _safe(obj.get_processing_status_display()),
-                _fmt_date(obj.effective_from),
-                _fmt_date(obj.effective_to),
-                _fmt_date(obj.review_due_date),
-            ]
-        )
-    return list(CS_SPECIES_HEADER), rows
+        row = [
+            _safe(obj.conservation_status_number),
+            _safe(getattr(sp, "species_number", "")),
+            _safe(getattr(t, "scientific_name", "")),
+            common_names,
+            _safe(getattr(t, "family_name", "")),
+            _safe(getattr(t, "genera_name", "")),
+            informal,
+            _safe(getattr(obj.change_code, "code", "") if obj.change_code else ""),
+            _safe(getattr(obj.wa_priority_list, "code", "") if obj.wa_priority_list else ""),
+            _safe(getattr(obj.wa_priority_category, "code", "") if obj.wa_priority_category else ""),
+            _safe(getattr(obj.wa_legislative_list, "code", "") if obj.wa_legislative_list else ""),
+            _safe(getattr(obj.wa_legislative_category, "code", "") if obj.wa_legislative_category else ""),
+            _safe(
+                getattr(obj.commonwealth_conservation_category, "code", "")
+                if obj.commonwealth_conservation_category
+                else ""
+            ),
+            _safe(getattr(obj.other_conservation_assessment, "code", "") if obj.other_conservation_assessment else ""),
+            _safe(obj.conservation_criteria),
+            _user_name(obj.submitter, user_cache),
+            _safe(getattr(getattr(si, "submitter_category", None), "name", "")) if si else "",
+            _safe(getattr(si, "organisation", "")) if si else "",
+            _user_name(obj.assigned_officer, user_cache),
+            _safe(obj.get_processing_status_display()),
+            _fmt_date(obj.effective_from),
+            _fmt_date(obj.effective_to),
+            _fmt_date(obj.review_due_date),
+        ]
+        if include_group_type:
+            row.insert(1, _safe(sp.group_type.name if sp and sp.group_type else ""))
+        rows.append(row)
+    header = list(CS_SPECIES_HEADER)
+    if include_group_type:
+        header.insert(1, "Group Type")
+    return header, rows
 
 
 # ── Conservation Status (Community) ──────────────────────────────────────────
@@ -442,7 +578,7 @@ def get_conservation_status_community_export(filters, limit):
     return list(qs[:limit])
 
 
-def get_conservation_status_community_export_fields(data):
+def get_conservation_status_community_export_fields(data, include_group_type=False):
     rows = []
     user_cache = {}
     for obj in data:
@@ -535,7 +671,7 @@ def get_occurrence_export(filters, limit):
     return list(qs[:limit])
 
 
-def get_occurrence_export_fields(data):
+def get_occurrence_export_fields(data, include_group_type=False):
     rows = []
     user_cache = {}
     for obj in data:
@@ -549,29 +685,33 @@ def get_occurrence_export_fields(data):
             for ig in (t.informal_groups.all() if t else [])
             if ig.classification_system_fk
         )
-        rows.append(
-            [
-                _safe(obj.occurrence_number),
-                _safe(obj.occurrence_name),
-                _safe(getattr(t, "scientific_name", "")),
-                _safe(getattr(ct, "community_name", "")),
-                _safe(getattr(ct, "community_common_id", "")),
-                _safe(getattr(obj.wild_status, "name", "") if obj.wild_status else ""),
-                obj.num_reports,
-                _safe(obj.migrated_from_id),
-                _safe(getattr(getattr(loc, "region", None), "name", "")),
-                _safe(getattr(getattr(loc, "district", None), "name", "")),
-                _fmt_date(obj.review_due_date),
-                _user_name(obj.last_modified_by, user_cache),
-                _fmt_date(obj.datetime_updated, "%d/%m/%Y"),
-                _fmt_date(obj.lodgement_date, "%d/%m/%Y"),
-                _fmt_date(obj.datetime_created, "%d/%m/%Y"),
-                _safe(getattr(t, "family_name", "")),
-                informal,
-                _safe(obj.get_processing_status_display()),
-            ]
-        )
-    return list(OCC_HEADER), rows
+        row = [
+            _safe(obj.occurrence_number),
+            _safe(obj.occurrence_name),
+            _safe(getattr(t, "scientific_name", "")),
+            _safe(getattr(ct, "community_name", "")),
+            _safe(getattr(ct, "community_common_id", "")),
+            _safe(getattr(obj.wild_status, "name", "") if obj.wild_status else ""),
+            obj.num_reports,
+            _safe(obj.migrated_from_id),
+            _safe(getattr(getattr(loc, "region", None), "name", "")),
+            _safe(getattr(getattr(loc, "district", None), "name", "")),
+            _fmt_date(obj.review_due_date),
+            _user_name(obj.last_modified_by, user_cache),
+            _fmt_date(obj.datetime_updated, "%d/%m/%Y"),
+            _fmt_date(obj.lodgement_date, "%d/%m/%Y"),
+            _fmt_date(obj.datetime_created, "%d/%m/%Y"),
+            _safe(getattr(t, "family_name", "")),
+            informal,
+            _safe(obj.get_processing_status_display()),
+        ]
+        if include_group_type:
+            row.insert(1, _safe(obj.group_type.name if obj.group_type else ""))
+        rows.append(row)
+    header = list(OCC_HEADER)
+    if include_group_type:
+        header.insert(1, "Group Type")
+    return header, rows
 
 
 # ── Occurrence Report ────────────────────────────────────────────────────────
@@ -621,7 +761,7 @@ def get_occurrence_report_export(filters, limit):
     return list(qs[:limit])
 
 
-def get_occurrence_report_export_fields(data):
+def get_occurrence_report_export_fields(data, include_group_type=False):
     rows = []
     user_cache = {}
     for obj in data:
@@ -643,31 +783,35 @@ def get_occurrence_report_export_fields(data):
             v = t.vernaculars.all().first()
             if v:
                 common_name = v.vernacular_name
-        rows.append(
-            [
-                _safe(obj.occurrence_report_number),
-                _safe(getattr(occ, "occurrence_number", "")),
-                _safe(getattr(occ, "occurrence_name", "")),
-                _safe(getattr(t, "scientific_name", "")),
-                _safe(getattr(ct, "community_name", "")),
-                _safe(getattr(ct, "community_common_id", "")),
-                _fmt_date(obj.observation_date, "%d/%m/%Y"),
-                main_obs,
-                _safe(obj.migrated_from_id),
-                _safe(getattr(getattr(loc, "region", None), "name", "")),
-                _safe(getattr(getattr(loc, "district", None), "name", "")),
-                _fmt_date(obj.lodgement_date, "%Y-%m-%d %H:%M:%S"),
-                _user_name(obj.submitter, user_cache),
-                _fmt_date(obj.datetime_approved, "%d/%m/%Y"),
-                _user_name(obj.assigned_officer, user_cache),
-                _user_name(obj.last_modified_by, user_cache),
-                _fmt_date(obj.datetime_updated, "%d/%m/%Y"),
-                _safe(getattr(t, "family_name", "")),
-                common_name,
-                _safe(obj.get_processing_status_display()),
-            ]
-        )
-    return list(OCR_HEADER), rows
+        row = [
+            _safe(obj.occurrence_report_number),
+            _safe(getattr(occ, "occurrence_number", "")),
+            _safe(getattr(occ, "occurrence_name", "")),
+            _safe(getattr(t, "scientific_name", "")),
+            _safe(getattr(ct, "community_name", "")),
+            _safe(getattr(ct, "community_common_id", "")),
+            _fmt_date(obj.observation_date, "%d/%m/%Y"),
+            main_obs,
+            _safe(obj.migrated_from_id),
+            _safe(getattr(getattr(loc, "region", None), "name", "")),
+            _safe(getattr(getattr(loc, "district", None), "name", "")),
+            _fmt_date(obj.lodgement_date, "%Y-%m-%d %H:%M:%S"),
+            _user_name(obj.submitter, user_cache),
+            _fmt_date(obj.datetime_approved, "%d/%m/%Y"),
+            _user_name(obj.assigned_officer, user_cache),
+            _user_name(obj.last_modified_by, user_cache),
+            _fmt_date(obj.datetime_updated, "%d/%m/%Y"),
+            _safe(getattr(t, "family_name", "")),
+            common_name,
+            _safe(obj.get_processing_status_display()),
+        ]
+        if include_group_type:
+            row.insert(1, _safe(obj.group_type.name if obj.group_type else ""))
+        rows.append(row)
+    header = list(OCR_HEADER)
+    if include_group_type:
+        header.insert(1, "Group Type")
+    return header, rows
 
 
 # ── Dispatch ─────────────────────────────────────────────────────────────────
@@ -677,6 +821,11 @@ EXPORT_MODELS = {
         "label": "Species",
         "get_data": get_species_export,
         "get_fields": get_species_export_fields,
+    },
+    "species_and_communities": {
+        "label": "Species & Communities",
+        "get_data": get_species_and_communities_export,
+        "get_fields": get_species_and_communities_export_fields,
     },
     "community": {
         "label": "Community",
@@ -731,7 +880,9 @@ def resolve_export_key(category, group_type):
             return "community", filters
         if group_type not in ("all", ""):
             filters["group_type"] = group_type
-        return "species", filters
+            return "species", filters
+        # "all" — return both species and communities combined
+        return "species_and_communities", filters
     if category == "conservation_status":
         if group_type == "community":
             return "conservation_status_community", filters
@@ -753,12 +904,12 @@ def export_model_data(model_key, filters, num_records):
     return EXPORT_MODELS[model_key]["get_data"](filters, limit)
 
 
-def format_export_data(model_key, data, fmt="csv", group_type_label=""):
+def format_export_data(model_key, data, fmt="csv", group_type_label="", include_group_type=False):
     """Format previously-fetched *data* as a file attachment tuple ``(name, bytes, mime)``."""
     if model_key not in EXPORT_MODELS:
         return None
     conf = EXPORT_MODELS[model_key]
-    header, rows = conf["get_fields"](data)
+    header, rows = conf["get_fields"](data, include_group_type=include_group_type)
     if fmt == "excel":
         return _excel_file(conf["label"], header, rows, group_type_label)
     return _csv_file(conf["label"], header, rows, group_type_label)

@@ -76,8 +76,9 @@ class Command(BaseCommand):
         group_type = params.get("group_type", "")
         gt_label_map = {"flora": "Flora", "fauna": "Fauna", "community": "Communities"}
         group_type_label = gt_label_map.get(group_type, "")
+        include_group_type = not group_type or group_type == "all"
 
-        attachment = format_export_data(model, data, fmt, group_type_label)
+        attachment = format_export_data(model, data, fmt, group_type_label, include_group_type=include_group_type)
         if attachment is None:
             logger.error("email_exports: failed to format data for model '%s'", model)
             return
