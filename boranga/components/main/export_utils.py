@@ -308,7 +308,8 @@ SPECIES_AND_COMMUNITIES_HEADER = [
 def get_species_and_communities_export(filters, limit):
     from boranga.components.species_and_communities.models import Community, Species
 
-    half = max(limit // 2, 1)
+    species_limit = limit // 2
+    community_limit = limit - species_limit
     species_qs = Species.objects.select_related(
         "taxonomy",
         "group_type",
@@ -333,7 +334,7 @@ def get_species_and_communities_export(filters, limit):
         ps = filters["processing_status"]
         species_qs = species_qs.filter(processing_status=ps)
         community_qs = community_qs.filter(processing_status=ps)
-    return list(species_qs[:half]) + list(community_qs[:half])
+    return list(species_qs[:species_limit]) + list(community_qs[:community_limit])
 
 
 def get_species_and_communities_export_fields(data, include_group_type=False):
