@@ -607,6 +607,9 @@ export default {
         };
     },
     computed: {
+        is_internal: function () {
+            return this.level == 'internal';
+        },
         filterApplied: function () {
             if (
                 this.filterOCRFaunaOccurrence === 'all' &&
