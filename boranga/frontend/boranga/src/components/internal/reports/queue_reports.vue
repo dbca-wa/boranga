@@ -200,18 +200,34 @@ export default {
     mounted() {
         this.fetchReportConfig();
         this.fetchQueueHistory();
-        this.pollTimer = setInterval(() => {
-            this.fetchQueueHistory();
-        }, 5000);
+        this.startPolling();
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
     },
     beforeUnmount() {
         clearInterval(this.pollTimer);
+        document.removeEventListener(
+            'visibilitychange',
+            this.onVisibilityChange
+        );
         this.disposePopovers();
     },
     updated() {
         this.initPopovers();
     },
     methods: {
+        startPolling() {
+            this.pollTimer = setInterval(() => {
+                this.fetchQueueHistory();
+            }, 5000);
+        },
+        onVisibilityChange() {
+            if (document.hidden) {
+                clearInterval(this.pollTimer);
+            } else {
+                this.fetchQueueHistory();
+                this.startPolling();
+            }
+        },
         fetchReportConfig() {
             fetch('/api/queue_report/')
                 .then((response) => response.json())
