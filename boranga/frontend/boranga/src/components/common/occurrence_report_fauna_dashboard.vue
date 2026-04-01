@@ -24,7 +24,7 @@
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div id="select_common_name" class="form-group">
+                    <div id="select_ocr_common_name" class="form-group">
                         <label for="ocr_common_name_lookup">Common Name:</label>
                         <select
                             id="ocr_common_name_lookup"
@@ -1639,7 +1639,7 @@ export default {
                             return 'Use % for wildcard search';
                         },
                     },
-                    dropdownParent: $('#select_common_name'),
+                    dropdownParent: $('#select_ocr_common_name'),
                     theme: 'bootstrap-5',
                     allowClear: true,
                     placeholder: 'Select Common Name',
