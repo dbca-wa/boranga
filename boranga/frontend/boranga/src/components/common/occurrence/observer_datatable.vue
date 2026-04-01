@@ -147,6 +147,7 @@ export default {
             columns.splice(1, 1);
         }
         return {
+            constants: constants,
             ocrObserverDetailHistoryId: null,
             observer_detail_url: api_endpoints.observer_detail,
             observer_detail_headers: vm.show_observer_contact_information
