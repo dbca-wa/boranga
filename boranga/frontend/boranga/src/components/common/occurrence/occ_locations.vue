@@ -30,11 +30,6 @@
                     :file-upload-disabled="isReadOnly"
                     level="internal"
                     style-by="model"
-                    :map-info-text="
-                        isInternal
-                            ? ''
-                            : 'Some text to explain the map and its use.'
-                    "
                     :selectable="true"
                     :coordinate-reference-systems="coordinateReferenceSystems"
                     :spatial-operations-allowed="['__all__']"
