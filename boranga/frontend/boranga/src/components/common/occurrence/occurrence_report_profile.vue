@@ -750,6 +750,13 @@ export default {
             $(vm.$refs[vm.common_name_lookup])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return !vm.is_external
+                                ? 'Use % for wildcard search'
+                                : 'Please enter 2 or more characters';
+                        },
+                    },
                     dropdownParent: $('#' + vm.select_common_name),
                     theme: 'bootstrap-5',
                     allowClear: true,

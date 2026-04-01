@@ -15,6 +15,7 @@ import OccurrenceReportReferral from '../occurrence/referral.vue';
 import BulkImport from '../occurrence/bulk_import.vue';
 import BulkImportSchemaList from '../occurrence/bulk_import_schema_list.vue';
 import BulkImportSchema from '../occurrence/bulk_import_schema.vue';
+import QueueReports from '../reports/queue_reports.vue';
 
 export default {
     path: '/internal',
@@ -90,6 +91,11 @@ export default {
                     ],
                 },
             ],
+        },
+        {
+            path: 'reports',
+            component: QueueReports,
+            name: 'internal-reports-dash',
         },
         {
             path: 'users',

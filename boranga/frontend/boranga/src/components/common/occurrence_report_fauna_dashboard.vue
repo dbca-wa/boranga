@@ -913,28 +913,30 @@ export default {
             let vm = this;
             let columns;
             let search;
-            let buttons = [
-                {
-                    extend: 'excel',
-                    title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Fauna Excel Export`,
-                    text: '<i class="bi bi-download"></i> Excel',
-                    className: 'btn btn-primary me-2 rounded',
-                    exportOptions: {
-                        columns: ':not(.no-export)',
-                        orthogonal: 'export',
-                    },
-                },
-                {
-                    extend: 'csv',
-                    title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Fauna CSV Export`,
-                    text: '<i class="bi bi-download"></i> CSV',
-                    className: 'btn btn-primary rounded',
-                    exportOptions: {
-                        columns: ':not(.no-export)',
-                        orthogonal: 'export',
-                    },
-                },
-            ];
+            let buttons = vm.is_internal
+                ? []
+                : [
+                      {
+                          extend: 'excel',
+                          title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Fauna Excel Export`,
+                          text: '<i class="bi bi-download"></i> Excel',
+                          className: 'btn btn-primary me-2 rounded',
+                          exportOptions: {
+                              columns: ':not(.no-export)',
+                              orthogonal: 'export',
+                          },
+                      },
+                      {
+                          extend: 'csv',
+                          title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Fauna CSV Export`,
+                          text: '<i class="bi bi-download"></i> CSV',
+                          className: 'btn btn-primary rounded',
+                          exportOptions: {
+                              columns: ':not(.no-export)',
+                              orthogonal: 'export',
+                          },
+                      },
+                  ];
             columns = [
                 vm.column_id,
                 vm.column_number,

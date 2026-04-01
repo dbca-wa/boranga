@@ -20,7 +20,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from boranga import helpers
-from boranga.components.main.models import AbstractOrderedList, HelpTextEntry
+from boranga.components.main.models import AbstractOrderedList, HelpTextEntry, JobQueue
 from boranga.components.main.serializers import (
     AbstractOrderedListSerializer,
     ContentTypeSerializer,
@@ -329,3 +329,126 @@ class CheckUpdatedActionMixin:
                 "server_datetime_updated": server_dt.isoformat() if server_dt else None,
             }
         )
+
+
+class QueueReportView(views.APIView):
+    """
+    POST: Queue a new report export job.
+    GET: Return available report categories and group types.
+    """
+
+    permission_classes = [IsInternal]
+
+    def get(self, request, *args, **kwargs):
+        from boranga.components.main.export_utils import GROUP_TYPES, REPORT_CATEGORIES
+
+        return Response(
+            {
+                "report_categories": REPORT_CATEGORIES,
+                "group_types": GROUP_TYPES,
+            }
+        )
+
+    def post(self, request, *args, **kwargs):
+        category = request.data.get("report_type")
+        group_type = request.data.get("group_type", "all")
+        fmt = request.data.get("format", "csv")
+        num_records = request.data.get("num_records", 100000)
+
+        from boranga.components.main.export_utils import (
+            EXPORT_MODELS,
+            REPORT_CATEGORIES,
+            resolve_export_key,
+        )
+
+        category_keys = [c["key"] for c in REPORT_CATEGORIES]
+        if not category or category not in category_keys:
+            return Response({"message": "Invalid report type."}, status=400)
+
+        export_model, resolved_filters = resolve_export_key(category, group_type)
+        if not export_model or export_model not in EXPORT_MODELS:
+            return Response({"message": "Invalid report type / group type combination."}, status=400)
+
+        try:
+            num_records = min(int(num_records), 500000)
+        except (TypeError, ValueError):
+            num_records = 100000
+
+        parameters = {
+            "model": export_model,
+            "filters": resolved_filters,
+            "format": fmt,
+            "num_records": num_records,
+            "category": category,
+            "group_type": group_type,
+        }
+
+        # Prevent duplicate pending/running jobs with the same parameters for the same user
+        if not JobQueue.objects.filter(
+            job_cmd="email_exports",
+            status__lt=JobQueue.STATUS_COMPLETED,
+            parameters_json=parameters,
+            user=request.user.id,
+        ).exists():
+            JobQueue.objects.create(
+                job_cmd="email_exports",
+                status=JobQueue.STATUS_PENDING,
+                parameters_json=parameters,
+                user=request.user.id,
+            )
+            label = EXPORT_MODELS[export_model]["label"]
+            return Response({"message": f"{label} data export will be emailed to {request.user.email} when ready."})
+        else:
+            return Response(
+                {"message": f"A report export for {request.user.email} with these parameters is already in progress."}
+            )
+
+
+class QueueReportHistoryView(views.APIView):
+    """Return recent queue items for the current user."""
+
+    permission_classes = [IsInternal]
+
+    HISTORY_LIMIT = 20
+
+    def get(self, request, *args, **kwargs):
+        from boranga.components.main.export_utils import (
+            EXPORT_MODELS,
+            GROUP_TYPES,
+            REPORT_CATEGORIES,
+        )
+
+        label_map = {k: v["label"] for k, v in EXPORT_MODELS.items()}
+        cat_label_map = {c["key"]: c["label"] for c in REPORT_CATEGORIES}
+        gt_label_map = {g["key"]: g["label"] for g in GROUP_TYPES}
+        jobs = JobQueue.objects.filter(job_cmd="email_exports", user=request.user.id).order_by("-created")[
+            : self.HISTORY_LIMIT
+        ]
+        results = []
+        for job in jobs:
+            params = job.parameters_json or {}
+            model_key = params.get("model", "")
+            fmt = params.get("format", "csv")
+            category = params.get("category", "")
+            group_type = params.get("group_type", "")
+            # Build display label from category + group type when available
+            if category:
+                display = cat_label_map.get(category, category)
+                gt_display = gt_label_map.get(group_type, "")
+                if gt_display and group_type != "all":
+                    display = f"{display} ({gt_display})"
+            else:
+                display = label_map.get(model_key, model_key)
+            results.append(
+                {
+                    "id": job.id,
+                    "report_type": display,
+                    "format": fmt,
+                    "status": job.get_status_display(),
+                    "status_id": job.status,
+                    "error_message": job.error_message or "",
+                    "created": job.created.isoformat(),
+                    "processed_dt": job.processed_dt.isoformat() if job.processed_dt else None,
+                }
+            )
+        return Response({"results": results})

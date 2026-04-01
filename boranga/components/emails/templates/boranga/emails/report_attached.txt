@@ -1,0 +1,5 @@
+{% extends 'boranga/emails/base_email.txt' %}
+
+{% block content %}
+The requested {{ model }} Report Export is attached to this email.
+{% endblock %}

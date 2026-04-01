@@ -225,7 +225,7 @@ def send_species_combine_email_notification(request, combine_species_qs, resulti
 # here species_proposal is the original species from rename functionality
 def send_species_rename_email_notification(request, species_proposal, new_species):
     email = RenameSpeciesSendNotificationEmail()
-    email.subject = f"A Species has been renamed: {species_proposal.species_number}: {new_species.species_number}"
+    email.subject = f"A Species has been renamed: {species_proposal.species_number}"
 
     species_url = request.build_absolute_uri(
         reverse(

@@ -801,3 +801,31 @@ class LegacyTaxonomyMapping(models.Model):
     def __str__(self):
         tgt = self.taxonomy or self.taxon_name_id
         return f"{self.list_name}:{self.legacy_taxon_name_id}:{self.legacy_canonical_name} -> {tgt}"
+
+
+class JobQueue(BaseModel):
+    STATUS_PENDING = 0
+    STATUS_RUNNING = 1
+    STATUS_COMPLETED = 2
+    STATUS_FAILED = 3
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "Pending"),
+        (STATUS_RUNNING, "Running"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+    )
+
+    job_cmd = models.CharField(max_length=255)
+    status = models.SmallIntegerField(choices=STATUS_CHOICES, default=STATUS_PENDING)
+    parameters_json = models.JSONField(null=True, blank=True)
+    processed_dt = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(null=True, blank=True)
+    user = models.IntegerField(blank=True, null=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "boranga"
+        verbose_name_plural = "Job Queue"
+
+    def __str__(self):
+        return f"{self.job_cmd} (status={self.get_status_display()}, user={self.user})"

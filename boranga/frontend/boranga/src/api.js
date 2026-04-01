@@ -40,6 +40,7 @@ export default {
     organisations: '/api/organisations.json',
     overdue_invoices: '/api/overdue_invoices.json',
     profile: '/api/profile',
+    queue_report: '/api/queue_report/',
     proposal_requirements: '/api/proposal_requirements.json',
     proposal_standard_requirements: '/api/proposal_standard_requirements.json',
     proposal_submit: '/api/proposal_submit.json',
