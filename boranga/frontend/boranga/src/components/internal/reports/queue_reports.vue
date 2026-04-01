@@ -303,6 +303,7 @@ export default {
         },
         rowClass(job) {
             if (job.status_id === 1) return 'table-info';
+            if (job.status_id === 2) return 'table-success';
             if (job.status_id === 3) return 'table-danger';
             return '';
         },
