@@ -218,10 +218,7 @@ _PROJ4_OVERRIDES = {
     #   Sc=-9.994 ppb = -0.009994 ppm
     # This gives ~1.80 m NE shift (GDA94 → WGS84), matching EPSG:4283 → EPSG:7844.
     4283: (
-        "+proj=longlat +ellps=GRS80"
-        " +towgs84=0.06155,-0.01087,-0.04019"
-        ",0.0394924,0.0327221,0.0328979,-0.009994"
-        " +no_defs"
+        "+proj=longlat +ellps=GRS80 +towgs84=0.06155,-0.01087,-0.04019,0.0394924,0.0327221,0.0328979,-0.009994 +no_defs"
     ),
 }
 
