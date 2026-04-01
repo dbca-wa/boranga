@@ -406,8 +406,6 @@ class QueueReportHistoryView(views.APIView):
 
     permission_classes = [CanViewReports]
 
-    HISTORY_LIMIT = 20
-
     def get(self, request, *args, **kwargs):
         from boranga.components.main.export_utils import (
             EXPORT_MODELS,
@@ -419,7 +417,7 @@ class QueueReportHistoryView(views.APIView):
         cat_label_map = {c["key"]: c["label"] for c in REPORT_CATEGORIES}
         gt_label_map = {g["key"]: g["label"] for g in GROUP_TYPES}
         jobs = JobQueue.objects.filter(job_cmd="email_exports", user=request.user.id).order_by("-created")[
-            : self.HISTORY_LIMIT
+            : settings.QUEUE_REPORT_HISTORY_LIMIT
         ]
         results = []
         for job in jobs:
@@ -448,4 +446,4 @@ class QueueReportHistoryView(views.APIView):
                     "processed_dt": job.processed_dt.isoformat() if job.processed_dt else None,
                 }
             )
-        return Response({"results": results})
+        return Response({"results": results, "history_limit": settings.QUEUE_REPORT_HISTORY_LIMIT})
