@@ -83,6 +83,12 @@ def is_internal_contributor(context):
 
 
 @register.simple_tag(takes_context=True)
+def can_view_reports(context):
+    request = context["request"]
+    return boranga_helpers.can_view_reports(request)
+
+
+@register.simple_tag(takes_context=True)
 def show_internal_menu_items(context):
     request = context["request"]
     if not request.user.is_authenticated:

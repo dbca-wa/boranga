@@ -294,6 +294,20 @@ def is_contributor(request):
     return is_internal_contributor(request) or is_external_contributor(request)
 
 
+def can_view_reports(request):
+    return belongs_to_groups(
+        request,
+        [
+            GROUP_NAME_READONLY_USER,
+            GROUP_NAME_CONSERVATION_STATUS_ASSESSOR,
+            GROUP_NAME_CONSERVATION_STATUS_APPROVER,
+            GROUP_NAME_OCCURRENCE_ASSESSOR,
+            GROUP_NAME_OCCURRENCE_APPROVER,
+            GROUP_NAME_SPECIES_COMMUNITIES_APPROVER,
+        ],
+    )
+
+
 def is_new_external_contributor(user_id):
     from boranga.components.conservation_status.models import ConservationStatus
     from boranga.components.occurrence.models import OccurrenceReport

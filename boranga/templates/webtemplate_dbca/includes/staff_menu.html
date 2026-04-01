@@ -1,10 +1,14 @@
 {% load users %}
 {% is_django_admin as is_django_admin_user %}
 {% is_occurrence_approver as is_occurrence_approver %}
+{% can_view_reports as can_view_reports_user %}
 
 {% if is_django_admin_user %}
     <li><a class="dropdown-item" href="{% url 'admin:index' %}">Admin</a></li>
 {% endif %}
 {% if request.user.is_superuser or is_django_admin_user or is_occurrence_approver %}
     <li><a class="dropdown-item" href="/internal/occurrence-report/bulk_import_schema/">ORF Bulk Import Schema</a></li>
+{% endif %}
+{% if request.user.is_superuser or is_django_admin_user or can_view_reports_user %}
+    <li><a class="dropdown-item" href="/internal/reports">Reports</a></li>
 {% endif %}

@@ -27,7 +27,7 @@ from boranga.components.main.serializers import (
     HelpTextEntrySerializer,
 )
 from boranga.components.occurrence.models import Datum
-from boranga.permissions import IsInternal
+from boranga.permissions import CanViewReports, IsInternal
 
 logger = logging.getLogger(__name__)
 
@@ -334,7 +334,7 @@ class QueueReportView(views.APIView):
     GET: Return available report categories and group types.
     """
 
-    permission_classes = [IsInternal]
+    permission_classes = [CanViewReports]
 
     def get(self, request, *args, **kwargs):
         from boranga.components.main.export_utils import GROUP_TYPES, REPORT_CATEGORIES
@@ -404,7 +404,7 @@ class QueueReportView(views.APIView):
 class QueueReportHistoryView(views.APIView):
     """Return recent queue items for the current user."""
 
-    permission_classes = [IsInternal]
+    permission_classes = [CanViewReports]
 
     HISTORY_LIMIT = 20
 
