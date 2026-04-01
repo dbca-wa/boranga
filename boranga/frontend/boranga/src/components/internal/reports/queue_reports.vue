@@ -180,7 +180,6 @@
 
 <script>
 import swal from 'sweetalert2';
-import { Popover } from 'bootstrap';
 
 export default {
     name: 'QueueReports',
@@ -289,7 +288,7 @@ export default {
                 this.$el
                     .querySelectorAll('[data-bs-toggle="popover"]')
                     .forEach((el) => {
-                        new Popover(el, { container: 'body' });
+                        new window.bootstrap.Popover(el, { container: 'body' });
                     });
             });
         },
@@ -297,7 +296,7 @@ export default {
             this.$el
                 ?.querySelectorAll('[data-bs-toggle="popover"]')
                 .forEach((el) => {
-                    const instance = Popover.getInstance(el);
+                    const instance = window.bootstrap.Popover.getInstance(el);
                     if (instance) instance.dispose();
                 });
         },
