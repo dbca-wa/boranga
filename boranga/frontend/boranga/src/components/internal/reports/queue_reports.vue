@@ -1,7 +1,8 @@
 <template>
-    <div id="internal-reports" class="container pt-4">
+    <div id="internal-reports" class="container">
         <h2 class="mb-4">Queue Reports</h2>
-        <div class="alert alert-info">
+        <div class="alert alert-primary">
+            <i class="bi bi-info-circle-fill text-primary me-1 fs-5"></i>
             Email reports will be sent to the requesting user some time after
             the request has been made. Reports are processed every 2 minutes.
         </div>
@@ -96,7 +97,9 @@
 
         <div v-if="queueHistory && queueHistory.length > 0" class="card mt-4">
             <div class="card-body">
-                <h5 class="card-title mb-3">Recent Queue Items</h5>
+                <h5 class="card-title mb-3">
+                    Queue Items <i class="bi bi-clock-history fs-5"></i>
+                </h5>
                 <p v-if="historyLimit" class="text-muted small mb-3">
                     Showing your {{ historyLimit }} most recent requests.
                 </p>
