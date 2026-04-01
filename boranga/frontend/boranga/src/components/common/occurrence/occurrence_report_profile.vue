@@ -37,6 +37,12 @@
                                                 class="col-sm-4 col-form-label"
                                                 >Assessor Comments
                                                 <HelpText
+                                                    v-if="
+                                                        occurrence_report_obj.processing_status ===
+                                                            'With Assessor' ||
+                                                        occurrence_report_obj.processing_status ===
+                                                            'With Referral'
+                                                    "
                                                     section_id="ORF_Assessor_Comments"
                                                     style="pointer-events: auto"
                                                 />

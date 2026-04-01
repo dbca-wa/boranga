@@ -11,11 +11,7 @@
         >
             <div class="row mb-3">
                 <div class="col">
-                    <span class="text-danger">*</span>
-                    <span class="text-muted ps-1"
-                        >You must indicate the location for your occurrence
-                        report</span
-                    >
+                    <HelpText section_id="ORF_Map" />
                 </div>
             </div>
             <div class="row mb-3">

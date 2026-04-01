@@ -196,7 +196,7 @@
     "pk": 20,
     "fields": {
       "archived": false,
-      "section_id": "ORF_observation_details",
+      "section_id": "ORF_Observer_Details",
       "text": "Help text about at least one main observer",
       "icon_with_popover": false,
       "authenticated_users_only": true,
@@ -520,7 +520,7 @@
     "pk": 47,
     "fields": {
       "archived": false,
-      "section_id": "OCC_Comments",
+      "section_id": "OCC_Fire_History_Comments",
       "text": "Help text about what information here relates to",
       "icon_with_popover": true,
       "authenticated_users_only": true,
@@ -582,6 +582,30 @@
       "archived": false,
       "section_id": "internal_home_card_right",
       "text": "<h5>Section 2</h5><ul><li><a href='#'>Link 1</a></li><li><a href='#'>Link 2</a></li><li><a href='#'>Link 3</a></li></ul>",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 53,
+    "fields": {
+      "archived": false,
+      "section_id": "ORF_Map",
+      "text": "You must indicate the location for your occurrence report",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 54,
+    "fields": {
+      "archived": false,
+      "section_id": "OCC_Map",
+      "text": "You must indicate the location for your occurrence",
       "icon_with_popover": false,
       "authenticated_users_only": true,
       "internal_users_only": true

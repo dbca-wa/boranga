@@ -1,6 +1,12 @@
 <template lang="html">
     <div id="observerTable">
-        <HelpText section_id="ORF_observation_details" />
+        <HelpText
+            v-if="
+                occurrence_report_obj.processing_status ===
+                constants.PROPOSAL_STATUS.DRAFT.TEXT
+            "
+            section_id="ORF_Observer_Details"
+        />
         <div v-if="!isReadOnly" class="row mb-3">
             <label for="" class="col-sm-6 control-label"> </label>
 
