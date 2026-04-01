@@ -1,7 +1,11 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>Hello Team,</p>
+{% endblock %}
+
 {%  block content %}
-	<p>A new Occurrence Report {{ occurrence_report.occurrence_report_number }} has been submitted and can be assessed.</p>
+	<p>A new Occurrence Report form {{ occurrence_report.occurrence_report_number }} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %} has been submitted and can be assessed.</p>
 
     <p>
         You can access this Report using the following link:

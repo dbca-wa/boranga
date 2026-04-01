@@ -1,10 +1,14 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{% block greetings %}
+{{ assessor }},
+{% endblock %}
+
 {%  block content %}
-    The Occurrence Report {{ occurrence_report.occurrence_report_number }} has been assessed and has been recommended for approval.
+    The Occurrence Report form {{ occurrence_report.occurrence_report_number }} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %} has been assessed and has been recommended for approval.
 
     Recommendation: Approve
-    Create New or Add to Existing Occurrence?: {% if approval_details.occurrence %}Add to Existing Occurrence: {{ approval_details.occurrence.occurrence_number }} - {{ approval_details.occurrence.occurrence_name }}{% else %}Create a new Occurrence: {{ approval_details.new_occurrence_name }}{% endif %}
+    Add to Existing Occurrence/Create New Occurrence: {% if approval_details.occurrence %}Add to Existing Occurrence: {{ approval_details.occurrence.occurrence_number }} - {{ approval_details.occurrence.occurrence_name }}{% else %}Create a new Occurrence: {{ approval_details.new_occurrence_name }}{% endif %}
     Details: {{ approval_details.details }}
 
     You can access this Occurrence Report using the following link:

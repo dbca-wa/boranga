@@ -1,0 +1,15 @@
+{%  extends 'boranga/emails/base_email.txt' %}
+
+{%  block content %}
+{{ assessor }},
+
+The Conservation Status Proposal {{ cs_proposal.conservation_status_number }}{% if cs_proposal.species_taxonomy %} {{ cs_proposal.species_taxonomy.scientific_name }}{% elif cs_proposal.community %} {{ cs_proposal.community.community_number }}{% endif %} has been sent back by the approver.
+
+Approver Recommended Action / Comments:
+
+{{ approver_comment }}
+
+You can action this Proposal using the following link:
+
+{{ url }}
+{%  endblock %}

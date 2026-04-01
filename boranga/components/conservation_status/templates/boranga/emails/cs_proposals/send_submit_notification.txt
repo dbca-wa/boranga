@@ -1,7 +1,9 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{% block greetings %}Hello Team,{% endblock %}
+
 {%  block content %}
-    A new Conservation Status Proposal {{ cs_proposal.conservation_status_number }} has been submitted and can be assessed.
+    A new Conservation Status Proposal {{ cs_proposal.conservation_status_number }} {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} has been submitted and can be assessed.
 
     You can access this Proposal using the following link:
 

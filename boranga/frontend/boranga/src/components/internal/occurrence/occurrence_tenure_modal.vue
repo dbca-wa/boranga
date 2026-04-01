@@ -23,17 +23,16 @@
                                     </div>
                                     <div class="col-sm-3">
                                         <!-- status_display -->
-                                        <input
+                                        <textarea
                                             id="status_id"
                                             v-model="tenureObj.status"
                                             :disabled="
                                                 isReadOnly ||
                                                 isAlwaysReadOnly('status')
                                             "
-                                            type="text"
                                             class="form-control"
                                             placeholder="Status"
-                                        />
+                                        ></textarea>
                                     </div>
                                 </div>
                             </div>
@@ -42,17 +41,16 @@
                                     >Tenure Area Id</label
                                 >
                                 <div class="col-sm-9">
-                                    <input
+                                    <textarea
                                         id="tenure_area_id"
                                         v-model="tenureObj.tenure_area_id"
                                         :disabled="
                                             isReadOnly ||
                                             isAlwaysReadOnly('tenure_area_id')
                                         "
-                                        type="text"
                                         class="form-control"
                                         placeholder="Tenure Area Id"
-                                    />
+                                    ></textarea>
                                 </div>
                             </div>
                             <div class="row mb-3">
@@ -62,17 +60,16 @@
                                     >
                                 </div>
                                 <div class="col-sm-9">
-                                    <input
+                                    <textarea
                                         id="owner_name"
                                         v-model="tenureObj.owner_name"
                                         :disabled="
                                             isReadOnly ||
                                             isAlwaysReadOnly('owner_name')
                                         "
-                                        type="text"
                                         class="form-control"
                                         placeholder="Owner Name"
-                                    />
+                                    ></textarea>
                                 </div>
                             </div>
                             <div class="row mb-3">

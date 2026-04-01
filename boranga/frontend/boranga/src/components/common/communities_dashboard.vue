@@ -588,8 +588,9 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (value, type) {
-                    let result = helpers.dtPopover(value, 30, 'hover');
+                    let result = helpers.dtPopover(value, 80, 'hover');
                     return type == 'export' ? value : result;
                 },
                 name: 'taxonomy__community_common_id',
@@ -601,8 +602,9 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (value, type) {
-                    let result = helpers.dtPopover(value, 30, 'hover');
+                    let result = helpers.dtPopover(value, 80, 'hover');
                     return type == 'export' ? value : result;
                 },
                 name: 'taxonomy__community_name',
@@ -754,28 +756,30 @@ export default {
 
             let columns = [];
             let search = null;
-            let buttons = [
-                {
-                    extend: 'excel',
-                    title: 'Boranga S&C Communities Excel Export',
-                    text: '<i class="bi bi-download"></i> Excel',
-                    className: 'btn btn-primary me-2 rounded',
-                    exportOptions: {
-                        columns: ':not(.no-export)',
-                        orthogonal: 'export',
-                    },
-                },
-                {
-                    extend: 'csv',
-                    title: 'Boranga S&C Communities CSV Export',
-                    text: '<i class="bi bi-download"></i> CSV',
-                    className: 'btn btn-primary rounded',
-                    exportOptions: {
-                        columns: ':not(.no-export)',
-                        orthogonal: 'export',
-                    },
-                },
-            ];
+            let buttons = vm.is_internal
+                ? []
+                : [
+                      {
+                          extend: 'excel',
+                          title: 'Boranga S&C Communities Excel Export',
+                          text: '<i class="bi bi-download"></i> Excel',
+                          className: 'btn btn-primary me-2 rounded',
+                          exportOptions: {
+                              columns: ':not(.no-export)',
+                              orthogonal: 'export',
+                          },
+                      },
+                      {
+                          extend: 'csv',
+                          title: 'Boranga S&C Communities CSV Export',
+                          text: '<i class="bi bi-download"></i> CSV',
+                          className: 'btn btn-primary rounded',
+                          exportOptions: {
+                              columns: ':not(.no-export)',
+                              orthogonal: 'export',
+                          },
+                      },
+                  ];
             if (vm.is_external) {
                 columns = [
                     vm.column_id,

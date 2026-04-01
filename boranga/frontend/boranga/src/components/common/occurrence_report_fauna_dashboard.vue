@@ -24,7 +24,7 @@
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div id="select_common_name" class="form-group">
+                    <div id="select_ocr_common_name" class="form-group">
                         <label for="ocr_common_name_lookup">Common Name:</label>
                         <select
                             id="ocr_common_name_lookup"
@@ -607,6 +607,9 @@ export default {
         };
     },
     computed: {
+        is_internal: function () {
+            return this.level == 'internal';
+        },
         filterApplied: function () {
             if (
                 this.filterOCRFaunaOccurrence === 'all' &&
@@ -913,28 +916,30 @@ export default {
             let vm = this;
             let columns;
             let search;
-            let buttons = [
-                {
-                    extend: 'excel',
-                    title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Fauna Excel Export`,
-                    text: '<i class="bi bi-download"></i> Excel',
-                    className: 'btn btn-primary me-2 rounded',
-                    exportOptions: {
-                        columns: ':not(.no-export)',
-                        orthogonal: 'export',
-                    },
-                },
-                {
-                    extend: 'csv',
-                    title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Fauna CSV Export`,
-                    text: '<i class="bi bi-download"></i> CSV',
-                    className: 'btn btn-primary rounded',
-                    exportOptions: {
-                        columns: ':not(.no-export)',
-                        orthogonal: 'export',
-                    },
-                },
-            ];
+            let buttons = vm.is_internal
+                ? []
+                : [
+                      {
+                          extend: 'excel',
+                          title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Fauna Excel Export`,
+                          text: '<i class="bi bi-download"></i> Excel',
+                          className: 'btn btn-primary me-2 rounded',
+                          exportOptions: {
+                              columns: ':not(.no-export)',
+                              orthogonal: 'export',
+                          },
+                      },
+                      {
+                          extend: 'csv',
+                          title: `Boranga ${constants.MODELS.OCCURRENCE_REPORT.MODEL_PREFIX} Fauna CSV Export`,
+                          text: '<i class="bi bi-download"></i> CSV',
+                          className: 'btn btn-primary rounded',
+                          exportOptions: {
+                              columns: ':not(.no-export)',
+                              orthogonal: 'export',
+                          },
+                      },
+                  ];
             columns = [
                 vm.column_id,
                 vm.column_number,
@@ -1634,7 +1639,7 @@ export default {
                             return 'Use % for wildcard search';
                         },
                     },
-                    dropdownParent: $('#select_common_name'),
+                    dropdownParent: $('#select_ocr_common_name'),
                     theme: 'bootstrap-5',
                     allowClear: true,
                     placeholder: 'Select Common Name',

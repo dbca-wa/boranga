@@ -681,18 +681,36 @@ export default {
     },
     mounted() {
         this.form = document.getElementById('bulk-import-form');
-        this.timer = setInterval(() => {
-            this.fetchImports();
-        }, 5000);
-        this.currentlyRunningTimer = setInterval(() => {
-            this.fetchCurrentlyRunningImports();
-        }, 1000);
+        this.startPolling();
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
     },
     beforeUnmount() {
         clearInterval(this.timer);
         clearInterval(this.currentlyRunningTimer);
+        document.removeEventListener(
+            'visibilitychange',
+            this.onVisibilityChange
+        );
     },
     methods: {
+        startPolling() {
+            this.timer = setInterval(() => {
+                this.fetchImports();
+            }, 5000);
+            this.currentlyRunningTimer = setInterval(() => {
+                this.fetchCurrentlyRunningImports();
+            }, 1000);
+        },
+        onVisibilityChange() {
+            if (document.hidden) {
+                clearInterval(this.timer);
+                clearInterval(this.currentlyRunningTimer);
+            } else {
+                this.fetchImports();
+                this.fetchCurrentlyRunningImports();
+                this.startPolling();
+            }
+        },
         getSchemaVersionText(schema_version) {
             return `Version: ${schema_version.version} - ${schema_version.name ? schema_version.name : 'No Name'}`;
         },

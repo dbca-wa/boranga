@@ -1,13 +1,17 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>{{ assessor }},</p>
+{% endblock %}
+
 {%  block content %}
     <p>
-        The Occurrence Report {{ occurrence_report.occurrence_report_number }} has been assessed and has been recommended for approval.
+        The Occurrence Report form {{ occurrence_report.occurrence_report_number }} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %} has been assessed and has been recommended for approval.
     </p>
 
     <p>Recommendation: Approve</p>
     <p>
-        Create New or Add to Existing Occurrence?:
+        Add to Existing Occurrence/Create New Occurrence:
         {% if approval_details.occurrence %}
             Add to Existing Occurrence: {{ approval_details.occurrence.occurrence_number }} - {{ approval_details.occurrence.occurrence_name }}
         {% else %}

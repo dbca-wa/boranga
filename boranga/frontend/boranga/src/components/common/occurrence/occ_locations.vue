@@ -10,11 +10,7 @@
         >
             <div class="row mb-3">
                 <div class="col">
-                    <span class="text-danger">*</span>
-                    <span class="text-muted ps-1"
-                        >You must indicate the location for your
-                        occurrence</span
-                    >
+                    <HelpText section_id="OCC_Map" />
                 </div>
             </div>
             <div class="row mb-3">
@@ -34,11 +30,6 @@
                     :file-upload-disabled="isReadOnly"
                     level="internal"
                     style-by="model"
-                    :map-info-text="
-                        isInternal
-                            ? ''
-                            : 'Some text to explain the map and its use.'
-                    "
                     :selectable="true"
                     :coordinate-reference-systems="coordinateReferenceSystems"
                     :spatial-operations-allowed="['__all__']"

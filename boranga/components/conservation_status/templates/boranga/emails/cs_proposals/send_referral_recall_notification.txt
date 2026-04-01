@@ -1,7 +1,9 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{% block greetings %}{{ referral_name }},{% endblock %}
+
 {%  block content %}
-    A referral for Conservation Status Proposal {{s_proposal.conservation_status_number}} has been recalled.
+    A referral for Conservation Status Proposal {{cs_proposal.conservation_status_number}} {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} has been recalled.
 
     No further action from you is required.
 {%  endblock %}

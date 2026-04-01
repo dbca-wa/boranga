@@ -26,14 +26,13 @@
                                         >
                                     </div>
                                     <div class="col-sm-9">
-                                        <input
+                                        <textarea
                                             ref="contact_name"
                                             v-model="contactObj.contact_name"
-                                            type="text"
                                             class="form-control"
                                             :disabled="isReadOnly"
                                             required
-                                        />
+                                        ></textarea>
                                     </div>
                                 </div>
                                 <div class="row mb-3">
@@ -43,12 +42,11 @@
                                         >
                                     </div>
                                     <div class="col-sm-9">
-                                        <input
+                                        <textarea
                                             v-model="contactObj.role"
-                                            type="text"
                                             class="form-control"
                                             :disabled="isReadOnly"
-                                        />
+                                        ></textarea>
                                     </div>
                                 </div>
                                 <div class="row mb-3">
@@ -58,12 +56,11 @@
                                         >
                                     </div>
                                     <div class="col-sm-9">
-                                        <input
+                                        <textarea
                                             v-model="contactObj.organisation"
-                                            type="text"
                                             class="form-control"
                                             :disabled="isReadOnly"
-                                        />
+                                        ></textarea>
                                     </div>
                                 </div>
                                 <div class="row mb-3">

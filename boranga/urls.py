@@ -370,6 +370,16 @@ api_patterns = [
         main_api.GetGISSettings.as_view(),
         name="gis-settings",
     ),
+    re_path(
+        r"^api/queue_report/$",
+        main_api.QueueReportView.as_view(),
+        name="queue-report",
+    ),
+    re_path(
+        r"^api/queue_report_history/$",
+        main_api.QueueReportHistoryView.as_view(),
+        name="queue-report-history",
+    ),
 ]
 
 # URL Patterns
@@ -384,6 +394,7 @@ urlpatterns = [
         name="ds_further_info",
     ),
     re_path(r"^internal/", views.InternalView.as_view(), name="internal"),
+    re_path(r"^internal/reports$", views.InternalView.as_view(), name="internal-reports"),
     re_path(
         r"^external/species-communities$",
         views.PublicView.as_view(),

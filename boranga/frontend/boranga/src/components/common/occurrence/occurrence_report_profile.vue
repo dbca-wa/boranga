@@ -37,6 +37,12 @@
                                                 class="col-sm-4 col-form-label"
                                                 >Assessor Comments
                                                 <HelpText
+                                                    v-if="
+                                                        occurrence_report_obj.processing_status ===
+                                                            'With Assessor' ||
+                                                        occurrence_report_obj.processing_status ===
+                                                            'With Referral'
+                                                    "
                                                     section_id="ORF_Assessor_Comments"
                                                     style="pointer-events: auto"
                                                 />
@@ -334,14 +340,13 @@
                         <HelpText section_id="ORF_OCC_Name" />
                     </label>
                     <div class="col-sm-9">
-                        <input
+                        <textarea
                             id="ORF_OCC_Name"
                             v-model="occurrence_report_obj.ocr_for_occ_name"
-                            type="text"
                             :disabled="isReadOnly"
                             class="form-control"
                             autocomplete="new-password"
-                        />
+                        ></textarea>
                     </div>
                 </div>
                 <div
@@ -751,6 +756,13 @@ export default {
             $(vm.$refs[vm.common_name_lookup])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return !vm.is_external
+                                ? 'Use % for wildcard search'
+                                : 'Please enter 2 or more characters';
+                        },
+                    },
                     dropdownParent: $('#' + vm.select_common_name),
                     theme: 'bootstrap-5',
                     allowClear: true,

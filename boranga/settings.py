@@ -241,6 +241,7 @@ CRON_CLASSES = [
     "boranga.cron.CronJobAutoLockConservationStatusRecords",
     "boranga.cron.CronJobAutoLockUnlockedOccurrenceRecords",
     "boranga.cron.CronJobClearCronJobLogs",
+    "boranga.cron.CronJobProcessReportQueue",
 ]
 
 

@@ -1,7 +1,11 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>{{ referral_name }},</p>
+{% endblock %}
+
 {%  block content %}
-    <p>A referral for Occurrence Report <strong>{{occurrence_report.occurrence_report_number}}</strong> has been completed:</p>
+    <p>A referral for Occurrence Report form <strong>{{occurrence_report.occurrence_report_number}}</strong> {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %} has been completed:</p>
 
     <p>Referral Comments: {{referral_comments}}</p>
 

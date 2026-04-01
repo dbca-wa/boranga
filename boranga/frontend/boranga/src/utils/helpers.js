@@ -261,7 +261,14 @@ export default {
     },
     dtPopover(value, truncate_length = 30, trigger = 'hover') {
         const ellipsis = '...';
+        const seeMoreLabel = 'see more';
         const raw = value == null ? '' : String(value);
+        // If the full text fits within the truncate length plus the
+        // space that would be taken by the "see more" label, show it
+        // in full instead of truncating and appending the label.
+        if (raw.length <= truncate_length + seeMoreLabel.length + 1) {
+            return '<span>' + this.escapeHtml(raw) + '</span>';
+        }
         const truncated = this.truncate(raw, {
             length: truncate_length,
             omission: ellipsis,
@@ -276,13 +283,23 @@ export default {
                 data-bs-placement="top"
                 data-bs-html="true"
                 data-bs-content="${this.escapeAttr(raw)}"
-            ><small>hover for more</small></a>`;
+            ><small>see more</small></a>`;
         }
         return result;
     },
     dtPopoverSplit(value, truncate_length = 30, trigger = 'hover') {
         const ellipsis = '...';
+        const seeMoreLabel = 'see more';
         const raw = value == null ? '' : String(value);
+        // If the full text fits within the truncate length plus the
+        // space that would be taken by the "see more" label, show it
+        // in full instead of truncating and appending the label.
+        if (raw.length <= truncate_length + seeMoreLabel.length + 1) {
+            return {
+                text: '<span>' + this.escapeHtml(raw) + '</span>',
+                link: '',
+            };
+        }
         const truncated = this.truncate(raw, {
             length: truncate_length,
             omission: ellipsis,
@@ -297,7 +314,7 @@ export default {
                 data-bs-placement="top"
                 data-bs-html="true"
                 data-bs-content="${this.escapeAttr(raw)}"
-            ><small>hover for more</small></a>`;
+            ><small>see more</small></a>`;
             return { text, link };
         }
         return { text, link: '' };

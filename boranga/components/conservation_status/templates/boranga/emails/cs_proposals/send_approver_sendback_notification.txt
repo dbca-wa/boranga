@@ -1,7 +1,9 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{% block greetings %}{{ assessor }},{% endblock %}
+
 {%  block content %}
-    The Proposal {{ cs_proposal.conservation_status_number }} has been sent back by the approver.
+    The Proposal {{ cs_proposal.conservation_status_number }} {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} has been sent back by the approver.
 
     Reason / Comments: {{ approver_comment }}
 

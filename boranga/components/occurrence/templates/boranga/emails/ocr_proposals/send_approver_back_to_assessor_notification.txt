@@ -1,7 +1,11 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+Hello Team,
+{% endblock %}
+
 {%  block content %}
-    The Occurrence Report {{ occurrence_report.occurrence_report_number }} has been sent back to the assessor.
+    The Occurrence Report form {{ occurrence_report.occurrence_report_number }} has been sent back to the assessor.
 
     Reason: {{ reason }}
 

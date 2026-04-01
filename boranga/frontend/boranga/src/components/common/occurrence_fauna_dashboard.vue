@@ -817,28 +817,30 @@ export default {
 
             let columns = [];
             let search = null;
-            let buttons = [
-                {
-                    extend: 'excel',
-                    title: 'Boranga OCC Fauna Excel Export',
-                    text: '<i class="bi bi-download"></i> Excel',
-                    className: 'btn btn-primary me-2 rounded',
-                    exportOptions: {
-                        columns: ':not(.no-export)',
-                        orthogonal: 'export',
-                    },
-                },
-                {
-                    extend: 'csv',
-                    title: 'Boranga OCC Fauna CSV Export',
-                    text: '<i class="bi bi-download"></i> CSV',
-                    className: 'btn btn-primary rounded',
-                    exportOptions: {
-                        columns: ':not(.no-export)',
-                        orthogonal: 'export',
-                    },
-                },
-            ];
+            let buttons = vm.is_internal
+                ? []
+                : [
+                      {
+                          extend: 'excel',
+                          title: 'Boranga OCC Fauna Excel Export',
+                          text: '<i class="bi bi-download"></i> Excel',
+                          className: 'btn btn-primary me-2 rounded',
+                          exportOptions: {
+                              columns: ':not(.no-export)',
+                              orthogonal: 'export',
+                          },
+                      },
+                      {
+                          extend: 'csv',
+                          title: 'Boranga OCC Fauna CSV Export',
+                          text: '<i class="bi bi-download"></i> CSV',
+                          className: 'btn btn-primary rounded',
+                          exportOptions: {
+                              columns: ':not(.no-export)',
+                              orthogonal: 'export',
+                          },
+                      },
+                  ];
             if (vm.is_internal) {
                 columns = [
                     vm.column_id,

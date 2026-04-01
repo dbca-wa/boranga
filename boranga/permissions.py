@@ -3,6 +3,7 @@ import logging
 from rest_framework.permissions import BasePermission
 
 from boranga.helpers import (
+    can_view_reports,
     is_conservation_status_approver,
     is_conservation_status_assessor,
     is_internal,
@@ -54,3 +55,14 @@ class IsApprover(BasePermission):
             or is_conservation_status_approver(request)
             or is_occurrence_approver(request)
         )
+
+
+class CanViewReports(BasePermission):
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        return can_view_reports(request)

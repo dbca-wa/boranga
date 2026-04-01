@@ -141,6 +141,40 @@
                     </div>
                 </div>
             </div>
+            <div v-if="homeCardLeft || homeCardRight" class="row mt-4">
+                <div v-if="homeCardLeft" class="col-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div v-html="homeCardLeft.text"></div>
+                            <a
+                                v-if="homeCardLeft.user_can_administer"
+                                :href="`/admin/boranga/helptextentry/${homeCardLeft.id}/change/`"
+                                role="button"
+                                class="ms-2"
+                                target="_blank"
+                                title="Edit help text"
+                                ><i class="bi bi-pencil-square"></i
+                            ></a>
+                        </div>
+                    </div>
+                </div>
+                <div v-if="homeCardRight" class="col-6">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div v-html="homeCardRight.text"></div>
+                            <a
+                                v-if="homeCardRight.user_can_administer"
+                                :href="`/admin/boranga/helptextentry/${homeCardRight.id}/change/`"
+                                role="button"
+                                class="ms-2"
+                                target="_blank"
+                                title="Edit help text"
+                                ><i class="bi bi-pencil-square"></i
+                            ></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div
                 class="row mt-4"
                 v-if="outstanding_referrals && outstanding_referrals.length"
@@ -222,6 +256,8 @@ export default {
         return {
             profile: null,
             outstanding_referrals: null,
+            homeCardLeft: null,
+            homeCardRight: null,
         };
     },
     components: {
@@ -243,6 +279,7 @@ export default {
             this.fetchProfile();
         }
         this.fetchOutstandingReferrals();
+        this.fetchHomeCards();
     },
     methods: {
         updateAreaOfInterest: function () {
@@ -284,6 +321,26 @@ export default {
                     console.log(error);
                 }
             );
+        },
+        fetchHomeCards: function () {
+            let vm = this;
+            const sectionIds = [
+                'internal_home_card_left',
+                'internal_home_card_right',
+            ];
+            sectionIds.forEach((sectionId, index) => {
+                fetch(`${api_endpoints.help_text_entries}/${sectionId}/`).then(
+                    async (response) => {
+                        if (!response.ok) return;
+                        const data = await response.json();
+                        if (index === 0) {
+                            vm.homeCardLeft = data;
+                        } else {
+                            vm.homeCardRight = data;
+                        }
+                    }
+                );
+            });
         },
         fetchOutstandingReferrals: function () {
             let vm = this;

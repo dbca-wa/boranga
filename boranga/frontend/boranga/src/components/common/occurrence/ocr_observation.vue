@@ -605,14 +605,13 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Permit ID:</label>
                 <div class="col-sm-9">
-                    <input
+                    <textarea
                         id="permit_id"
                         v-model="occurrence_report_obj.identification.permit_id"
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
                         placeholder=""
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div class="row mb-3">

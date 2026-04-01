@@ -80,7 +80,6 @@ from boranga.components.occurrence.email import (
     send_approver_approve_email_notification,
     send_approver_back_to_assessor_email_notification,
     send_approver_decline_email_notification,
-    send_decline_email_notification,
     send_occurrence_report_amendment_email_notification,
     send_occurrence_report_referral_complete_email_notification,
     send_occurrence_report_referral_email_notification,
@@ -983,8 +982,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             ),
             request,
         )
-
-        send_decline_email_notification(reason, self)
 
     def validate_submit(self):
         missing_values = []

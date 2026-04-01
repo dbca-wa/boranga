@@ -44,15 +44,14 @@
                                 >First Name</label
                             >
                             <div class="col-sm-9">
-                                <input
+                                <textarea
                                     id="first_name"
                                     ref="first_name"
                                     v-model="external_referee_invite.first_name"
-                                    type="text"
                                     class="form-control"
                                     name="first_name"
                                     required
-                                />
+                                ></textarea>
                                 <div class="invalid-feedback">
                                     Please enter the referee's first name.
                                 </div>
@@ -66,13 +65,12 @@
                                 >Last Name</label
                             >
                             <div class="col-sm-9">
-                                <input
+                                <textarea
                                     v-model="external_referee_invite.last_name"
-                                    type="text"
                                     class="form-control"
                                     name="last_name"
                                     required
-                                />
+                                ></textarea>
                                 <div class="invalid-feedback">
                                     Please enter the referee's last name.
                                 </div>

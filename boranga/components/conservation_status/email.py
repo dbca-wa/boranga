@@ -109,6 +109,12 @@ class ApproverSendBackNotificationEmail(TemplateEmailBase):
     txt_template = "boranga/emails/cs_proposals/send_approver_sendback_notification.txt"
 
 
+class ApproverSendBackFromProposedForAgendaNotificationEmail(TemplateEmailBase):
+    subject = "A Conservation Status Proposal has been sent back by approver"
+    html_template = "boranga/emails/cs_proposals/send_approver_sendback_from_proposed_for_agenda_notification.html"
+    txt_template = "boranga/emails/cs_proposals/send_approver_sendback_from_proposed_for_agenda_notification.txt"
+
+
 class ConservationStatusDeferNotificationEmail(TemplateEmailBase):
     subject = "A conservation status proposal has been deferred"
     html_template = "boranga/emails/cs_proposals/send_defer_notification.html"
@@ -130,6 +136,7 @@ class ConservationStatusApprovalSendNotificationEmail(TemplateEmailBase):
 def send_submit_email_notification(request, cs_proposal):
     """Recipient: Always internal users"""
     email = SubmitSendNotificationEmail()
+    email.subject = f"A new Conservation Status Proposal has been submitted: {cs_proposal.conservation_status_number}"
     url = request.build_absolute_uri(
         reverse(
             "internal-conservation-status-detail",
@@ -159,6 +166,10 @@ def send_submit_email_notification(request, cs_proposal):
 def send_submitter_submit_email_notification(request, cs_proposal):
     """Recipient: Maybe internal or external user"""
     email = ExternalSubmitSendNotificationEmail()
+    email.subject = (
+        f"{settings.DEP_NAME} - confirmation - Conservation Status Proposal "
+        f"submitted: {cs_proposal.conservation_status_number}"
+    )
 
     to_user = EmailUser.objects.get(id=cs_proposal.submitter)
 
@@ -197,8 +208,8 @@ def send_external_referee_invite_email(conservation_status, request, external_re
     """Recipient: Always an external user"""
 
     subject = (
-        f"Referral Request for DBCA's Boranga System "
-        f"Conservation Status Proposal: {conservation_status.conservation_status_number}"
+        f"Referral Request for a Conservation Status Proposal "
+        f"in DBCA's Boranga System: {conservation_status.conservation_status_number}"
     )
     if reminder:
         subject = f"Reminder: {subject}"
@@ -236,6 +247,10 @@ def send_external_referee_invite_email(conservation_status, request, external_re
 def send_conservation_status_referral_email_notification(referral, request, reminder=False):
     """Recipient: May be internal or external user"""
     email = ConservationStatusReferralSendNotificationEmail()
+    email.subject = (
+        f"A referral for a Conservation Status Proposal in DBCA's Boranga System "
+        f"has been sent to you: {referral.conservation_status.conservation_status_number}"
+    )
 
     to_user = EmailUser.objects.get(id=referral.referral)
 
@@ -262,6 +277,7 @@ def send_conservation_status_referral_email_notification(referral, request, remi
         "url": url,
         "reminder": reminder,
         "comments": referral.text,
+        "referral_name": to_user.get_full_name(),
     }
 
     msg = email.send(to_user.email, context=context)
@@ -278,6 +294,10 @@ def send_conservation_status_referral_email_notification(referral, request, remi
 def send_conservation_status_referral_recall_email_notification(referral, request):
     """Recipient: May be internal or external user"""
     email = ConservationStatusReferralRecallNotificationEmail()
+    email.subject = (
+        f"A referral for a Conservation Status Proposal in DBCA's Boranga System "
+        f"has been recalled: {referral.conservation_status.conservation_status_number}"
+    )
 
     to_user = EmailUser.objects.get(id=referral.referral)
 
@@ -302,6 +322,7 @@ def send_conservation_status_referral_recall_email_notification(referral, reques
     context = {
         "cs_proposal": referral.conservation_status,
         "url": url,
+        "referral_name": to_user.get_full_name(),
     }
 
     msg = email.send(to_user.email, context=context)
@@ -319,6 +340,10 @@ def send_conservation_status_referral_complete_email_notification(referral, requ
     """Recipient: Always an internal user"""
 
     email = ConservationStatusReferralCompleteNotificationEmail()
+    email.subject = (
+        f"A referral for a Conservation Status Proposal has been completed: "
+        f"{referral.conservation_status.conservation_status_number}"
+    )
     url = request.build_absolute_uri(
         reverse(
             "internal-conservation-status-detail",
@@ -332,6 +357,7 @@ def send_conservation_status_referral_complete_email_notification(referral, requ
         "cs_proposal": referral.conservation_status,
         "url": url,
         "referral_comments": referral.referral_comment,
+        "referral_name": to_user.get_full_name(),
     }
 
     msg = email.send(to_user.email, context=context)
@@ -347,6 +373,10 @@ def send_conservation_status_amendment_email_notification(amendment_request, req
     """Recipient: May be internal or external user"""
 
     email = ConservationStatusAmendmentRequestSendNotificationEmail()
+    email.subject = (
+        f"An amendment to your Conservation Status Proposal is required: "
+        f"{conservation_status.conservation_status_number}"
+    )
     reason = amendment_request.reason.reason
 
     to_user = EmailUser.objects.get(id=conservation_status.submitter)
@@ -379,6 +409,7 @@ def send_conservation_status_amendment_email_notification(amendment_request, req
         "reason": reason,
         "amendment_request_text": amendment_request.text,
         "url": url,
+        "submitter": to_user.get_full_name(),
     }
 
     msg = email.send(
@@ -503,6 +534,10 @@ def send_approver_proposed_for_agenda_email_notification(request, conservation_s
     """Recipient: Always internal users"""
 
     email = ApproverProposedForAgendaSendNotificationEmail()
+    email.subject = (
+        f"A Conservation Status Proposal has been proposed for agenda: "
+        f"{conservation_status.conservation_status_number}"
+    )
     url = request.build_absolute_uri(reverse("internal-meeting-dashboard", kwargs={}))
     context = {
         "cs_proposal": conservation_status,
@@ -534,6 +569,9 @@ def send_assessor_ready_for_agenda_email_notification(request, conservation_stat
     """Recipient: Always internal users"""
 
     email = AssessorReadyForAgendaSendNotificationEmail()
+    email.subject = (
+        f"A Conservation Status Proposal is ready for agenda: " f"{conservation_status.conservation_status_number}"
+    )
     url = request.build_absolute_uri(reverse("internal-meeting-dashboard", kwargs={}))
     context = {
         "cs_proposal": conservation_status,
@@ -562,9 +600,13 @@ def send_assessor_ready_for_agenda_email_notification(request, conservation_stat
 
 
 def send_proposal_approver_sendback_email_notification(request, conservation_status):
-    """Recipient: Always internal users"""
+    """Recipient: Individual CS assessor that proposed the CS for agenda"""
 
     email = ApproverSendBackNotificationEmail()
+    email.subject = (
+        f"A Conservation Status Proposal has been sent back by approver: "
+        f"{conservation_status.conservation_status_number}"
+    )
     url = request.build_absolute_uri(
         reverse(
             "internal-conservation-status-detail",
@@ -574,31 +616,66 @@ def send_proposal_approver_sendback_email_notification(request, conservation_sta
 
     if "test-emails" in request.path_info:
         approver_comment = "This is my test comment"
+        to_user = EmailUser.objects.get(id=request.user.id)
     else:
         approver_comment = conservation_status.approver_comment
+        to_user = EmailUser.objects.get(id=conservation_status.assigned_officer)
 
     context = {
         "cs_proposal": conservation_status,
         "url": url,
         "approver_comment": approver_comment,
+        "assessor": to_user.get_full_name(),
     }
 
-    group_type = (
-        conservation_status.species.group_type
-        if conservation_status.species
-        else conservation_status.community.group_type
-    )
-
-    recipients = SystemEmailGroup.emails_by_group_and_area(
-        group_type=group_type,
-        area=SystemEmailGroup.AREA_CONSERVATION_STATUS,
-    )
-
-    msg = email.send(recipients, context=context)
+    msg = email.send(to_user.email, context=context)
 
     sender = get_sender_user()
 
     _log_conservation_status_email(msg, conservation_status, sender=sender)
+
+    _log_user_email(msg, to_user, to_user, sender=sender)
+
+    return msg
+
+
+def send_proposal_approver_sendback_from_proposed_for_agenda_notification(request, conservation_status):
+    """Recipient: Individual CS assessor that proposed the CS for agenda"""
+
+    email = ApproverSendBackFromProposedForAgendaNotificationEmail()
+    email.subject = (
+        f"A Conservation Status Proposal has been sent back by approver: "
+        f"{conservation_status.conservation_status_number}"
+    )
+
+    url = request.build_absolute_uri(
+        reverse(
+            "internal-conservation-status-detail",
+            kwargs={"cs_proposal_pk": conservation_status.id},
+        )
+    )
+
+    if "test-emails" in request.path_info:
+        approver_comment = "This is my test comment"
+        to_user = EmailUser.objects.get(id=request.user.id)
+    else:
+        approver_comment = conservation_status.approver_comment
+        to_user = EmailUser.objects.get(id=conservation_status.assigned_officer)
+
+    context = {
+        "cs_proposal": conservation_status,
+        "url": url,
+        "approver_comment": approver_comment,
+        "assessor": to_user.get_full_name(),
+    }
+
+    msg = email.send(to_user.email, context=context)
+
+    sender = get_sender_user()
+
+    _log_conservation_status_email(msg, conservation_status, sender=sender)
+
+    _log_user_email(msg, to_user, to_user, sender=sender)
 
     return msg
 
@@ -607,6 +684,9 @@ def send_approver_defer_email_notification(request, conservation_status, reason)
     """Recipient: Always internal users"""
 
     email = ConservationStatusDeferNotificationEmail()
+    email.subject = (
+        f"A Conservation Status Proposal has been deferred: " f"{conservation_status.conservation_status_number}"
+    )
     url = request.build_absolute_uri(
         reverse(
             "internal-conservation-status-detail",

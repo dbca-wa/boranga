@@ -6,6 +6,7 @@
 {% show_internal_menu_items as show_internal_menu_items %}
 {% show_meetings_menu_item as show_meetings_menu_item %}
 {% is_contributor as is_contributor %}
+{% can_view_reports as can_view_reports_user %}
 
 {% if is_internal_login %}
     {% if show_internal_menu_items %}
@@ -23,6 +24,11 @@
     <li class="nav-item">
         <a class="nav-link{% if 'occurrence' in request.path %} active{% endif %}" href="/internal/occurrence">Occurrences</a>
     </li>
+    {% if request.user.is_superuser or can_view_reports_user %}
+    <li class="nav-item">
+        <a class="nav-link{% if 'reports' in request.path %} active{% endif %}" href="/internal/reports">Reports</a>
+    </li>
+    {% endif %}
     {% endif %}
 {% else %}
   <li class="nav-item">

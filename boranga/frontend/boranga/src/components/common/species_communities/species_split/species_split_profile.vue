@@ -889,14 +889,13 @@
                     Numbers:</label
                 >
                 <div class="col-sm-8">
-                    <input
+                    <textarea
                         id="department_file_numbers"
                         v-model="species_original.department_file_numbers"
                         :disabled="true"
-                        type="text"
                         class="form-control"
                         placeholder=""
-                    />
+                    ></textarea>
                 </div>
                 <div class="col-sm-1">
                     <input
@@ -917,13 +916,12 @@
                     >Department File Numbers:</label
                 >
                 <div class="col-sm-8">
-                    <input
+                    <textarea
                         id="department_file_numbers"
                         v-model="species_community.department_file_numbers"
-                        type="text"
                         class="form-control"
                         placeholder=""
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div class="row mb-3">
@@ -1060,14 +1058,13 @@
                     Reference:
                 </label>
                 <div class="col-sm-8">
-                    <input
+                    <textarea
                         ref="conservation_plan_reference"
                         v-model="species_original.conservation_plan_reference"
                         :disabled="true"
-                        type="text"
                         class="form-control"
                         name="conservation_plan_reference"
-                    />
+                    ></textarea>
                 </div>
                 <div class="col-sm-1">
                     <input

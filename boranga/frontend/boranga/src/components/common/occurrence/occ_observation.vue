@@ -338,14 +338,13 @@
                     >ID Confirmed by:</label
                 >
                 <div class="col-sm-9">
-                    <input
+                    <textarea
                         id="id_confirmed_by"
                         v-model="occurrence_obj.identification.id_confirmed_by"
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
                         placeholder=""
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div class="row mb-3">
@@ -600,14 +599,13 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Permit ID:</label>
                 <div class="col-sm-9">
-                    <input
+                    <textarea
                         id="permit_id"
                         v-model="occurrence_obj.identification.permit_id"
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
                         placeholder=""
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div class="row mb-3">

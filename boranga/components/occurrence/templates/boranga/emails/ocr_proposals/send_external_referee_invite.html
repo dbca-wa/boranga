@@ -9,13 +9,13 @@
 {%  block content %}
         {% if reminder %}
         <p>
-            <strong>Reminder:</strong> You have been invited to complete a referral for Occurrence Report: <strong>{{occurrence_report.occurrence_report_number}} in DBCA's Boranga System</strong>.
+            <strong>Reminder:</strong> You have been invited to complete a referral for Occurrence Report form: <strong>{{occurrence_report.occurrence_report_number}} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %}</strong> in DBCA's Boranga System.
         </p>
         <p>
             We sent the original referral request to this email address on {{external_referee_invite.datetime_sent|date:'d/m/Y'}}.
         </p>
         {% else %}
-        <p>You have been invited to complete referral for Occurrence Report: <strong>{{occurrence_report.occurrence_report_number}}</strong> in DBCA's Boranga System.</p>
+        <p>You have been invited to complete a referral for Occurrence Report form: <strong>{{occurrence_report.occurrence_report_number}} {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %}</strong> in DBCA's Boranga System.</p>
         {% endif %}
     </p>
 
@@ -23,11 +23,11 @@
 
     <p>
         In order to submit your comments regarding the Occurrence Report you will need to create an account with
-        our system. (If you already have an account with us you can simply log in as usual).
+        our system (if you already have an account with us you can simply log in as usual).
     </p>
 
     <p>
-        When you register and log in you will be able to see any conservation status proposals that have been referred to you.
+        When you register and log in you will be able to see any Occurrence Report forms that have been referred to you.
     </p>
 
     <p>

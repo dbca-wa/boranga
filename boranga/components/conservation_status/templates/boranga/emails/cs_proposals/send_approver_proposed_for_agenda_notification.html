@@ -1,8 +1,12 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>Hello Team,</p>
+{% endblock %}
+
 {%  block content %}
     <p>
-	    The Conservation Status Proposal {{ cs_proposal.conservation_status_number }} has been 'Proposed for Agenda'.
+	    The Conservation Status Proposal {{ cs_proposal.conservation_status_number }} {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} has been 'Proposed for Agenda'.
     </p>
 
     <p>

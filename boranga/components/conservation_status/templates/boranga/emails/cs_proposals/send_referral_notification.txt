@@ -1,10 +1,12 @@
 {%  extends 'boranga/emails/base_email.txt' %}
 
+{% block greetings %}{{ referral_name }},{% endblock %}
+
 {%  block content %}
     {% if reminder %}
-        This is a reminder for a referral for Conservation Status Proposal <strong>{{cs_proposal.conservation_status_number}}</strong> that has been sent to you
+        This is a reminder for a referral for Conservation Status Proposal {{cs_proposal.conservation_status_number}} {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} that has been sent to you
     {% else %}
-        A referral for Conservation Status Proposal CS{{proposal.id}} has been sent to you:
+        A referral for Conservation Status Proposal {{cs_proposal.conservation_status_number}} {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} has been sent to you:
         Comments: {{comments}}
     {% endif %}
 

@@ -1,10 +1,14 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>{{ referral_name }},</p>
+{% endblock %}
+
 {%  block content %}
     {% if reminder %}
-        <p>This is a reminder for a referral for Occurrence Report <strong>{{occurrence_report.occurrence_report_number}}</strong> that has been sent to you:</p>
+        <p>This is a reminder for a referral for Occurrence Report form <strong>{{occurrence_report.occurrence_report_number}}</strong> {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %} that has been sent to you:</p>
     {% else %}
-        <p>A referral for Occurrence Report <strong>{{occurrence_report.occurrence_report_number}}</strong> has been sent to you:</p>
+        <p>A referral for Occurrence Report form <strong>{{occurrence_report.occurrence_report_number}}</strong> {% if occurrence_report.species %}{{ occurrence_report.species.taxonomy.scientific_name }}{% elif occurrence_report.community %}{{ occurrence_report.community.taxonomy.community_name }}{% endif %} has been sent to you:</p>
 
         <p>Comments: {{comments}}</p>
     {% endif %}

@@ -52,13 +52,12 @@
                                         >
                                     </div>
                                     <div class="col-sm-4">
-                                        <input
+                                        <textarea
                                             v-model="comms.fromm"
-                                            type="text"
                                             class="form-control"
                                             name="fromm"
                                             required
-                                        />
+                                        ></textarea>
                                         <div class="invalid-feedback">
                                             Please enter the sender.
                                         </div>
@@ -104,14 +103,13 @@
                                         >
                                     </div>
                                     <div class="col-sm-9">
-                                        <input
+                                        <textarea
                                             v-model="comms.subject"
-                                            type="text"
                                             class="form-control"
                                             name="subject"
                                             style="width: 70%"
                                             required
-                                        />
+                                        ></textarea>
                                         <div class="invalid-feedback">
                                             Please enter a subject/description.
                                         </div>

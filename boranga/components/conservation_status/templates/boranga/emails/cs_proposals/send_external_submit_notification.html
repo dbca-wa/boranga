@@ -1,25 +1,26 @@
 {% extends 'boranga/emails/base_email.html' %}
 
+{% block greetings %}
+<p>Dear {{ submitter }},</p>
+{% endblock %}
+
 {% block content %}
   {% if cs_proposal.is_flora_application %}
-    <p>Your proposal for a flora conservation status has been submitted, the proposal number is {{ cs_proposal.conservation_status_number }}</p>Submitter: {{ submitter }}<br />
+    <p>Your proposal for a flora conservation status has been submitted, the proposal number is {{ cs_proposal.conservation_status_number }} {{ cs_proposal.species.taxonomy.scientific_name }}</p>Submitter: {{ submitter }}<br />
     Lodgement date: {{ cs_proposal.lodgement_date }}
 
-    <p>Please note it may take up to 21 days to process your proposal.</p>
     <p>You will receive a notification email if there is any incomplete information or documents missing from the proposal.</p>
   {% elif cs_proposal.is_fauna_application %}
-    <p>Your proposal for a fauna conservation status has been submitted, the proposal number is {{ cs_proposal.conservation_status_number }}</p>Submitter: {{ submitter }}<br />
+    <p>Your proposal for a fauna conservation status has been submitted, the proposal number is {{ cs_proposal.conservation_status_number }} {{ cs_proposal.species.taxonomy.scientific_name }}</p>Submitter: {{ submitter }}<br />
     Lodgement date: {{ cs_proposal.lodgement_date }}
-
-    <p>Please note it may take up to 21 days to process your proposal.</p>
 
     <p>You will receive a notification email if there is any incomplete information or documents missing from the proposal.</p>
   {% else %}
-    <p>Your proposal for a community conservation status has been submitted, the proposal number is {{ cs_proposal.conservation_status_number }}</p>Submitter: {{ submitter }}<br />
+    <p>Your proposal for a community conservation status has been submitted, the proposal number is {{ cs_proposal.conservation_status_number }} {{ cs_proposal.community.taxonomy.community_name }}</p>Submitter: {{ submitter }}<br />
     Lodgement date: {{ cs_proposal.lodgement_date }}
-
-    <p>Please note it may take up to 21 days to process your proposal.</p>
 
     <p>You will receive a notification email if there is any incomplete information or documents missing from the proposal.</p>
   {% endif %}
+
+    <p>For information on the listing process for proposals for threatened listings (new listing/change/delisting) please see <a href="https://www.dbca.wa.gov.au/management/threatened-species-and-communities/nominations-listing">Nominations for listing | Department of Biodiversity, Conservation and Attractions</a></p>
 {% endblock %}

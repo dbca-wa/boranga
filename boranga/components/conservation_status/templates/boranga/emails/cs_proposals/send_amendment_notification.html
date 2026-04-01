@@ -1,9 +1,11 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
-{%  block content %}
-	Your Conservation Status proposal {{ cs_proposal.conservation_status_number }} has been reviewed and requires an amendment before further assessment.
+{% block greetings %}
+<p>Dear {{ submitter }},</p>
+{% endblock %}
 
-    {% if reason %}
+{%  block content %}
+        Your Conservation Status proposal {{ cs_proposal.conservation_status_number }} {% if cs_proposal.species %}{{ cs_proposal.species.taxonomy.scientific_name }}{% elif cs_proposal.community %}{{ cs_proposal.community.taxonomy.community_name }}{% endif %} has been reviewed and requires an amendment before further assessment.
         <p>
         	<span>Amendment Reason: {{ reason }}</span>
         </p>

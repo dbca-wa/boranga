@@ -84,13 +84,12 @@
                             >Name</label
                         >
                         <div class="col-sm-6">
-                            <input
+                            <textarea
                                 id="name"
                                 v-model="submitter_information.name"
-                                type="text"
                                 maxlength="100"
                                 class="form-control"
-                            />
+                            ></textarea>
                         </div>
                     </div>
                     <div
@@ -173,14 +172,13 @@
                                 >Organisation</label
                             >
                             <div class="col-sm-6">
-                                <input
+                                <textarea
                                     id="organisation"
                                     ref="organisation"
                                     v-model="submitter_information.organisation"
-                                    type="text"
                                     maxlength="100"
                                     class="form-control"
-                                />
+                                ></textarea>
                             </div>
                         </div>
                         <div
@@ -193,13 +191,12 @@
                                 >Position / Role</label
                             >
                             <div class="col-sm-6">
-                                <input
+                                <textarea
                                     id="position"
                                     v-model="submitter_information.position"
-                                    type="text"
                                     maxlength="100"
                                     class="form-control"
-                                />
+                                ></textarea>
                             </div>
                         </div>
                     </template>
