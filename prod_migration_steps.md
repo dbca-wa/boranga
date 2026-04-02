@@ -24,7 +24,7 @@ _Note: Steps 6–13 are run by opening a shell on the boranga-prod workload in t
 ## Step 7: Apply the admin migration patch
 
 ```
-patch venv/lib/python3.12/site-packages/django/contrib/admin/migrations/0001_initial.py 0001_intial.py.patch
+patch venv/lib/python3.13/site-packages/django/contrib/admin/migrations/0001_initial.py 0001_initial.py.patch
 ```
 
 _Note: The path to the virtual environment may vary on your local system_
@@ -38,13 +38,13 @@ _Note: The path to the virtual environment may vary on your local system_
 ## Step 9: Reverse the admin migration patch
 
 ```
-patch -R venv/lib/python3.12/site-packages/django/contrib/admin/migrations/0001_initial.py 0001_intial.py.patch
+patch -R venv/lib/python3.13/site-packages/django/contrib/admin/migrations/0001_initial.py 0001_initial.py.patch
 ```
 
 ## Step 10: Apply the reversion migration patch
 
 ```
-patch venv/lib/python3.12/site-packages/reversion/migrations/0001_squashed_0004_auto_20160611_1202.py 0001_squashed_0004_auto_20160611_1202.py.patch
+patch venv/lib/python3.13/site-packages/reversion/migrations/0001_squashed_0004_auto_20160611_1202.py 0001_squashed_0004_auto_20160611_1202.py.patch
 ```
 
 ## Step 11: Migrate the reversion app
@@ -57,7 +57,7 @@ patch venv/lib/python3.12/site-packages/reversion/migrations/0001_squashed_0004_
 ## Step 12: Reverse the reversion migration patch
 
 ```
-patch -R venv/lib/python3.12/site-packages/reversion/migrations/0001_squashed_0004_auto_20160611_1202.py 0001_squashed_0004_auto_20160611_1202.py.patch
+patch -R venv/lib/python3.13/site-packages/reversion/migrations/0001_squashed_0004_auto_20160611_1202.py 0001_squashed_0004_auto_20160611_1202.py.patch
 ```
 
 ## Step 13: Run the rest of the migrations
