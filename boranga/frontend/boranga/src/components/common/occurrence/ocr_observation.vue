@@ -341,8 +341,9 @@
                         "
                         class="text-danger ms-1"
                         >*</span
-                    ></label
-                >
+                    >
+                    <HelpText section_id="Identification_certainty"
+                /></label>
                 <div class="col-sm-9">
                     <template v-if="!isReadOnly">
                         <template
@@ -708,6 +709,7 @@ import { v4 as uuid } from 'uuid';
 import FormSection from '@/components/forms/section_toggle.vue';
 import PlantCount from './plant_count.vue';
 import AnimalObservation from './animal_observation.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
 export default {
     name: 'OCRObservation',
@@ -715,6 +717,7 @@ export default {
         FormSection,
         PlantCount,
         AnimalObservation,
+        HelpText,
     },
     props: {
         occurrence_report_obj: {
