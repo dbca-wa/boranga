@@ -642,6 +642,9 @@ export default {
                 return true;
             }
         },
+        is_internal: function () {
+            return this.level == 'internal';
+        },
         addCommunityOCRVisibility: function () {
             return (
                 this.profile?.user &&

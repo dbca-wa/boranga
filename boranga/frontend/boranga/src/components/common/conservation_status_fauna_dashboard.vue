@@ -848,6 +848,9 @@ export default {
         is_referral: function () {
             return this.level == 'referral';
         },
+        is_internal: function () {
+            return this.level == 'internal';
+        },
         addFaunaCSVisibility: function () {
             return (
                 this.profile?.user &&
