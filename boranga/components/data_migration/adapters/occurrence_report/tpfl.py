@@ -35,6 +35,10 @@ from ..sources import Source
 from . import schema
 
 # TPFL-specific transforms and pipelines
+
+# Module-level lazy cache for AREA_OCCUPIED_METHOD mapping (populated on first use)
+_AREA_METHOD_MAP: dict[str, str | None] | None = None
+
 # Create factory transform that maps POP_ID to Occurrence instance with persistent caching
 OCCURRENCE_FROM_POP_ID_TRANSFORM = occurrence_from_pop_id_factory("TPFL")
 
@@ -423,16 +427,25 @@ def ocr_plant_count_comment_transform(value, ctx):
     if not isinstance(row, dict):
         return _result("; ".join(parts) if parts else "")
 
-    from boranga.components.main.models import LegacyValueMap
+    # Lazy-load AREA_OCCUPIED_METHOD mapping once into a module-level cache
+    # to avoid per-row DB/cache round-trips during the transform phase.
+    global _AREA_METHOD_MAP
+    if _AREA_METHOD_MAP is None:
+        from boranga.components.main.models import LegacyValueMap
+
+        _AREA_METHOD_MAP = {}
+        for rec in LegacyValueMap.objects.filter(
+            legacy_system="TPFL",
+            list_name="AREA_OCCUPIED_METHOD (DRF_LOV_AREA_CALC_VWS)",
+            active=True,
+        ):
+            result = rec.target_object if rec.target_object is not None else rec.canonical_name
+            _AREA_METHOD_MAP[rec.legacy_value] = result
 
     # 2. AREA_OCCUPIED_METHOD
     area_method = row.get("AREA_OCCUPIED_METHOD")
     if area_method and str(area_method).strip():
-        mapped = LegacyValueMap.get_target(
-            legacy_system="TPFL",
-            list_name="AREA_OCCUPIED_METHOD (DRF_LOV_AREA_CALC_VWS)",
-            legacy_value=str(area_method).strip(),
-        )
+        mapped = _AREA_METHOD_MAP.get(str(area_method).strip())
         if mapped:
             parts.append(f"Area Occupied Method: {mapped}")
 
@@ -775,6 +788,21 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
 
         veg_classes_map = preload_veg_classes_map(veg_classes_path)
 
+        # Preload LegacyValueMap dicts for list_names used per-row in the
+        # extraction loop to avoid per-row DB/cache round-trips.
+        from boranga.components.main.models import LegacyValueMap
+
+        _lvm_lists = [
+            "VCHR_STATUS_CODE (DRF_LOV_VOUCHER_STAT_VWS)",
+            "DUPVOUCH_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)",
+        ]
+        _lvm_cache: dict[str, dict[str, str | None]] = {}
+        for _list_name in _lvm_lists:
+            _lvm_cache[_list_name] = {}
+            for rec in LegacyValueMap.objects.filter(legacy_system="TPFL", list_name=_list_name, active=True):
+                result = rec.target_object if rec.target_object is not None else rec.canonical_name
+                _lvm_cache[_list_name][rec.legacy_value] = result
+
         raw_rows, read_warnings = self.read_table(path)
         warnings.extend(read_warnings)
 
@@ -921,26 +949,16 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
 
             # Identification comment composition: map and prefix VCHR_STATUS_CODE & DUPVOUCH_LOCATION
             try:
-                from boranga.components.main.models import LegacyValueMap
-
                 idc_parts = []
                 VCHR = canonical.get("VCHR_STATUS_CODE", "")
                 if VCHR:
-                    mapped = LegacyValueMap.get_target(
-                        legacy_system="TPFL",
-                        list_name="VCHR_STATUS_CODE (DRF_LOV_VOUCHER_STAT_VWS)",
-                        legacy_value=VCHR,
-                    )
+                    mapped = _lvm_cache.get("VCHR_STATUS_CODE (DRF_LOV_VOUCHER_STAT_VWS)", {}).get(VCHR)
                     if mapped:
                         idc_parts.append(f"Specimen Status: {mapped}")
 
                 DUPV = canonical.get("DUPVOUCH_LOCATION", "")
                 if DUPV:
-                    mapped2 = LegacyValueMap.get_target(
-                        legacy_system="TPFL",
-                        list_name="DUPVOUCH_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)",
-                        legacy_value=DUPV,
-                    )
+                    mapped2 = _lvm_cache.get("DUPVOUCH_LOCATION (DRF_LOV_VOUCHER_LOC_VWS)", {}).get(DUPV)
                     if mapped2:
                         idc_parts.append(f"Duplicate Voucher Location: {mapped2}")
 
