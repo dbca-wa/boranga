@@ -71,7 +71,6 @@
                                 id="your-comments"
                                 v-model="referral.referral_comment"
                                 class="form-control"
-                                rows="6"
                                 autofocus
                             ></textarea>
                         </div>

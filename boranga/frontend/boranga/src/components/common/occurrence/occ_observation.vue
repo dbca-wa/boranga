@@ -343,6 +343,7 @@
                         v-model="occurrence_obj.identification.id_confirmed_by"
                         :disabled="isReadOnly"
                         class="form-control"
+                        maxlength="1000"
                         placeholder=""
                     ></textarea>
                 </div>
@@ -605,6 +606,7 @@
                         v-model="occurrence_obj.identification.permit_id"
                         :disabled="isReadOnly"
                         class="form-control"
+                        maxlength="500"
                         placeholder=""
                     ></textarea>
                 </div>

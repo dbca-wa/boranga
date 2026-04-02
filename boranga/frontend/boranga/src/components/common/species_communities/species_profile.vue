@@ -825,6 +825,7 @@
                             v-model="species_community.department_file_numbers"
                             :disabled="isReadOnly"
                             class="form-control"
+                            maxlength="512"
                             placeholder=""
                         ></textarea>
                     </div>

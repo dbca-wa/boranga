@@ -32,6 +32,7 @@
                                         v-model="siteObj.site_name"
                                         :disabled="isReadOnly"
                                         class="form-control"
+                                        maxlength="255"
                                     ></textarea>
                                 </div>
                             </div>

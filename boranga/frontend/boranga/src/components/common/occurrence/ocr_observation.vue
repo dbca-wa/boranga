@@ -306,16 +306,16 @@
                     >ID Confirmed by:</label
                 >
                 <div class="col-sm-9">
-                    <input
+                    <textarea
                         id="id_confirmed_by"
                         v-model="
                             occurrence_report_obj.identification.id_confirmed_by
                         "
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
+                        maxlength="1000"
                         placeholder=""
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div
@@ -611,6 +611,7 @@
                         v-model="occurrence_report_obj.identification.permit_id"
                         :disabled="isReadOnly"
                         class="form-control"
+                        maxlength="500"
                         placeholder=""
                     ></textarea>
                 </div>

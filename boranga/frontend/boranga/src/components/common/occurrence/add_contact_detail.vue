@@ -30,6 +30,7 @@
                                             ref="contact_name"
                                             v-model="contactObj.contact_name"
                                             class="form-control"
+                                            maxlength="250"
                                             :disabled="isReadOnly"
                                             required
                                         ></textarea>
@@ -45,6 +46,7 @@
                                         <textarea
                                             v-model="contactObj.role"
                                             class="form-control"
+                                            maxlength="250"
                                             :disabled="isReadOnly"
                                         ></textarea>
                                     </div>
@@ -59,6 +61,7 @@
                                         <textarea
                                             v-model="contactObj.organisation"
                                             class="form-control"
+                                            maxlength="250"
                                             :disabled="isReadOnly"
                                         ></textarea>
                                     </div>
