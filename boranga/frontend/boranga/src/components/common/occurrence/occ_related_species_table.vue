@@ -463,6 +463,11 @@ export default {
             $(vm.$refs[vm.select_common_name])
                 .select2({
                     minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
                     dropdownParent: $('#' + vm.select_common_name),
                     theme: 'bootstrap-5',
                     allowClear: true,
