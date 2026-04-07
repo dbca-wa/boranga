@@ -4,6 +4,7 @@ import os
 from django.core.management.base import BaseCommand, CommandError
 
 from boranga.components.data_migration.adapters.sources import ALL_SOURCES, get_locked_sources
+from boranga.components.data_migration.integrity import compare_checksums, snapshot_checksums
 from boranga.components.data_migration.registry import ImportContext, all_importers, get
 from boranga.components.main.models import MigrationRun
 
@@ -199,7 +200,35 @@ class Command(BaseCommand):
                         )
 
             opts_no_path = {k: v for k, v in opts.items() if k != "path"}
-            stats = imp_cls().run(opts["path"], ctx, **opts_no_path)
+            importer_instance = imp_cls()
+            # --- Integrity: pre-run checksums ---
+            specified_sources = opts.get("sources")
+            if not ctx.dry_run and ctx.migration_run and specified_sources:
+                try:
+                    snapshot_checksums(importer_instance, specified_sources, ctx.migration_run, "pre")
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"Warning: pre-run integrity snapshot failed: {e}"))
+            stats = importer_instance.run(opts["path"], ctx, **opts_no_path)
+            # --- Integrity: post-run checksums + comparison ---
+            if not ctx.dry_run and ctx.migration_run and specified_sources:
+                try:
+                    snapshot_checksums(importer_instance, specified_sources, ctx.migration_run, "post")
+                    mismatches = compare_checksums(ctx.migration_run, imp_cls.slug)
+                    if mismatches:
+                        self.stdout.write(self.style.ERROR("CROSS-CONTAMINATION DETECTED:"))
+                        for m in mismatches:
+                            self.stdout.write(
+                                self.style.ERROR(
+                                    f"  Source: {m['source']}  Table: {m['table']}\n"
+                                    f"    Pre:  {m['pre_checksum']} ({m['pre_row_count']} rows)\n"
+                                    f"    Post: {m['post_checksum']} ({m['post_row_count']} rows)\n"
+                                    f"    {m['detail']}"
+                                )
+                            )
+                    else:
+                        self.stdout.write(self.style.SUCCESS("Integrity check passed — no cross-contamination."))
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"Warning: post-run integrity check failed: {e}"))
             # Cleanup env var set for limiting rows during this run
             if limit_val and os.environ.get("DATA_MIGRATION_LIMIT") == str(limit_val):
                 try:

@@ -27,6 +27,10 @@ SOURCE_ADAPTERS = {
 class OccurrenceThreatImporter(BaseSheetImporter):
     slug = "occurrence_threats_legacy"
     description = "Import occurrence threats from legacy TPFL sources (SHEETNO=Null)"
+    integrity_tables = [
+        "boranga_occurrence",
+        ("boranga_occconservationthreat", "boranga_occurrence", "occurrence_id"),
+    ]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OCCConservationThreat target data (only those without report link). Respect `ctx.dry_run`."""

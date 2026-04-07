@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 class AssociatedSpeciesImporter(BaseSheetImporter):
     slug = "associated_species"
     description = "Import Associated Species from legacy sources"
+    integrity_tables = [
+        "boranga_occurrencereport",
+        ("boranga_ocrassociatedspecies", "boranga_occurrencereport", "occurrence_report_id"),
+    ]
 
     SOURCE_ADAPTERS = {
         Source.TEC_SITE_SPECIES.value: "boranga.components.data_migration.adapters.occurrence_report.tec_site_species.OccurrenceReportTecSiteSpeciesAdapter",

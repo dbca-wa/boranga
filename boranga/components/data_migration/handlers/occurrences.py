@@ -90,6 +90,7 @@ class OccurrenceImporter(BaseSheetImporter):
     """
 
     slug = "occurrence_legacy"
+    integrity_tables = ["boranga_occurrence"]
     description = "Import occurrence data from legacy TEC / TFAUNA / TPFL sources"
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):

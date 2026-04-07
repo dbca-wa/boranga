@@ -123,6 +123,7 @@ def _load_community_threats(path: str) -> dict:
 class CommunityImporter(BaseSheetImporter):
     slug = "communities_legacy"
     description = "Import communities data from legacy TPFL sources"
+    integrity_tables = ["boranga_community"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete community target data. Respects `ctx.dry_run` (no-op when True)."""

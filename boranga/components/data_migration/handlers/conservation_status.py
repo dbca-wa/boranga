@@ -41,6 +41,7 @@ SOURCE_ADAPTERS = {
 class ConservationStatusImporter(BaseSheetImporter):
     slug = "conservation_status_legacy"
     description = "Import conservation status from legacy TPFL sources"
+    integrity_tables = ["boranga_conservationstatus"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete ConservationStatus target data. Respect `ctx.dry_run`."""
