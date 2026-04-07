@@ -4926,6 +4926,213 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             logger.info(f"Finished populating Occurrence 1-to-1 objects. Cloned {cloned_count} sections.")
 
+        # ---------------------------------------------------------------------
+        # Aggregate OCRAssociatedSpecies → OCCAssociatedSpecies (unique by taxonomy)
+        # ---------------------------------------------------------------------
+        # For each Occurrence linked to child OccurrenceReports in this run,
+        # collect ALL unique associated species (by taxonomy_id) across every
+        # child OCR and ensure the parent OCC ends up with the full unique set.
+        # Runs late in the pipeline after other large structures have been freed.
+        ocrs_with_occ = [ocr for ocr in target_map.values() if getattr(ocr, "occurrence_id", None)]
+
+        if ocrs_with_occ:
+            logger.info(
+                "Aggregating OCRAssociatedSpecies -> OCCAssociatedSpecies for %d linked OCRs (RSS=%.0fMB)",
+                len(ocrs_with_occ),
+                _rss_mb(),
+            )
+
+            # Map OCR pk → parent OCC id
+            ocr_to_occ = {ocr.pk: ocr.occurrence_id for ocr in ocrs_with_occ}
+            occ_ids = list(set(ocr_to_occ.values()))
+
+            # Fetch OCRAssociatedSpecies pk keyed by OCR pk
+            ocr_assocs = dict(
+                OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=list(ocr_to_occ.keys())).values_list(
+                    "occurrence_report_id", "pk"
+                )
+            )
+
+            if ocr_assocs:
+                # Determine through-table FK field names
+                ocr_through_model = OCRAssociatedSpecies.related_species.through
+                _agg_ocr_fk = _agg_tax_fk = None
+                for f in ocr_through_model._meta.get_fields():
+                    rm = getattr(f, "remote_field", None)
+                    if rm and getattr(rm, "model", None) == OCRAssociatedSpecies:
+                        _agg_ocr_fk = f.name
+                    if rm and getattr(rm, "model", None) == AssociatedSpeciesTaxonomy:
+                        _agg_tax_fk = f.name
+
+                if _agg_ocr_fk and _agg_tax_fk:
+                    # Fetch through rows: (ocr_assoc_pk, ast_pk)
+                    through_rows = list(
+                        ocr_through_model.objects.filter(
+                            **{f"{_agg_ocr_fk}_id__in": list(ocr_assocs.values())}
+                        ).values_list(f"{_agg_ocr_fk}_id", f"{_agg_tax_fk}_id")
+                    )
+
+                    if through_rows:
+                        # Fetch AST details for deduplication
+                        ast_pks = {row[1] for row in through_rows}
+                        ast_details = {}
+                        for pk, tax_id, role_id, comments in AssociatedSpeciesTaxonomy.objects.filter(
+                            pk__in=ast_pks
+                        ).values_list("pk", "taxonomy_id", "species_role_id", "comments"):
+                            ast_details[pk] = (tax_id, role_id, comments or "")
+
+                        # Reverse map: ocr_assoc_pk → occ_id
+                        ocr_assoc_to_occ = {}
+                        for ocr_pk, assoc_pk in ocr_assocs.items():
+                            ocr_assoc_to_occ[assoc_pk] = ocr_to_occ[ocr_pk]
+
+                        # Aggregate unique taxonomy_ids per OCC (first-seen role/comments wins)
+                        occ_desired: dict[int, dict[int, tuple]] = defaultdict(dict)
+                        for ocr_assoc_pk, ast_pk in through_rows:
+                            occ_id = ocr_assoc_to_occ.get(ocr_assoc_pk)
+                            details = ast_details.get(ast_pk)
+                            if not occ_id or not details:
+                                continue
+                            tax_id, role_id, comments = details
+                            if tax_id and tax_id not in occ_desired[occ_id]:
+                                occ_desired[occ_id][tax_id] = (role_id, comments)
+
+                        if occ_desired:
+                            # Ensure OCCAssociatedSpecies exists for each OCC
+                            existing_occ_assoc = {
+                                a.occurrence_id: a
+                                for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=occ_ids)
+                            }
+                            missing_occ_ids = set(occ_desired.keys()) - set(existing_occ_assoc.keys())
+                            if missing_occ_ids:
+                                OCCAssociatedSpecies.objects.bulk_create(
+                                    [OCCAssociatedSpecies(occurrence_id=oid) for oid in missing_occ_ids],
+                                    batch_size=BATCH,
+                                )
+                                for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=list(missing_occ_ids)):
+                                    existing_occ_assoc[a.occurrence_id] = a
+
+                            # Determine through-table FK names for OCCAssociatedSpecies
+                            occ_through_model = OCCAssociatedSpecies.related_species.through
+                            _agg_occ_fk = _agg_occ_tax_fk = None
+                            for f in occ_through_model._meta.get_fields():
+                                rm = getattr(f, "remote_field", None)
+                                if rm and getattr(rm, "model", None) == OCCAssociatedSpecies:
+                                    _agg_occ_fk = f.name
+                                if rm and getattr(rm, "model", None) == AssociatedSpeciesTaxonomy:
+                                    _agg_occ_tax_fk = f.name
+
+                            if _agg_occ_fk and _agg_occ_tax_fk:
+                                # Fetch existing taxonomy_ids already linked on each OCC
+                                occ_assoc_pks = [
+                                    a.pk for a in existing_occ_assoc.values() if a.occurrence_id in occ_desired
+                                ]
+                                existing_occ_through = list(
+                                    occ_through_model.objects.filter(
+                                        **{f"{_agg_occ_fk}_id__in": occ_assoc_pks}
+                                    ).values_list(f"{_agg_occ_fk}_id", f"{_agg_occ_tax_fk}_id")
+                                )
+                                existing_occ_ast_pks = {row[1] for row in existing_occ_through}
+                                occ_ast_tax = (
+                                    dict(
+                                        AssociatedSpeciesTaxonomy.objects.filter(
+                                            pk__in=existing_occ_ast_pks
+                                        ).values_list("pk", "taxonomy_id")
+                                    )
+                                    if existing_occ_ast_pks
+                                    else {}
+                                )
+
+                                # occ_assoc_pk → set of taxonomy_ids already on OCC
+                                occ_existing_tax: dict[int, set[int]] = defaultdict(set)
+                                for occ_assoc_pk, ast_pk in existing_occ_through:
+                                    tax_id = occ_ast_tax.get(ast_pk)
+                                    if tax_id:
+                                        occ_existing_tax[occ_assoc_pk].add(tax_id)
+
+                                # Build list of new AST instances to create (skip existing)
+                                ast_to_create: list[tuple[int, AssociatedSpeciesTaxonomy]] = []
+                                for occ_id, tax_map in occ_desired.items():
+                                    occ_assoc = existing_occ_assoc.get(occ_id)
+                                    if not occ_assoc:
+                                        continue
+                                    already = occ_existing_tax.get(occ_assoc.pk, set())
+                                    for tax_id, (role_id, comments) in tax_map.items():
+                                        if tax_id not in already:
+                                            ast_to_create.append(
+                                                (
+                                                    occ_assoc.pk,
+                                                    AssociatedSpeciesTaxonomy(
+                                                        taxonomy_id=tax_id,
+                                                        species_role_id=role_id,
+                                                        comments=comments,
+                                                    ),
+                                                )
+                                            )
+
+                                if ast_to_create:
+                                    ast_instances = [t[1] for t in ast_to_create]
+                                    try:
+                                        AssociatedSpeciesTaxonomy.objects.bulk_create(ast_instances, batch_size=BATCH)
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to bulk_create AST for OCC aggregation; "
+                                            "falling back to individual creates"
+                                        )
+                                        for inst in ast_instances:
+                                            try:
+                                                inst.save()
+                                            except Exception:
+                                                logger.exception(
+                                                    "Failed to create AST for taxonomy %s",
+                                                    inst.taxonomy_id,
+                                                )
+
+                                    # Bulk-create through rows linking OCCAssociatedSpecies → new ASTs
+                                    occ_through_to_create = [
+                                        occ_through_model(
+                                            **{
+                                                f"{_agg_occ_fk}_id": occ_assoc_pk,
+                                                f"{_agg_occ_tax_fk}_id": inst.pk,
+                                            }
+                                        )
+                                        for occ_assoc_pk, inst in ast_to_create
+                                        if inst.pk
+                                    ]
+                                    if occ_through_to_create:
+                                        try:
+                                            for i in range(0, len(occ_through_to_create), BATCH):
+                                                occ_through_model.objects.bulk_create(
+                                                    occ_through_to_create[i : i + BATCH],
+                                                    batch_size=BATCH,
+                                                )
+                                        except Exception:
+                                            logger.exception(
+                                                "Failed to bulk_create OCC aggregated associated-species "
+                                                "through rows; falling back to individual creates"
+                                            )
+                                            for t in occ_through_to_create:
+                                                try:
+                                                    t.save()
+                                                except Exception:
+                                                    logger.exception(
+                                                        "Failed to create through row for OCCAssociatedSpecies %s",
+                                                        getattr(t, f"{_agg_occ_fk}_id", None),
+                                                    )
+
+                                    logger.info(
+                                        "Aggregated %d unique associated species across %d Occurrences from %d OCRs",
+                                        len(ast_to_create),
+                                        len(occ_desired),
+                                        len(ocrs_with_occ),
+                                    )
+                                else:
+                                    logger.info(
+                                        "No new associated species to aggregate for %d "
+                                        "Occurrences (all taxonomy_ids already present)",
+                                        len(occ_desired),
+                                    )
+
         logger.info("OccurrenceReportImporter: persist phase complete (RSS=%.0fMB)", _rss_mb())
         persist_end = timezone.now()
         persist_duration = persist_end - transform_end
