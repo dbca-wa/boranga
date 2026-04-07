@@ -5100,25 +5100,27 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                         if inst.pk
                                     ]
                                     if occ_through_to_create:
-                                        try:
-                                            for i in range(0, len(occ_through_to_create), BATCH):
+                                        for i in range(0, len(occ_through_to_create), BATCH):
+                                            chunk = occ_through_to_create[i : i + BATCH]
+                                            try:
                                                 occ_through_model.objects.bulk_create(
-                                                    occ_through_to_create[i : i + BATCH],
+                                                    chunk,
                                                     batch_size=BATCH,
                                                 )
-                                        except Exception:
-                                            logger.exception(
-                                                "Failed to bulk_create OCC aggregated associated-species "
-                                                "through rows; falling back to individual creates"
-                                            )
-                                            for t in occ_through_to_create:
-                                                try:
-                                                    t.save()
-                                                except Exception:
-                                                    logger.exception(
-                                                        "Failed to create through row for OCCAssociatedSpecies %s",
-                                                        getattr(t, f"{_agg_occ_fk}_id", None),
-                                                    )
+                                            except Exception:
+                                                logger.exception(
+                                                    "Failed to bulk_create OCC aggregated associated-species "
+                                                    "through rows (batch %d); falling back to individual creates",
+                                                    i // BATCH,
+                                                )
+                                                for t in chunk:
+                                                    try:
+                                                        t.save()
+                                                    except Exception:
+                                                        logger.exception(
+                                                            "Failed to create through row for OCCAssociatedSpecies %s",
+                                                            getattr(t, f"{_agg_occ_fk}_id", None),
+                                                        )
 
                                     logger.info(
                                         "Aggregated %d unique associated species across %d Occurrences from %d OCRs",
