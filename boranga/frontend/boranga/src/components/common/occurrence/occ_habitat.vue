@@ -604,6 +604,18 @@
             </div>
             <div class="row mb-3">
                 <div class="col-sm-12">
+                    <span
+                        v-if="occurrence_obj.habitat_condition.copied_ocr"
+                        class="float-end"
+                        ><b
+                            >Sourced from
+                            {{ occurrence_obj.habitat_condition.copied_ocr }}</b
+                        ></span
+                    >
+                </div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-sm-12">
                     <button
                         v-if="!updatingHabitatConditionDetails"
                         class="btn btn-sm float-end"
