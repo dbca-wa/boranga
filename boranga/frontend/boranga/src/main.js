@@ -110,10 +110,21 @@ window.fetch = ((orig) => {
         // Re-check read-only status from the server on every write attempt.
         // DataTables uses POST on _paginated endpoints when the querystring is too
         // long — these are read-only list queries and must not be blocked.
+        // FileField uses POST with action=list to fetch document lists — also read-only.
+        const body =
+            (args.length > 1 && args[1]?.body) ||
+            (args[0] instanceof Request && args[0].body) ||
+            null;
+        const isDocListQuery =
+            method === 'POST' &&
+            body instanceof FormData &&
+            body.get('action') === 'list';
+
         if (
             isApi &&
             WRITE_METHODS.has(method) &&
-            !url.pathname.includes('_paginated')
+            !url.pathname.includes('_paginated') &&
+            !isDocListQuery
         ) {
             const isReadOnly = await refreshReadOnlyStatus();
             if (isReadOnly) {
