@@ -944,6 +944,7 @@
                             v-model="species.department_file_numbers"
                             :disabled="true"
                             class="form-control"
+                            maxlength="512"
                             placeholder=""
                         ></textarea>
                     </div>
@@ -984,6 +985,7 @@
                         ref="combine_department_file_numbers"
                         v-model="species_community.department_file_numbers"
                         class="form-control"
+                        maxlength="512"
                     ></textarea>
                 </div>
             </div>
@@ -1177,6 +1179,7 @@
                             v-model="species.conservation_plan_reference"
                             :disabled="true"
                             class="form-control"
+                            maxlength="500"
                             placeholder=""
                         ></textarea>
                     </div>

@@ -31,6 +31,7 @@
                                                 isAlwaysReadOnly('status')
                                             "
                                             class="form-control"
+                                            maxlength="100"
                                             placeholder="Status"
                                         ></textarea>
                                     </div>
@@ -49,6 +50,7 @@
                                             isAlwaysReadOnly('tenure_area_id')
                                         "
                                         class="form-control"
+                                        maxlength="100"
                                         placeholder="Tenure Area Id"
                                     ></textarea>
                                 </div>
@@ -68,6 +70,7 @@
                                             isAlwaysReadOnly('owner_name')
                                         "
                                         class="form-control"
+                                        maxlength="255"
                                         placeholder="Owner Name"
                                     ></textarea>
                                 </div>

@@ -56,6 +56,7 @@
                                             v-model="comms.fromm"
                                             class="form-control"
                                             name="fromm"
+                                            maxlength="200"
                                             required
                                         ></textarea>
                                         <div class="invalid-feedback">
@@ -107,6 +108,7 @@
                                             v-model="comms.subject"
                                             class="form-control"
                                             name="subject"
+                                            maxlength="200"
                                             style="width: 70%"
                                             required
                                         ></textarea>

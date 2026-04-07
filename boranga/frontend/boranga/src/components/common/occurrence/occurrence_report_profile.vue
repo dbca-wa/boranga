@@ -29,7 +29,6 @@
                                                     assessor_comment_readonly
                                                 "
                                                 class="form-control"
-                                                rows="3"
                                                 placeholder="Assessor Comments"
                                             />
                                             <label
@@ -345,6 +344,7 @@
                             v-model="occurrence_report_obj.ocr_for_occ_name"
                             :disabled="isReadOnly"
                             class="form-control"
+                            maxlength="250"
                             autocomplete="new-password"
                         ></textarea>
                     </div>

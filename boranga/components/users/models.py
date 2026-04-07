@@ -70,6 +70,14 @@ class SubmitterInformation(BaseModel):
 
 class SubmitterInformationModelMixin:
     def save(self, *args, **kwargs):
+        # When update_fields is specified, the caller only intends to write
+        # specific columns.  Skip the auto-creation side-effect unless the
+        # caller explicitly includes submitter_information in update_fields.
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "submitter_information" not in update_fields:
+            super().save(*args, **kwargs)
+            return
+
         if not self.pk or self.submitter_information:
             super().save(*args, **kwargs)
             return

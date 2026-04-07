@@ -42,6 +42,7 @@
                                             ref="observer_name"
                                             v-model="observerObj.observer_name"
                                             class="form-control"
+                                            maxlength="250"
                                             :disabled="isReadOnly"
                                             required
                                             autofocus
@@ -219,6 +220,7 @@
                                         <textarea
                                             v-model="observerObj.organisation"
                                             class="form-control"
+                                            maxlength="250"
                                             :disabled="isReadOnly"
                                         ></textarea>
                                     </div>

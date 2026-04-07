@@ -610,5 +610,17 @@
       "authenticated_users_only": true,
       "internal_users_only": true
     }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 55,
+    "fields": {
+      "archived": false,
+      "section_id": "Identification_certainty",
+      "text": "Help text for identification certainty.",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
   }
 ]

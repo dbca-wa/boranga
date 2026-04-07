@@ -50,6 +50,7 @@
                                     v-model="external_referee_invite.first_name"
                                     class="form-control"
                                     name="first_name"
+                                    maxlength="100"
                                     required
                                 ></textarea>
                                 <div class="invalid-feedback">
@@ -69,6 +70,7 @@
                                     v-model="external_referee_invite.last_name"
                                     class="form-control"
                                     name="last_name"
+                                    maxlength="100"
                                     required
                                 ></textarea>
                                 <div class="invalid-feedback">

@@ -1444,7 +1444,6 @@
                                                     assessor_comment_readonly
                                                 "
                                                 class="form-control"
-                                                rows="3"
                                                 placeholder="Assessor Comments"
                                             />
                                             <label

@@ -730,7 +730,7 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Pollinator Information:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="isReadOnly" type="text" class="form-control" id="pollinator_info"
+                    <textarea :disabled="isReadOnly" class="form-control" id="pollinator_info"
                         placeholder="" v-model="species_community.conservation_attributes.pollinator_information" />
                 </div>
             </div>
@@ -790,7 +790,7 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Response to Fire:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="isReadOnly" type="text" class="form-control" id="response_to_fire"
+                    <textarea :disabled="isReadOnly" class="form-control" id="response_to_fire"
                         placeholder="" v-model="species_community.conservation_attributes.response_to_fire" />
                 </div>
             </div>
@@ -809,7 +809,7 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Hydrology:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="isReadOnly" type="text" class="form-control" id="hydrology" placeholder=""
+                    <textarea :disabled="isReadOnly" class="form-control" id="hydrology" placeholder=""
                         v-model="species_community.conservation_attributes.hydrology" />
                 </div>
             </div>
@@ -817,7 +817,7 @@
                 <label for="" class="col-sm-3 control-label">Ecological Community and Biological Information:
                 </label>
                 <div class="col-sm-9">
-                    <textarea :disabled="isReadOnly" type="text" class="form-control"
+                    <textarea :disabled="isReadOnly" class="form-control"
                         id="ecological_biological_information" placeholder=""
                         v-model="species_community.conservation_attributes.ecological_and_biological_information" />
                 </div>
@@ -825,21 +825,21 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Research Requirements:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="isReadOnly" type="text" class="form-control" id="research_requirements"
+                    <textarea :disabled="isReadOnly" class="form-control" id="research_requirements"
                         placeholder="" v-model="species_community.conservation_attributes.research_requirements" />
                 </div>
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Response to Dieback:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="isReadOnly" type="text" class="form-control" id="response_to_dieback"
+                    <textarea :disabled="isReadOnly" class="form-control" id="response_to_dieback"
                         placeholder="" v-model="species_community.conservation_attributes.response_to_dieback" />
                 </div>
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label">Other relevant diseases:</label>
                 <div class="col-sm-9">
-                    <textarea :disabled="isReadOnly" type="text" class="form-control" id="other_relevant_diseases"
+                    <textarea :disabled="isReadOnly" class="form-control" id="other_relevant_diseases"
                         placeholder="" v-model="species_community.conservation_attributes.other_relevant_diseases" />
                 </div>
             </div>
@@ -860,6 +860,7 @@
                             v-model="species_community.department_file_numbers"
                             :disabled="isReadOnly"
                             class="form-control"
+                            maxlength="512"
                             placeholder=""
                         ></textarea>
                     </div>

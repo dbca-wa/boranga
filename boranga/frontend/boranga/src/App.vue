@@ -19,6 +19,9 @@ textarea {
     field-sizing: content;
     resize: none;
 }
+.form-floating > textarea.form-control {
+    height: auto;
+}
 .select2-container--disabled,
 .select2-container--focus {
     z-index: 1;

@@ -196,6 +196,7 @@
                                                 ref="schema-name"
                                                 v-model="schema.name"
                                                 class="form-control"
+                                                maxlength="255"
                                                 placeholder="Enter Schema Name"
                                                 autofocus
                                             ></textarea>

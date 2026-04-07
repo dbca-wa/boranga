@@ -18,6 +18,7 @@
                         v-model="meeting_obj.title"
                         :disabled="isReadOnly"
                         class="form-control"
+                        maxlength="128"
                         placeholder=""
                         autofocus
                     ></textarea>
@@ -86,6 +87,7 @@
                         v-model="meeting_obj.attendees"
                         :disabled="isReadOnly"
                         class="form-control"
+                        maxlength="1208"
                         placeholder=""
                     ></textarea>
                 </div>

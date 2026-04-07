@@ -306,16 +306,16 @@
                     >ID Confirmed by:</label
                 >
                 <div class="col-sm-9">
-                    <input
+                    <textarea
                         id="id_confirmed_by"
                         v-model="
                             occurrence_report_obj.identification.id_confirmed_by
                         "
                         :disabled="isReadOnly"
-                        type="text"
                         class="form-control"
+                        maxlength="1000"
                         placeholder=""
-                    />
+                    ></textarea>
                 </div>
             </div>
             <div
@@ -341,8 +341,11 @@
                         "
                         class="text-danger ms-1"
                         >*</span
-                    ></label
-                >
+                    >
+                    <HelpText
+                        section_id="Identification_certainty"
+                        class="ms-1"
+                /></label>
                 <div class="col-sm-9">
                     <template v-if="!isReadOnly">
                         <template
@@ -610,6 +613,7 @@
                         v-model="occurrence_report_obj.identification.permit_id"
                         :disabled="isReadOnly"
                         class="form-control"
+                        maxlength="500"
                         placeholder=""
                     ></textarea>
                 </div>
@@ -708,6 +712,7 @@ import { v4 as uuid } from 'uuid';
 import FormSection from '@/components/forms/section_toggle.vue';
 import PlantCount from './plant_count.vue';
 import AnimalObservation from './animal_observation.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { api_endpoints, constants, helpers } from '@/utils/hooks';
 export default {
     name: 'OCRObservation',
@@ -715,6 +720,7 @@ export default {
         FormSection,
         PlantCount,
         AnimalObservation,
+        HelpText,
     },
     props: {
         occurrence_report_obj: {

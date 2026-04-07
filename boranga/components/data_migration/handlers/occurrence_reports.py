@@ -882,7 +882,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         occ_map = {}
         if occ_mig_ids:
-            occ_map = {o.migrated_from_id: o for o in Occurrence.objects.filter(migrated_from_id__in=occ_mig_ids)}
+            occ_map = {
+                o.migrated_from_id: o
+                for o in Occurrence.objects.filter(migrated_from_id__in=occ_mig_ids).select_related("location")
+            }
 
         _tec_sources = {
             Source.TEC.value,
@@ -946,12 +949,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             "row": {"occurrence_link": removed_val},
                         }
                     )
-
-        # Free canonical (OccurrenceReportRow dataclass) from ops — no longer
-        # needed after occurrence linking.  Prevents duplicate retention of
-        # fields already captured in defaults/merged.
-        for op in ops:
-            op.pop("canonical", None)
 
         # Build op_map for O(1) access to per-migrated-id data (avoid O(n) scans)
         op_map = {o["migrated_from_id"]: o for o in ops}
@@ -1025,9 +1022,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
             )
 
-        # Free per-op defaults — now embedded in to_create / to_update instances.
+        # Free per-op defaults and canonical — now embedded in to_create / to_update instances.
         for op in ops:
             op.pop("defaults", None)
+            op.pop("canonical", None)
         del existing_by_migrated
 
         # Bulk create new OccurrenceReports
@@ -1159,10 +1157,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
 
         # Now handle related models in bulk for both created and updated occurrence reports
-        # Prepare target occurrence_report ids
+        # Build target_map from already-fetched created_map + to_update instances
+        # instead of re-querying the DB for the same rows.
         target_mig_ids = [o["migrated_from_id"] for o in ops]
-        target_occs = list(OccurrenceReport.objects.filter(migrated_from_id__in=target_mig_ids))
-        target_map = {o.migrated_from_id: o for o in target_occs}
+        target_map: dict[str, OccurrenceReport] = {}
+        for mig_id, ocr in created_map.items():
+            target_map[mig_id] = ocr
+        for up in to_update:
+            inst = up[0]
+            if inst.migrated_from_id:
+                target_map[inst.migrated_from_id] = inst
+        target_occs = list(target_map.values())
 
         # Load associated-species mapping (SHEETNO -> [species names]) from
         # mappings module. The loader will look for
@@ -2219,6 +2224,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # SubmitterInformation: OneToOne - create or update submitter information
         # Note: OneToOne relationship is defined on OccurrenceReport side (submitter_information field)
+        # Pre-fetch the DBCA SubmitterCategory once to avoid repeated queries in the loops below.
+        from boranga.components.users.models import SubmitterCategory
+
+        _dbca_submitter_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
+
         # Fetch existing submitter information (keyed by occurrence_report.pk)
         existing_submitter_info = {}
         for s in SubmitterInformation.objects.filter(occurrence_report__in=target_occs):
@@ -2264,15 +2274,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # Ensure defaults are set if not already present
                 if not si.organisation:
                     si.organisation = "DBCA"
-                if not si.submitter_category_id:
-                    try:
-                        from boranga.components.users.models import SubmitterCategory
-
-                        dbca_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
-                        if dbca_cat:
-                            si.submitter_category_id = dbca_cat.pk
-                    except Exception:
-                        pass
+                if not si.submitter_category_id and _dbca_submitter_cat:
+                    si.submitter_category_id = _dbca_submitter_cat.pk
 
                 submitter_info_to_update.append(si)
             else:
@@ -2292,14 +2295,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                 # Pipeline stores FK value under "submitter_category" (field name), not "submitter_category_id"
                 if not si_create.get("submitter_category") and not si_create.get("submitter_category_id"):
-                    try:
-                        from boranga.components.users.models import SubmitterCategory
-
-                        dbca_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
-                        if dbca_cat:
-                            si_create["submitter_category_id"] = dbca_cat.pk
-                    except Exception:
-                        pass
+                    if _dbca_submitter_cat:
+                        si_create["submitter_category_id"] = _dbca_submitter_cat.pk
 
                 if si_data:  # only create if we have data
                     si_instance = SubmitterInformation(**normalize_create_kwargs(SubmitterInformation, si_create))
@@ -2337,15 +2334,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # Ensure defaults are set if not already present
                 if not si.organisation:
                     si.organisation = "DBCA"
-                if not si.submitter_category_id:
-                    try:
-                        from boranga.components.users.models import SubmitterCategory
-
-                        dbca_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
-                        if dbca_cat:
-                            si.submitter_category_id = dbca_cat.pk
-                    except Exception:
-                        pass
+                if not si.submitter_category_id and _dbca_submitter_cat:
+                    si.submitter_category_id = _dbca_submitter_cat.pk
 
                 submitter_info_to_update.append(si)
             else:
@@ -2365,14 +2355,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # Ensure submitter_category defaults to DBCA category if not provided.
                 # Pipeline stores FK value under "submitter_category" (field name), not "submitter_category_id".
                 if not si_create.get("submitter_category") and not si_create.get("submitter_category_id"):
-                    try:
-                        from boranga.components.users.models import SubmitterCategory
-
-                        dbca_cat = SubmitterCategory.objects.filter(name__iexact="DBCA").first()
-                        if dbca_cat:
-                            si_create["submitter_category_id"] = dbca_cat.pk
-                    except Exception:
-                        pass
+                    if _dbca_submitter_cat:
+                        si_create["submitter_category_id"] = _dbca_submitter_cat.pk
 
                 if si_data:  # only create if we have data
                     si_instance = SubmitterInformation(**normalize_create_kwargs(SubmitterInformation, si_create))
@@ -2587,11 +2571,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
             )
             try:
                 OccurrenceReportDocument.objects.bulk_create(docs_to_create, batch_size=BATCH)
-                # Fix uploaded_date via UPDATE (auto_now_add prevents direct assignment)
+                # Fix uploaded_date via batched SQL UPDATE (auto_now_add prevents direct assignment).
+                # Group by date to minimise round-trips instead of one query per doc.
                 if docs_need_uploaded_date:
+                    from collections import defaultdict as _defaultdict
+
+                    date_to_pks: dict = _defaultdict(list)
                     for doc, en_date in docs_need_uploaded_date:
                         if doc.pk:
-                            OccurrenceReportDocument.objects.filter(pk=doc.pk).update(uploaded_date=en_date)
+                            date_to_pks[en_date].append(doc.pk)
+                    for _date, _pks in date_to_pks.items():
+                        OccurrenceReportDocument.objects.filter(pk__in=_pks).update(uploaded_date=_date)
             except Exception:
                 logger.exception("Failed to bulk_create OccurrenceReportDocument; falling back to individual saves")
                 for doc in docs_to_create:
@@ -2603,12 +2593,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         )
                 # Retry uploaded_date for fallback-saved docs
                 if docs_need_uploaded_date:
+                    from collections import defaultdict as _defaultdict2
+
+                    date_to_pks2: dict = _defaultdict2(list)
                     for doc, en_date in docs_need_uploaded_date:
                         if doc.pk:
-                            try:
-                                OccurrenceReportDocument.objects.filter(pk=doc.pk).update(uploaded_date=en_date)
-                            except Exception:
-                                pass
+                            date_to_pks2[en_date].append(doc.pk)
+                    for _date, _pks in date_to_pks2.items():
+                        try:
+                            OccurrenceReportDocument.objects.filter(pk__in=_pks).update(uploaded_date=_date)
+                        except Exception:
+                            pass
 
         # Free document temp structures — no longer needed.
         del existing_doc_keys, docs_to_create, docs_need_uploaded_date
@@ -2775,7 +2770,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # simultaneously (OCRLocation, OCRHabitatComposition, …), each with 54 k
         # Django model instances. That can push peak RSS above 5 GB. Flushing
         # every CHILD_FLUSH_EACH items keeps each list bounded in size.
-        CHILD_FLUSH_EACH = 5000
+        CHILD_FLUSH_EACH = 15000
 
         # Fetch ContentType once before processing geometries
         from django.contrib.contenttypes.models import ContentType

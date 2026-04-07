@@ -19,11 +19,19 @@ logger = logging.getLogger(__name__)
 
 class DefaultDataManager:
     def __init__(self):
-        # Make sure all conservation status records have a submitter information
-        for conservation_status in ConservationStatus.objects.filter(submitter_information__isnull=True):
+        # Make sure all conservation status records have a submitter information.
+        # Exclude migrated records — their submitter information is managed by
+        # the data migration handler and must not be overwritten by the mixin's
+        # auto-creation logic (which populates contact_details but omits
+        # organisation and submitter_category).
+        for conservation_status in ConservationStatus.objects.filter(
+            submitter_information__isnull=True, migrated_from_id=""
+        ):
             conservation_status.save(no_revision=True)
         # Make sure all occurrence report records have a submitter information
-        for occurrence_report in OccurrenceReport.objects.filter(submitter_information__isnull=True):
+        for occurrence_report in OccurrenceReport.objects.filter(
+            submitter_information__isnull=True, migrated_from_id__isnull=True
+        ):
             occurrence_report.save(no_revision=True)
 
         for group_name in settings.GROUP_NAME_CHOICES:

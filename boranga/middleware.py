@@ -72,6 +72,8 @@ class ReadOnlyMiddleware:
             and not any(request.path.startswith(p) for p in self.EXEMPT_PATH_PREFIXES)
             # Allow DataTables POST queries on paginated endpoints (read-only list queries)
             and "_paginated" not in request.path
+            # Allow document list POST requests (filefield_immediate uses POST with action=list)
+            and not (request.method == "POST" and request.POST.get("action") == "list")
         ):
             from django.http import JsonResponse
 

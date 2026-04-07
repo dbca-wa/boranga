@@ -343,6 +343,7 @@
                         v-model="occurrence_obj.identification.id_confirmed_by"
                         :disabled="isReadOnly"
                         class="form-control"
+                        maxlength="1000"
                         placeholder=""
                     ></textarea>
                 </div>
@@ -350,8 +351,9 @@
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label fw-bold"
                     >Identification Certainty:
-                    <span class="text-danger">*</span></label
-                >
+                    <span class="text-danger">*</span>
+                    <HelpText section_id="Identification_certainty"
+                /></label>
                 <div class="col-sm-9">
                     <template v-if="!isReadOnly">
                         <template
@@ -604,6 +606,7 @@
                         v-model="occurrence_obj.identification.permit_id"
                         :disabled="isReadOnly"
                         class="form-control"
+                        maxlength="500"
                         placeholder=""
                     ></textarea>
                 </div>
@@ -721,6 +724,7 @@ import FormSection from '@/components/forms/section_toggle.vue';
 import PlantCount from './plant_count.vue';
 import AnimalObservation from './animal_observation.vue';
 import RelatedReports from '@/components/common/occurrence/occ_related_ocr_table.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { api_endpoints, helpers } from '@/utils/hooks';
 export default {
     name: 'OCCObservation',
@@ -729,6 +733,7 @@ export default {
         PlantCount,
         AnimalObservation,
         RelatedReports,
+        HelpText,
     },
     props: {
         occurrence_obj: {
