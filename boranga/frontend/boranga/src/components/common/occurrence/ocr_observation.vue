@@ -342,7 +342,9 @@
                         class="text-danger ms-1"
                         >*</span
                     >
-                    <HelpText section_id="Identification_certainty"
+                    <HelpText
+                        section_id="Identification_certainty"
+                        class="ms-1"
                 /></label>
                 <div class="col-sm-9">
                     <template v-if="!isReadOnly">
