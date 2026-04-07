@@ -33,6 +33,10 @@ SOURCE_ADAPTERS = {
 class OccurrenceReportDocumentImporter(BaseSheetImporter):
     slug = "occurrence_report_documents_legacy"
     description = "Import occurrence report documents from DRF_RFR_FORMS (TPFL) and SITE_VISITS (TEC)"
+    integrity_tables = [
+        "boranga_occurrencereport",
+        ("boranga_occurrencereportdocument", "boranga_occurrencereport", "occurrence_report_id"),
+    ]
 
     def add_arguments(self, parser):
         parser.add_argument(

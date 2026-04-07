@@ -829,3 +829,41 @@ class JobQueue(BaseModel):
 
     def __str__(self):
         return f"{self.job_cmd} (status={self.get_status_display()}, user={self.user})"
+
+
+class MigrationSourceChecksum(models.Model):
+    """Snapshot of a per-source, per-table hash taken before and after a migration run.
+
+    Used to detect cross-contamination: if a run for source A modifies data
+    belonging to source B, the pre/post checksums for source B will differ.
+    """
+
+    PHASE_PRE = "pre"
+    PHASE_POST = "post"
+    PHASE_CHOICES = (
+        (PHASE_PRE, "Pre-run"),
+        (PHASE_POST, "Post-run"),
+    )
+
+    migration_run = models.ForeignKey(
+        MigrationRun,
+        on_delete=models.CASCADE,
+        related_name="source_checksums",
+    )
+    handler_slug = models.CharField(max_length=100)
+    source = models.CharField(max_length=50)
+    target_table = models.CharField(max_length=150)
+    checksum = models.CharField(max_length=32)
+    row_count = models.PositiveIntegerField()
+    phase = models.CharField(max_length=4, choices=PHASE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "boranga"
+        unique_together = (
+            "migration_run",
+            "handler_slug",
+            "source",
+            "target_table",
+            "phase",
+        )

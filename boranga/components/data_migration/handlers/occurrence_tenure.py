@@ -86,6 +86,7 @@ class DummyRequest:
 class OccurrenceTenureImporter(BaseSheetImporter):
     slug = "occurrence_tenure"
     description = "Create OccurrenceTenure from spatial intersection and legacy CSV"
+    integrity_tables = ["boranga_occurrence"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OccurrenceTenure target data. Respect `ctx.dry_run`."""

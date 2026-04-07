@@ -115,6 +115,7 @@ SOURCE_ADAPTERS = {
 class OccurrenceReportImporter(BaseSheetImporter):
     slug = "occurrence_report_legacy"
     description = "Import occurrence reports from legacy sources (TPFL etc)"
+    integrity_tables = ["boranga_occurrencereport"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OccurrenceReport target data and its child tables. Respect `ctx.dry_run`."""

@@ -28,6 +28,10 @@ SOURCE_ADAPTERS = {
 class OccurrenceDocumentImporter(BaseSheetImporter):
     slug = "occurrence_documents_legacy"
     description = "Import occurrence child documents from legacy TPFL/TEC/TFAUNA sources"
+    integrity_tables = [
+        "boranga_occurrence",
+        ("boranga_occurrencedocument", "boranga_occurrence", "occurrence_id"),
+    ]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OccurrenceDocument target data. Respect `ctx.dry_run`."""

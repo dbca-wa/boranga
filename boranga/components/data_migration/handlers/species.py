@@ -121,6 +121,7 @@ def _apply_tfauna_region_district(
 class SpeciesImporter(BaseSheetImporter):
     slug = "species_legacy"
     description = "Import species data from legacy TEC / TFAUNA / TPFL sources"
+    integrity_tables = ["boranga_species"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete species target data. Respects `ctx.dry_run` (no-op when True)."""
