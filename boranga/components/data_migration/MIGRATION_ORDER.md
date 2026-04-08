@@ -11,7 +11,7 @@
 7. Copy only the .csv files from the Flora folder (the files may be in a subfolder that is also called Flora)
 8. Paste them into the folder within DRF-2025-11-04 (in this case it's called 'DRF-2025-11-04T09_10_43_3'), Select overwrite when prompted
 9. Open 'Microsoft Azure Storage Explorer' and navigate to dbcaoimdevtransfer > Blob Containers > transfer > <YourNAME>
-10. Create a new folder named after the group type and today's date e.g. tpfl-20260130
+10. Create a new folder named after the legacy system name and today's date e.g. tpfl-20260130
 11. Select all the CSV files from the 'DRF-2025-11-04T09_10_43_3' folder and drag them into the new Azure folder
 12. Open the rancher environment being used for data verification (in this case UAT)
 13. Navigate to the Deployment being used (in this case 'boranga-dev')
