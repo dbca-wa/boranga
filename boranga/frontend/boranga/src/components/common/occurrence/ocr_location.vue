@@ -536,7 +536,7 @@ export default {
     },
     computed: {
         componentMapKey: function () {
-            return `component-map-${this.uuid_component_map}`;
+            return `component-map-${this.uuid_component_map}-${this.occurrence_report_obj.can_user_edit}`;
         },
         assessorCommentVisibility: function () {
             return this.occurrence_report_obj.assessor_mode.assessor_box_view;
