@@ -442,6 +442,9 @@ class OccurrenceTpflAdapter(SourceAdapter):
             canonical_row["OCCLocation__boundary_description"] = (
                 "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
             )
+            # Task 14938: DRF_POPULATION has no REGION column; region is derived from the DISTRICT
+            # code via REGION_TRANSFORM (same lookup table, different return_type → region FK).
+            canonical_row["OCCLocation__region_id"] = raw.get("DISTRICT")
 
             # Compute occurrence_name from raw row (raw column names)
             pop = str(raw.get("POP_NUMBER", "") or "").strip()

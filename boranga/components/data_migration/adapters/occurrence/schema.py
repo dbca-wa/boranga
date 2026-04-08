@@ -89,7 +89,7 @@ COLUMN_MAP = {
     "CO_ORD_SOURCE_CODE": "OCCLocation__coordinate_source_id",
     "LANDDISTRICT": "OCCLocation__locality",  # Task 14935: DRF_POPULATION column is LANDDISTRICT
     "DISTRICT": "OCCLocation__district_id",
-    "REGION": "OCCLocation__region_id",
+    # Note: no REGION column in DRF_POPULATION — region_id is derived from DISTRICT in the adapter (task 14938)
     "RESOLUTION": "OCCLocation__location_accuracy_id",
     "LGA_CODE": "OCCLocation__lga_code",
     # Comment composition parts (adapter composes these)
