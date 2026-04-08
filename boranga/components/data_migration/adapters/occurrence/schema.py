@@ -87,7 +87,7 @@ COLUMN_MAP = {
     # OCCLocation
     "LOCATION": "OCCLocation__location_description",
     "CO_ORD_SOURCE_CODE": "OCCLocation__coordinate_source_id",
-    "LOCALITY": "OCCLocation__locality",
+    "LANDDISTRICT": "OCCLocation__locality",  # Task 14935: DRF_POPULATION column is LANDDISTRICT
     "DISTRICT": "OCCLocation__district_id",
     "REGION": "OCCLocation__region_id",
     "RESOLUTION": "OCCLocation__location_accuracy_id",
