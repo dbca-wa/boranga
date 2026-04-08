@@ -833,26 +833,24 @@ export default {
             return data ? moment(data).format('DD/MM/YYYY HH:mm:ss') : '';
         },
     },
-    beforeRouteEnter: function (to, from, next) {
-        fetch(`/api/occurrence_report/${to.params.occurrence_report_id}/`).then(
-            async (response) => {
-                if (!response.ok) {
-                    console.error(
-                        `Occurrence report ${to.params.occurrence_report_id} not found (HTTP ${response.status})`
-                    );
-                    next((vm) => {
-                        vm.$router.push({ name: 'internal-occurrence-dash' });
-                    });
-                    return;
-                }
-                next(async (vm) => {
-                    vm.occurrence_report = await response.json();
-                });
-            },
-            (err) => {
-                console.log(err);
+    beforeRouteEnter: async function (to, from) {
+        try {
+            const response = await fetch(
+                `/api/occurrence_report/${to.params.occurrence_report_id}/`
+            );
+            if (!response.ok) {
+                console.error(
+                    `Occurrence report ${to.params.occurrence_report_id} not found (HTTP ${response.status})`
+                );
+                return { name: 'internal-occurrence-dash' };
             }
-        );
+            const data = await response.json();
+            return (vm) => {
+                vm.occurrence_report = data;
+            };
+        } catch (err) {
+            console.log(err);
+        }
     },
     data: function () {
         return {
