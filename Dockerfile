@@ -99,6 +99,7 @@ COPY --chown=oim:oim scripts/combine_csvs.py \
                       scripts/dedupe_errors.py \
                       scripts/generate_uat_fixtures.sh \
                       scripts/partition_migration_data.py \
+                      scripts/split_csv.py \
                       ./scripts/
 
 FROM python_dependencies_boranga AS build_vue_boranga
