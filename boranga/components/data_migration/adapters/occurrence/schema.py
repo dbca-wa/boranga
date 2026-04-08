@@ -90,7 +90,7 @@ COLUMN_MAP = {
     "LOCALITY": "OCCLocation__locality",
     "DISTRICT": "OCCLocation__district_id",
     "REGION": "OCCLocation__region_id",
-    "LOCATION_ACCURACY": "OCCLocation__location_accuracy_id",
+    "RESOLUTION": "OCCLocation__location_accuracy_id",
     "LGA_CODE": "OCCLocation__lga_code",
     # Comment composition parts (adapter composes these)
     "REASON_DEACTIVATED": "REASON_DEACTIVATED",
@@ -100,10 +100,10 @@ COLUMN_MAP = {
     "LAND_MGR_PHONE": "LAND_MGR_PHONE",
     # OCCHabitatComposition
     "DRAINAGE": "OCCHabitatComposition__drainage_id",
-    "LAND_FORM": "OCCHabitatComposition__land_form",
+    "LANDFORM": "OCCHabitatComposition__land_form",
     "GRAVEL": "OCCHabitatComposition__loose_rock_percent",
     "ROCK_TYPE": "OCCHabitatComposition__rock_type_id",
-    "SOIL_COLOUR": "OCCHabitatComposition__soil_colour_id",
+    "SOIL_COLOR": "OCCHabitatComposition__soil_colour_id",
     "SOIL_CONDITION": "OCCHabitatComposition__soil_condition_id",
     "SOIL_TYPE": "OCCHabitatComposition__soil_type",
     # Habitat notes composition parts (HABITAT_NOTES + "ASPECT: " + ASPECT)
@@ -121,9 +121,9 @@ COLUMN_MAP = {
     "VCHR_STATUS_CODE": "OCCIdentification__vchr_status_code",
     "DUPVOUCH_LOCATION": "OCCIdentification__dupvouch_location",
     # OCCObservationDetail
-    "AREA_ASSESSMENT": "OCCObservationDetail__area_assessment_id",
-    "AREA_SURVEYED": "OCCObservationDetail__area_surveyed",
-    "SURVEY_DURATION": "OCCObservationDetail__survey_duration",
+    "SVY_EXTENT": "OCCObservationDetail__area_assessment_id",
+    "SVY_EFFORT_AREA": "OCCObservationDetail__area_surveyed",
+    "SVY_EFFORT_TIME": "OCCObservationDetail__survey_duration",
     # OCCAssociatedSpecies
     "ASSOCIATED_SPECIES": "OCCAssociatedSpecies__comment",
     # OCCPlantCount
