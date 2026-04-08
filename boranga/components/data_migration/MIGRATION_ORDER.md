@@ -10,9 +10,9 @@
 6. Extract to a folder of the same name i.e. Flora
 7. Copy only the .csv files from the Flora folder (the files may be in a subfolder that is also called Flora)
 8. Paste them into the folder within DRF-2025-11-04 (in this case it's called 'DRF-2025-11-04T09_10_43_3'), Select overwrite when prompted
-9. compress that folder 'DRF-2025-11-04T09_10_43_3' into a .tar.gz file rename the file to include the group type and today's date e.g. tpfl-20260130.tar.gz
-10. Open 'Microsoft Azure Storage Explorer' and navigate to dbcaoimdevtransfer > Blob Containers > transfer > <YourNAME>
-11. Copy the .tar.gz file into the folder
+9. Open 'Microsoft Azure Storage Explorer' and navigate to dbcaoimdevtransfer > Blob Containers > transfer > <YourNAME>
+10. Create a new folder named after the group type and today's date e.g. tpfl-20260130
+11. Select all the CSV files from the 'DRF-2025-11-04T09_10_43_3' folder and drag them into the new Azure folder
 12. Open the rancher environment being used for data verification (in this case UAT)
 13. Navigate to the Deployment being used (in this case 'boranga-dev')
 14. Open a shell and navigate to the folder that will be housing the files (e.g. private-media/legacy_data/TPFL)
@@ -30,17 +30,11 @@ It will tell you: cannot move '<timestamp_archived>' to a subdirectory of itself
 
 mv TPFL_20260130_113630_archived ..
 
-16. run 'azcopy login', copy the code and visit the link to authenticate.
-17. run 'azcopy list https://dbcaoimdevtransfer.blob.core.windows.net/transfer/<YouName>' to confirm the file is present
-18. run 'azcopy copy https://dbcaoimdevtransfer.blob.core.windows.net/transfer/<YourName>/tpfl-20260130.tar.gz .'
-19. run 'tar -xzvf tpfl-20260130.tar.gz', it will give warnings 'Cannot utime: Operation not permitted'
-20. It's likely the files will be in a sub folder so move all the files up one folder and remove the sub folder:
-
-mv DRF-2025-11-04T09_10_43_3/\* . && rmdir DRF-2025-11-04T09_10_43_3
-
-21. Remove the .tar.gz file, run 'rm tpfl-20260130.tar.gz'
-22. Now the folder private-media/legacy_data/TPFL (for example) should have all the files needed for the following migration steps.
-23. Return home: cd ~
+17. run 'azcopy login', copy the code and visit the link to authenticate.
+18. run 'azcopy list https://dbcaoimdevtransfer.blob.core.windows.net/transfer/<YourName>/tpfl-20260130' to confirm the files are present
+19. run 'azcopy copy "https://dbcaoimdevtransfer.blob.core.windows.net/transfer/<YourName>/tpfl-20260130/*" .'
+20. Now the folder private-media/legacy_data/TPFL (for example) should have all the files needed for the following migration steps.
+21. Return home: cd ~
 
 # --- Performance Optimization
 
