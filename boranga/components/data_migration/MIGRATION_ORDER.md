@@ -81,7 +81,26 @@ or, if combined into one file:
 
 ## Occurrence Reports
 
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets --seed-history
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets --seed-history (full run can be done locally but recommend splitting the .csv as below in AKS environments)
+
+The occurrence reports run is quite time intenstive (~2.5 hrs in AKS when run on the full .csv file). As such, we can split up the .csv file like so:
+
+Before running in AKS, raise the CPU request on the deployment to 2000m (matching the limit) via the Rancher UI > Resources section. This gives the pod guaranteed CPU for the duration and helps avoid throttling from other pods on the same node. Remember to drop it back to 10m after the migration is complete.
+
+python scripts/split_csv.py private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv \
+    --chunk-size 13573 \
+    --output-dir private-media/legacy_data/TPFL/chunks \
+    --handler occurrence_report_legacy \
+    --handler-args "--sources TPFL --seed-history"
+
+The command will output a list of migration runs to process each of the chunks. E.g.:
+
+--- Commands to run ---
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0001.csv --wipe-targets --sources TPFL --seed-history
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0002.csv --sources TPFL --seed-history
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0003.csv --sources TPFL --seed-history
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0004.csv --sources TPFL --seed-history
+
 ./manage.py migrate_data run occurrence_report_documents_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets --seed-history
 ./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TPFL/DRF_SHEET_THREATS.csv --sources TPFL --wipe-targets --seed-history
 
