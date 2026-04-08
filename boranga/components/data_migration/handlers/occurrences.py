@@ -1046,7 +1046,6 @@ class OccurrenceImporter(BaseSheetImporter):
                                 "geometry": circle,
                                 "original_geometry_ewkb": circle.ewkb,
                                 "locked": True,
-                                "buffer_radius": 1,
                             }
                             if occ_content_type:
                                 defaults["content_type"] = occ_content_type
