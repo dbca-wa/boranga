@@ -165,8 +165,9 @@ class MigratedHistorySeeder:
         seeder.seed_occurrence_reports()
     """
 
-    def __init__(self, batch_size: int = 500):
+    def __init__(self, batch_size: int = 500, migration_run_id: int | None = None):
         self.batch_size = batch_size
+        self.migration_run_id = migration_run_id
         self._stats: dict[str, int] = {}
 
     # ------------------------------------------------------------------
@@ -542,6 +543,30 @@ class MigratedHistorySeeder:
             len(all_ids) - len(already),
         )
 
+        # Warn if any already-versioned objects belong to the current migration run —
+        # this indicates stale reversion history from PK reuse after a wipe.
+        if self.migration_run_id is not None and already:
+            try:
+                model_class._meta.get_field("migration_run_id")
+                suspicious_pks = list(
+                    queryset.filter(
+                        pk__in=[int(s) for s in already],
+                        migration_run_id=self.migration_run_id,
+                    ).values_list("pk", flat=True)
+                )
+                if suspicious_pks:
+                    logger.warning(
+                        "seed_simple(%s): %d object(s) from the current migration run (id=%s) already "
+                        "have reversion history — possible stale history from PK reuse after a wipe. "
+                        "Inspect these PKs: %s",
+                        label,
+                        len(suspicious_pks),
+                        self.migration_run_id,
+                        suspicious_pks,
+                    )
+            except Exception:
+                pass
+
         total_created = 0
 
         for i in range(0, len(all_ids), self.batch_size):
@@ -619,6 +644,30 @@ class MigratedHistorySeeder:
             len(already),
             len(to_seed_pks),
         )
+
+        # Warn if any already-versioned objects belong to the current migration run —
+        # this indicates stale reversion history from PK reuse after a wipe.
+        if self.migration_run_id is not None and already:
+            try:
+                model_class._meta.get_field("migration_run_id")
+                suspicious_pks = list(
+                    queryset.filter(
+                        pk__in=[int(s) for s in already],
+                        migration_run_id=self.migration_run_id,
+                    ).values_list("pk", flat=True)
+                )
+                if suspicious_pks:
+                    logger.warning(
+                        "seed_parent(%s): %d object(s) from the current migration run (id=%s) already "
+                        "have reversion history — possible stale history from PK reuse after a wipe. "
+                        "Inspect these PKs: %s",
+                        label,
+                        len(suspicious_pks),
+                        self.migration_run_id,
+                        suspicious_pks,
+                    )
+            except Exception:
+                pass
 
         total_versions = 0
 

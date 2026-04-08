@@ -240,7 +240,10 @@ class Command(BaseCommand):
                 if ctx.dry_run:
                     self.stdout.write(self.style.WARNING("dry-run: would seed migrated history (skipped)."))
                 else:
-                    self._run_history_seeder(batch_size=opts.get("seed_history_batch_size", 500))
+                    self._run_history_seeder(
+                        batch_size=opts.get("seed_history_batch_size", 500),
+                        migration_run=getattr(ctx, "migration_run", None),
+                    )
             self.stdout.write(self.style.SUCCESS("Done."))
             return
 
@@ -327,20 +330,24 @@ class Command(BaseCommand):
                 if ctx.dry_run:
                     self.stdout.write(self.style.WARNING("dry-run: would seed migrated history (skipped)."))
                 else:
-                    self._run_history_seeder(batch_size=opts.get("seed_history_batch_size", 500))
+                    self._run_history_seeder(
+                        batch_size=opts.get("seed_history_batch_size", 500),
+                        migration_run=getattr(ctx, "migration_run", None),
+                    )
             self.stdout.write(self.style.SUCCESS(f"All done: {ctx.stats}"))
             return
 
         raise CommandError("Unknown action")
 
-    def _run_history_seeder(self, batch_size: int = 500) -> None:
+    def _run_history_seeder(self, batch_size: int = 500, migration_run=None) -> None:
         """Invoke the MigratedHistorySeeder and report results to stdout."""
         from boranga.components.data_migration.history_seeding.reversion_seeder import (
             MigratedHistorySeeder,
         )
 
         self.stdout.write("Seeding initial reversion history for all migrated records…")
-        seeder = MigratedHistorySeeder(batch_size=batch_size)
+        migration_run_id = migration_run.pk if migration_run else None
+        seeder = MigratedHistorySeeder(batch_size=batch_size, migration_run_id=migration_run_id)
         stats = seeder.seed_all()
         total = sum(stats.values())
         self.stdout.write(
