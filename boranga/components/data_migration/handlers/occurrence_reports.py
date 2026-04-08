@@ -449,6 +449,33 @@ class OccurrenceReportImporter(BaseSheetImporter):
             except Exception:
                 pass
 
+        # Filter to specific IDs when --filter-ids is supplied.
+        # Accepts both full migrated_from_id (e.g. "tpfl-76254") and raw source
+        # IDs (e.g. "76254"). The match is performed against the raw
+        # migrated_from_id column value in the extracted row.
+        filter_ids = options.get("filter_ids") or []
+        if filter_ids:
+            filter_set = set()
+            for fid in filter_ids:
+                fid = str(fid).strip()
+                filter_set.add(fid.casefold())
+                # Also accept the suffix after the first "-" so users can pass
+                # either "tpfl-76254" or "76254" interchangeably.
+                if "-" in fid:
+                    filter_set.add(fid.split("-", 1)[1].casefold())
+            original_count = len(all_rows)
+            all_rows = [
+                r
+                for r in all_rows
+                if str(r.get("migrated_from_id", "")).strip().casefold() in filter_set
+                or str(r.get("migrated_from_id", "")).strip().split("-", 1)[-1].casefold() in filter_set
+            ]
+            logger.info(
+                "OccurrenceReportImporter: --filter-ids applied; kept %d of %d rows",
+                len(all_rows),
+                original_count,
+            )
+
         # 2. Build pipelines per-source by merging base schema pipelines with
         # adapter-provided `PIPELINES`. This keeps adapter-specific transforms
         # next to the adapter implementation while the importer runs them.

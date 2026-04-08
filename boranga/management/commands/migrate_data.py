@@ -44,6 +44,12 @@ class Command(BaseCommand):
             default=None,
             help="Optional limit of rows to process (for testing)",
         )
+        p_run.add_argument(
+            "--filter-ids",
+            nargs="+",
+            metavar="ID",
+            help="Only process rows whose migrated_from_id or raw source ID matches any of these values (e.g. tpfl-76254 or 76254)",
+        )
 
         p_multi = sub.add_parser("runmany", help="Run multiple importers sequentially")
         p_multi.add_argument("path", help="Spreadsheet path (shared)")
@@ -64,6 +70,12 @@ class Command(BaseCommand):
             type=int,
             default=None,
             help="Optional limit of rows to process (for testing)",
+        )
+        p_multi.add_argument(
+            "--filter-ids",
+            nargs="+",
+            metavar="ID",
+            help="Only process rows whose migrated_from_id or raw source ID matches any of these values (e.g. tpfl-76254 or 76254)",
         )
 
         # Seed initial reversion history for migrated records after the import
