@@ -178,7 +178,7 @@ LGA_CODE_TRANSFORM = build_legacy_map_transform(
 # --- OCCObservationDetail transforms ---
 AREA_ASSESSMENT_TRANSFORM = build_legacy_map_transform(
     "TPFL",
-    "SVY_EXTENT (DRF_LOV_SVY_EXTENT_VWS)",
+    "SVY_EXTENT (DRF_LOV_SRV_EXT_VWS)",
     required=False,
     return_type="id",
 )
