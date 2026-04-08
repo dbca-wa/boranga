@@ -90,9 +90,9 @@ python scripts/split_csv.py private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv \
 The command will output a list of migration runs to process each of the chunks. E.g.:
 
 --- Commands to run ---
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0001.csv --wipe-targets --sources TPFL --seed-history
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0002.csv --sources TPFL --seed-history
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0003.csv --sources TPFL --seed-history
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0001.csv --wipe-targets --sources TPFL --seed-history && \
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0002.csv --sources TPFL --seed-history && \
+./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0003.csv --sources TPFL --seed-history && \
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0004.csv --sources TPFL --seed-history
 
 ./manage.py migrate_data run occurrence_report_documents_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets --seed-history
