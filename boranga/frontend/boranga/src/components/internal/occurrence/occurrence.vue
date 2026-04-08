@@ -285,7 +285,7 @@ export default {
             return data ? moment(data).format('DD/MM/YYYY HH:mm:ss') : '';
         },
     },
-    beforeRouteEnter: async function (to, from) {
+    beforeRouteEnter: async function (to) {
         try {
             const response = await fetch(
                 `/api/occurrence/${to.params.occurrence_id}/`
@@ -298,7 +298,7 @@ export default {
             console.log(err);
         }
     },
-    beforeRouteLeave(to, from) {
+    beforeRouteLeave() {
         if (
             this.occurrence &&
             !this.occurrence.locked &&

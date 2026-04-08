@@ -833,7 +833,7 @@ export default {
             return data ? moment(data).format('DD/MM/YYYY HH:mm:ss') : '';
         },
     },
-    beforeRouteEnter: async function (to, from) {
+    beforeRouteEnter: async function (to) {
         try {
             const response = await fetch(
                 `/api/occurrence_report/${to.params.occurrence_report_id}/`
