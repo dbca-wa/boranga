@@ -285,38 +285,38 @@ export default {
             return data ? moment(data).format('DD/MM/YYYY HH:mm:ss') : '';
         },
     },
-    beforeRouteEnter: function (to, from, next) {
-        fetch(`/api/occurrence/${to.params.occurrence_id}/`).then(
-            async (response) => {
-                next(async (vm) => {
-                    vm.occurrence = await response.json();
-                });
-            },
-            (err) => {
-                console.log(err);
-            }
-        );
+    beforeRouteEnter: async function (to) {
+        try {
+            const response = await fetch(
+                `/api/occurrence/${to.params.occurrence_id}/`
+            );
+            const data = await response.json();
+            return (vm) => {
+                vm.occurrence = data;
+            };
+        } catch (err) {
+            console.log(err);
+        }
     },
-    beforeRouteLeave(to, from, next) {
+    beforeRouteLeave() {
         if (
             this.occurrence &&
             !this.occurrence.locked &&
             this.shouldShowTimerAndPoll
         ) {
-            swal.fire({
-                title: 'Occurrence Unlocked',
-                text: 'Please lock the occurrence before leaving.',
-                icon: 'warning',
-                confirmButtonText: 'Ok',
-                customClass: {
-                    confirmButton: 'btn btn-primary',
-                },
-            }).then(() => {
-                next(false);
-            });
-        } else {
-            next();
+            return swal
+                .fire({
+                    title: 'Occurrence Unlocked',
+                    text: 'Please lock the occurrence before leaving.',
+                    icon: 'warning',
+                    confirmButtonText: 'Ok',
+                    customClass: {
+                        confirmButton: 'btn btn-primary',
+                    },
+                })
+                .then(() => false);
         }
+        return true;
     },
     data: function () {
         return {

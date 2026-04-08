@@ -449,6 +449,33 @@ class OccurrenceReportImporter(BaseSheetImporter):
             except Exception:
                 pass
 
+        # Filter to specific IDs when --filter-ids is supplied.
+        # Accepts both full migrated_from_id (e.g. "tpfl-76254") and raw source
+        # IDs (e.g. "76254"). The match is performed against the raw
+        # migrated_from_id column value in the extracted row.
+        filter_ids = options.get("filter_ids") or []
+        if filter_ids:
+            filter_set = set()
+            for fid in filter_ids:
+                fid = str(fid).strip()
+                filter_set.add(fid.casefold())
+                # Also accept the suffix after the first "-" so users can pass
+                # either "tpfl-76254" or "76254" interchangeably.
+                if "-" in fid:
+                    filter_set.add(fid.split("-", 1)[1].casefold())
+            original_count = len(all_rows)
+            all_rows = [
+                r
+                for r in all_rows
+                if str(r.get("migrated_from_id", "")).strip().casefold() in filter_set
+                or str(r.get("migrated_from_id", "")).strip().split("-", 1)[-1].casefold() in filter_set
+            ]
+            logger.info(
+                "OccurrenceReportImporter: --filter-ids applied; kept %d of %d rows",
+                len(all_rows),
+                original_count,
+            )
+
         # 2. Build pipelines per-source by merging base schema pipelines with
         # adapter-provided `PIPELINES`. This keeps adapter-specific transforms
         # next to the adapter implementation while the importer runs them.
@@ -1219,14 +1246,18 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 extracted = [n.strip() for n in raw_names if n.strip()]
 
                 if extracted:
-                    if mig not in sheet_to_species:
-                        sheet_to_species[mig] = []
+                    # Use the raw SHEETNO (strip source prefix like "tpfl-") so
+                    # comment-extracted names are merged into the same bucket as
+                    # the CSV-loaded species (keyed by raw SHEETNO).
+                    raw_mig_key = mig.split("-", 1)[1] if "-" in mig else mig
+                    if raw_mig_key not in sheet_to_species:
+                        sheet_to_species[raw_mig_key] = []
 
                     # Add newly found names if not already present
-                    current_set = {n.casefold() for n in sheet_to_species[mig]}
+                    current_set = {n.casefold() for n in sheet_to_species[raw_mig_key]}
                     for name in extracted:
                         if name.casefold() not in current_set:
-                            sheet_to_species[mig].append(name)
+                            sheet_to_species[raw_mig_key].append(name)
                             current_set.add(name.casefold())
                             extra_species_count += 1
 
@@ -1587,7 +1618,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     continue
 
                 # Check if we have species
-                names = sheet_to_species.get(sheetno, [])
+                # sheet_to_species is keyed by raw SHEETNO (e.g. "76254") but
+                # sheetno here is the full migrated_from_id (e.g. "tpfl-76254").
+                # Strip the source prefix to get the raw key for the lookup.
+                raw_sheetno = sheetno.split("-", 1)[1] if "-" in sheetno else sheetno
+                names = sheet_to_species.get(raw_sheetno, [])
                 resolved = [name_to_assoc[n] for n in names if n in name_to_assoc]
 
                 # Check if we have comment or species_list_relates_to
@@ -1775,8 +1810,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                 to_create_through = []
                 to_delete_filters = []
+                # Build a reverse map: raw_sheetno -> migrated_from_id so we can look
+                # up target_map entries (keyed by full migrated_from_id like "tpfl-76254")
+                # from sheet_to_species keys (raw SHEETNO like "76254").
+                raw_to_mig_id = {}
+                for mig_id in target_map:
+                    raw = mig_id.split("-", 1)[1] if "-" in mig_id else mig_id
+                    raw_to_mig_id[raw] = mig_id
                 for sheetno, names in sheet_to_species.items():
-                    ocr = target_map.get(sheetno)
+                    mig_id = raw_to_mig_id.get(sheetno, sheetno)
+                    ocr = target_map.get(mig_id)
                     if not ocr:
                         continue
                     assoc_obj = existing_assoc.get(ocr.pk)

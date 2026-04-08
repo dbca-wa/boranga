@@ -574,7 +574,7 @@ export default {
     },
     computed: {
         componentMapKey: function () {
-            return `component-map-${this.uuid_component_map}`;
+            return `component-map-${this.uuid_component_map}-${this.occurrence_obj.can_user_edit}`;
         },
         datatableRelatedOCRKey: function () {
             return `datatable-ocr-${this.uuid_datatable_ocr}`;
