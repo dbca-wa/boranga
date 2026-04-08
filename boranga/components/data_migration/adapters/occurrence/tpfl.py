@@ -150,12 +150,8 @@ DISTRICT_TRANSFORM = build_legacy_map_transform(
     required=False,
     return_type="id",
 )
-REGION_TRANSFORM = build_legacy_map_transform(
-    "TPFL",
-    "DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
-    required=False,
-    return_type="id",
-)
+# Task 14938: Region is derived from district_id via the District.region FK in the handler;
+# there is no separate REGION lookup in DRF_LOV_DEC_DISTRICT_VWS.
 LOCATION_ACCURACY_TRANSFORM = build_legacy_map_transform(
     "TPFL",
     "RESOLUTION (DRF_LOV_RESOLUTION_VWS)",
@@ -314,7 +310,7 @@ PIPELINES = {
     ],
     "OCCLocation__locality": ["strip", "blank_to_none", LOCALITY_TRANSFORM],
     "OCCLocation__district_id": ["strip", "blank_to_none", DISTRICT_TRANSFORM, "to_int"],
-    "OCCLocation__region_id": ["strip", "blank_to_none", REGION_TRANSFORM, "to_int"],
+    # region_id is derived from district_id in the handler (task 14938)
     "OCCLocation__location_accuracy_id": ["strip", "blank_to_none", LOCATION_ACCURACY_TRANSFORM, "to_int"],
     "OCCLocation__lga_code": ["strip", "blank_to_none", LGA_CODE_TRANSFORM],
     # --- OCCObservationDetail ---
@@ -442,9 +438,6 @@ class OccurrenceTpflAdapter(SourceAdapter):
             canonical_row["OCCLocation__boundary_description"] = (
                 "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
             )
-            # Task 14938: DRF_POPULATION has no REGION column; region is derived from the DISTRICT
-            # code via REGION_TRANSFORM (same lookup table, different return_type → region FK).
-            canonical_row["OCCLocation__region_id"] = raw.get("DISTRICT")
 
             # Compute occurrence_name from raw row (raw column names)
             pop = str(raw.get("POP_NUMBER", "") or "").strip()
