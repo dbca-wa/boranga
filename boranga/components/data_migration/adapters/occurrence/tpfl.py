@@ -12,12 +12,13 @@ from boranga.components.data_migration.registry import (
     datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     fk_lookup,
+    fk_lookup_static,
     registry,
     static_value_factory,
     taxonomy_lookup_legacy_mapping,
     to_decimal_factory,
 )
-from boranga.components.occurrence.models import Occurrence, WildStatus
+from boranga.components.occurrence.models import IdentificationCertainty, Occurrence, WildStatus
 from boranga.components.species_and_communities.models import (
     Community,
     GroupType,
@@ -150,8 +151,12 @@ DISTRICT_TRANSFORM = build_legacy_map_transform(
     required=False,
     return_type="id",
 )
-# Task 14938: Region is derived from district_id via the District.region FK in the handler;
-# there is no separate REGION lookup in DRF_LOV_DEC_DISTRICT_VWS.
+REGION_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
+    required=False,
+    return_type="id",
+)
 LOCATION_ACCURACY_TRANSFORM = build_legacy_map_transform(
     "TPFL",
     "RESOLUTION (DRF_LOV_RESOLUTION_VWS)",
@@ -210,8 +215,8 @@ DECIMAL_12_2 = to_decimal_factory(max_digits=12, decimal_places=2)
 DECIMAL_14_4 = to_decimal_factory(max_digits=14, decimal_places=4)
 DECIMAL_5_2 = to_decimal_factory(max_digits=5, decimal_places=2)
 
-# Static value for OCCIdentification.identification_certainty default
-STATIC_HIGH_CERTAINTY = static_value_factory("High Certainty")
+# Task 14927: Static default — every TPFL occurrence gets identification_certainty = "High Certainty"
+HIGH_CERTAINTY_TRANSFORM = fk_lookup_static(IdentificationCertainty, "name", "High Certainty")
 
 # Static value for OCCLocation.boundary_description default
 STATIC_BOUNDARY_DESC = static_value_factory(
@@ -310,7 +315,7 @@ PIPELINES = {
     ],
     "OCCLocation__locality": ["strip", "blank_to_none", LOCALITY_TRANSFORM],
     "OCCLocation__district_id": ["strip", "blank_to_none", DISTRICT_TRANSFORM, "to_int"],
-    # region_id is derived from district_id in the handler (task 14938)
+    "OCCLocation__region_id": ["strip", "blank_to_none", REGION_TRANSFORM, "to_int"],
     "OCCLocation__location_accuracy_id": ["strip", "blank_to_none", LOCATION_ACCURACY_TRANSFORM, "to_int"],
     "OCCLocation__lga_code": ["strip", "blank_to_none", LGA_CODE_TRANSFORM],
     # --- OCCObservationDetail ---
@@ -334,6 +339,7 @@ PIPELINES = {
     "OCCFireHistory__fire_year": ["strip", "blank_to_none"],
     "OCCFireHistory__intensity_id": ["strip", "blank_to_none", FIRE_INTENSITY_TRANSFORM, "to_int"],
     # --- OCCIdentification ---
+    "OCCIdentification__identification_certainty_id": [HIGH_CERTAINTY_TRANSFORM],  # Task 14927
     "OCCIdentification__barcode_number": ["strip", "blank_to_none"],
     "OCCIdentification__collector_number": ["strip", "blank_to_none"],
     "OCCIdentification__permit_id": ["strip", "blank_to_none"],
@@ -373,6 +379,7 @@ PIPELINES = {
     "OCCPlantCount__quad_num_juvenile": ["strip", "blank_to_none"],
     "OCCPlantCount__quad_num_seedlings": ["strip", "blank_to_none"],
     "OCCPlantCount__population_notes": ["strip", "blank_to_none"],
+    "OCCPlantCount__obs_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
 }
 
 
@@ -438,6 +445,9 @@ class OccurrenceTpflAdapter(SourceAdapter):
             canonical_row["OCCLocation__boundary_description"] = (
                 "Boundary not mapped, migrated point coordinate has had a 1 metre buffer applied"
             )
+            # Task 14938: DRF_POPULATION has no REGION column; region is derived from the DISTRICT
+            # code via REGION_TRANSFORM (same lookup table, different return_type → region FK).
+            canonical_row["OCCLocation__region_id"] = raw.get("DISTRICT")
 
             # Compute occurrence_name from raw row (raw column names)
             pop = str(raw.get("POP_NUMBER", "") or "").strip()

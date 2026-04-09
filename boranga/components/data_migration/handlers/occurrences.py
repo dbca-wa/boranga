@@ -1258,11 +1258,11 @@ class OccurrenceImporter(BaseSheetImporter):
                         merged.get(f"OCCPlantCount__{f}") is not None for f in ("simple_alive", "simple_dead")
                     )
                     if has_detailed:
-                        count_status = "detailed"
+                        count_status = "detailed_count"
                     elif has_simple:
-                        count_status = "simple"
+                        count_status = "simple_count"
                     else:
-                        count_status = None
+                        count_status = "not_counted"
 
                     defaults = {
                         "counted_subject_id": merged.get("OCCPlantCount__counted_subject_id"),
@@ -1289,6 +1289,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         "flowering_plants_per": merged.get("OCCPlantCount__flowering_plants_per"),
                         "total_quadrat_area": merged.get("OCCPlantCount__total_quadrat_area"),
                         "comment": pc_comment,
+                        "obs_date": merged.get("OCCPlantCount__obs_date"),
                     }
                     apply_model_defaults(OCCPlantCount, defaults)
                     if occ.pk in existing_plant:
@@ -1445,6 +1446,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         "flowering_plants_per",
                         "total_quadrat_area",
                         "comment",
+                        "obs_date",
                     ],
                     batch_size=BATCH,
                 )
