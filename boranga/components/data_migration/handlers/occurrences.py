@@ -57,7 +57,7 @@ from boranga.components.occurrence.models import (
     OCCVegetationStructure,
     SpeciesRole,
 )
-from boranga.components.species_and_communities.models import Taxonomy
+from boranga.components.species_and_communities.models import District, Taxonomy
 
 logger = logging.getLogger(__name__)
 
@@ -734,7 +734,10 @@ class OccurrenceImporter(BaseSheetImporter):
             logger.warning("Could not resolve ContentType for Occurrence model")
             occ_content_type = None
 
-        # community_group_type_id = get_group_type_id(GroupType.GROUP_TYPE_COMMUNITY)
+        # Preload district_id → region_id for deriving OCCLocation.region from district (task 14938)
+        district_to_region_id: dict[int, int] = {
+            d.pk: d.region_id for d in District.objects.filter(region_id__isnull=False).only("pk", "region_id")
+        }
 
         logger.info(
             "OccurrenceImporter: processing related objects in chunks (total %d ops)...",
@@ -923,13 +926,16 @@ class OccurrenceImporter(BaseSheetImporter):
                         loc_desc = f"{loc_desc} LGA: {lga_code}"
                     elif lga_code:
                         loc_desc = f"LGA: {lga_code}"
+                    district_id = merged.get("OCCLocation__district_id")
+                    # Task 14938: derive region from district (no separate REGION column in source)
+                    region_id = district_to_region_id.get(district_id) if district_id else None
                     defaults = {
                         "coordinate_source_id": merged.get("OCCLocation__coordinate_source_id"),
                         "boundary_description": merged.get("OCCLocation__boundary_description"),
                         "locality": merged.get("OCCLocation__locality"),
                         "location_description": loc_desc,
-                        "district_id": merged.get("OCCLocation__district_id"),
-                        "region_id": merged.get("OCCLocation__region_id"),
+                        "district_id": district_id,
+                        "region_id": region_id,
                         "location_accuracy_id": merged.get("OCCLocation__location_accuracy_id"),
                     }
                     apply_model_defaults(OCCLocation, defaults)
@@ -1252,11 +1258,11 @@ class OccurrenceImporter(BaseSheetImporter):
                         merged.get(f"OCCPlantCount__{f}") is not None for f in ("simple_alive", "simple_dead")
                     )
                     if has_detailed:
-                        count_status = "detailed"
+                        count_status = "detailed_count"
                     elif has_simple:
-                        count_status = "simple"
+                        count_status = "simple_count"
                     else:
-                        count_status = None
+                        count_status = "not_counted"
 
                     defaults = {
                         "counted_subject_id": merged.get("OCCPlantCount__counted_subject_id"),
@@ -1283,6 +1289,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         "flowering_plants_per": merged.get("OCCPlantCount__flowering_plants_per"),
                         "total_quadrat_area": merged.get("OCCPlantCount__total_quadrat_area"),
                         "comment": pc_comment,
+                        "obs_date": merged.get("OCCPlantCount__obs_date"),
                     }
                     apply_model_defaults(OCCPlantCount, defaults)
                     if occ.pk in existing_plant:
@@ -1439,6 +1446,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         "flowering_plants_per",
                         "total_quadrat_area",
                         "comment",
+                        "obs_date",
                     ],
                     batch_size=BATCH,
                 )

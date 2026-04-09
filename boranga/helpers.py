@@ -42,6 +42,12 @@ def abbreviate_species_name(name):
 def check_file(file, model_name):
     from boranga.components.main.models import FileExtensionWhitelist
 
+    # check file size
+    max_size = getattr(settings, "MAX_UPLOAD_SIZE_BYTES", None)
+    if max_size and hasattr(file, "size") and file.size > max_size:
+        mb_limit = max_size / (1024 * 1024)
+        raise ValidationError(f"File size exceeds the maximum allowed size of {mb_limit:.0f} MB")
+
     # check if extension in whitelist
     cache_key = settings.CACHE_KEY_FILE_EXTENSION_WHITELIST
     whitelist = cache.get(cache_key)

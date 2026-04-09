@@ -228,7 +228,11 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             else:
                 occurrence_map[mid] = {
                     "pk": pk,
-                    "active": status == Occurrence.PROCESSING_STATUS_ACTIVE,
+                    "active": status
+                    in (
+                        Occurrence.PROCESSING_STATUS_ACTIVE,
+                        Occurrence.PROCESSING_STATUS_HISTORICAL,
+                    ),
                     "geom_pk": geom_pk,
                 }
 
