@@ -114,10 +114,10 @@ COLUMN_MAP = {
     "FIRE_YEAR": "OCCFireHistory__fire_year",
     "FIRE_INTENSITY": "OCCFireHistory__intensity_id",
     # OCCIdentification
-    "BARCODE_NUMBER": "OCCIdentification__barcode_number",
-    "COLLECTOR_NUMBER": "OCCIdentification__collector_number",
+    "BARCODE": "OCCIdentification__barcode_number",  # Task 14925: DRF_POPULATION column is BARCODE
+    "COLLECTOR_NO": "OCCIdentification__collector_number",  # Task 14926: DRF_POPULATION column is COLLECTOR_NO
     "PERMIT_ID": "OCCIdentification__permit_id",
-    "SAMPLE_DESTINATION": "OCCIdentification__sample_destination_id",
+    "VOUCHER_LOCATION": "OCCIdentification__sample_destination_id",  # Task 14931: DRF_POPULATION column is VOUCHER_LOCATION
     "VCHR_STATUS_CODE": "OCCIdentification__vchr_status_code",
     "DUPVOUCH_LOCATION": "OCCIdentification__dupvouch_location",
     # OCCObservationDetail
@@ -127,28 +127,28 @@ COLUMN_MAP = {
     # OCCAssociatedSpecies
     "ASSOCIATED_SPECIES": "OCCAssociatedSpecies__comment",
     # OCCPlantCount
-    "COUNTED_SUBJECT": "OCCPlantCount__counted_subject_id",
-    "PLANT_CONDITION": "OCCPlantCount__plant_condition_id",
-    "PLANT_COUNT_METHOD": "OCCPlantCount__plant_count_method_id",
+    "CNT_PLANT_TYPE_CODE": "OCCPlantCount__counted_subject_id",  # was COUNTED_SUBJECT
+    "POPULATION_CONDITION": "OCCPlantCount__plant_condition_id",  # was PLANT_CONDITION
+    "COUNT_MTHD_CODE": "OCCPlantCount__plant_count_method_id",  # was PLANT_COUNT_METHOD
     "CLONAL": "OCCPlantCount__clonal_reproduction_present",
-    "VEGETATIVE_STATE": "OCCPlantCount__vegetative_state_present",
-    "FLOWER_BUD": "OCCPlantCount__flower_bud_present",
-    "FLOWER": "OCCPlantCount__flower_present",
+    "VEGETATIVE": "OCCPlantCount__vegetative_state_present",  # was VEGETATIVE_STATE
+    "IN_BUDS": "OCCPlantCount__flower_bud_present",  # was FLOWER_BUD
+    "IN_FLOWER": "OCCPlantCount__flower_present",  # was FLOWER
     "IMMATURE_FRUIT": "OCCPlantCount__immature_fruit_present",
-    "RIPE_FRUIT": "OCCPlantCount__ripe_fruit_present",
+    "FRUIT": "OCCPlantCount__ripe_fruit_present",  # was RIPE_FRUIT
     "DEHISCED_FRUIT": "OCCPlantCount__dehisced_fruit_present",
-    "ALIVE_MATURE": "OCCPlantCount__detailed_alive_mature",
-    "DEAD_MATURE": "OCCPlantCount__detailed_dead_mature",
-    "ALIVE_JUVENILE": "OCCPlantCount__detailed_alive_juvenile",
-    "DEAD_JUVENILE": "OCCPlantCount__detailed_dead_juvenile",
-    "ALIVE_SEEDLING": "OCCPlantCount__detailed_alive_seedling",
-    "DEAD_SEEDLING": "OCCPlantCount__detailed_dead_seedling",
-    "SIMPLE_ALIVE": "OCCPlantCount__simple_alive",
-    "SIMPLE_DEAD": "OCCPlantCount__simple_dead",
-    "QUADRATS_SURVEYED": "OCCPlantCount__quadrats_surveyed",
-    "ESTIMATED_POPULATION_AREA": "OCCPlantCount__estimated_population_area",
-    "FLOWERING_PLANTS_PER": "OCCPlantCount__flowering_plants_per",
-    "TOTAL_QUADRAT_AREA": "OCCPlantCount__total_quadrat_area",
+    "MATURE_PLANTS": "OCCPlantCount__detailed_alive_mature",  # was ALIVE_MATURE
+    "MATURE_DEAD": "OCCPlantCount__detailed_dead_mature",  # was DEAD_MATURE
+    "JUVENILE_PLANTS": "OCCPlantCount__detailed_alive_juvenile",  # was ALIVE_JUVENILE
+    "JUVENILE_DEAD": "OCCPlantCount__detailed_dead_juvenile",  # was DEAD_JUVENILE
+    "SEEDLING_PLANTS": "OCCPlantCount__detailed_alive_seedling",  # was ALIVE_SEEDLING
+    "SEEDLING_DEAD": "OCCPlantCount__detailed_dead_seedling",  # was DEAD_SEEDLING
+    "SIMPLE_LIVE_TOT": "OCCPlantCount__simple_alive",  # Task 14965: was SIMPLE_ALIVE
+    "SIMPLE_DEAD_TOT": "OCCPlantCount__simple_dead",  # was SIMPLE_DEAD
+    "QUAD_NUM": "OCCPlantCount__quadrats_surveyed",  # was QUADRATS_SURVEYED
+    "AREA_OCCUPIED": "OCCPlantCount__estimated_population_area",  # was ESTIMATED_POPULATION_AREA
+    "FLOWER_PERCENTAGE": "OCCPlantCount__flowering_plants_per",  # was FLOWERING_PLANTS_PER
+    "QUAD_TOT_SQ_M": "OCCPlantCount__total_quadrat_area",  # was TOTAL_QUADRAT_AREA
     "POLLINATOR_OBSERVATION": "OCCPlantCount__pollinator_observation",
     "AREA_OCCUPIED_METHOD": "OCCPlantCount__area_occupied_method",
     "QUAD_SIZE": "OCCPlantCount__quad_size",
@@ -157,6 +157,7 @@ COLUMN_MAP = {
     "QUAD_NUM_JUVENILE": "OCCPlantCount__quad_num_juvenile",
     "QUAD_NUM_SEEDLINGS": "OCCPlantCount__quad_num_seedlings",
     "POPULATION_NOTES": "OCCPlantCount__population_notes",
+    "COUNT_SECT_DATE": "OCCPlantCount__obs_date",
     # OCCHabitatCondition (adapter dispatches to 6 fields from single code)
     "HABITAT_CONDITION": "HABITAT_CONDITION",
     # OccurrenceGeometry (lat/long for 1m circle generation in handler)
@@ -308,6 +309,7 @@ class OccurrenceRow:
     OCCPlantCount__quad_num_juvenile: str | None = None
     OCCPlantCount__quad_num_seedlings: str | None = None
     OCCPlantCount__population_notes: str | None = None
+    OCCPlantCount__obs_date: date | None = None
 
     OccurrenceGeometry__latitude: float | None = None
     OccurrenceGeometry__longitude: float | None = None
