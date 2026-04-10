@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from django.apps import apps
@@ -17,6 +18,8 @@ from boranga.components.data_migration.registry import (
     register,
     run_pipeline,
 )
+
+logger = logging.getLogger(__name__)
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OccurrenceDocumentTpflAdapter(),
@@ -36,11 +39,11 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OccurrenceDocument target data. Respect `ctx.dry_run`."""
         if ctx.dry_run:
+            logger.info("OccurrenceDocumentImporter.clear_targets: dry-run, skipping delete")
             return
 
-        from boranga.components.data_migration.adapters.sources import (
-            SOURCE_GROUP_TYPE_MAP,
-        )
+        from boranga.components.data_migration.adapters.sources import SOURCE_GROUP_TYPE_MAP
+        from boranga.components.occurrence.models import OccurrenceDocument
 
         sources = options.get("sources")
         target_group_types = set()
@@ -51,21 +54,29 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
 
         is_filtered = bool(sources)
 
-        logger = __import__("logging").getLogger(__name__)
-
         if is_filtered:
             if not target_group_types:
+                logger.warning(
+                    "clear_targets: sources %s provided but no associated group_types found in map. Skipping delete.",
+                    sources,
+                )
                 return
             logger.warning(
                 "OccurrenceDocumentImporter: deleting OccurrenceDocument data for group_types: %s ...",
                 target_group_types,
             )
-            doc_filter = {"occurrence__group_type__name__in": target_group_types}
+            group_type_filter = {"group_type__name__in": target_group_types}
         else:
-            logger.warning("OccurrenceDocumentImporter: deleting OccurrenceDocument data...")
-            doc_filter = {}
+            logger.warning("OccurrenceDocumentImporter: deleting all OccurrenceDocument data...")
+            group_type_filter = {}
 
-        from django.apps import apps
+        # Delete reversion history first (more efficient than waiting for cascade)
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_for_related_model(OccurrenceDocument, "occurrence", group_type_filter)
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
+
         from django.db import connections
 
         conn = connections["default"]
@@ -74,10 +85,9 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
             conn.set_autocommit(True)
 
         try:
-            OccurrenceDocument = apps.get_model("boranga", "OccurrenceDocument")
             try:
                 if is_filtered:
-                    OccurrenceDocument.objects.filter(**doc_filter).delete()
+                    OccurrenceDocument.objects.filter(occurrence__group_type__name__in=target_group_types).delete()
                 else:
                     OccurrenceDocument.objects.all().delete()
             except Exception:
@@ -108,6 +118,8 @@ class OccurrenceDocumentImporter(BaseSheetImporter):
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
+
+        logger.info("Deletion complete.")
 
     def add_arguments(self, parser):
         parser.add_argument(

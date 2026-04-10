@@ -45,11 +45,11 @@ class OCRConservationThreatImporter(BaseSheetImporter):
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
         """Delete OCRConservationThreat target data. Respect `ctx.dry_run`."""
         if ctx.dry_run:
+            logger.info("OCRConservationThreatImporter.clear_targets: dry-run, skipping delete")
             return
 
-        from boranga.components.data_migration.adapters.sources import (
-            SOURCE_GROUP_TYPE_MAP,
-        )
+        from boranga.components.data_migration.adapters.sources import SOURCE_GROUP_TYPE_MAP
+        from boranga.components.occurrence.models import OCRConservationThreat
 
         sources = options.get("sources")
         target_group_types = set()
@@ -62,23 +62,33 @@ class OCRConservationThreatImporter(BaseSheetImporter):
 
         if is_filtered:
             if not target_group_types:
+                logger.warning(
+                    "clear_targets: sources %s provided but no associated group_types found in map. Skipping delete.",
+                    sources,
+                )
                 return
             logger.warning(
                 "OCRConservationThreatImporter: deleting OCRConservationThreat data for group_types: %s ...",
                 target_group_types,
             )
+            group_type_filter = {"group_type__name__in": target_group_types}
             threat_filter = {"occurrence_report__group_type__name__in": target_group_types}
         else:
-            logger.warning("OCRConservationThreatImporter: deleting OCRConservationThreat data...")
+            logger.warning("OCRConservationThreatImporter: deleting all OCRConservationThreat data...")
+            group_type_filter = {}
             threat_filter = {}
+
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_for_related_model(OCRConservationThreat, "occurrence_report", group_type_filter)
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
 
         from django.db import connection as conn
         from django.db import transaction
 
         with transaction.atomic():
             try:
-                from boranga.components.occurrence.models import OCRConservationThreat
-
                 if is_filtered:
                     OCRConservationThreat.objects.filter(**threat_filter).delete()
                 else:

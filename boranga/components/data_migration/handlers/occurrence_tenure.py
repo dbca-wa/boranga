@@ -98,6 +98,14 @@ class OccurrenceTenureImporter(BaseSheetImporter):
         # OccurrenceTenure is just a linking model between OccurrenceGeometry and Tenure features
         count = OccurrenceTenure.objects.count()
         logger.info(f"Deleting {count} OccurrenceTenure objects...")
+
+        # Delete reversion history first (more efficient than waiting for cascade)
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_for_model(OccurrenceTenure, {})
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
+
         OccurrenceTenure.objects.all().delete()
 
         # Reset the primary key sequence for OccurrenceTenure when using PostgreSQL.

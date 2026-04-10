@@ -63,6 +63,92 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
             out[k] = v
         return out
 
+    def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
+        """Delete OccurrenceReportDocument target data. Respect `ctx.dry_run`."""
+        if ctx.dry_run:
+            logger.info("OccurrenceReportDocumentImporter.clear_targets: dry-run, skipping delete")
+            return
+
+        from boranga.components.data_migration.adapters.sources import SOURCE_GROUP_TYPE_MAP
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(sources)
+
+        if is_filtered:
+            if not target_group_types:
+                logger.warning(
+                    "clear_targets: sources %s provided but no associated group_types found in map. Skipping delete.",
+                    sources,
+                )
+                return
+            logger.warning(
+                "OccurrenceReportDocumentImporter: deleting OccurrenceReportDocument data for group_types: %s ...",
+                target_group_types,
+            )
+            doc_filter = {"group_type__name__in": target_group_types}
+        else:
+            logger.warning("OccurrenceReportDocumentImporter: deleting all OccurrenceReportDocument data...")
+            doc_filter = {}
+
+        # Delete reversion history first (more efficient than waiting for cascade)
+        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
+
+        cleaner = ReversionHistoryCleaner(batch_size=2000)
+        cleaner.clear_for_related_model(OccurrenceReportDocument, "occurrence_report", doc_filter)
+        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
+
+        from django.db import connections
+
+        conn = connections["default"]
+        was_autocommit = conn.get_autocommit()
+        if not was_autocommit:
+            conn.set_autocommit(True)
+
+        try:
+            try:
+                if is_filtered:
+                    OccurrenceReportDocument.objects.filter(
+                        occurrence_report__group_type__name__in=target_group_types
+                    ).delete()
+                else:
+                    OccurrenceReportDocument.objects.all().delete()
+            except Exception:
+                logger.exception("Failed to delete OccurrenceReportDocument")
+
+            # Reset the primary key sequence for OccurrenceReportDocument when using PostgreSQL.
+            try:
+                if getattr(conn, "vendor", None) == "postgresql":
+                    table = OccurrenceReportDocument._meta.db_table
+                    with conn.cursor() as cur:
+                        cur.execute(f"SELECT MAX(id) FROM {table}")
+                        row = cur.fetchone()
+                        max_id = row[0] if row else None
+
+                        if max_id is not None:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", max_id, True],
+                            )
+                        else:
+                            cur.execute(
+                                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                [table, "id", 1, False],
+                            )
+                    logger.info("Reset primary key sequence for table %s to %s", table, max_id)
+            except Exception:
+                logger.exception("Failed to reset OccurrenceReportDocument primary key sequence")
+        finally:
+            if not was_autocommit:
+                conn.set_autocommit(False)
+
+        logger.info("Deletion complete.")
+
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
         logger.info(
@@ -236,40 +322,6 @@ class OccurrenceReportDocumentImporter(BaseSheetImporter):
 
         # Free all_rows — no longer needed once the transform loop is complete.
         del all_rows
-
-        # Handle wipe_targets before creating new documents
-        if options.get("wipe_targets"):
-            # Collect occurrence_report IDs from our extracted data to limit deletion scope
-            report_ids = {inst.occurrence_report_id for inst, row in to_create}
-            report_ids.discard(None)
-
-            if report_ids:
-                # Determine group_type from the sources being imported
-                # TPFL = flora/fauna, TEC = community
-
-                group_type_names = set()
-                for src in sources:
-                    if src == Source.TPFL.value:
-                        group_type_names.add("flora")
-                    elif src == Source.TEC_SITE_VISITS.value:
-                        group_type_names.add("community")
-
-                if not group_type_names:
-                    logger.warning("Could not determine group_type for wipe_targets, skipping wipe")
-                else:
-                    # Only wipe documents for OccurrenceReports matching both report_ids AND group_type
-                    wipe_filter = OccurrenceReportDocument.objects.filter(
-                        occurrence_report_id__in=report_ids,
-                        occurrence_report__group_type__name__in=group_type_names,
-                    )
-                    wipe_count = wipe_filter.count()
-                    logger.info(
-                        f"Wiping {wipe_count} existing documents for {len(report_ids)} occurrence reports "
-                        f"(group_type: {', '.join(group_type_names)})..."
-                    )
-                    wipe_filter.delete()
-            else:
-                logger.info("No occurrence reports to wipe documents for")
 
         if ctx.dry_run:
             logger.info(f"Dry run: would create {len(to_create)} documents")
