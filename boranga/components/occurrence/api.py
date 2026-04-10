@@ -545,6 +545,7 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class OccurrenceReportViewSet(
+    CheckUpdatedActionMixin,
     viewsets.GenericViewSet,
     mixins.RetrieveModelMixin,
     DatumSearchMixin,
@@ -553,7 +554,7 @@ class OccurrenceReportViewSet(
     serializer_class = OccurrenceReportSerializer
     lookup_field = "id"
     permission_classes = [OccurrenceReportPermission | ExternalOccurrenceReportPermission]
-    UNLOCKED_EDITING_WINDOW_MINUTES = settings.UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES
+    UNLOCKED_EDITING_WINDOW_MINUTES = settings.UNLOCKED_OCCURRENCE_REPORT_EDITING_WINDOW_MINUTES
 
     def get_queryset(self):
         request = self.request
@@ -1009,7 +1010,7 @@ class OccurrenceReportViewSet(
 
         serializer = AssociatedSpeciesTaxonomySerializer(related_species, many=True, context={"request": request})
 
-        if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(serializer.data)
@@ -1043,7 +1044,7 @@ class OccurrenceReportViewSet(
 
         serializer = AssociatedSpeciesTaxonomySerializer(related_species, many=True, context={"request": request})
 
-        if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(serializer.data)
@@ -1231,14 +1232,14 @@ class OccurrenceReportViewSet(
     def unlocked_back_to_assessor(self):
         instance = self.get_object()
         request = self.request
-        if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.is_unlocked:
             serializer = BackToAssessorSerializer(data={"reason": "Change made after unlock"})
             serializer.is_valid(raise_exception=True)
             instance.back_to_assessor(request, serializer.validated_data)
 
     @detail_route(
         methods=[
-            "POST",
+            "PATCH",
         ],
         detail=True,
         permission_classes=[OccurrenceReportPermission],
@@ -1251,7 +1252,7 @@ class OccurrenceReportViewSet(
 
     @detail_route(
         methods=[
-            "POST",
+            "PATCH",
         ],
         detail=True,
         permission_classes=[OccurrenceReportPermission],
@@ -1283,7 +1284,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRLocationSerializer(new_instance).data)
@@ -1305,7 +1306,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRHabitatCompositionSerializer(new_instance).data)
@@ -1326,7 +1327,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRHabitatConditionSerializer(new_instance).data)
@@ -1347,7 +1348,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRVegetationStructureSerializer(new_instance).data)
@@ -1366,7 +1367,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRFireHistorySerializer(new_instance).data)
@@ -1387,7 +1388,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRAssociatedSpeciesSerializer(new_instance).data)
@@ -1408,7 +1409,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRObservationDetailSerializer(new_instance).data)
@@ -1427,7 +1428,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
         return Response(OCRPlantCountSerializer(new_instance).data)
 
@@ -1447,7 +1448,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRAnimalObservationSerializer(new_instance).data)
@@ -1468,7 +1469,7 @@ class OccurrenceReportViewSet(
         serializer.is_valid(raise_exception=True)
         new_instance = serializer.save()
 
-        if ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if ocr_instance.is_unlocked:
             self.unlocked_back_to_assessor()
 
         return Response(OCRIdentificationSerializer(new_instance).data)
@@ -1602,7 +1603,7 @@ class OccurrenceReportViewSet(
             save_geometry(request, instance, geometry_data, "occurrence_report")
         serializer = SaveOccurrenceReportSerializer(instance, data=proposal_data, partial=True)
         serializer.is_valid(raise_exception=True)
-        if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.is_unlocked:
             serializer.save(no_revision=True)
             self.unlocked_back_to_assessor()
         else:
@@ -1745,7 +1746,7 @@ class OccurrenceReportViewSet(
     def validate_map_files(self, request, *args, **kwargs):
         instance = self.get_object()
         validate_map_files(request, instance, "occurrence_report")
-        if instance.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.is_unlocked:
             self.unlocked_back_to_assessor()
             instance.save(no_revision=True)
         else:
@@ -2090,7 +2091,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
     def unlocked_back_to_assessor(self, occurrence_report):
         request = self.request
-        if occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if occurrence_report.is_unlocked:
             serializer = BackToAssessorSerializer(data={"reason": "Change made after unlock"})
             serializer.is_valid(raise_exception=True)
             occurrence_report.back_to_assessor(request, serializer.validated_data)
@@ -2120,7 +2121,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         serializer.save(version_user=request.user)
 
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         instance.occurrence_report.log_user_action(
@@ -2157,7 +2158,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         serializer.save(version_user=request.user)
 
-        if occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(occurrence_report)
 
         return Response(serializer.data)
@@ -2174,7 +2175,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance.save(version_user=request.user)
 
         serializer = self.get_serializer(instance)
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2198,7 +2199,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance.save(version_user=request.user)
 
         serializer = self.get_serializer(instance)
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2249,7 +2250,7 @@ class OccurrenceReportDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveMo
 
     def unlocked_back_to_assessor(self, occurrence_report):
         request = self.request
-        if occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if occurrence_report.is_unlocked:
             serializer = BackToAssessorSerializer(data={"reason": "Change made after unlock"})
             serializer.is_valid(raise_exception=True)
             occurrence_report.back_to_assessor(request, serializer.validated_data)
@@ -2299,7 +2300,7 @@ class OccurrenceReportDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveMo
             request,
         )
         serializer = self.get_serializer(instance)
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2328,7 +2329,7 @@ class OccurrenceReportDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveMo
             request,
         )
         serializer = self.get_serializer(instance)
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2359,7 +2360,7 @@ class OccurrenceReportDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveMo
             ),
             request,
         )
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2393,7 +2394,7 @@ class OccurrenceReportDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveMo
             ),
             request,
         )
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
         return Response(serializer.data)
 
@@ -2454,7 +2455,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
 
     def unlocked_back_to_assessor(self, occurrence_report):
         request = self.request
-        if occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if occurrence_report.is_unlocked:
             serializer = BackToAssessorSerializer(data={"reason": "Change made after unlock"})
             serializer.is_valid(raise_exception=True)
             occurrence_report.back_to_assessor(request, serializer.validated_data)
@@ -2496,7 +2497,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         )
         serializer = self.get_serializer(instance)
 
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         return Response(serializer.data)
@@ -2527,7 +2528,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         )
         serializer = self.get_serializer(instance)
 
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         return Response(serializer.data)
@@ -2555,7 +2556,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         )
         serializer = self.get_serializer(instance)
 
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         return Response(serializer.data)
@@ -2582,7 +2583,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
         )
         serializer = self.get_serializer(instance)
 
-        if instance.occurrence_report.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
+        if instance.occurrence_report.is_unlocked:
             self.unlocked_back_to_assessor(instance.occurrence_report)
 
         return Response(serializer.data)

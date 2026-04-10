@@ -330,10 +330,7 @@ export default {
                             vm.$nextTick(() => {
                                 vm.initialiseCommonNameLookup();
                             });
-                            if (
-                                vm.occurrence_report_obj.processing_status ==
-                                'Unlocked'
-                            ) {
+                            if (vm.occurrence_report_obj.is_unlocked) {
                                 vm.$router.go();
                             }
                         },
@@ -406,10 +403,7 @@ export default {
                                 },
                             });
                             vm.$refs.related_species_datatable.vmDataTable.ajax.reload();
-                            if (
-                                vm.occurrence_report_obj.processing_status ==
-                                'Unlocked'
-                            ) {
+                            if (vm.occurrence_report_obj.is_unlocked) {
                                 vm.$router.go();
                             }
                         },
@@ -424,7 +418,7 @@ export default {
             let vm = this;
             vm.$refs.related_species_datatable.vmDataTable.ajax.reload();
             vm.selected_associated_species_taxonomy_id = null;
-            if (vm.occurrence_report_obj.processing_status == 'Unlocked') {
+            if (vm.occurrence_report_obj.is_unlocked) {
                 vm.$router.go();
             }
         },

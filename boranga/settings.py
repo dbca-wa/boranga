@@ -242,6 +242,7 @@ CRON_CLASSES = [
     "boranga.cron.CronJobOCRProcessBulkImportQueue",
     "boranga.cron.CronJobAutoLockConservationStatusRecords",
     "boranga.cron.CronJobAutoLockUnlockedOccurrenceRecords",
+    "boranga.cron.CronJobAutoLockUnlockedOccurrenceReportRecords",
     "boranga.cron.CronJobClearCronJobLogs",
     "boranga.cron.CronJobProcessReportQueue",
 ]
@@ -584,6 +585,9 @@ UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES = config(
     "UNLOCKED_CONSERVATION_STATUS_EDITING_WINDOW_MINUTES", default=30, cast=int
 )
 UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES = config("UNLOCKED_OCCURRENCE_EDITING_WINDOW_MINUTES", default=30, cast=int)
+UNLOCKED_OCCURRENCE_REPORT_EDITING_WINDOW_MINUTES = config(
+    "UNLOCKED_OCCURRENCE_REPORT_EDITING_WINDOW_MINUTES", default=30, cast=int
+)
 
 FETCH_NOMOS_DATA_TIME_OF_DAY = config("FETCH_NOMOS_DATA_TIME_OF_DAY", default="03:00")  # 24 hour format HH:MM
 CLEAR_CRON_JOB_LOGS_TIME_OF_DAY = config("CLEAR_CRON_JOB_LOGS_TIME_OF_DAY", default="00:30")  # 24 hour format HH:MM

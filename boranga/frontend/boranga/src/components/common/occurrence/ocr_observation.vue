@@ -255,6 +255,7 @@
                 ref="plantCountDetail"
                 :plant_count="occurrence_report_obj.plant_count"
                 :processing_status="occurrence_report_obj.processing_status"
+                :is_unlocked="occurrence_report_obj.is_unlocked"
                 :is_report="true"
                 :occurrence_id="occurrence_report_obj.id"
                 :is_external="is_external"
@@ -281,6 +282,7 @@
                 ref="animalObservationDetail"
                 :animal_observation="occurrence_report_obj.animal_observation"
                 :processing_status="occurrence_report_obj.processing_status"
+                :is_unlocked="occurrence_report_obj.is_unlocked"
                 :is_report="true"
                 :occurrence_id="occurrence_report_obj.id"
                 :is_external="is_external"
@@ -921,10 +923,7 @@ export default {
                             showConfirmButton: false,
                             timer: 1200,
                         }).then(() => {
-                            if (
-                                vm.occurrence_report_obj.processing_status ==
-                                'Unlocked'
-                            ) {
+                            if (vm.occurrence_report_obj.is_unlocked) {
                                 vm.$router.go();
                             }
                         });
@@ -980,10 +979,7 @@ export default {
                         showConfirmButton: false,
                         timer: 1200,
                     }).then(() => {
-                        if (
-                            vm.occurrence_report_obj.processing_status ==
-                            'Unlocked'
-                        ) {
+                        if (vm.occurrence_report_obj.is_unlocked) {
                             vm.$router.go();
                         }
                     });

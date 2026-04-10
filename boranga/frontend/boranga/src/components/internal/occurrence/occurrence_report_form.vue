@@ -88,7 +88,7 @@
                 <div
                     v-if="
                         occurrence_report.approved_by_name &&
-                        ['Approved', 'Declined', 'Unlocked'].includes(
+                        ['Approved', 'Declined'].includes(
                             occurrence_report.processing_status
                         )
                     "
@@ -146,6 +146,26 @@
                     <div class="card-body border-bottom">
                         <strong>Status</strong><br />
                         {{ occurrence_report.processing_status }}
+                        <template
+                            v-if="occurrence_report.show_locked_indicator"
+                        >
+                            <i
+                                v-if="occurrence_report.locked"
+                                class="bi bi-lock-fill text-warning fs-5"
+                                title="locked"
+                            ></i>
+                            <i
+                                v-else
+                                class="bi bi-unlock-fill text-secondary fs-5 ms-1"
+                                title="unlocked"
+                            ></i>
+                            <span
+                                v-if="showEditingCountdown"
+                                :class="editingCountdownBadgeClass"
+                            >
+                                {{ editingCountdownDisplay }}
+                            </span>
+                        </template>
                     </div>
                     <div class="card-body">
                         <div class="mb-2">
@@ -551,7 +571,7 @@
                             </button>
 
                             <button
-                                v-if="approved"
+                                v-if="canUnlock"
                                 style="width: 80%"
                                 class="btn btn-primary mb-2"
                                 @click.prevent="unlock()"
@@ -560,7 +580,7 @@
                                 Unlock
                             </button>
                             <button
-                                v-if="unlocked"
+                                v-if="canLock"
                                 style="width: 80%"
                                 class="btn btn-primary mb-2"
                                 @click.prevent="lock()"
@@ -873,6 +893,11 @@ export default {
             external_referee_email: '',
             selectedReassignUser: null,
             isDirty: false,
+            pollInterval: null,
+            editingCountdownInterval: null,
+            editingWindowMinutes: null,
+            serverDatetimeUpdated: null,
+            editingCountdown: null,
         };
     },
     computed: {
@@ -974,10 +999,49 @@ export default {
             );
         },
         unlocked: function () {
+            return this.occurrence_report && this.occurrence_report.is_unlocked;
+        },
+        canLock: function () {
             return (
                 this.occurrence_report &&
-                this.occurrence_report.processing_status === 'Unlocked'
+                this.occurrence_report.can_user_change_lock &&
+                !this.occurrence_report.locked
             );
+        },
+        canUnlock: function () {
+            return (
+                this.occurrence_report &&
+                this.occurrence_report.can_user_change_lock &&
+                this.occurrence_report.locked
+            );
+        },
+        shouldShowTimerAndPoll() {
+            return (
+                this.occurrence_report &&
+                !this.occurrence_report.locked &&
+                this.occurrence_report.processing_status === 'Approved'
+            );
+        },
+        showEditingCountdown() {
+            return (
+                this.shouldShowTimerAndPoll &&
+                this.editingWindowMinutes !== null &&
+                this.serverDatetimeUpdated !== null
+            );
+        },
+        editingCountdownDisplay() {
+            if (this.editingCountdown === null) return '';
+            const min = Math.floor(this.editingCountdown / 60);
+            const sec = this.editingCountdown % 60;
+            return `${min}:${sec.toString().padStart(2, '0')} until auto lock`;
+        },
+        editingCountdownBadgeClass() {
+            if (this.editingCountdown !== null) {
+                if (this.editingCountdown < 60) {
+                    return 'badge bg-danger text-white ms-2';
+                }
+            }
+            return 'badge bg-warning text-dark ms-2';
         },
         isAssignedOfficer: function () {
             return (
@@ -1061,9 +1125,12 @@ export default {
         vm.$nextTick(() => {
             vm.initialiseContributorsSelect();
         });
+        this.startPollingForUpdates();
         window.addEventListener('beforeunload', vm.leaving);
     },
     beforeUnmount: function () {
+        this.stopPollingForUpdates();
+        this.stopEditingCountdown();
         window.removeEventListener('beforeunload', this.leaving);
     },
     updated: function () {
@@ -1147,9 +1214,9 @@ export default {
                 }
             });
         },
-        unlock: function () {
+        unlock: async function () {
             let vm = this;
-            swal.fire({
+            const swalresult = await swal.fire({
                 title: 'Unlock Report',
                 text: 'Are you sure you want to unlock this approved report?',
                 icon: 'question',
@@ -1160,38 +1227,54 @@ export default {
                     cancelButton: 'btn btn-secondary me-2',
                 },
                 reverseButtons: true,
-            }).then((swalresult) => {
-                if (swalresult.isConfirmed) {
-                    fetch(
+            });
+            if (swalresult.isConfirmed) {
+                try {
+                    const response = await fetch(
                         `/api/occurrence_report/${vm.occurrence_report.id}/unlock_occurrence_report.json`,
                         {
-                            method: 'POST',
+                            method: 'PATCH',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
                         }
-                    ).then(
-                        async (response) => {
-                            swal.fire({
-                                title: 'Unlocked',
-                                text: 'The approved occurrence report form has been unlocked for editing',
-                                icon: 'success',
-                                customClass: {
-                                    confirmButton: 'btn btn-primary',
-                                },
-                            });
-                            vm.occurrence_report = await response.json();
-                        },
-                        (error) => {
-                            console.log(error);
-                        }
                     );
+                    const data = await response.json();
+                    if (!response.ok) {
+                        swal.fire({
+                            title: 'Error',
+                            text: JSON.stringify(data),
+                            icon: 'error',
+                            customClass: {
+                                confirmButton: 'btn btn-primary',
+                            },
+                        });
+                        return;
+                    }
+                    vm.occurrence_report = data;
+                    vm.editingWindowMinutes =
+                        vm.occurrence_report.editing_window_minutes;
+                    vm.serverDatetimeUpdated =
+                        vm.occurrence_report.datetime_updated;
+                    vm.startEditingCountdown();
+                    vm.startPollingForUpdates();
+                    swal.fire({
+                        title: 'Unlocked',
+                        html: `<p>The approved occurrence report form has been unlocked for editing.</p>
+                        <p class="fw-bold">If you have not modified the record for more than ${vm.editingWindowMinutes} minutes, it will be locked automatically.</p>`,
+                        icon: 'success',
+                        customClass: {
+                            confirmButton: 'btn btn-primary',
+                        },
+                    });
+                } catch (error) {
+                    console.log(error);
                 }
-            });
+            }
         },
-        lock: function () {
+        lock: async function () {
             let vm = this;
-            swal.fire({
+            const swalresult = await swal.fire({
                 title: 'Lock Report',
                 text: 'Are you sure you want to lock this approved report?',
                 icon: 'question',
@@ -1202,34 +1285,44 @@ export default {
                     cancelButton: 'btn btn-secondary me-2',
                 },
                 reverseButtons: true,
-            }).then((swalresult) => {
-                if (swalresult.isConfirmed) {
-                    fetch(
+            });
+            if (swalresult.isConfirmed) {
+                try {
+                    const response = await fetch(
                         `/api/occurrence_report/${vm.occurrence_report.id}/lock_occurrence_report.json`,
                         {
-                            method: 'POST',
+                            method: 'PATCH',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
                         }
-                    ).then(
-                        async (response) => {
-                            swal.fire({
-                                title: 'Locked',
-                                text: 'The approved occurrence report form has been locked from editing',
-                                icon: 'success',
-                                customClass: {
-                                    confirmButton: 'btn btn-primary',
-                                },
-                            });
-                            vm.occurrence_report = await response.json();
-                        },
-                        (error) => {
-                            console.log(error);
-                        }
                     );
+                    const data = await response.json();
+                    if (!response.ok) {
+                        swal.fire({
+                            title: 'Error',
+                            text: JSON.stringify(data),
+                            icon: 'error',
+                            customClass: {
+                                confirmButton: 'btn btn-primary',
+                            },
+                        });
+                        return;
+                    }
+                    vm.stopEditingCountdown();
+                    vm.occurrence_report = data;
+                    swal.fire({
+                        title: 'Locked',
+                        text: 'The approved occurrence report form has been locked from editing',
+                        icon: 'success',
+                        customClass: {
+                            confirmButton: 'btn btn-primary',
+                        },
+                    });
+                } catch (error) {
+                    console.log(error);
                 }
-            });
+            }
         },
         amendmentRequest: function () {
             this.$refs.amendment_request.isModalOpen = true;
@@ -2362,6 +2455,7 @@ export default {
                         return;
                     }
                     vm.occurrence_report = await response.json();
+                    vm.updateEditingWindowVarsFromOCRObj();
                 },
                 (err) => {
                     console.log(err);
@@ -2414,6 +2508,103 @@ export default {
             this.$router.push({
                 name: 'internal-occurrence-dash',
             });
+        },
+        async checkForUpdates() {
+            if (!this.shouldShowTimerAndPoll) return;
+            const id = this.occurrence_report.id;
+            const dt = this.occurrence_report.datetime_updated;
+            try {
+                const resp = await fetch(
+                    `/api/occurrence_report/${id}/check-updated/?datetime_updated=${encodeURIComponent(dt)}`
+                );
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.changed) {
+                        await this.fetchOccurrenceReport(id);
+                    }
+                    this.editingWindowMinutes = data.editing_window_minutes;
+                }
+            } catch (e) {
+                console.error('Polling error:', e);
+            }
+        },
+        startPollingForUpdates() {
+            this.stopPollingForUpdates();
+            if (this.shouldShowTimerAndPoll) {
+                this.checkForUpdates();
+                this.pollInterval = setInterval(this.checkForUpdates, 60000);
+            }
+        },
+        stopPollingForUpdates() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
+        },
+        startEditingCountdown() {
+            this.stopEditingCountdown();
+            this.updateEditingCountdown();
+            this.editingCountdownInterval = setInterval(
+                this.updateEditingCountdown,
+                1000
+            );
+        },
+        stopEditingCountdown() {
+            if (this.editingCountdownInterval) {
+                clearInterval(this.editingCountdownInterval);
+                this.editingCountdownInterval = null;
+                this.editingCountdown = null;
+            }
+        },
+        updateEditingCountdown() {
+            if (!this.serverDatetimeUpdated || !this.editingWindowMinutes) {
+                this.editingCountdown = null;
+                return;
+            }
+            const updated = new Date(this.serverDatetimeUpdated);
+            const now = new Date();
+            const windowMs = this.editingWindowMinutes * 60 * 1000;
+            const elapsedMs = now - updated;
+            const remainingMs = windowMs - elapsedMs;
+            this.editingCountdown =
+                remainingMs > 0 ? Math.floor(remainingMs / 1000) : 0;
+
+            if (this.editingCountdown === 0 && this.shouldShowTimerAndPoll) {
+                this.autoLockOccurrenceReport();
+            }
+        },
+        async autoLockOccurrenceReport() {
+            const id = this.occurrence_report.id;
+            await fetch(
+                `/api/occurrence_report/${id}/lock_occurrence_report/`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            );
+            await this.fetchOccurrenceReport(id);
+            this.stopEditingCountdown();
+            this.stopPollingForUpdates();
+            swal.fire({
+                title: 'Record Auto Locked',
+                text: `This record has been automatically locked because the editing window of ${this.editingWindowMinutes} minutes expired.`,
+                icon: 'info',
+                confirmButtonText: 'OK',
+                customClass: {
+                    confirmButton: 'btn btn-primary',
+                },
+            });
+        },
+        updateEditingWindowVarsFromOCRObj() {
+            if (!this.occurrence_report) return;
+            this.editingWindowMinutes =
+                this.occurrence_report.editing_window_minutes;
+            this.serverDatetimeUpdated =
+                this.occurrence_report.datetime_updated;
+            if (this.shouldShowTimerAndPoll) {
+                this.startEditingCountdown();
+                this.startPollingForUpdates();
+            }
         },
     },
 };

@@ -1452,9 +1452,7 @@ export default {
                     showConfirmButton: false,
                     timer: 1200,
                 }).then(() => {
-                    if (
-                        vm.occurrence_report_obj.processing_status == 'Unlocked'
-                    ) {
+                    if (vm.occurrence_report_obj.is_unlocked) {
                         vm.$router.go();
                     }
                 });
@@ -1494,10 +1492,7 @@ export default {
                             confirmButton: 'btn btn-primary',
                         },
                     }).then(() => {
-                        if (
-                            vm.occurrence_report_obj.processing_status ==
-                            'Unlocked'
-                        ) {
+                        if (vm.occurrence_report_obj.is_unlocked) {
                             vm.$router.go();
                         }
                     });
@@ -1515,9 +1510,7 @@ export default {
                     showConfirmButton: false,
                     timer: 1200,
                 }).then(() => {
-                    if (
-                        vm.occurrence_report_obj.processing_status == 'Unlocked'
-                    ) {
+                    if (vm.occurrence_report_obj.is_unlocked) {
                         vm.$router.go();
                     }
                 });
@@ -1555,10 +1548,7 @@ export default {
                         showConfirmButton: false,
                         timer: 1200,
                     }).then(() => {
-                        if (
-                            vm.occurrence_report_obj.processing_status ==
-                            'Unlocked'
-                        ) {
+                        if (vm.occurrence_report_obj.is_unlocked) {
                             vm.$router.go();
                         }
                     });
@@ -1609,10 +1599,7 @@ export default {
                         showConfirmButton: false,
                         timer: 1200,
                     }).then(() => {
-                        if (
-                            vm.occurrence_report_obj.processing_status ==
-                            'Unlocked'
-                        ) {
+                        if (vm.occurrence_report_obj.is_unlocked) {
                             vm.$router.go();
                         }
                     });
@@ -1666,10 +1653,7 @@ export default {
                         showConfirmButton: false,
                         timer: 1200,
                     }).then(() => {
-                        if (
-                            vm.occurrence_report_obj.processing_status ==
-                            'Unlocked'
-                        ) {
+                        if (vm.occurrence_report_obj.is_unlocked) {
                             vm.$router.go();
                         }
                     });

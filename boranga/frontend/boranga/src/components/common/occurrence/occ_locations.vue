@@ -901,7 +901,7 @@ export default {
                         showConfirmButton: false,
                         timer: 1200,
                     }).then(() => {
-                        if (vm.occurrence_obj.processing_status == 'Unlocked') {
+                        if (vm.occurrence_obj.is_unlocked) {
                             vm.$router.go();
                         }
                     });

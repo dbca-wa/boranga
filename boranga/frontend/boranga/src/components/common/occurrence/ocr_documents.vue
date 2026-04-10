@@ -449,10 +449,7 @@ export default {
                                 },
                             }).then(() => {
                                 vm.$refs.documents_datatable.vmDataTable.ajax.reload();
-                                if (
-                                    vm.occurrence_report_obj
-                                        .processing_status == 'Unlocked'
-                                ) {
+                                if (vm.occurrence_report_obj.is_unlocked) {
                                     vm.$router.go();
                                 }
                             });
@@ -510,10 +507,7 @@ export default {
                                 },
                             }).then(() => {
                                 vm.$refs.documents_datatable.vmDataTable.ajax.reload();
-                                if (
-                                    vm.occurrence_report_obj
-                                        .processing_status == 'Unlocked'
-                                ) {
+                                if (vm.occurrence_report_obj.is_unlocked) {
                                     vm.$router.go();
                                 }
                             });
@@ -528,7 +522,7 @@ export default {
         updatedDocuments() {
             let vm = this;
             this.$refs.documents_datatable.vmDataTable.ajax.reload();
-            if (vm.occurrence_report_obj.processing_status == 'Unlocked') {
+            if (vm.occurrence_report_obj.is_unlocked) {
                 vm.$router.go();
             }
         },

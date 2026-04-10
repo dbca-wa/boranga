@@ -653,6 +653,9 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "common_name",
             "fauna_group",
             "fauna_sub_group",
+            "locked",
+            "show_locked_indicator",
+            "is_unlocked",
         )
         datatables_always_serialize = (
             "id",
@@ -677,6 +680,9 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "is_new_contributor",
             "copied_to_occurrence",
             "geometry_show_on_map",
+            "locked",
+            "show_locked_indicator",
+            "is_unlocked",
         )
 
     def get_scientific_name(self, obj):
@@ -1774,6 +1780,7 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
     can_user_assess = serializers.SerializerMethodField()
     can_user_action = serializers.SerializerMethodField()
     can_user_copy = serializers.SerializerMethodField()
+    can_user_change_lock = serializers.SerializerMethodField()
     can_add_log = serializers.SerializerMethodField()
     user_is_assessor = serializers.SerializerMethodField()
     current_assessor = serializers.SerializerMethodField(read_only=True)
@@ -1793,6 +1800,9 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
     reported_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
     community_common_id = serializers.CharField(source="community.taxonomy.community_common_id", allow_null=True)
     occurrence_number = serializers.CharField(source="occurrence.occurrence_number", allow_null=True)
+    show_locked_indicator = serializers.BooleanField(read_only=True)
+    editing_window_minutes = serializers.IntegerField(read_only=True)
+    is_unlocked = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = OccurrenceReport
@@ -1866,10 +1876,16 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
             "migrated_from_id",
             "user_is_assessor",
             "can_user_copy",
+            "can_user_change_lock",
             "record_source",
             "comments",
             "common_names",
             "approved_by_name",
+            "locked",
+            "show_locked_indicator",
+            "editing_window_minutes",
+            "is_unlocked",
+            "datetime_updated",
         )
 
     def get_approved_by_name(self, obj):
@@ -1899,12 +1915,14 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
         request = self.context["request"]
         return (
             (is_occurrence_assessor(request) or is_occurrence_approver(request))
-            and obj.processing_status
-            in [
-                OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
-                OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
-                OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
-            ]
+            and (
+                obj.processing_status
+                in [
+                    OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
+                    OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
+                ]
+                or obj.is_unlocked
+            )
             and obj.assigned_officer == request.user.id
         )
 
@@ -1926,10 +1944,7 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
 
     def get_can_user_change_lock(self, obj):
         request = self.context["request"]
-        return (is_occurrence_assessor(request) or is_occurrence_approver(request)) and obj.processing_status in [
-            OccurrenceReport.PROCESSING_STATUS_APPROVED,
-            OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
-        ]
+        return obj.can_change_lock(request)
 
     def get_can_user_action(self, obj):
         return self.get_can_user_assess(obj) or self.get_can_user_approve(obj) or self.get_can_user_change_lock(obj)

@@ -216,7 +216,7 @@ class ObservationTime(OrderedModel, ArchivableModel):
         return str(self.name)
 
 
-class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
+class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, RevisionedMixin):
     """
     Occurrence Report for any particular species or community
 
@@ -270,7 +270,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     PROCESSING_STATUS_WITH_APPROVER = "with_approver"
     PROCESSING_STATUS_APPROVED = "approved"
     PROCESSING_STATUS_DECLINED = "declined"
-    PROCESSING_STATUS_UNLOCKED = "unlocked"
     PROCESSING_STATUS_DISCARDED = "discarded"
     PROCESSING_STATUS_CLOSED = "closed"
     PROCESSING_STATUS_CHOICES = (
@@ -280,7 +279,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         (PROCESSING_STATUS_WITH_APPROVER, "With Approver"),
         (PROCESSING_STATUS_APPROVED, "Approved"),
         (PROCESSING_STATUS_DECLINED, "Declined"),
-        (PROCESSING_STATUS_UNLOCKED, "Unlocked"),
         (PROCESSING_STATUS_DISCARDED, "Discarded"),
         (PROCESSING_STATUS_CLOSED, "Delisted"),
     )
@@ -389,7 +387,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     assigned_approver = models.IntegerField(null=True)  # EmailUserRO
     approved_by = models.IntegerField(null=True)  # EmailUserRO
     datetime_approved = models.DateTimeField(blank=True, null=True)
-    datetime_updated = models.DateTimeField(default=timezone.now)
+    datetime_updated = models.DateTimeField(auto_now=True)
     last_modified_by = models.IntegerField(null=True)  # EmailUserRO
     # internal user who edits the approved conservation status(only specific fields)
     # modified_by = models.IntegerField(null=True) #EmailUserRO
@@ -442,7 +440,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
     def save(self, *args, **kwargs):
         # Clear the cache
         cache.delete(settings.CACHE_KEY_MAP_OCCURRENCE_REPORTS)
-        self.datetime_updated = timezone.now()
         version_user = kwargs.get("version_user") or getattr(self, "version_user", None)
         if version_user is not None:
             user_id = version_user.id if hasattr(version_user, "id") else int(version_user)
@@ -551,6 +548,18 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         return self.processing_status in self.FINALISED_STATUSES
 
     @property
+    def is_unlocked(self):
+        return self.processing_status == self.PROCESSING_STATUS_APPROVED and not self.locked
+
+    @property
+    def show_locked_indicator(self):
+        return self.processing_status == self.PROCESSING_STATUS_APPROVED
+
+    @property
+    def editing_window_minutes(self):
+        return settings.UNLOCKED_OCCURRENCE_REPORT_EDITING_WINDOW_MINUTES
+
+    @property
     def allowed_assessors(self):
         group_ids = None
         if self.processing_status in [
@@ -568,11 +577,14 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
                 else []
             )
             return users
-        elif self.processing_status in [
-            OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
-            OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
-            OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
-        ]:
+        elif (
+            self.processing_status
+            in [
+                OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
+                OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
+            ]
+            or self.is_unlocked
+        ):
             group_ids = member_ids(GROUP_NAME_OCCURRENCE_ASSESSOR)
             users = (
                 list(
@@ -650,10 +662,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         return is_occurrence_report_referee(request, occurrence_report=self)
 
     def has_unlocked_mode(self, request):
-        status_with_assessor = [
-            "unlocked",
-        ]
-        if self.processing_status not in status_with_assessor:
+        if not self.is_unlocked:
             return False
 
         if not self.assigned_officer:
@@ -715,11 +724,14 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         return related_item
 
     def can_assess(self, request):
-        if self.processing_status in [
-            OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
-            OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
-            OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
-        ]:
+        if (
+            self.processing_status
+            in [
+                OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
+                OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
+            ]
+            or self.is_unlocked
+        ):
             return is_occurrence_assessor(request) or is_occurrence_approver(request)
 
         elif self.processing_status == OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER:
@@ -728,10 +740,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         return False
 
     def can_change_lock(self, request):
-        if self.processing_status in [
-            OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
-            OccurrenceReport.PROCESSING_STATUS_APPROVED,
-        ]:
+        if self.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED:
             return is_occurrence_assessor(request) or is_occurrence_approver(request)
 
     @transaction.atomic
@@ -1125,6 +1134,7 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_APPROVED
         self.customer_status = OccurrenceReport.CUSTOMER_STATUS_APPROVED
+        self.locked = True
         self.approved_by = request.user.id
         self.datetime_approved = timezone.now()
 
@@ -1180,13 +1190,18 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
 
     @transaction.atomic
     def back_to_assessor(self, request, validated_data):
-        if not self.can_assess(request) or self.processing_status not in [
-            OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
-            OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
-        ]:
+        if (
+            not self.can_assess(request)
+            or self.processing_status
+            not in [
+                OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
+            ]
+            and not self.is_unlocked
+        ):
             raise exceptions.OccurrenceReportNotAuthorized()
 
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR
+        self.locked = False
         self.save(version_user=request.user)
 
         reason = validated_data.get("reason", "")
@@ -1212,36 +1227,46 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
         send_approver_back_to_assessor_email_notification(request, self, reason)
 
     def lock(self, request):
-        if self.can_change_lock(request) and self.processing_status == OccurrenceReport.PROCESSING_STATUS_UNLOCKED:
-            self.processing_status = OccurrenceReport.PROCESSING_STATUS_APPROVED
-            self.save(version_user=request.user)
+        if self.locked:
+            raise ValidationError("Occurrence report is already locked")
 
-            self.log_user_action(
-                OccurrenceReportUserAction.ACTION_LOCK.format(self.occurrence_report_number),
-                request,
-            )
+        if not self.can_change_lock(request):
+            raise ValidationError("You do not have permission to lock this occurrence report")
 
-            request.user.log_user_action(
-                OccurrenceReportUserAction.ACTION_LOCK.format(self.occurrence_report_number),
-                request,
-            )
+        self.locked = True
+        self.save(version_user=request.user)
+
+        self.log_user_action(
+            OccurrenceReportUserAction.ACTION_LOCK.format(self.occurrence_report_number),
+            request,
+        )
+
+        request.user.log_user_action(
+            OccurrenceReportUserAction.ACTION_LOCK.format(self.occurrence_report_number),
+            request,
+        )
 
     def unlock(self, request):
-        if self.can_change_lock(request) and self.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED:
-            self.processing_status = OccurrenceReport.PROCESSING_STATUS_UNLOCKED
-            if self.assigned_officer != request.user.id:
-                self.assigned_officer = request.user.id
-            self.save(version_user=request.user)
+        if not self.locked:
+            raise ValidationError("Occurrence report is already unlocked")
 
-            self.log_user_action(
-                OccurrenceReportUserAction.ACTION_UNLOCK.format(self.occurrence_report_number),
-                request,
-            )
+        if not self.can_change_lock(request):
+            raise ValidationError("You do not have permission to unlock this occurrence report")
 
-            request.user.log_user_action(
-                OccurrenceReportUserAction.ACTION_UNLOCK.format(self.occurrence_report_number),
-                request,
-            )
+        self.locked = False
+        if self.assigned_officer != request.user.id:
+            self.assigned_officer = request.user.id
+        self.save(version_user=request.user)
+
+        self.log_user_action(
+            OccurrenceReportUserAction.ACTION_UNLOCK.format(self.occurrence_report_number),
+            request,
+        )
+
+        request.user.log_user_action(
+            OccurrenceReportUserAction.ACTION_UNLOCK.format(self.occurrence_report_number),
+            request,
+        )
 
     @property
     def latest_referrals(self):
@@ -1254,7 +1279,6 @@ class OccurrenceReport(SubmitterInformationModelMixin, RevisionedMixin):
             OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
             OccurrenceReport.PROCESSING_STATUS_APPROVED,
             OccurrenceReport.PROCESSING_STATUS_DECLINED,
-            OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
             OccurrenceReport.PROCESSING_STATUS_CLOSED,
         ]:
             if OccurrenceReportReferral.objects.filter(occurrence_report=self, referral=request.user.id).exists():
