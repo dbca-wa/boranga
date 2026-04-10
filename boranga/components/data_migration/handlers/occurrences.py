@@ -58,6 +58,7 @@ from boranga.components.occurrence.models import (
     SpeciesRole,
 )
 from boranga.components.species_and_communities.models import District, Taxonomy
+from boranga.components.users.models import SubmitterInformation
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,15 @@ class OccurrenceImporter(BaseSheetImporter):
             conn.set_autocommit(True)
         try:
             try:
+                # Delete SubmitterInformation first — it is not cascade-deleted when the OCR is deleted
+                # (the FK sits on OccurrenceReport with on_delete=SET_NULL, so deleting the OCR orphans
+                # the SubmitterInformation row without this explicit step).
+                if is_filtered:
+                    SubmitterInformation.objects.filter(
+                        occurrence_report__group_type__name__in=target_group_types
+                    ).delete()
+                else:
+                    SubmitterInformation.objects.filter(occurrence_report__isnull=False).delete()
                 # Delete OccurrenceReport objects first as they depend on Occurrences
                 OccurrenceReport.objects.filter(**report_filter).delete()
 

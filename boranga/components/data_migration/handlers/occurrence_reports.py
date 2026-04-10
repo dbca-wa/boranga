@@ -170,6 +170,15 @@ class OccurrenceReportImporter(BaseSheetImporter):
             conn.set_autocommit(True)
         try:
             try:
+                # Delete SubmitterInformation first — it is not cascade-deleted when the OCR is deleted
+                # (the FK sits on OccurrenceReport with on_delete=SET_NULL, so deleting the OCR orphans
+                # the SubmitterInformation row without this explicit step).
+                if is_filtered:
+                    SubmitterInformation.objects.filter(
+                        occurrence_report__group_type__name__in=target_group_types
+                    ).delete()
+                else:
+                    SubmitterInformation.objects.filter(occurrence_report__isnull=False).delete()
                 if is_filtered:
                     OccurrenceReport.objects.filter(**report_filter).delete()
                 else:
