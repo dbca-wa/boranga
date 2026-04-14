@@ -74,6 +74,10 @@ class ReadOnlyMiddleware:
             and "_paginated" not in request.path
             # Allow document list POST requests (filefield_immediate uses POST with action=list)
             and not (request.method == "POST" and request.POST.get("action") == "list")
+            # Allow shapefile conversion (functionally read-only: converts GeoJSON for geometry download)
+            and request.path != "/api/geojson_to_shapefile"
+            # Allow report queueing (needed to run reports while in verification mode)
+            and request.path != "/api/queue_report/"
         ):
             from django.http import JsonResponse
 

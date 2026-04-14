@@ -3154,12 +3154,18 @@ export default {
             });
 
             let extent_interactions = [vm.snap, vm.dragAndDrop];
-            if (vm.editable) {
-                // Only add these interactions if polygons are editable
+            if (vm.editable || window.env?.read_only) {
+                // Add the select interaction when editable or when in read-only verification
+                // mode so that features can be selected and downloaded as GeoJSON/Shapefile.
                 vm.select = vm.initialiseSelectFeatureEvent();
+                extent_interactions.push(vm.select);
+            }
+
+            if (vm.editable) {
+                // Only add modify/transform interactions if polygons are editable
                 vm.modify = vm.initialiseModifyFeatureEvent();
                 vm.transform = vm.initialiseTransform();
-                extent_interactions.push(vm.select, vm.modify, vm.transform);
+                extent_interactions.push(vm.modify, vm.transform);
             }
 
             vm.map.getInteractions().extend(extent_interactions);

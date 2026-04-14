@@ -120,11 +120,20 @@ window.fetch = ((orig) => {
             body instanceof FormData &&
             body.get('action') === 'list';
 
+        // These POST endpoints are functionally read-only and must work in read-only mode:
+        // - geojson_to_shapefile: converts GeoJSON to a shapefile for geometry download
+        // - queue_report/: queues a report export job (needed during data verification)
+        const EXEMPT_WRITE_PATHS = new Set([
+            '/api/geojson_to_shapefile',
+            '/api/queue_report/',
+        ]);
+
         if (
             isApi &&
             WRITE_METHODS.has(method) &&
             !url.pathname.includes('_paginated') &&
-            !isDocListQuery
+            !isDocListQuery &&
+            !EXEMPT_WRITE_PATHS.has(url.pathname)
         ) {
             const isReadOnly = await refreshReadOnlyStatus();
             if (isReadOnly) {
