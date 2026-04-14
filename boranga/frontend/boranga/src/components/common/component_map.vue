@@ -4356,7 +4356,7 @@ export default {
         },
         initialiseSelectFeatureEvent: function () {
             let vm = this;
-            if (!vm.editable) {
+            if (!vm.editable && !window.env?.read_only) {
                 return null;
             }
             // A basic style for selected polygons
@@ -4419,15 +4419,17 @@ export default {
                     // Add to the collection for the purpose of controlling which features can be modified (ModifyFeature)
                     vm.selectedFeatureCollection.push(feature);
                     // Add to undo stack
-                    vm.undoredo.push('select feature', {
-                        before: new Collection(beforeFeatures, {
-                            unique: true,
-                        }),
-                        after: new Collection(
-                            [...vm.selectedFeatureCollection.getArray()],
-                            { unique: true }
-                        ),
-                    });
+                    if (vm.undoredo) {
+                        vm.undoredo.push('select feature', {
+                            before: new Collection(beforeFeatures, {
+                                unique: true,
+                            }),
+                            after: new Collection(
+                                [...vm.selectedFeatureCollection.getArray()],
+                                { unique: true }
+                            ),
+                        });
+                    }
                 });
 
                 $.each(evt.deselected, function (idx, feature) {
@@ -4442,15 +4444,17 @@ export default {
                     // Remove from the collection for the purpose of controlling which features can be modified (ModifyFeature)
                     vm.selectedFeatureCollection.remove(feature);
                     // Add to undo stack
-                    vm.undoredo.push('select feature', {
-                        before: new Collection(beforeFeatures, {
-                            unique: true,
-                        }),
-                        after: new Collection(
-                            [...vm.selectedFeatureCollection.getArray()],
-                            { unique: true }
-                        ),
-                    });
+                    if (vm.undoredo) {
+                        vm.undoredo.push('select feature', {
+                            before: new Collection(beforeFeatures, {
+                                unique: true,
+                            }),
+                            after: new Collection(
+                                [...vm.selectedFeatureCollection.getArray()],
+                                { unique: true }
+                            ),
+                        });
+                    }
                 });
 
                 // In draw mode, disable the Draw interaction while features
