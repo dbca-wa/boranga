@@ -223,6 +223,7 @@ class ConservationStatusImporter(BaseSheetImporter):
         name_cache: dict = {}
 
         for row in all_rows:
+            stats["processed"] += 1
             # Run pipeline transformations
             pipelines = pipelines_by_source.get(row.get("_source"), [])
 
