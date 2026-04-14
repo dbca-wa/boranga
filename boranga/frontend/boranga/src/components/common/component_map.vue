@@ -2678,7 +2678,10 @@ export default {
                 feature.unset('model');
                 features.push(feature);
             });
-            const geojson = format.writeFeatures(features);
+            const geojson = format.writeFeatures(features, {
+                dataProjection: 'EPSG:4326',
+                featureProjection: `EPSG:${this.effectiveMapSrid}`,
+            });
 
             this.download_content(
                 geojson,
