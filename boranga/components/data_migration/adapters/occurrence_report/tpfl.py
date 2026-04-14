@@ -412,7 +412,8 @@ PLANT_COUNT_METHOD_TRANSFORM = build_legacy_map_transform(
 
 def ocr_plant_count_comment_transform(value, ctx):
     """Concatenate fields for OCRPlantCount comment."""
-    parts = []
+    first_parts: list[str] = []
+    rest_parts: list[str] = []
 
     row = getattr(ctx, "row", None) if ctx is not None else None
     if row is None and isinstance(ctx, dict):
@@ -422,10 +423,10 @@ def ocr_plant_count_comment_transform(value, ctx):
     # schema column mapping, so `value` is always None.  Read from ctx.row instead.
     population_notes = (row.get("POPULATION_NOTES") if isinstance(row, dict) else None) or value
     if population_notes and str(population_notes).strip():
-        parts.append(str(population_notes).strip())
+        first_parts.append(str(population_notes).strip())
 
     if not isinstance(row, dict):
-        return _result("; ".join(parts) if parts else "")
+        return _result("; ".join(first_parts) if first_parts else "")
 
     # Lazy-load AREA_OCCUPIED_METHOD mapping once into a module-level cache
     # to avoid per-row DB/cache round-trips during the transform phase.
@@ -447,34 +448,36 @@ def ocr_plant_count_comment_transform(value, ctx):
     if area_method and str(area_method).strip():
         mapped = _AREA_METHOD_MAP.get(str(area_method).strip())
         if mapped:
-            parts.append(f"Area Occupied Method: {mapped}")
+            rest_parts.append(f"Area Occupied Method: {mapped}")
 
     # 3. QUAD_SIZE
     quad_size = row.get("QUAD_SIZE")
     if quad_size and str(quad_size).strip():
-        parts.append(f"Quadrat Size: {str(quad_size).strip()}")
+        rest_parts.append(f"Quadrat Size: {str(quad_size).strip()}")
 
     # 4. QUAD_NUM_TOTAL
     quad_num_total = row.get("QUAD_NUM_TOTAL")
     if quad_num_total and str(quad_num_total).strip():
-        parts.append(f"Quadrat Simple Count: {str(quad_num_total).strip()}")
+        rest_parts.append(f"Quadrat Simple Count: {str(quad_num_total).strip()}")
 
     # 5. QUAD_NUM_MATURE
     quad_num_mature = row.get("QUAD_NUM_MATURE")
     if quad_num_mature and str(quad_num_mature).strip():
-        parts.append(f"Quadrat Mature Count: {str(quad_num_mature).strip()}")
+        rest_parts.append(f"Quadrat Mature Count: {str(quad_num_mature).strip()}")
 
     # 6. QUAD_NUM_JUVENILE
     quad_num_juvenile = row.get("QUAD_NUM_JUVENILE")
     if quad_num_juvenile and str(quad_num_juvenile).strip():
-        parts.append(f"Quadrat Juvenile Count: {str(quad_num_juvenile).strip()}")
+        rest_parts.append(f"Quadrat Juvenile Count: {str(quad_num_juvenile).strip()}")
 
     # 7. QUAD_NUM_SEEDLINGS
     quad_num_seedlings = row.get("QUAD_NUM_SEEDLINGS")
     if quad_num_seedlings and str(quad_num_seedlings).strip():
-        parts.append(f"Quadrat Seedlings Count: {str(quad_num_seedlings).strip()}")
+        rest_parts.append(f"Quadrat Seedlings Count: {str(quad_num_seedlings).strip()}")
 
-    return _result("; ".join(parts))
+    # <LINE BREAK> between POPULATION_NOTES and the remaining fields
+    sections = [p for p in ["; ".join(first_parts), "; ".join(rest_parts)] if p]
+    return _result("\n".join(sections) if sections else "")
 
 
 def ocr_plant_count_status_transform(value, ctx):
