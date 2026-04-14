@@ -692,9 +692,9 @@ def t_ocr_comments_transform(value, ctx):
             return
         if comments:
             comments += _next_sep + part
-            _next_sep = ", "
         else:
             comments = part
+        _next_sep = ", "
 
     # OTHER_COMMENTS: plain text, no prefix
     _append_part(OTHER_COMMENTS if OTHER_COMMENTS else None)
