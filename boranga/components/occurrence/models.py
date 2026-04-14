@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import json
 import logging
@@ -8345,7 +8346,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                         "row_index": index,
                         "error_type": "column",
                         "data": cell_value,
-                        "error_message": f"Value in column {self.xlsx_column_header_name} is blank",
+                        "error_message": f"Column '{self.xlsx_column_header_name}' is required but was empty",
                     }
                 )
                 errors_added += 1
@@ -8491,17 +8492,21 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             try:
                 geom_json = json.loads(cell_value)
             except (json.JSONDecodeError, TypeError):
-                error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} is not a valid JSON"
-                errors.append(
-                    {
-                        "row_index": index,
-                        "error_type": "column",
-                        "data": cell_value,
-                        "error_message": error_message,
-                    }
-                )
-                errors_added += 1
-                return cell_value, errors_added
+                # Fallback: handle Python dict repr (single-quoted strings from str(dict))
+                try:
+                    geom_json = ast.literal_eval(cell_value)
+                except Exception:
+                    error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} is not a valid JSON"
+                    errors.append(
+                        {
+                            "row_index": index,
+                            "error_type": "column",
+                            "data": cell_value,
+                            "error_message": error_message,
+                        }
+                    )
+                    errors_added += 1
+                    return cell_value, errors_added
 
             cell_value = []
 
@@ -8653,7 +8658,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors_added += 1
                 return cell_value, errors_added
             except related_model.DoesNotExist:
-                display_value = cell_value if cell_value else "matching the criteria"
+                display_value = repr(cell_value) if cell_value is not None else "(blank)"
                 error_message = (
                     f"Can't find {self.django_import_field_name} record by looking up "
                     f"{lookup_field} with value {display_value} "
