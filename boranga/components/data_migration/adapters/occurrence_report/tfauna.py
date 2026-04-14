@@ -43,7 +43,11 @@ _name_id_to_species_cache: dict[str, int] | None = None
 
 def _get_name_id_to_species_map() -> dict[str, int]:
     """Build and cache a map from taxon_name_id → Species primary key
-    using TFAUNA LegacyTaxonomyMapping entries."""
+    using TFAUNA LegacyTaxonomyMapping entries.
+
+    Only maps to fauna Species (group_type='fauna') to prevent cross-kingdom
+    links where a TFAUNA occurrence would incorrectly point to a flora Species.
+    """
     global _name_id_to_species_cache
     if _name_id_to_species_cache is not None:
         return _name_id_to_species_cache
@@ -51,9 +55,9 @@ def _get_name_id_to_species_map() -> dict[str, int]:
     from boranga.components.main.models import LegacyTaxonomyMapping
     from boranga.components.species_and_communities.models import Species
 
-    # taxonomy_id → species pk
+    # taxonomy_id → species pk (fauna only)
     tax_to_species: dict[int, int] = {}
-    for sp in Species.objects.values("taxonomy_id", "id"):
+    for sp in Species.objects.filter(group_type__name="fauna").values("taxonomy_id", "id"):
         if sp["taxonomy_id"]:
             tax_to_species[sp["taxonomy_id"]] = sp["id"]
 
