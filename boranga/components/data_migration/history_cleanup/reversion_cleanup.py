@@ -176,7 +176,7 @@ class ReversionHistoryCleaner:
             (SpeciesDistribution, "species"),
             (SpeciesConservationAttributes, "species"),
             (SpeciesPublishingStatus, "species"),
-            (Taxonomy, "species_set"),  # Reverse FK
+            (Taxonomy, "species"),  # Reverse of OneToOneField
         ]
 
         for model_class, related_path in models_to_clear:
@@ -187,8 +187,8 @@ class ReversionHistoryCleaner:
 
         # Handle Taxonomy-related models (nested relationship)
         taxonomy_models = [
-            (TaxonPreviousName, "taxonomy__species_set"),
-            (TaxonVernacular, "taxonomy__species_set"),
+            (TaxonPreviousName, "taxonomy__species"),
+            (TaxonVernacular, "taxonomy__species"),
         ]
 
         for model_class, related_path in taxonomy_models:
