@@ -208,7 +208,13 @@ class Command(BaseCommand):
         )
 
         # ── 4. LegacyTaxonomyMapping  (Task 11847) ──────────────────────────────
-        # Match TFAUNA NameID → Taxonomy via Taxonomy.taxon_name_id.
+        # Match TFAUNA NameID → Taxonomy via scientific name matching within
+        # kingdom Animalia.
+        #
+        # WARNING: The TFAUNA CSV "NameID" column uses a numbering system that
+        # is DIFFERENT from Taxonomy.taxon_name_id, so matching by ID would
+        # cross-link fauna names to flora taxonomy records (see incident notes).
+        # We must resolve via scientific name + kingdom instead.
         species_list_path = options["species_list"]
         if not os.path.isfile(species_list_path):
             self.stdout.write(
@@ -228,16 +234,37 @@ class Command(BaseCommand):
 
             self.stdout.write(f"  Read {len(name_id_to_scname)} NameID→ScName pairs from Species List.")
 
-            # Bulk-fetch matching Taxonomy objects
-            int_ids = {int(nid) for nid in name_id_to_scname}
-            taxon_by_name_id: dict[int, Taxonomy] = {
-                t.taxon_name_id: t for t in Taxonomy.objects.filter(taxon_name_id__in=int_ids)
-            }
-            self.stdout.write(f"  Resolved {len(taxon_by_name_id)}/{len(int_ids)} NameIDs via Taxonomy.taxon_name_id.")
+            # Build scientific name → Taxonomy lookup restricted to Animalia
+            # (case-insensitive to handle minor casing differences)
+            unique_scnames = set(name_id_to_scname.values())
+            taxon_by_scname: dict[str, Taxonomy] = {}
+            for t in Taxonomy.objects.filter(
+                scientific_name__in=unique_scnames,
+                kingdom_fk__kingdom_name="Animalia",
+            ):
+                taxon_by_scname[t.scientific_name] = t
+
+            # Case-insensitive fallback for names that didn't match exactly
+            if len(taxon_by_scname) < len(unique_scnames):
+                unmatched = unique_scnames - set(taxon_by_scname.keys())
+                ci_lookup = {n.lower(): n for n in unmatched}
+                for t in Taxonomy.objects.filter(
+                    kingdom_fk__kingdom_name="Animalia",
+                ):
+                    if t.scientific_name.lower() in ci_lookup:
+                        original = ci_lookup.pop(t.scientific_name.lower())
+                        taxon_by_scname[original] = t
+                        if not ci_lookup:
+                            break
+
+            self.stdout.write(
+                f"  Resolved {len(taxon_by_scname)}/{len(unique_scnames)} "
+                f"unique ScNames via Taxonomy scientific_name (Animalia only)."
+            )
 
             ltm_created = ltm_updated = ltm_skipped = 0
             for nid_str, scname in name_id_to_scname.items():
-                taxonomy = taxon_by_name_id.get(int(nid_str))
+                taxonomy = taxon_by_scname.get(scname)
                 if taxonomy is None:
                     ltm_skipped += 1
                     continue
