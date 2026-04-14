@@ -1,5 +1,6 @@
 import logging
 import re
+import warnings
 
 import pyproj
 from django.apps import apps
@@ -123,7 +124,9 @@ def proj4_string_from_epsg_code(code):
 
     ellipsoids = pyproj.get_ellps_map()
     crs = pyproj.CRS.from_string(code)
-    prj = crs.to_proj4()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*PROJ string.*")
+        prj = crs.to_proj4()
     prj_split = prj.split("+")
 
     regex = re.compile(r"(?:\+ellps=)(\w+)")
@@ -204,25 +207,6 @@ class GetListItems(views.APIView):
         return Response(serializer.data)
 
 
-# proj4js datum-shift definitions for SRIDs where pyproj's to_proj4() output
-# omits +towgs84 (e.g. GDA94 / EPSG:4283).  These use the official ICSM
-# 7-parameter Helmert transformation (GDA94 → GDA2020 ≈ WGS84), which gives
-# ~1–5 cm accuracy across Australia — sufficient for web-map display.
-_PROJ4_OVERRIDES = {
-    # GDA94 with the ICSM conformal 7-parameter transformation to WGS84/GDA2020.
-    # Source: ICSM GDA2020 Technical Manual (Table 3.4), converted from
-    # "position vector" (ICSM/ISO 19111) to "coordinate frame" convention
-    # (PROJ4/proj4js) by negating Rx, Ry, Rz.
-    #   Tx=0.06155 m, Ty=-0.01087 m, Tz=-0.04019 m
-    #   Rx=+0.0394924", Ry=+0.0327221", Rz=+0.0328979"  (arcseconds, signs flipped)
-    #   Sc=-9.994 ppb = -0.009994 ppm
-    # This gives ~1.80 m NE shift (GDA94 → WGS84), matching EPSG:4283 → EPSG:7844.
-    4283: (
-        "+proj=longlat +ellps=GRS80 +towgs84=0.06155,-0.01087,-0.04019,0.0394924,0.0327221,0.0328979,-0.009994 +no_defs"
-    ),
-}
-
-
 class GetGISSettings(views.APIView):
     """Returns GIS configuration including the default SRID and extent."""
 
@@ -233,10 +217,12 @@ class GetGISSettings(views.APIView):
         try:
             crs = pyproj.CRS.from_epsg(srid)
             crs_name = crs.name
-            proj4_string = _PROJ4_OVERRIDES.get(srid) or crs.to_proj4()
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning, message=".*PROJ string.*")
+                proj4_string = crs.to_proj4()
         except Exception:
             crs_name = f"EPSG:{srid}"
-            proj4_string = _PROJ4_OVERRIDES.get(srid)
+            proj4_string = None
 
         extent = settings.GIS_EXTENT
         if not isinstance(extent, list | tuple) or len(extent) != 4:
