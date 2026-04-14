@@ -160,9 +160,6 @@ class ReversionHistoryCleaner:
             SpeciesDistribution,
             SpeciesDocument,
             SpeciesPublishingStatus,
-            Taxonomy,
-            TaxonPreviousName,
-            TaxonVernacular,
         )
 
         logger.info("=== Clearing Species reversion history ===")
@@ -170,28 +167,19 @@ class ReversionHistoryCleaner:
         # Main model first
         self.clear_for_model(Species, group_type_filter)
 
-        # Related models (most are direct FK to Species, some through Taxonomy)
+        # Related models that CASCADE-delete when Species is deleted
+        # NOTE: Taxonomy, TaxonPreviousName, TaxonVernacular are deliberately
+        # excluded.  Species.taxonomy is OneToOneField(on_delete=SET_NULL), so
+        # Taxonomy records survive a Species wipe — their version history must
+        # be preserved.
         models_to_clear = [
             (SpeciesDocument, "species"),
             (SpeciesDistribution, "species"),
             (SpeciesConservationAttributes, "species"),
             (SpeciesPublishingStatus, "species"),
-            (Taxonomy, "species"),  # Reverse of OneToOneField
         ]
 
         for model_class, related_path in models_to_clear:
-            try:
-                self.clear_for_related_model(model_class, related_path, group_type_filter)
-            except Exception as e:
-                logger.warning("Failed to clear %s versions: %s", model_class.__name__, e)
-
-        # Handle Taxonomy-related models (nested relationship)
-        taxonomy_models = [
-            (TaxonPreviousName, "taxonomy__species"),
-            (TaxonVernacular, "taxonomy__species"),
-        ]
-
-        for model_class, related_path in taxonomy_models:
             try:
                 self.clear_for_related_model(model_class, related_path, group_type_filter)
             except Exception as e:
