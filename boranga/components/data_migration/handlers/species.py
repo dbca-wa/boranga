@@ -7,7 +7,7 @@ import os
 from collections import defaultdict
 from typing import Any
 
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.sources import Source
@@ -155,13 +155,9 @@ class SpeciesImporter(BaseSheetImporter):
                 target_group_types,
             )
             species_filter = {"group_type__name__in": target_group_types}
-            occ_filter = {"group_type__name__in": target_group_types}
-            report_filter = {"group_type__name__in": target_group_types}
         else:
             logger.warning("SpeciesImporter: deleting ALL Species and related data...")
             species_filter = {}
-            occ_filter = {}
-            report_filter = {}
 
         # Delete reversion history first (more efficient than waiting for cascade)
         from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
@@ -223,17 +219,74 @@ class SpeciesImporter(BaseSheetImporter):
                     Occurrence.objects.all().delete()
                     Species.objects.all().delete()
             else:
-                # Filtered delete
-                try:
-                    OccurrenceReport.objects.filter(**report_filter).delete()
+                # Filtered delete — use raw SQL for performance.
+                # Django's ORM Collector walks ~45 reverse FK relationships,
+                # loading every related PK into memory before issuing DELETEs.
+                # For ~5 K Species + ~22 K Occurrences + cascades this takes
+                # minutes.  Raw SQL with subqueries lets Postgres handle it in
+                # seconds via its own ON DELETE CASCADE.
+                vendor = getattr(conn, "vendor", None)
+                target_species_pks = list(Species.objects.filter(**species_filter).values_list("pk", flat=True))
+                if target_species_pks and vendor == "postgresql":
+                    species_table = Species._meta.db_table
+                    occ_table = Occurrence._meta.db_table
+                    ocr_table = OccurrenceReport._meta.db_table
+                    logger.info(
+                        "SpeciesImporter: raw-SQL filtered delete for %d Species (group_types=%s)",
+                        len(target_species_pks),
+                        target_group_types,
+                    )
+                    with conn.cursor() as cur:
+                        # Build a temp table of target species PKs for efficient joins
+                        cur.execute("CREATE TEMP TABLE _target_species_pks (id INTEGER PRIMARY KEY) ON COMMIT DROP")
+                        # Batch-insert PKs (executemany is fast for simple inserts)
+                        from itertools import batched
 
-                    # Unlink combined_occurrence to allow deletion
-                    Occurrence.objects.filter(**occ_filter).update(combined_occurrence=None)
-                    Occurrence.objects.filter(**occ_filter).delete()
+                        for batch in batched(target_species_pks, 5000):
+                            cur.executemany("INSERT INTO _target_species_pks (id) VALUES (%s)", [(pk,) for pk in batch])
 
-                    Species.objects.filter(**species_filter).delete()
-                except Exception:
-                    logger.exception("SpeciesImporter: Failed to delete filtered target data")
+                        # 1. OccurrenceReports linked to target Species (directly or via Occurrence)
+                        #    CASCADE on the DB side handles OCRLocation, OCRHabitatComposition, etc.
+                        cur.execute(f"""
+                            DELETE FROM {ocr_table}
+                            WHERE species_id IN (SELECT id FROM _target_species_pks)
+                               OR occurrence_id IN (
+                                   SELECT id FROM {occ_table}
+                                   WHERE species_id IN (SELECT id FROM _target_species_pks)
+                               )
+                        """)
+                        logger.info("  Deleted %d OccurrenceReport rows", cur.rowcount)
+
+                        # 2. Occurrences — clear self-FK first, then delete
+                        cur.execute(f"""
+                            UPDATE {occ_table} SET combined_occurrence_id = NULL
+                            WHERE species_id IN (SELECT id FROM _target_species_pks)
+                        """)
+                        cur.execute(f"""
+                            DELETE FROM {occ_table}
+                            WHERE species_id IN (SELECT id FROM _target_species_pks)
+                        """)
+                        logger.info("  Deleted %d Occurrence rows", cur.rowcount)
+
+                        # 3. Species themselves — CASCADE handles SpeciesDistribution,
+                        #    SpeciesPublishingStatus, ConservationStatus, etc.
+                        cur.execute(f"""
+                            DELETE FROM {species_table}
+                            WHERE id IN (SELECT id FROM _target_species_pks)
+                        """)
+                        logger.info("  Deleted %d Species rows", cur.rowcount)
+
+                elif target_species_pks:
+                    # Non-Postgres fallback: ORM delete
+                    OccurrenceReport.objects.filter(
+                        models.Q(species_id__in=target_species_pks)
+                        | models.Q(occurrence__species_id__in=target_species_pks)
+                    ).delete()
+                    Occurrence.objects.filter(species_id__in=target_species_pks).update(combined_occurrence=None)
+                    Occurrence.objects.filter(species_id__in=target_species_pks).delete()
+                    Species.objects.filter(pk__in=target_species_pks).delete()
+                else:
+                    logger.info("SpeciesImporter: no Species matched filter %s; nothing to delete", species_filter)
 
             # Reset the primary key sequence for Species, Occurrence, OccurrenceReport
             try:
@@ -614,6 +667,26 @@ class SpeciesImporter(BaseSheetImporter):
                 # update existing (re-import of same record)
                 for k, v in defaults.items():
                     setattr(obj, k, v)
+                # Claim the new taxonomy_id in tax_seen so that subsequent ops
+                # with the same taxonomy_id are not added to to_create, which
+                # would cause a unique constraint violation when bulk_update later
+                # changes this species to the same taxonomy_id.
+                new_tax_id = defaults.get("taxonomy_id")
+                if new_tax_id:
+                    if new_tax_id in tax_seen:
+                        # Another op already claimed this taxonomy_id; clear it
+                        # from this update to avoid a conflict in bulk_update.
+                        logger.warning(
+                            "SpeciesImporter: taxonomy_id=%s collision during update of "
+                            "migrated_from_id=%s (already claimed by %s); "
+                            "clearing taxonomy_id from this update to avoid constraint violation",
+                            new_tax_id,
+                            migrated_from_id,
+                            tax_seen[new_tax_id],
+                        )
+                        obj.taxonomy_id = None
+                    else:
+                        tax_seen[new_tax_id] = migrated_from_id
                 to_update.append((obj, merged, districts_raw))
                 continue
 
