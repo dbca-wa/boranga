@@ -1224,33 +1224,34 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 # OCCPlantCount
                 if any(k.startswith("OCCPlantCount__") for k in merged):
-                    # Build comment from multiple fields
-                    pc_comment_parts: list[str] = []
+                    # Build comment from multiple fields.
+                    # POPULATION_NOTES goes first (no prefix), then a <LINE BREAK>,
+                    # then the remaining structured fields joined with "; ".
+                    pc_pop_notes = merged.get("OCCPlantCount__population_notes")
+                    pc_rest_parts: list[str] = []
                     pc_pollinator = merged.get("OCCPlantCount__pollinator_observation")
                     if pc_pollinator:
-                        pc_comment_parts.append(f"Pollinator Observation: {pc_pollinator}")
+                        pc_rest_parts.append(f"Pollinator Observation: {pc_pollinator}")
                     pc_area_method = merged.get("OCCPlantCount__area_occupied_method")
                     if pc_area_method:
-                        pc_comment_parts.append(f"Area Occupied Method: {pc_area_method}")
+                        pc_rest_parts.append(f"Area Occupied Method: {pc_area_method}")
                     pc_quad_size = merged.get("OCCPlantCount__quad_size")
                     if pc_quad_size:
-                        pc_comment_parts.append(f"Quadrat Size: {pc_quad_size}")
+                        pc_rest_parts.append(f"Quadrat Size: {pc_quad_size}")
                     pc_quad_total = merged.get("OCCPlantCount__quad_num_total")
                     if pc_quad_total:
-                        pc_comment_parts.append(f"Quadrat Num Total: {pc_quad_total}")
+                        pc_rest_parts.append(f"Quadrat Num Total: {pc_quad_total}")
                     pc_quad_mat = merged.get("OCCPlantCount__quad_num_mature")
                     if pc_quad_mat:
-                        pc_comment_parts.append(f"Quadrat Num Mature: {pc_quad_mat}")
+                        pc_rest_parts.append(f"Quadrat Num Mature: {pc_quad_mat}")
                     pc_quad_juv = merged.get("OCCPlantCount__quad_num_juvenile")
                     if pc_quad_juv:
-                        pc_comment_parts.append(f"Quadrat Num Juvenile: {pc_quad_juv}")
+                        pc_rest_parts.append(f"Quadrat Num Juvenile: {pc_quad_juv}")
                     pc_quad_seed = merged.get("OCCPlantCount__quad_num_seedlings")
                     if pc_quad_seed:
-                        pc_comment_parts.append(f"Quadrat Num Seedlings: {pc_quad_seed}")
-                    pc_pop_notes = merged.get("OCCPlantCount__population_notes")
-                    if pc_pop_notes:
-                        pc_comment_parts.append(pc_pop_notes)
-                    pc_comment = "; ".join(pc_comment_parts) if pc_comment_parts else None
+                        pc_rest_parts.append(f"Quadrat Num Seedlings: {pc_quad_seed}")
+                    pc_sections = [p for p in [pc_pop_notes, "; ".join(pc_rest_parts)] if p]
+                    pc_comment = "\n".join(pc_sections) if pc_sections else None
 
                     # Derive count_status from detailed/simple data
                     has_detailed = any(
