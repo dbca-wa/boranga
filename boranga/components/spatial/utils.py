@@ -1201,7 +1201,7 @@ def get_geometry_array_from_geojson(
     features = geojson.get("features")
 
     geoms = []
-    bbox = Polygon.from_bbox(settings.GIS_EXTENT)
+    bbox = GEOSGeometry(Polygon.from_bbox(settings.GIS_EXTENT), srid=settings.DEFAULT_SRID)
 
     for feature in features:
         geom = feature.get("geometry")
@@ -1219,7 +1219,7 @@ def get_geometry_array_from_geojson(
             errors_added += 1
             continue
 
-        geom = GEOSGeometry(json.dumps(geom))
+        geom = GEOSGeometry(json.dumps(geom), srid=settings.DEFAULT_SRID)
 
         if not geom.within(bbox):
             error_message = (
