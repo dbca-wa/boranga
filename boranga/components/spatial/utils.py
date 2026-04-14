@@ -1219,7 +1219,12 @@ def get_geometry_array_from_geojson(
             errors_added += 1
             continue
 
-        geom = GEOSGeometry(json.dumps(geom), srid=settings.DEFAULT_SRID)
+        # GeoJSON is always WGS 84 (EPSG:4326) per RFC 7946.
+        # Parse with the correct source SRID, then reproject to the
+        # application's default CRS so stored geometries are consistent.
+        geom = GEOSGeometry(json.dumps(geom), srid=4326)
+        if geom.srid != settings.DEFAULT_SRID:
+            geom.transform(settings.DEFAULT_SRID)
 
         if not geom.within(bbox):
             error_message = (
