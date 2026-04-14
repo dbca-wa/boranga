@@ -781,6 +781,10 @@ export default {
             type: String,
             required: false,
         },
+        is_unlocked: {
+            type: Boolean,
+            default: false,
+        },
         // this prop is only send from split species form to make the original species readonly
         is_readonly: {
             type: Boolean,
@@ -1079,7 +1083,7 @@ export default {
                             showConfirmButton: false,
                             timer: 1200,
                         }).then(() => {
-                            if (vm.processing_status == 'Unlocked') {
+                            if (vm.is_unlocked) {
                                 vm.$router.go();
                             }
                         });

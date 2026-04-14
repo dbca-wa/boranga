@@ -682,20 +682,23 @@ def t_ocr_comments_transform(value, ctx):
     RDSIDE_MKR_COMMENTS = (ctx.row.get("RDSIDE_MKR_COMMENTS") or "").strip()
 
     comments = None
+    _next_sep = ", "
     transform_issues: list[TransformIssue] = []
 
     # Helper to append parts safely (skips falsy parts and avoids None concatenation)
     def _append_part(part: str | None):
-        nonlocal comments
+        nonlocal comments, _next_sep
         if not part:
             return
         if comments:
-            comments += ", " + part
+            comments += _next_sep + part
+            _next_sep = ", "
         else:
             comments = part
 
     # OTHER_COMMENTS: plain text, no prefix
     _append_part(OTHER_COMMENTS if OTHER_COMMENTS else None)
+    _next_sep = "\n"  # <LINE BREAK> before PURPOSE section
 
     if PURPOSE1:
         purpose1 = LegacyValueMap.get_target(
@@ -737,6 +740,7 @@ def t_ocr_comments_transform(value, ctx):
         else:
             _append_part(vesting)
 
+    _next_sep = "\n"  # <LINE BREAK> before fencing section
     _append_part(f"Fencing Status: {FENCING_STATUS}" if FENCING_STATUS else None)
     _append_part(f"Fencing Comments: {FENCING_COMMENTS}" if FENCING_COMMENTS else None)
     _append_part(f"Road Marker Status: {ROADSIDE_MARKER_STATUS}" if ROADSIDE_MARKER_STATUS else None)

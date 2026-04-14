@@ -468,16 +468,19 @@ class OccurrenceTpflAdapter(SourceAdapter):
             POP_COMMENTS = raw.get("POP_COMMENTS", "")
             REASON_DEACTIVATED = raw.get("REASON_DEACTIVATED", "")
             DEACTIVATED_DATE = raw.get("DEACTIVATED_DATE", "")
-            parts = []
+            first_parts = []
+            rest_parts = []
             if POP_COMMENTS:
-                parts.append(str(POP_COMMENTS).strip())
+                first_parts.append(str(POP_COMMENTS).strip())
             if REASON_DEACTIVATED:
-                parts.append(f"Reason Deactivated: {str(REASON_DEACTIVATED).strip()}")
+                rest_parts.append(f"Reason Deactivated: {str(REASON_DEACTIVATED).strip()}")
             if DEACTIVATED_DATE:
                 dd = _format_date_ddmmyyyy(DEACTIVATED_DATE)
-                parts.append(f"Date Deactivated: {dd}")
+                rest_parts.append(f"Date Deactivated: {dd}")
+            # <LINE BREAK> between POP_COMMENTS and the deactivation fields
+            sections = [p for p in ["; ".join(first_parts), "; ".join(rest_parts)] if p]
             # Set using canonical field name 'comment' (POP_COMMENTS maps to 'comment' in COLUMN_MAP)
-            canonical_row["comment"] = "; ".join(parts) if parts else canonical_row.get("comment")
+            canonical_row["comment"] = "\n".join(sections) if sections else canonical_row.get("comment")
             LAND_MGR_ADDRESS = raw.get("LAND_MGR_ADDRESS", "")
             LAND_MGR_PHONE = raw.get("LAND_MGR_PHONE", "")
             contact = LAND_MGR_ADDRESS

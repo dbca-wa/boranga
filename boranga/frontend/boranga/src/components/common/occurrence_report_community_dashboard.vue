@@ -869,6 +869,20 @@ export default {
                 searchable: true,
                 visible: true,
                 name: 'processing_status',
+                render: function (data, type, full) {
+                    let html = full.processing_status_display;
+                    if (!full.show_locked_indicator) {
+                        return html;
+                    }
+                    if (full.locked) {
+                        html +=
+                            '<i class="bi bi-lock-fill ms-2 text-warning"></i>';
+                    } else {
+                        html +=
+                            '<i class="bi bi-unlock-fill ms-2 text-secondary"></i>';
+                    }
+                    return html;
+                },
             };
         },
         column_action: function () {
@@ -890,6 +904,8 @@ export default {
                     } else {
                         if (full.can_user_assess || full.can_user_approve) {
                             links += `<a href='/internal/occurrence-report/${full.id}?action=edit'>Process</a><br/>`;
+                        } else if (full.is_unlocked) {
+                            links += `<a href='/internal/occurrence-report/${full.id}?action=edit'>Edit</a><br/>`;
                         } else {
                             links += `<a href='/internal/occurrence-report/${full.id}?action=view'>View</a><br/>`;
                         }

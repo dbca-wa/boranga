@@ -99,8 +99,8 @@ class OccurrenceReportPermission(BasePermission):
                 in [
                     OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
                     OccurrenceReport.PROCESSING_STATUS_WITH_ASSESSOR,
-                    OccurrenceReport.PROCESSING_STATUS_UNLOCKED,
                 ]
+                or obj.is_unlocked
             )
             and (
                 (self_assigning and (in_assessor_group or in_approver_group))

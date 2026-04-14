@@ -618,10 +618,7 @@ export default {
                                 },
                             }).then(() => {
                                 vm.$refs.threats_datatable.vmDataTable.ajax.reload();
-                                if (
-                                    vm.occurrence_report_obj
-                                        .processing_status == 'Unlocked'
-                                ) {
+                                if (vm.occurrence_report_obj.is_unlocked) {
                                     vm.$router.go();
                                 }
                             });
@@ -678,10 +675,7 @@ export default {
                                 },
                             }).then(() => {
                                 vm.$refs.threats_datatable.vmDataTable.ajax.reload();
-                                if (
-                                    vm.occurrence_report_obj
-                                        .processing_status == 'Unlocked'
-                                ) {
+                                if (vm.occurrence_report_obj.is_unlocked) {
                                     vm.$router.go();
                                 }
                             });
@@ -696,7 +690,7 @@ export default {
         updatedThreats() {
             let vm = this;
             this.$refs.threats_datatable.vmDataTable.ajax.reload();
-            if (vm.occurrence_report_obj.processing_status == 'Unlocked') {
+            if (vm.occurrence_report_obj.is_unlocked) {
                 vm.$router.go();
             }
         },

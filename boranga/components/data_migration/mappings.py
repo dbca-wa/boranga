@@ -126,7 +126,7 @@ def load_species_to_district_links(
         return mapping
 
     try:
-        with open(csv_path, newline="", encoding="utf-8") as fh:
+        with open(csv_path, newline="", encoding="utf-8-sig") as fh:
             reader = csv.DictReader(fh)
             if not reader.fieldnames or key_column not in reader.fieldnames or district_column not in reader.fieldnames:
                 logger.warning(
@@ -261,7 +261,7 @@ def load_csv_mapping(
 
     mapping: dict[str, str] = {}
     try:
-        with open(resolved_str, newline="", encoding="utf-8") as fh:
+        with open(resolved_str, newline="", encoding="utf-8-sig") as fh:
             rdr = csv.DictReader(fh, delimiter=delimiter)
             if not rdr.fieldnames or key_column not in rdr.fieldnames or value_column not in rdr.fieldnames:
                 logger.warning(
@@ -424,7 +424,7 @@ def load_sheet_associated_species_names(
         resolved = base_dir / "legacy_data" / "TPFL" / filename
 
     try:
-        with open(resolved, newline="", encoding="utf-8") as fh:
+        with open(resolved, newline="", encoding="utf-8-sig") as fh:
             reader = csv.DictReader(fh)
             if not reader.fieldnames:
                 logger.debug("Associated-species CSV %s has no headers", resolved)

@@ -103,27 +103,27 @@ class OccurrenceDocumentTpflAdapter(SourceAdapter):
         return canonical_str
 
     def _build_description(self, raw: dict) -> str | None:
-        parts: list[str] = []
+        header_parts: list[str] = []
 
         othernames = str(raw.get("OTHERNAMES", "")).strip()
         if othernames:
-            parts.append(f"Name: {othernames}")
+            header_parts.append(f"Name: {othernames}")
 
         notification_action = self._map_notification_action(raw.get("NOTIFICATION_TYPE"))
         if notification_action:
-            parts.append(f"Action: {notification_action}")
+            header_parts.append(f"Action: {notification_action}")
 
         notifier_name = str(raw.get("NOTIFIER_NAME", "")).strip()
         if notifier_name:
-            parts.append(f"Liaising Officer: {notifier_name}")
+            header_parts.append(f"Liaising Officer: {notifier_name}")
 
         comments = str(raw.get("COMMENTS", "")).strip()
-        if comments:
-            parts.append(comments)
 
-        if not parts:
+        # <LINE BREAK> between header fields and COMMENTS body
+        sections = [p for p in ["; ".join(header_parts), comments] if p]
+        if not sections:
             return None
-        return "; ".join(parts)
+        return "\n".join(sections)
 
     def extract(self, path: str, **options) -> ExtractionResult:
         rows = []

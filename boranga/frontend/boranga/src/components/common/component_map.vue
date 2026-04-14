@@ -2678,7 +2678,10 @@ export default {
                 feature.unset('model');
                 features.push(feature);
             });
-            const geojson = format.writeFeatures(features);
+            const geojson = format.writeFeatures(features, {
+                dataProjection: 'EPSG:4326',
+                featureProjection: `EPSG:${this.effectiveMapSrid}`,
+            });
 
             this.download_content(
                 geojson,
@@ -3154,12 +3157,18 @@ export default {
             });
 
             let extent_interactions = [vm.snap, vm.dragAndDrop];
-            if (vm.editable) {
-                // Only add these interactions if polygons are editable
+            if (vm.editable || window.env?.read_only) {
+                // Add the select interaction when editable or when in read-only verification
+                // mode so that features can be selected and downloaded as GeoJSON/Shapefile.
                 vm.select = vm.initialiseSelectFeatureEvent();
+                extent_interactions.push(vm.select);
+            }
+
+            if (vm.editable) {
+                // Only add modify/transform interactions if polygons are editable
                 vm.modify = vm.initialiseModifyFeatureEvent();
                 vm.transform = vm.initialiseTransform();
-                extent_interactions.push(vm.select, vm.modify, vm.transform);
+                extent_interactions.push(vm.modify, vm.transform);
             }
 
             vm.map.getInteractions().extend(extent_interactions);
@@ -4347,7 +4356,7 @@ export default {
         },
         initialiseSelectFeatureEvent: function () {
             let vm = this;
-            if (!vm.editable) {
+            if (!vm.editable && !window.env?.read_only) {
                 return null;
             }
             // A basic style for selected polygons
@@ -4410,15 +4419,17 @@ export default {
                     // Add to the collection for the purpose of controlling which features can be modified (ModifyFeature)
                     vm.selectedFeatureCollection.push(feature);
                     // Add to undo stack
-                    vm.undoredo.push('select feature', {
-                        before: new Collection(beforeFeatures, {
-                            unique: true,
-                        }),
-                        after: new Collection(
-                            [...vm.selectedFeatureCollection.getArray()],
-                            { unique: true }
-                        ),
-                    });
+                    if (vm.undoredo) {
+                        vm.undoredo.push('select feature', {
+                            before: new Collection(beforeFeatures, {
+                                unique: true,
+                            }),
+                            after: new Collection(
+                                [...vm.selectedFeatureCollection.getArray()],
+                                { unique: true }
+                            ),
+                        });
+                    }
                 });
 
                 $.each(evt.deselected, function (idx, feature) {
@@ -4433,15 +4444,17 @@ export default {
                     // Remove from the collection for the purpose of controlling which features can be modified (ModifyFeature)
                     vm.selectedFeatureCollection.remove(feature);
                     // Add to undo stack
-                    vm.undoredo.push('select feature', {
-                        before: new Collection(beforeFeatures, {
-                            unique: true,
-                        }),
-                        after: new Collection(
-                            [...vm.selectedFeatureCollection.getArray()],
-                            { unique: true }
-                        ),
-                    });
+                    if (vm.undoredo) {
+                        vm.undoredo.push('select feature', {
+                            before: new Collection(beforeFeatures, {
+                                unique: true,
+                            }),
+                            after: new Collection(
+                                [...vm.selectedFeatureCollection.getArray()],
+                                { unique: true }
+                            ),
+                        });
+                    }
                 });
 
                 // In draw mode, disable the Draw interaction while features

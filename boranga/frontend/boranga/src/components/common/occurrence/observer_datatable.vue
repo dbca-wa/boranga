@@ -401,10 +401,7 @@ export default {
                             }).then(() => {
                                 vm.$refs.observer_detail_datatable.vmDataTable.ajax.reload();
                                 vm.$emit('refreshOccurrenceReport');
-                                if (
-                                    vm.occurrence_report_obj
-                                        .processing_status == 'Unlocked'
-                                ) {
+                                if (vm.occurrence_report_obj.is_unlocked) {
                                     vm.$router.go();
                                 }
                             });
@@ -451,10 +448,7 @@ export default {
                     }).then(() => {
                         vm.$refs.observer_detail_datatable.vmDataTable.ajax.reload();
                         vm.$emit('refreshOccurrenceReport');
-                        if (
-                            vm.occurrence_report_obj.processing_status ==
-                            'Unlocked'
-                        ) {
+                        if (vm.occurrence_report_obj.is_unlocked) {
                             vm.$router.go();
                         }
                     });
@@ -476,7 +470,7 @@ export default {
             let vm = this;
             this.$refs.observer_detail_datatable.vmDataTable.ajax.reload();
             vm.$emit('refreshOccurrenceReport');
-            if (vm.occurrence_report_obj.processing_status == 'Unlocked') {
+            if (vm.occurrence_report_obj.is_unlocked) {
                 vm.$router.go();
             }
         },

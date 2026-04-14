@@ -417,10 +417,7 @@ export default {
                             }).then(() => {
                                 vm.$refs.contact_detail_datatable.vmDataTable.ajax.reload();
                                 vm.$emit('refreshOccurrenceReport');
-                                if (
-                                    vm.occurrence_obj.processing_status ==
-                                    'Unlocked'
-                                ) {
+                                if (vm.occurrence_obj.is_unlocked) {
                                     vm.$router.go();
                                 }
                             });
@@ -467,7 +464,7 @@ export default {
                     }).then(() => {
                         vm.$refs.contact_detail_datatable.vmDataTable.ajax.reload();
                         vm.$emit('refreshOccurrenceReport');
-                        if (vm.occurrence_obj.processing_status == 'Unlocked') {
+                        if (vm.occurrence_obj.is_unlocked) {
                             vm.$router.go();
                         }
                     });
