@@ -274,6 +274,8 @@ class ContentTypeSerializer(BaseModelSerializer):
                 field.name not in exclude_fields
                 and field.name != "occurrence_report"
                 and not field.auto_created
+                and not getattr(field, "auto_now", False)
+                and not getattr(field, "auto_now_add", False)
                 and not (
                     field.is_relation
                     and type(field)
