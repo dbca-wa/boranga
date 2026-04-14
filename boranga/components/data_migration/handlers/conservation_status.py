@@ -158,6 +158,7 @@ class ConservationStatusImporter(BaseSheetImporter):
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         stats["extracted"] = 0
+        stats["error_details_csv"] = None
         all_rows: list[dict] = []
         warnings = []
         errors_details = []
@@ -448,6 +449,7 @@ class ConservationStatusImporter(BaseSheetImporter):
                     writer = csv.DictWriter(fh, fieldnames=fieldnames)
                     writer.writeheader()
                     writer.writerows(errors_details)
+                stats["error_details_csv"] = csv_path
                 print(f"Successfully wrote {len(errors_details)} error records to CSV.")
             except Exception as e:
                 logger.error(f"Failed to write error CSV: {e}")
