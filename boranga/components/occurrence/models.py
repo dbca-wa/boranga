@@ -7281,17 +7281,68 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         species_or_community_identifier = None
         for column in columns:
             sample_value = column.get_sample_value(errors, species_or_community_identifier)
+
             if (
                 column.django_import_content_type.model == Occurrence._meta.model_name
                 and column.django_import_field_name == "species"
             ):
-                species_or_community_identifier = Species.objects.get(taxonomy__scientific_name=sample_value)
+                if sample_value is None:
+                    # get_sample_value already appended a "no_records" error.
+                    # Schema validation requires at least one Species with an existing
+                    # Occurrence in the database to use as sample data.
+                    errors.append(
+                        {
+                            "error_type": "column_validation",
+                            "error_message": (
+                                "Schema validation requires at least one Species with an associated Occurrence "
+                                "to exist in the database. Please create a Species and Occurrence before validating."
+                            ),
+                        }
+                    )
+                    transaction.set_rollback(True)
+                    return errors
+                try:
+                    species_or_community_identifier = Species.objects.get(taxonomy__scientific_name=sample_value)
+                except Species.DoesNotExist:
+                    errors.append(
+                        {
+                            "error_type": "column_validation",
+                            "error_message": f"Species with scientific name '{sample_value}' does not exist.",
+                        }
+                    )
+                    transaction.set_rollback(True)
+                    return errors
 
             if (
                 column.django_import_content_type.model == Occurrence._meta.model_name
                 and column.django_import_field_name == "community"
             ):
-                species_or_community_identifier = Community.objects.get(taxonomy__community_common_id=sample_value)
+                if sample_value is None:
+                    # get_sample_value already appended a "no_records" error.
+                    # Schema validation requires at least one Community with an existing
+                    # Occurrence in the database to use as sample data.
+                    errors.append(
+                        {
+                            "error_type": "column_validation",
+                            "error_message": (
+                                "Schema validation requires at least one Community with an associated Occurrence "
+                                "to exist in the database. Please create a Community and Occurrence before validating."
+                            ),
+                        }
+                    )
+                    transaction.set_rollback(True)
+                    return errors
+                try:
+                    species_or_community_identifier = Community.objects.get(taxonomy__community_common_id=sample_value)
+                except Community.DoesNotExist:
+                    errors.append(
+                        {
+                            "error_type": "column_validation",
+                            "error_message": f"Community with community common ID '{sample_value}' does not exist.",
+                        }
+                    )
+                    transaction.set_rollback(True)
+                    return errors
 
             if (
                 column.django_import_content_type.model == Occurrence._meta.model_name
@@ -8311,7 +8362,9 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     default_value = field_default
 
                 cell_value = default_value
-                return cell_value, errors_added
+
+            # Either used the default or the field allows null — either way, no further validation needed.
+            return cell_value, errors_added
 
         xlsx_data_validation_type = self.xlsx_validation_type
 
