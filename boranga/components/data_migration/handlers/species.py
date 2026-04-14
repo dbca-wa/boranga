@@ -33,6 +33,122 @@ from boranga.components.species_and_communities.models import (
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+#  Raw cascade-delete helpers (Postgres only)
+#
+#  Django creates all FK constraints as NO ACTION at the DB level and manages
+#  cascades in Python via the Collector.  The Collector walks ~45 reverse FK
+#  relationships, loads every related PK into memory, then issues individual
+#  DELETEs — slow for large datasets.
+#
+#  These helpers discover the FK tree from pg_catalog and issue DELETE
+#  statements from leaf tables to root, using nested sub-queries so Postgres
+#  does the work in-engine.
+# ---------------------------------------------------------------------------
+
+_fk_children_cache: dict[str, list[tuple[str, str]]] = {}
+_pk_column_cache: dict[str, str] = {}
+
+
+def _get_pk_column(cursor, table_name: str) -> str:
+    """Return the single-column primary key name for *table_name*.
+
+    Django multi-table inheritance tables use ``<parent>_ptr_id`` rather than
+    ``id``, so we cannot hard-code ``id``."""
+    if table_name in _pk_column_cache:
+        return _pk_column_cache[table_name]
+    cursor.execute(
+        """
+        SELECT att.attname
+          FROM pg_constraint con
+          JOIN pg_class cl ON con.conrelid = cl.oid
+          JOIN pg_attribute att
+               ON att.attrelid = cl.oid AND att.attnum = con.conkey[1]
+         WHERE con.contype = 'p'
+           AND cl.relname  = %s
+           AND array_length(con.conkey, 1) = 1
+        """,
+        [table_name],
+    )
+    row = cursor.fetchone()
+    col = row[0] if row else "id"
+    _pk_column_cache[table_name] = col
+    return col
+
+
+def _find_fk_children(cursor, table_name: str) -> list[tuple[str, str]]:
+    """Return ``[(child_table, child_fk_column), ...]`` for every single-column
+    FK that references *table_name*."""
+    if table_name in _fk_children_cache:
+        return _fk_children_cache[table_name]
+    cursor.execute(
+        """
+        SELECT cl.relname, att.attname
+          FROM pg_constraint con
+          JOIN pg_class cl  ON con.conrelid  = cl.oid
+          JOIN pg_class ref ON con.confrelid = ref.oid
+          JOIN pg_attribute att
+               ON att.attrelid = cl.oid AND att.attnum = con.conkey[1]
+         WHERE con.contype = 'f'
+           AND ref.relname = %s
+           AND array_length(con.conkey, 1) = 1
+        """,
+        [table_name],
+    )
+    result = cursor.fetchall()
+    _fk_children_cache[table_name] = result
+    return result
+
+
+def _raw_cascade_delete(
+    cursor,
+    table_name: str,
+    where_sql: str,
+    params: list,
+    *,
+    _path: frozenset[str] | None = None,
+) -> int:
+    """Delete rows matching *where_sql* from *table_name*, first recursively
+    deleting from every FK-child table discovered via ``pg_catalog``.
+
+    Returns total rows deleted across all tables.
+    """
+    if _path is None:
+        _path = frozenset()
+    if table_name in _path:
+        return 0  # cycle guard (e.g. self-FK already seen via ancestor)
+    _path = _path | {table_name}
+
+    children = _find_fk_children(cursor, table_name)
+    total = 0
+
+    for child_table, child_fk_col in children:
+        if child_table == table_name:
+            # Self-referencing FK — null it so we can delete later
+            cursor.execute(
+                f"UPDATE {table_name} SET {child_fk_col} = NULL"  # noqa: S608
+                f" WHERE {where_sql}",
+                params,
+            )
+            continue
+        pk_col = _get_pk_column(cursor, table_name)
+        child_where = f"{child_fk_col} IN (SELECT {pk_col} FROM {table_name} WHERE {where_sql})"
+        total += _raw_cascade_delete(
+            cursor,
+            child_table,
+            child_where,
+            params,
+            _path=_path,
+        )
+
+    cursor.execute(f"DELETE FROM {table_name} WHERE {where_sql}", params)  # noqa: S608
+    deleted = cursor.rowcount
+    if deleted > 0:
+        logger.info("  cascade-delete: %d rows from %s", deleted, table_name)
+    total += deleted
+    return total
+
+
 SOURCE_ADAPTERS = {
     Source.TPFL.value: SpeciesTpflAdapter(),
     Source.TFAUNA.value: SpeciesTfaunaAdapter(),
@@ -219,62 +335,29 @@ class SpeciesImporter(BaseSheetImporter):
                     Occurrence.objects.all().delete()
                     Species.objects.all().delete()
             else:
-                # Filtered delete — use raw SQL for performance.
+                # Filtered delete — use recursive raw-SQL cascade delete.
                 # Django's ORM Collector walks ~45 reverse FK relationships,
                 # loading every related PK into memory before issuing DELETEs.
-                # For ~5 K Species + ~22 K Occurrences + cascades this takes
-                # minutes.  Raw SQL with subqueries lets Postgres handle it in
-                # seconds via its own ON DELETE CASCADE.
+                # _raw_cascade_delete discovers the FK tree from pg_catalog and
+                # issues DELETEs leaf-to-root via nested sub-queries.
                 vendor = getattr(conn, "vendor", None)
                 target_species_pks = list(Species.objects.filter(**species_filter).values_list("pk", flat=True))
                 if target_species_pks and vendor == "postgresql":
                     species_table = Species._meta.db_table
-                    occ_table = Occurrence._meta.db_table
-                    ocr_table = OccurrenceReport._meta.db_table
                     logger.info(
                         "SpeciesImporter: raw-SQL filtered delete for %d Species (group_types=%s)",
                         len(target_species_pks),
                         target_group_types,
                     )
+                    placeholders = ",".join(["%s"] * len(target_species_pks))
                     with conn.cursor() as cur:
-                        # Build a temp table of target species PKs for efficient joins
-                        cur.execute("CREATE TEMP TABLE _target_species_pks (id INTEGER PRIMARY KEY) ON COMMIT DROP")
-                        # Batch-insert PKs (executemany is fast for simple inserts)
-                        from itertools import batched
-
-                        for batch in batched(target_species_pks, 5000):
-                            cur.executemany("INSERT INTO _target_species_pks (id) VALUES (%s)", [(pk,) for pk in batch])
-
-                        # 1. OccurrenceReports linked to target Species (directly or via Occurrence)
-                        #    CASCADE on the DB side handles OCRLocation, OCRHabitatComposition, etc.
-                        cur.execute(f"""
-                            DELETE FROM {ocr_table}
-                            WHERE species_id IN (SELECT id FROM _target_species_pks)
-                               OR occurrence_id IN (
-                                   SELECT id FROM {occ_table}
-                                   WHERE species_id IN (SELECT id FROM _target_species_pks)
-                               )
-                        """)
-                        logger.info("  Deleted %d OccurrenceReport rows", cur.rowcount)
-
-                        # 2. Occurrences — clear self-FK first, then delete
-                        cur.execute(f"""
-                            UPDATE {occ_table} SET combined_occurrence_id = NULL
-                            WHERE species_id IN (SELECT id FROM _target_species_pks)
-                        """)
-                        cur.execute(f"""
-                            DELETE FROM {occ_table}
-                            WHERE species_id IN (SELECT id FROM _target_species_pks)
-                        """)
-                        logger.info("  Deleted %d Occurrence rows", cur.rowcount)
-
-                        # 3. Species themselves — CASCADE handles SpeciesDistribution,
-                        #    SpeciesPublishingStatus, ConservationStatus, etc.
-                        cur.execute(f"""
-                            DELETE FROM {species_table}
-                            WHERE id IN (SELECT id FROM _target_species_pks)
-                        """)
-                        logger.info("  Deleted %d Species rows", cur.rowcount)
+                        total = _raw_cascade_delete(
+                            cur,
+                            species_table,
+                            f"id IN ({placeholders})",
+                            target_species_pks,
+                        )
+                        logger.info("  Raw cascade delete complete: %d total rows", total)
 
                 elif target_species_pks:
                     # Non-Postgres fallback: ORM delete
