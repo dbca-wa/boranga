@@ -7994,6 +7994,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 self.django_import_content_type == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
                 and self.django_import_field_name in OccurrenceReport.BULK_IMPORT_EMAIL_USER_FIELDS
                 and not self.is_emailuser_column
+                and self.default_value != self.DEFAULT_VALUE_BULK_IMPORT_SUBMITTER
             ):
                 error_message = (
                     f"Configuration Hint: The column '{self.xlsx_column_header_name}' "
