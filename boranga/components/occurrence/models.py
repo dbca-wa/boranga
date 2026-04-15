@@ -3120,6 +3120,28 @@ class OCRPlantCount(BaseModel):
             # This is to preserve the original data from the migration
             return super().save(*args, **kwargs)
 
+        # For flora records created via the bulk importer, auto-derive count_status
+        # from whichever count fields contain data (detailed takes priority over simple).
+        if (
+            self.occurrence_report.bulk_import_task_id is not None
+            and self.occurrence_report.group_type.name == GroupType.GROUP_TYPE_FLORA
+        ):
+            detailed_values = [
+                self.detailed_alive_mature,
+                self.detailed_dead_mature,
+                self.detailed_alive_juvenile,
+                self.detailed_dead_juvenile,
+                self.detailed_alive_seedling,
+                self.detailed_dead_seedling,
+            ]
+            simple_values = [self.simple_alive, self.simple_dead]
+            if any(v is not None for v in detailed_values):
+                self.count_status = settings.COUNT_STATUS_COUNTED
+            elif any(v is not None for v in simple_values):
+                self.count_status = settings.COUNT_STATUS_SIMPLE_COUNT
+            else:
+                self.count_status = settings.COUNT_STATUS_NOT_COUNTED
+
         # For non migrated occurrences, set fields to None based on count status field
         if self.count_status == settings.COUNT_STATUS_NOT_COUNTED:
             self.detailed_alive_mature = None
