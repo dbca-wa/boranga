@@ -54,19 +54,8 @@ class Command(BaseCommand):
         task = OccurrenceReportBulkImportTask.objects.get(id=candidate.id)
 
         try:
-            # Process the task
-            errors = task.process()
-            if errors:
-                task.processing_status = OccurrenceReportBulkImportTask.PROCESSING_STATUS_FAILED
-                task.datetime_error = timezone.now()
-                task.error_message = "Errors occurred during processing:\n"
-                for error in errors:
-                    task.error_message += f"Row: {error['row_index'] + 1}. Error: {error['error_message']}\n"
-            else:
-                # Set the task to completed
-                task.processing_status = OccurrenceReportBulkImportTask.PROCESSING_STATUS_COMPLETED
-                task.datetime_completed = timezone.now()
-            task.save()
+            # Process the task. process() handles all status, error_message, and save() internally.
+            task.process()
 
         except KeyboardInterrupt:
             logger.info(f"OCR Bulk Import Task {task.id} was interrupted")

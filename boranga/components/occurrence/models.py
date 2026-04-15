@@ -6296,7 +6296,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 for index, row in enumerate(rows):
                     if index + 1 > self.rows:
                         logger.warning(
-                            f"Bulk import task {self.id} tried to process row {index + 1} "
+                            f"Bulk import task {self.id} tried to process row {index + 2} "
                             "which is greater than the total number of rows"
                         )
                         break
@@ -6308,10 +6308,10 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             self.save()
                             self.process_row(ocr_migrated_from_ids, index, headers, row, errors)
                     except IntegrityError as e:
-                        logger.exception(f"IntegrityError on row {index} for import {self.id}: {e}")
+                        logger.exception(f"IntegrityError on row {index + 2} for import {self.id}: {e}")
                         errors.append(
                             {
-                                "row_index": index,
+                                "row_index": index + 2,
                                 "error_type": "integrity",
                                 "data": row,
                                 "error_message": str(e),
@@ -6319,10 +6319,10 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         )
                         continue
                     except Exception as e:
-                        logger.exception(f"Unhandled error on row {index} for import {self.id}: {e}")
+                        logger.exception(f"Unhandled error on row {index + 2} for import {self.id}: {e}")
                         errors.append(
                             {
-                                "row_index": index,
+                                "row_index": index + 2,
                                 "error_type": "exception",
                                 "data": row,
                                 "error_message": str(e),
@@ -6354,9 +6354,15 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 # Persist full errors list (human readable string) so the API/UI can display detailed errors.
                 if failure_summary and failure_summary.get("errors") is not None:
                     try:
-                        # Build a single string with each error on its own line.
+                        # Build a single string with each error on its own line, sorted by row.
                         error_lines = []
-                        for e in failure_summary.get("errors"):
+                        sorted_errors = sorted(
+                            failure_summary.get("errors"),
+                            key=lambda e: (
+                                e.get("row_index") if isinstance(e, dict) and e.get("row_index") is not None else 0
+                            ),
+                        )
+                        for e in sorted_errors:
                             if isinstance(e, dict):
                                 row_idx = e.get("row_index")
                                 msg = e.get("error_message") or e.get("error_type") or str(e)
@@ -6399,8 +6405,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             return []
 
     def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
-        # Present row numbers to humans starting at 1 (not 0)
-        row_index = index + 1
+        # Row 1 in the XLSX is the header; data starts at row 2, so add 2 to the 0-based index.
+        row_index = index + 2
 
         row_hash = hashlib.sha256(str(row).encode()).hexdigest()
         if OccurrenceReport.objects.filter(import_hash=row_hash).exists():
