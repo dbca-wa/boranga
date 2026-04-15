@@ -6798,6 +6798,20 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 if current_model_instance._meta.model_name in many_to_many_fields:
                     logger.info(f"Adding many to many fields for {current_model_instance}")
                     for m2m_field in many_to_many_fields[current_model_instance._meta.model_name]:
+                        # Special case: OCRAssociatedSpecies.related_species — validate() resolved
+                        # the cell value to a list of Taxonomy instances; create fresh
+                        # AssociatedSpeciesTaxonomy records here then set the M2M.
+                        if (
+                            isinstance(current_model_instance, OCRAssociatedSpecies)
+                            and m2m_field["field"] == "related_species"
+                        ):
+                            ast_instances = [
+                                AssociatedSpeciesTaxonomy.objects.create(taxonomy=taxonomy)
+                                for taxonomy in m2m_field["value"]
+                            ]
+                            current_model_instance.related_species.set(ast_instances)
+                            continue
+
                         field = getattr(current_model_instance, m2m_field["field"])
                         field.set(m2m_field["value"])
 
@@ -8722,6 +8736,105 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return cell_value, errors_added
 
         if isinstance(field, models.ManyToManyField):
+            # Special case: OCRAssociatedSpecies.related_species is a parent→child→grandchild
+            # relationship (OCRAssociatedSpecies → AssociatedSpeciesTaxonomy → Taxonomy).
+            # The cell contains delimiter-separated scientific names that must be resolved
+            # to Taxonomy instances.  Actual AssociatedSpeciesTaxonomy records are created
+            # later in process_row().
+            #
+            # Optional in-cell disambiguation syntax:
+            #   "Drosera sp. [flora]" — append [<group_type_name>] after the scientific name.
+            # When omitted the name must be globally unique; if it matches taxonomies from
+            # multiple group types an error is raised telling the user to add the suffix.
+            if (
+                self.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+                and self.django_import_field_name == "related_species"
+            ):
+                import re as _re
+
+                _DISAMBIG_RE = _re.compile(r"^(.*?)\s*\[([^\]]+)\]\s*$")
+
+                names = [n.strip() for n in cell_value.split(settings.OCR_BULK_IMPORT_M2M_DELIMITER)]
+                resolved_taxa = []
+                for entry in names:
+                    if not entry:
+                        continue
+
+                    # Check for optional [group_type] suffix
+                    m = _DISAMBIG_RE.match(entry)
+                    if m:
+                        scientific_name = m.group(1).strip()
+                        group_type_hint = m.group(2).strip().lower()
+                        qs = Taxonomy.objects.filter(
+                            scientific_name=scientific_name,
+                            species__group_type__name=group_type_hint,
+                        )
+                        if not qs.exists():
+                            error_message = (
+                                f"No taxonomy found with scientific name '{scientific_name}' "
+                                f"and group type '{group_type_hint}' "
+                                f"for column '{self.xlsx_column_header_name}'"
+                            )
+                            errors.append(
+                                {
+                                    "row_index": index,
+                                    "error_type": "column",
+                                    "data": entry,
+                                    "error_message": error_message,
+                                }
+                            )
+                            errors_added += 1
+                            continue
+                    else:
+                        scientific_name = entry
+                        qs = Taxonomy.objects.filter(scientific_name=scientific_name)
+                        if not qs.exists():
+                            error_message = (
+                                f"No taxonomy found with scientific name '{scientific_name}' "
+                                f"for column '{self.xlsx_column_header_name}'"
+                            )
+                            errors.append(
+                                {
+                                    "row_index": index,
+                                    "error_type": "column",
+                                    "data": entry,
+                                    "error_message": error_message,
+                                }
+                            )
+                            errors_added += 1
+                            continue
+
+                        # Check whether this name spans multiple group types — if so the
+                        # user must add [group_type] to disambiguate.
+                        group_type_names = (
+                            qs.filter(species__group_type__isnull=False)
+                            .values_list("species__group_type__name", flat=True)
+                            .distinct()
+                        )
+                        if group_type_names.count() > 1:
+                            ambiguous_types = ", ".join(sorted(group_type_names))
+                            error_message = (
+                                f"Scientific name '{scientific_name}' is ambiguous — it exists "
+                                f"in multiple group types ({ambiguous_types}). "
+                                f"Append the group type in square brackets to disambiguate, "
+                                f"e.g. '{scientific_name} [flora]'. "
+                                f"Column: '{self.xlsx_column_header_name}'"
+                            )
+                            errors.append(
+                                {
+                                    "row_index": index,
+                                    "error_type": "column",
+                                    "data": entry,
+                                    "error_message": error_message,
+                                }
+                            )
+                            errors_added += 1
+                            continue
+
+                    resolved_taxa.append(qs.first())
+                cell_value = resolved_taxa
+                return cell_value, errors_added
+
             related_model = field.related_model
             related_model_qs = related_model.objects.all()
 
