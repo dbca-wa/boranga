@@ -1609,6 +1609,9 @@ export default {
                     this.selectedColumn.default_value === '' ||
                     this.selectedColumn.default_value === undefined
                 ) || !!this.selectedField.has_default;
+            // FileField columns store files and are always allowed to be blank
+            // (an empty cell simply means no file is attached for that row)
+            if (this.selectedField.type == 'FileField') return false;
             // Disabled when field does not allow null and there is no default and it's not the occurrence_number special case
             return (
                 !this.selectedField.allow_null &&
@@ -1813,7 +1816,9 @@ export default {
                             this.selectedColumn.default_value === undefined
                         ) || !!this.selectedField.has_default;
                     this.selectedColumn.xlsx_data_validation_allow_blank =
-                        this.selectedField.allow_null || hasDefault;
+                        this.selectedField.type == 'FileField' ||
+                        this.selectedField.allow_null ||
+                        hasDefault;
                 }
                 this.$refs['column-name'].focus();
             });
