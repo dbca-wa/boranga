@@ -48,6 +48,7 @@ mv TPFL_20260130_113630_archived ..
 ./manage.py populate_legacy_value_map private-media/legacy_data/TPFL/legacy-data-map-TPFL.csv --legacy-system TPFL --update
 ./manage.py populate_legacy_taxonomy_mapping private-media/legacy_data/TPFL/legacy-species-names-mapped-Nomos-ID-TPFL.csv --filter-list-name "TPFL Species" --list-name TPFL
 ./manage.py populate_legacy_taxonomy_mapping private-media/legacy_data/TPFL/legacy-species-names-mapped-Nomos-ID-TPFL.csv --filter-list-name "TPFL AssociatedSpecies"
+./manage.py populate_legacy_taxonomy_mapping private-media/legacy_data/TPFL/legacy-species-names-mapped-Nomos-ID-TPFL.csv --filter-list-name "TPFL CS sanitised" --list-name TPFL
 
 ## Species
 

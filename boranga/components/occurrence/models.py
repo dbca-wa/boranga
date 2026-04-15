@@ -7994,6 +7994,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 self.django_import_content_type == ct_models.ContentType.objects.get_for_model(OccurrenceReport)
                 and self.django_import_field_name in OccurrenceReport.BULK_IMPORT_EMAIL_USER_FIELDS
                 and not self.is_emailuser_column
+                and self.default_value != self.DEFAULT_VALUE_BULK_IMPORT_SUBMITTER
             ):
                 error_message = (
                     f"Configuration Hint: The column '{self.xlsx_column_header_name}' "
@@ -8511,16 +8512,35 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             cell_value = []
 
             geojson_type = geom_json.get("type", None)
-            if not geojson_type or geojson_type != "FeatureCollection":
+            _BARE_GEOMETRY_TYPES = {
+                "Point",
+                "MultiPoint",
+                "LineString",
+                "MultiLineString",
+                "Polygon",
+                "MultiPolygon",
+                "GeometryCollection",
+            }
+            if geojson_type in _BARE_GEOMETRY_TYPES:
+                # Wrap bare geometry in a FeatureCollection
+                geom_json = {
+                    "type": "FeatureCollection",
+                    "features": [{"type": "Feature", "geometry": geom_json, "properties": {}}],
+                }
+            elif geojson_type == "Feature":
+                # Wrap single Feature in a FeatureCollection
+                geom_json = {"type": "FeatureCollection", "features": [geom_json]}
+            elif geojson_type != "FeatureCollection":
+                actual_value = cell_value if cell_value else geom_json
                 error_message = (
-                    f"Value {cell_value} in column {self.xlsx_column_header_name} "
+                    f"Value {actual_value} in column {self.xlsx_column_header_name} "
                     "does not contain a valid FeatureCollection"
                 )
                 errors.append(
                     {
                         "row_index": index,
                         "error_type": "column",
-                        "data": cell_value,
+                        "data": actual_value,
                         "error_message": error_message,
                     }
                 )

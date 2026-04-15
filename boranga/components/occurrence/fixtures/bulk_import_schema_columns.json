@@ -1449,7 +1449,7 @@
       "django_import_field_name": "description",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFDOC Description",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
@@ -1465,7 +1465,7 @@
       "django_import_field_name": "_file",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFDOC File",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
@@ -1641,7 +1641,7 @@
       "django_import_field_name": "related_species",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFSPE Related Species",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
@@ -3529,7 +3529,7 @@
       "django_import_field_name": "description",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFDOC Description",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
@@ -3545,7 +3545,7 @@
       "django_import_field_name": "_file",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFDOC File",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
@@ -3721,7 +3721,7 @@
       "django_import_field_name": "related_species",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFSPE Related Species",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
@@ -5161,7 +5161,7 @@
       "django_import_field_name": "description",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFDOC Description",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
@@ -5177,7 +5177,7 @@
       "django_import_field_name": "_file",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFDOC File",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
@@ -5353,7 +5353,7 @@
       "django_import_field_name": "related_species",
       "django_lookup_field_name": null,
       "xlsx_column_header_name": "ORFSPE Related Species",
-      "xlsx_data_validation_allow_blank": false,
+      "xlsx_data_validation_allow_blank": true,
       "is_editable": true,
       "default_value": null,
       "is_emailuser_column": false
