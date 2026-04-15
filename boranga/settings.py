@@ -538,6 +538,12 @@ OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT = env("OCR_BULK_IMPORT_LOOKUP_TABLE_RE
 
 OCR_BULK_IMPORT_M2M_DELIMITER = env("OCR_BULK_IMPORT_M2M_DELIMITER", "||")
 
+# Prefix added to migrated_from_id values created by the bulk importer.
+# The full prefix written to the DB is: {PREFIX}-{zero-padded task ID}-
+# e.g. with defaults: "bulk-0001-"  (10 chars overhead)
+OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX = env("OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX", "bulk")
+OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH = env("OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH", 4)
+
 COUNT_STATUS_NOT_COUNTED = "not_counted"
 COUNT_STATUS_COUNTED = "detailed_count"
 COUNT_STATUS_SIMPLE_COUNT = "simple_count"

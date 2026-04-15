@@ -6462,17 +6462,23 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             )
             return
 
+        # Prefix with the bulk import task id (zero-padded to pad_length digits) so that
+        # records from different tasks can coexist and be re-imported idempotently per task.
+        _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+        _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+        prefixed_migrated_from_id = f"{_prefix}-{self.pk:0{_pad}d}-{ocr_migrated_from_id}"
+
         mode = "create"
         if (
-            ocr_migrated_from_id in ocr_migrated_from_ids
-            or OccurrenceReport.objects.filter(migrated_from_id=ocr_migrated_from_id).exists()
+            prefixed_migrated_from_id in ocr_migrated_from_ids
+            or OccurrenceReport.objects.filter(migrated_from_id=prefixed_migrated_from_id).exists()
         ):
             mode = "update"
 
-        if ocr_migrated_from_id not in ocr_migrated_from_ids:
+        if prefixed_migrated_from_id not in ocr_migrated_from_ids:
             # Because this is happening in a transaction we need to keep track of
             # the ocr_migrated_from_ids that have been processed in this transaction
-            ocr_migrated_from_ids.append(ocr_migrated_from_id)
+            ocr_migrated_from_ids.append(prefixed_migrated_from_id)
 
         row_error_count = 0
         total_column_error_count = 0
@@ -6588,13 +6594,14 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             if current_model_name == OccurrenceReport._meta.model_name:
                 if mode == "create":
                     current_model_instance = OccurrenceReport(**model_data)
+                    current_model_instance.migrated_from_id = prefixed_migrated_from_id
                     current_model_instance.bulk_import_task_id = self.pk
                     current_model_instance.import_hash = row_hash
                     current_model_instance.group_type_id = self.schema.group_type_id
                     current_model_instance.submitter = self.email_user
                     current_model_instance.lodgement_date = timezone.now()
                 else:
-                    current_model_instance = OccurrenceReport.objects.get(migrated_from_id=row[0])
+                    current_model_instance = OccurrenceReport.objects.get(migrated_from_id=prefixed_migrated_from_id)
                     for field, value in model_data.items():
                         setattr(current_model_instance, field, value)
             elif current_model_name == Occurrence._meta.model_name:
@@ -7111,14 +7118,20 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 )
                 lookup_next_col += 1
             elif isinstance(model_field, models.fields.CharField):
+                _text_max_length = model_field.max_length
+                if model_field.name == "migrated_from_id" and model_class is OccurrenceReport:
+                    _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    # overhead = "{prefix}-" + zero-padded id + "-"
+                    _text_max_length -= len(_prefix) + 1 + _pad + 1
                 dv = DataValidation(
                     type=dv_types["textLength"],
                     allow_blank=allow_blank,
                     operator=dv_operators["lessThanOrEqual"],
-                    formula1=f"{model_field.max_length}",
-                    error="Text must be less than or equal to {model_field.max_length} characters",
+                    formula1=f"{_text_max_length}",
+                    error=f"Text must be less than or equal to {_text_max_length} characters",
                     errorTitle="Text too long",
-                    prompt=f"Maximum {model_field.max_length} characters",
+                    prompt=f"Maximum {_text_max_length} characters",
                     promptTitle="Text length",
                 )
             elif isinstance(model_field, models.fields.DateTimeField | models.fields.DateField):
@@ -8602,7 +8615,16 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return cell_value, errors_added
 
         if xlsx_data_validation_type == "textLength" and field.max_length:
-            if len(str(cell_value)) > field.max_length:
+            _effective_max = field.max_length
+            if (
+                self.django_import_field_name == "migrated_from_id"
+                and self.django_import_content_type.model == OccurrenceReport._meta.model_name
+            ):
+                _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                # overhead = "{prefix}-" + zero-padded id + "-"
+                _effective_max -= len(_prefix) + 1 + _pad + 1
+            if len(str(cell_value)) > _effective_max:
                 error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} has too many characters"
                 errors.append(
                     {
