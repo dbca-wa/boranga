@@ -32,7 +32,7 @@ COLUMN_MAP = {
     # ocr_for_occ_number - synthetic field, see pipelines
     "FORM_STATUS_CODE": "processing_status",
     "RECORD_SRC_CODE": "record_source",
-    # reported_date: just a copy of lodgement_date, so will be applied in handler
+    # datetime_created: just a copy of lodgement_date, so will be applied in handler
     "CREATED_BY": "submitter",
     "USERNAME": "submitter",  # Map Survey USERNAME to submitter as well
     "MODIFIED_BY": "modified_by",  # used in tpfl adapter to derive submitter
@@ -238,7 +238,7 @@ class OccurrenceReportRow:
     ocr_for_occ_number: str | None = None
     ocr_for_occ_name: str | None = None
     assessor_data: str | None = None
-    reported_date: date | None = None  # copy of lodgement_date
+    datetime_created: date | None = None  # copy of lodgement_date
     lodgement_date: date | None = None
     approved_by: int | None = None  # FK id (EmailUser) after transform
     submitter: int | None = None  # FK id (EmailUser) after transform
@@ -380,9 +380,9 @@ class OccurrenceReportRow:
         """
         Build OccurrenceReportRow from pipeline output. Coerce simple types.
         """
-        # lodgement_date and reported_date are datetimes; observation_date is date
+        # lodgement_date and datetime_created are datetimes; observation_date is date
         lodgement_dt = utils.parse_date_iso(d.get("lodgement_date"))
-        reported_dt = utils.parse_date_iso(d.get("reported_date"))
+        reported_dt = utils.parse_date_iso(d.get("datetime_created"))
         obs_dt = utils.parse_date_iso(d.get("observation_date"))
         obs_date = obs_dt.date() if obs_dt is not None else None
 
@@ -400,7 +400,7 @@ class OccurrenceReportRow:
             ocr_for_occ_number=utils.safe_strip(d.get("ocr_for_occ_number")),
             ocr_for_occ_name=utils.safe_strip(d.get("ocr_for_occ_name")),
             assessor_data=utils.safe_strip(d.get("assessor_data")),
-            reported_date=reported_dt,
+            datetime_created=reported_dt,
             lodgement_date=lodgement_dt,
             approved_by=utils.to_int_maybe(d.get("approved_by")),
             submitter=utils.to_int_maybe(d.get("submitter")),
@@ -605,7 +605,7 @@ class OccurrenceReportRow:
             "ocr_for_occ_number": self.ocr_for_occ_number or "",
             "ocr_for_occ_name": self.ocr_for_occ_name or "",
             "assessor_data": self.assessor_data or "",
-            "reported_date": self.reported_date,
+            "datetime_created": self.datetime_created,
             "lodgement_date": self.lodgement_date,
             "approved_by": self.approved_by,
             "submitter": self.submitter,

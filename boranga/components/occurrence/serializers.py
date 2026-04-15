@@ -580,7 +580,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
     assessor = serializers.SerializerMethodField()
     submitter = serializers.SerializerMethodField()
     processing_status_display = serializers.CharField(source="get_processing_status_display")
-    reported_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
+    datetime_created = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
     lodgement_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
     assessor_edit = serializers.SerializerMethodField(read_only=True)
     internal_user_edit = serializers.SerializerMethodField()
@@ -619,7 +619,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "scientific_name",
             "community_name",
             "community_common_id",
-            "reported_date",
+            "datetime_created",
             "lodgement_date",
             "assessor",
             "submitter",
@@ -665,7 +665,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "community",
             "community_name",
             "community_common_id",
-            "reported_date",
+            "datetime_created",
             "lodgement_date",
             "assessor",
             "submitter",
@@ -1505,7 +1505,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     lodgement_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", required=False, allow_null=True)
     observation_date = serializers.DateField(format="%Y-%m-%d")
     observation_time = serializers.CharField(source="observation_time.name", allow_null=True, read_only=True)
-    reported_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
+    datetime_created = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
     submitter_information = SubmitterInformationSerializer()
     number_of_observers = serializers.IntegerField(read_only=True)
     has_main_observer = serializers.BooleanField(read_only=True)
@@ -1526,7 +1526,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
             "community_number",
             "community_id",
             "occurrence_report_number",
-            "reported_date",
+            "datetime_created",
             "lodgement_date",
             "applicant_type",
             "applicant",
@@ -1797,7 +1797,7 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
     lodgement_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S", required=False, allow_null=True)
     observation_date = serializers.DateField(format="%Y-%m-%d")
     observation_time = serializers.CharField(source="observation_time.name", allow_null=True)
-    reported_date = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
+    datetime_created = serializers.DateTimeField(format="%Y-%m-%d %H:%M:%S")
     community_common_id = serializers.CharField(source="community.taxonomy.community_common_id", allow_null=True)
     occurrence_number = serializers.CharField(source="occurrence.occurrence_number", allow_null=True)
     show_locked_indicator = serializers.BooleanField(read_only=True)
@@ -1817,7 +1817,7 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
             "community_id",
             "community_common_id",
             "occurrence_report_number",
-            "reported_date",
+            "datetime_created",
             "lodgement_date",
             "applicant_type",
             "applicant",
@@ -1994,7 +1994,9 @@ class DTOccurrenceReportReferralSerializer(BaseModelSerializer):
     community_name = serializers.CharField(
         source="occurrence_report.community.taxonomy.community_name", allow_null=True
     )
-    reported_date = serializers.DateTimeField(source="occurrence_report.reported_date", format="%Y-%m-%d %H:%M:%S")
+    datetime_created = serializers.DateTimeField(
+        source="occurrence_report.datetime_created", format="%Y-%m-%d %H:%M:%S"
+    )
     submitter = serializers.SerializerMethodField()
     group_type = serializers.CharField(source="occurrence_report.group_type.name", allow_null=True)
     referral = serializers.SerializerMethodField()
@@ -2010,7 +2012,7 @@ class DTOccurrenceReportReferralSerializer(BaseModelSerializer):
             "occurrence_name",
             "scientific_name",
             "community_name",
-            "reported_date",
+            "datetime_created",
             "submitter",
             "group_type",
             "processing_status",
@@ -2533,7 +2535,7 @@ class SaveOccurrenceReportSerializer(BaseOccurrenceReportSerializer):
             "species_id",
             "community_id",
             "lodgement_date",
-            "reported_date",
+            "datetime_created",
             "applicant_type",
             "submitter",
             "readonly",

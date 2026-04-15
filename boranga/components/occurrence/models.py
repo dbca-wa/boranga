@@ -373,7 +373,7 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
         null=True,
         related_name="occurrence_reports",
     )
-    reported_date = models.DateTimeField(default=timezone.now, null=False, blank=False)
+    datetime_created = models.DateTimeField(default=timezone.now, null=False, blank=False)
     submitter_information = models.OneToOneField(
         SubmitterInformation,
         on_delete=models.SET_NULL,

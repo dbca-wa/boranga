@@ -273,11 +273,11 @@ export default {
         },
         column_submission_date_time: function () {
             return {
-                data: 'reported_date',
+                data: 'datetime_created',
                 orderable: true,
                 searchable: true,
                 visible: true,
-                name: 'occurrence_report__reported_date',
+                name: 'occurrence_report__datetime_created',
             };
         },
         column_submitter: function () {

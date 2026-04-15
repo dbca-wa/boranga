@@ -43,18 +43,18 @@ class OccurrenceReportReferralFilterBackend(DatatablesFilterBackend):
             filter_submitted_to_date = datetime.combine(filter_submitted_to_date, time.max)
 
         if filter_submitted_from_date and not filter_submitted_to_date:
-            queryset = queryset.filter(occurrence_report__reported_date__gte=filter_submitted_from_date)
+            queryset = queryset.filter(occurrence_report__datetime_created__gte=filter_submitted_from_date)
 
         if filter_submitted_from_date and filter_submitted_to_date:
             queryset = queryset.filter(
-                reported_date__range=[
+                occurrence_report__datetime_created__range=[
                     filter_submitted_from_date,
                     filter_submitted_to_date,
                 ]
             )
 
         if filter_submitted_to_date and not filter_submitted_from_date:
-            queryset = queryset.filter(occurrence_report__reported_date__lte=filter_submitted_to_date)
+            queryset = queryset.filter(occurrence_report__datetime_created__lte=filter_submitted_to_date)
 
         filter_from_review_due_date = request.GET.get("filter_from_review_due_date")
         filter_to_review_due_date = request.GET.get("filter_to_review_due_date")
