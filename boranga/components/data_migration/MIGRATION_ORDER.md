@@ -13,7 +13,7 @@
 9. Open 'Microsoft Azure Storage Explorer' and navigate to dbcaoimdevtransfer > Blob Containers > transfer > <YourNAME>
 10. Create a new folder named after the legacy system name and today's date e.g. tpfl-20260130
 11. Select all the CSV files from the 'DRF-2025-11-04T09_10_43_3' folder and drag them into the new Azure folder
-12. Open the rancher environment being used for data verification (in this case UAT)
+12. Open the rancher environment being used for data verification (in this case DEV)
 13. Navigate to the Deployment being used (in this case 'boranga-dev')
 14. Open a shell and navigate to the folder that will be housing the files (e.g. private-media/legacy_data/TPFL)
 15. If there are existing files in the folder, move them to an archive folder:
