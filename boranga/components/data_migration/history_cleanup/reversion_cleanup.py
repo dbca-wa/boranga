@@ -257,6 +257,7 @@ class ReversionHistoryCleaner:
             OccurrenceReportDocument,
             OccurrenceReportGeometry,
             OccurrenceSite,
+            OccurrenceTenure,
             OCCVegetationStructure,
             OCRAnimalObservation,
             OCRAssociatedSpecies,
@@ -278,7 +279,12 @@ class ReversionHistoryCleaner:
         self.clear_for_model(OccurrenceReport, group_type_filter)
 
         # Occurrence-related models (OCC*)
+        # OccurrenceTenure must be cleaned before OccurrenceGeometry is deleted: when
+        # OccurrenceGeometry is deleted, Django calls SET_NULL_AND_HISTORICAL on related
+        # OccurrenceTenure rows (setting occurrence_geometry=NULL), severing the FK that
+        # would be needed for any subsequent relationship-based version lookup.
         occ_models = [
+            (OccurrenceTenure, "occurrence_geometry__occurrence"),
             (OccurrenceGeometry, "occurrence"),
             (OCCContactDetail, "occurrence"),
             (OCCLocation, "occurrence"),
