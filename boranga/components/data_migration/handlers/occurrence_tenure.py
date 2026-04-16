@@ -89,86 +89,32 @@ class OccurrenceTenureImporter(BaseSheetImporter):
     integrity_tables = ["boranga_occurrence"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
-        """Delete OccurrenceTenure target data. Respect `ctx.dry_run` and `--sources`."""
+        """Delete OccurrenceTenure target data.
+
+        OccurrenceTenure rows and their reversion history are deleted inside
+        occurrence_legacy.clear_targets, immediately before OccurrenceGeometry is removed
+        (while the occurrence_geometry FK is still intact for source-scoped filtering).
+        By the time this method is called the records are already gone, so this is a no-op.
+        """
         if ctx.dry_run:
-            logger.info("Dry run: Would delete OccurrenceTenure objects")
+            logger.info("Dry run: OccurrenceTenure is cleared by occurrence_legacy --wipe-targets (no-op here)")
             return
-
-        from boranga.components.data_migration.adapters.sources import SOURCE_GROUP_TYPE_MAP
-
-        sources = options.get("sources")
-        target_group_types = set()
-        if sources:
-            for s in sources:
-                if s in SOURCE_GROUP_TYPE_MAP:
-                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
-
-        is_filtered = bool(target_group_types)
-
-        # OccurrenceTenure has no group_type of its own; filter via the linked Occurrence.
-        if is_filtered:
-            tenure_qs = OccurrenceTenure.objects.filter(
-                occurrence_geometry__occurrence__group_type__name__in=target_group_types
+        remaining = OccurrenceTenure.objects.count()
+        if remaining:
+            logger.warning(
+                "occurrence_tenure.clear_targets: %d OccurrenceTenure rows still present — "
+                "expected 0 after occurrence_legacy --wipe-targets ran first. "
+                "Deleting now as a fallback.",
+                remaining,
             )
-            logger.info("Deleting OccurrenceTenure objects for group_types %s ...", target_group_types)
+            from django.contrib.contenttypes.models import ContentType
+            from reversion.models import Version
+
+            ct = ContentType.objects.get_for_model(OccurrenceTenure)
+            Version.objects.filter(content_type=ct).delete()
+            OccurrenceTenure.objects.all().delete()
         else:
-            tenure_qs = OccurrenceTenure.objects.all()
-            logger.info("Deleting ALL OccurrenceTenure objects...")
-
-        # Delete reversion history first.
-        # OccurrenceTenure has no group_type field so we cannot use the group_type-filtered
-        # helper.  Instead we resolve the object IDs from the already-scoped queryset and
-        # delete their Version rows directly.  For an unfiltered wipe we delete *all*
-        # Version rows by content type — this safely removes stale versions from prior runs
-        # whose PKs have since been reused, which the ID-enumeration path would miss.
-        from django.contrib.contenttypes.models import ContentType
-        from reversion.models import Version
-
-        ct = ContentType.objects.get_for_model(OccurrenceTenure)
-
-        if is_filtered:
-            str_ids = [str(pk) for pk in tenure_qs.values_list("id", flat=True)]
-            batch_size = 2000
-            deleted_versions = 0
-            for i in range(0, len(str_ids), batch_size):
-                batch = str_ids[i : i + batch_size]
-                n, _ = Version.objects.filter(content_type=ct, object_id__in=batch).delete()
-                deleted_versions += n
-        else:
-            deleted_versions, _ = Version.objects.filter(content_type=ct).delete()
-
-        logger.info("Deleted %d OccurrenceTenure reversion Version records", deleted_versions)
-
-        count = tenure_qs.count()
-        logger.info(f"Deleting {count} OccurrenceTenure objects...")
-        tenure_qs.delete()
-
-        # Reset the primary key sequence for OccurrenceTenure when using PostgreSQL.
-        try:
-            from django.db import connection as conn
-
-            if getattr(conn, "vendor", None) == "postgresql":
-                table = OccurrenceTenure._meta.db_table
-                with conn.cursor() as cur:
-                    cur.execute(f"SELECT MAX(id) FROM {table}")
-                    row = cur.fetchone()
-                    max_id = row[0] if row else None
-
-                    if max_id is not None:
-                        cur.execute(
-                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                            [table, "id", max_id, True],
-                        )
-                    else:
-                        cur.execute(
-                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                            [table, "id", 1, False],
-                        )
-                logger.info("Reset primary key sequence for table %s to %s", table, max_id)
-        except Exception:
-            logger.exception("Failed to reset OccurrenceTenure primary key sequence")
-
-        logger.info("Deletion complete.")
+            logger.info("occurrence_tenure.clear_targets: no OccurrenceTenure rows to delete (already cleared).")
 
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
