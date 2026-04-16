@@ -83,6 +83,15 @@ class OccurrenceThreatImporter(BaseSheetImporter):
 
         cleaner = ReversionHistoryCleaner(batch_size=2000)
         cleaner.clear_for_related_model(OCCConservationThreat, "occurrence", group_type_filter)
+
+        # Also clean any stale/orphaned Version records for OCC threats that no longer
+        # exist in the DB (e.g. Task-12681 records cascade-deleted when a prior
+        # occurrence_report_threats_legacy --wipe-targets run deleted OCR threats without
+        # cleaning their linked OCC Versions first).  Such orphaned Versions would not be
+        # found by clear_for_related_model above (the objects are gone from the DB).
+        # If the OCC PK sequence is later reset and new records reuse those PKs, the seeder
+        # would find these stale Versions and skip reseeding — leaving mismatched history.
+        cleaner.clear_orphaned_for_model(OCCConservationThreat)
         logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
 
         from django.db import connections
