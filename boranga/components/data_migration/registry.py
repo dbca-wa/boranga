@@ -118,7 +118,7 @@ _SOURCE_DEFAULT_USER_MAP = {
     "TEC_SURVEYS": "boranga.tec@dbca.wa.gov.au",
     "TEC_SURVEY_THREATS": "boranga.tec@dbca.wa.gov.au",
     "TEC_BOUNDARIES": "boranga.tec@dbca.wa.gov.au",
-    "TPFL": "boranga.ptfl@dbca.wa.gov.au",
+    "TPFL": "boranga.tpfl@dbca.wa.gov.au",
     "TFAUNA": "boranga.tfauna@dbca.wa.gov.au",
 }
 
