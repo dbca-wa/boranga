@@ -388,11 +388,11 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                     skipped += 1
                     continue
 
-                # Populate Tenure
-                # This creates/updates OccurrenceTenure objects
+                # Populate Tenure without creating a revision yet — purpose/vesting/significant
+                # will be set below and a single final save will create one clean version.
                 tenure_count_before = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).count()
 
-                populate_occurrence_tenure_data(geometry_instance, features, request)
+                populate_occurrence_tenure_data(geometry_instance, features, request, skip_revision=True)
 
                 # Now update with CSV data
                 purpose_id = transformed.get("OccurrenceTenure__purpose_id")
@@ -412,27 +412,16 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                     created += num_new
                     updated += tenure_count_before
 
-                # Apply CSV data to the tenures
-                # If there are multiple tenures, we apply it to all of them as it is likely
-                # intended for the entire occurrence population represented by this row.
+                # Apply CSV data and do the single versioned save for each tenure.
+                # populate_occurrence_tenure_data ran with skip_revision=True above, so this
+                # save creates exactly one version containing the complete final state.
                 for tenure in tenures:
-                    updated_fields = []
                     if purpose_id:
                         tenure.purpose_id = purpose_id
-                        updated_fields.append("purpose")
                     if vesting_id:
                         tenure.vesting_id = vesting_id
-                        updated_fields.append("vesting")
-
                     tenure.significant_to_occurrence = True
-                    updated_fields.append("significant_to_occurrence")
-
                     tenure.save(version_user=user)
-
-                    # duration = time.time() - row_start_time
-                    # logger.info(
-                    #     f"Processed Occurrence {occurrence} ({action_str}) in {duration:.4f}s"
-                    # )
 
             except Exception as e:
                 logger.exception(f"Error processing tenure for Occurrence {occurrence}: {e}")
