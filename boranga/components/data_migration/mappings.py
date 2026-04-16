@@ -452,8 +452,10 @@ def load_sheet_associated_species_names(
                 count += 1
         return mapping
     except FileNotFoundError:
-        logger.warning("Associated-species CSV not found: %s", resolved)
-        return {}
+        raise FileNotFoundError(
+            f"Associated-species CSV not found: {resolved}. "
+            "Ensure DRF_SHEET_VEG_CLASSES_Ass_Species.csv is present alongside the source file."
+        ) from None
     except Exception as exc:
         logger.exception("Error reading associated-species CSV %s: %s", resolved, exc)
         return {}
