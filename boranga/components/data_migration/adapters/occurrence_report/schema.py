@@ -595,6 +595,7 @@ class OccurrenceReportRow:
             "species_id": self.species_id,
             "community_id": self.community_id,
             "processing_status": self.processing_status,
+            "locked": self.processing_status == "approved",
             "customer_status": self.customer_status,
             "observation_date": self.observation_date,
             "record_source": self.record_source,
