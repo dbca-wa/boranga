@@ -127,7 +127,11 @@ class OccurrenceTenureImporter(BaseSheetImporter):
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
 
-        # Get the user for versioning
+        # Get the user for versioning.
+        # Prefer an explicit user_id on the context; fall back to the migration service
+        # account for the adapter's source (e.g. boranga.tpfl@dbca.wa.gov.au for TPFL).
+        # Never fall back to a random superuser — that would stamp unrelated users onto the
+        # reversion history of migrated tenures.
         user = None
         if ctx.user_id:
             try:
@@ -135,16 +139,20 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             except EmailUserRO.DoesNotExist:
                 pass
 
-        # If no user found, try to find a system user or similar, or just use None (might fail if save expects user)
-        # populate_occurrence_tenure_data uses request.user.
         if not user:
-            # Fallback to first superuser or similar if needed, but for migration usually we might have a specific user
-            # For now let's assume ctx.user_id is provided or we can use a dummy user if allowed.
-            # If ctx.user_id is None, we might need to fetch a default user.
-            try:
-                user = EmailUserRO.objects.filter(is_superuser=True).first()
-            except Exception:
-                pass
+            from boranga.components.data_migration.registry import _SOURCE_DEFAULT_USER_MAP
+
+            source_email = _SOURCE_DEFAULT_USER_MAP.get(OccurrenceTenureAdapter.source_key.upper())
+            if source_email:
+                try:
+                    user = EmailUserRO.objects.get(email=source_email)
+                except EmailUserRO.DoesNotExist:
+                    logger.warning(
+                        "Migration service account '%s' for source '%s' not found; "
+                        "OccurrenceTenure revisions will be attributed to no user.",
+                        source_email,
+                        OccurrenceTenureAdapter.source_key,
+                    )
 
         request = DummyRequest(user)
 
