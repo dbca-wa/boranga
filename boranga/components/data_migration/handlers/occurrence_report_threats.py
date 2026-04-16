@@ -82,6 +82,21 @@ class OCRConservationThreatImporter(BaseSheetImporter):
 
         cleaner = ReversionHistoryCleaner(batch_size=2000)
         cleaner.clear_for_related_model(OCRConservationThreat, "occurrence_report", group_type_filter)
+
+        # Also clean Version records for Task-12681 OCCConservationThreat records that are
+        # linked (via occurrence_report_threat FK) to the OCR threats being deleted below.
+        # When OCRConservationThreat records are deleted, Django cascades to those OCC
+        # records (on_delete=CASCADE).  If their Versions are not cleaned here they become
+        # orphaned in the Version table.  A later occurrence_threats_legacy --wipe-targets
+        # run can reset the OCC PK sequence, causing new OCC threats to reuse those PKs;
+        # the seeder then finds the stale Versions and skips reseeding — leaving wrong history.
+        from boranga.components.occurrence.models import OCCConservationThreat
+
+        cleaner.clear_for_related_model(
+            OCCConservationThreat,
+            "occurrence_report_threat__occurrence_report",
+            group_type_filter,
+        )
         logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
 
         from django.db import connection as conn

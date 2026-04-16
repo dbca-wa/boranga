@@ -373,7 +373,7 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
         null=True,
         related_name="occurrence_reports",
     )
-    reported_date = models.DateTimeField(default=timezone.now, null=False, blank=False)
+    datetime_created = models.DateTimeField(default=timezone.now, null=False, blank=False)
     submitter_information = models.OneToOneField(
         SubmitterInformation,
         on_delete=models.SET_NULL,
@@ -3119,6 +3119,28 @@ class OCRPlantCount(BaseModel):
             # IMPORTANT: If the occurrence report is migrated, do not modify counts
             # This is to preserve the original data from the migration
             return super().save(*args, **kwargs)
+
+        # For flora records created via the bulk importer, auto-derive count_status
+        # from whichever count fields contain data (detailed takes priority over simple).
+        if (
+            self.occurrence_report.bulk_import_task_id is not None
+            and self.occurrence_report.group_type.name == GroupType.GROUP_TYPE_FLORA
+        ):
+            detailed_values = [
+                self.detailed_alive_mature,
+                self.detailed_dead_mature,
+                self.detailed_alive_juvenile,
+                self.detailed_dead_juvenile,
+                self.detailed_alive_seedling,
+                self.detailed_dead_seedling,
+            ]
+            simple_values = [self.simple_alive, self.simple_dead]
+            if any(v is not None for v in detailed_values):
+                self.count_status = settings.COUNT_STATUS_COUNTED
+            elif any(v is not None for v in simple_values):
+                self.count_status = settings.COUNT_STATUS_SIMPLE_COUNT
+            else:
+                self.count_status = settings.COUNT_STATUS_NOT_COUNTED
 
         # For non migrated occurrences, set fields to None based on count status field
         if self.count_status == settings.COUNT_STATUS_NOT_COUNTED:
@@ -6296,7 +6318,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 for index, row in enumerate(rows):
                     if index + 1 > self.rows:
                         logger.warning(
-                            f"Bulk import task {self.id} tried to process row {index + 1} "
+                            f"Bulk import task {self.id} tried to process row {index + 2} "
                             "which is greater than the total number of rows"
                         )
                         break
@@ -6308,10 +6330,10 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             self.save()
                             self.process_row(ocr_migrated_from_ids, index, headers, row, errors)
                     except IntegrityError as e:
-                        logger.exception(f"IntegrityError on row {index} for import {self.id}: {e}")
+                        logger.exception(f"IntegrityError on row {index + 2} for import {self.id}: {e}")
                         errors.append(
                             {
-                                "row_index": index,
+                                "row_index": index + 2,
                                 "error_type": "integrity",
                                 "data": row,
                                 "error_message": str(e),
@@ -6319,10 +6341,10 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         )
                         continue
                     except Exception as e:
-                        logger.exception(f"Unhandled error on row {index} for import {self.id}: {e}")
+                        logger.exception(f"Unhandled error on row {index + 2} for import {self.id}: {e}")
                         errors.append(
                             {
-                                "row_index": index,
+                                "row_index": index + 2,
                                 "error_type": "exception",
                                 "data": row,
                                 "error_message": str(e),
@@ -6354,9 +6376,15 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 # Persist full errors list (human readable string) so the API/UI can display detailed errors.
                 if failure_summary and failure_summary.get("errors") is not None:
                     try:
-                        # Build a single string with each error on its own line.
+                        # Build a single string with each error on its own line, sorted by row.
                         error_lines = []
-                        for e in failure_summary.get("errors"):
+                        sorted_errors = sorted(
+                            failure_summary.get("errors"),
+                            key=lambda e: (
+                                e.get("row_index") if isinstance(e, dict) and e.get("row_index") is not None else 0
+                            ),
+                        )
+                        for e in sorted_errors:
                             if isinstance(e, dict):
                                 row_idx = e.get("row_index")
                                 msg = e.get("error_message") or e.get("error_type") or str(e)
@@ -6399,8 +6427,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             return []
 
     def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
-        # Present row numbers to humans starting at 1 (not 0)
-        row_index = index + 1
+        # Row 1 in the XLSX is the header; data starts at row 2, so add 2 to the 0-based index.
+        row_index = index + 2
 
         row_hash = hashlib.sha256(str(row).encode()).hexdigest()
         if OccurrenceReport.objects.filter(import_hash=row_hash).exists():
@@ -6434,17 +6462,23 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             )
             return
 
+        # Prefix with the bulk import task id (zero-padded to pad_length digits) so that
+        # records from different tasks can coexist and be re-imported idempotently per task.
+        _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+        _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+        prefixed_migrated_from_id = f"{_prefix}-{self.pk:0{_pad}d}-{ocr_migrated_from_id}"
+
         mode = "create"
         if (
-            ocr_migrated_from_id in ocr_migrated_from_ids
-            or OccurrenceReport.objects.filter(migrated_from_id=ocr_migrated_from_id).exists()
+            prefixed_migrated_from_id in ocr_migrated_from_ids
+            or OccurrenceReport.objects.filter(migrated_from_id=prefixed_migrated_from_id).exists()
         ):
             mode = "update"
 
-        if ocr_migrated_from_id not in ocr_migrated_from_ids:
+        if prefixed_migrated_from_id not in ocr_migrated_from_ids:
             # Because this is happening in a transaction we need to keep track of
             # the ocr_migrated_from_ids that have been processed in this transaction
-            ocr_migrated_from_ids.append(ocr_migrated_from_id)
+            ocr_migrated_from_ids.append(prefixed_migrated_from_id)
 
         row_error_count = 0
         total_column_error_count = 0
@@ -6560,13 +6594,14 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             if current_model_name == OccurrenceReport._meta.model_name:
                 if mode == "create":
                     current_model_instance = OccurrenceReport(**model_data)
+                    current_model_instance.migrated_from_id = prefixed_migrated_from_id
                     current_model_instance.bulk_import_task_id = self.pk
                     current_model_instance.import_hash = row_hash
                     current_model_instance.group_type_id = self.schema.group_type_id
                     current_model_instance.submitter = self.email_user
                     current_model_instance.lodgement_date = timezone.now()
                 else:
-                    current_model_instance = OccurrenceReport.objects.get(migrated_from_id=row[0])
+                    current_model_instance = OccurrenceReport.objects.get(migrated_from_id=prefixed_migrated_from_id)
                     for field, value in model_data.items():
                         setattr(current_model_instance, field, value)
             elif current_model_name == Occurrence._meta.model_name:
@@ -6792,6 +6827,20 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 if current_model_instance._meta.model_name in many_to_many_fields:
                     logger.info(f"Adding many to many fields for {current_model_instance}")
                     for m2m_field in many_to_many_fields[current_model_instance._meta.model_name]:
+                        # Special case: OCRAssociatedSpecies.related_species — validate() resolved
+                        # the cell value to a list of Taxonomy instances; create fresh
+                        # AssociatedSpeciesTaxonomy records here then set the M2M.
+                        if (
+                            isinstance(current_model_instance, OCRAssociatedSpecies)
+                            and m2m_field["field"] == "related_species"
+                        ):
+                            ast_instances = [
+                                AssociatedSpeciesTaxonomy.objects.create(taxonomy=taxonomy)
+                                for taxonomy in m2m_field["value"]
+                            ]
+                            current_model_instance.related_species.set(ast_instances)
+                            continue
+
                         field = getattr(current_model_instance, m2m_field["field"])
                         field.set(m2m_field["value"])
 
@@ -7069,14 +7118,20 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 )
                 lookup_next_col += 1
             elif isinstance(model_field, models.fields.CharField):
+                _text_max_length = model_field.max_length
+                if model_field.name == "migrated_from_id" and model_class is OccurrenceReport:
+                    _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    # overhead = "{prefix}-" + zero-padded id + "-"
+                    _text_max_length -= len(_prefix) + 1 + _pad + 1
                 dv = DataValidation(
                     type=dv_types["textLength"],
                     allow_blank=allow_blank,
                     operator=dv_operators["lessThanOrEqual"],
-                    formula1=f"{model_field.max_length}",
-                    error="Text must be less than or equal to {model_field.max_length} characters",
+                    formula1=f"{_text_max_length}",
+                    error=f"Text must be less than or equal to {_text_max_length} characters",
                     errorTitle="Text too long",
-                    prompt=f"Maximum {model_field.max_length} characters",
+                    prompt=f"Maximum {_text_max_length} characters",
                     promptTitle="Text length",
                 )
             elif isinstance(model_field, models.fields.DateTimeField | models.fields.DateField):
@@ -7690,6 +7745,16 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         # Check if the field for this column exists in the database
         return self.field_exists
 
+    @cached_property
+    def invalid_lookup_field(self):
+        """Returns True when the custom lookup field cannot be resolved on the related model."""
+        if not self.django_lookup_field_name:
+            return False
+        if not self.related_model:
+            return False
+        # A None queryset means the field resolution failed with a FieldError
+        return self.related_model_qs is None
+
     @property
     def field(self):
         if not self.django_import_content_type or not self.django_import_field_name:
@@ -7771,18 +7836,21 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
     def related_model_qs(self):
         display_field = self.display_field
 
-        filter_dict = {f"{display_field}__isnull": False}
-        related_model_qs = self.related_model.objects.filter(**filter_dict)
+        try:
+            filter_dict = {f"{display_field}__isnull": False}
+            related_model_qs = self.related_model.objects.filter(**filter_dict)
 
-        if issubclass(self.related_model, ArchivableModel):
-            related_model_qs = self.related_model.objects.exclude(archived=True)
+            if issubclass(self.related_model, ArchivableModel):
+                related_model_qs = self.related_model.objects.exclude(archived=True)
 
-        # If the related model has a group_type field, filter by the schema's group type
-        # (i.e. flora, fauna or community)
-        if hasattr(self.related_model, "group_type"):
-            related_model_qs = related_model_qs.filter(group_type=self.schema.group_type)
+            # If the related model has a group_type field, filter by the schema's group type
+            # (i.e. flora, fauna or community)
+            if hasattr(self.related_model, "group_type"):
+                related_model_qs = related_model_qs.filter(group_type=self.schema.group_type)
 
-        return related_model_qs.order_by(display_field)
+            return related_model_qs.order_by(display_field)
+        except FieldError:
+            return None
 
     @cached_property
     def filtered_related_model_qs(self):
@@ -8129,6 +8197,38 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     @property
     def preview_foreign_key_values_xlsx(self):
+        display_field = self.display_field
+
+        # Special case: OCRAssociatedSpecies.related_species with a taxonomy-traversing
+        # lookup field (e.g. 'taxonomy__scientific_name'). The related model is
+        # AssociatedSpeciesTaxonomy, which only contains rows that are already linked to
+        # existing OCRs. For the preview we want every valid Taxonomy name instead, so
+        # query Taxonomy directly using the trailing part of the lookup path.
+        if (
+            self.django_import_content_type_id
+            and self.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+            and self.django_import_field_name == "related_species"
+            and self.django_lookup_field_name
+        ):
+            # Strip the leading "taxonomy__" or any intermediate path and resolve the
+            # field name directly on Taxonomy (e.g. 'taxonomy__scientific_name' → 'scientific_name').
+            leaf_field = self.django_lookup_field_name.split("__")[-1]
+            preview_qs = Taxonomy.objects.values_list(leaf_field, flat=True).order_by(leaf_field).distinct()
+            max_length = (
+                preview_qs.aggregate(max_length=Max(Length(Cast(leaf_field, output_field=CharField()))))["max_length"]
+                or 0
+            )
+            if len(self.xlsx_column_header_name) > max_length:
+                max_length = len(self.xlsx_column_header_name)
+            workbook = openpyxl.Workbook()
+            worksheet = workbook.active
+            worksheet.append([self.xlsx_column_header_name])
+            for cell_value in preview_qs:
+                worksheet.append([cell_value])
+            worksheet["A1"].font = Font(bold=True)
+            worksheet.column_dimensions["A"].width = max_length + 2
+            return workbook
+
         related_model_qs = self.filtered_related_model_qs
 
         if not related_model_qs:
@@ -8149,7 +8249,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
         headers = [self.xlsx_column_header_name]
         worksheet.append(headers)
-        for cell_value in related_model_qs.order_by(display_field).values_list(display_field, flat=True):
+        for cell_value in related_model_qs.order_by(display_field).values_list(display_field, flat=True).distinct():
             worksheet.append([cell_value])
 
         # Make the headers bold
@@ -8560,7 +8660,16 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return cell_value, errors_added
 
         if xlsx_data_validation_type == "textLength" and field.max_length:
-            if len(str(cell_value)) > field.max_length:
+            _effective_max = field.max_length
+            if (
+                self.django_import_field_name == "migrated_from_id"
+                and self.django_import_content_type.model == OccurrenceReport._meta.model_name
+            ):
+                _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                # overhead = "{prefix}-" + zero-padded id + "-"
+                _effective_max -= len(_prefix) + 1 + _pad + 1
+            if len(str(cell_value)) > _effective_max:
                 error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} has too many characters"
                 errors.append(
                     {
@@ -8716,6 +8825,105 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return cell_value, errors_added
 
         if isinstance(field, models.ManyToManyField):
+            # Special case: OCRAssociatedSpecies.related_species is a parent→child→grandchild
+            # relationship (OCRAssociatedSpecies → AssociatedSpeciesTaxonomy → Taxonomy).
+            # The cell contains delimiter-separated scientific names that must be resolved
+            # to Taxonomy instances.  Actual AssociatedSpeciesTaxonomy records are created
+            # later in process_row().
+            #
+            # Optional in-cell disambiguation syntax:
+            #   "Drosera sp. [flora]" — append [<group_type_name>] after the scientific name.
+            # When omitted the name must be globally unique; if it matches taxonomies from
+            # multiple group types an error is raised telling the user to add the suffix.
+            if (
+                self.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+                and self.django_import_field_name == "related_species"
+            ):
+                import re as _re
+
+                _DISAMBIG_RE = _re.compile(r"^(.*?)\s*\[([^\]]+)\]\s*$")
+
+                names = [n.strip() for n in cell_value.split(settings.OCR_BULK_IMPORT_M2M_DELIMITER)]
+                resolved_taxa = []
+                for entry in names:
+                    if not entry:
+                        continue
+
+                    # Check for optional [group_type] suffix
+                    m = _DISAMBIG_RE.match(entry)
+                    if m:
+                        scientific_name = m.group(1).strip()
+                        group_type_hint = m.group(2).strip().lower()
+                        qs = Taxonomy.objects.filter(
+                            scientific_name=scientific_name,
+                            species__group_type__name=group_type_hint,
+                        )
+                        if not qs.exists():
+                            error_message = (
+                                f"No taxonomy found with scientific name '{scientific_name}' "
+                                f"and group type '{group_type_hint}' "
+                                f"for column '{self.xlsx_column_header_name}'"
+                            )
+                            errors.append(
+                                {
+                                    "row_index": index,
+                                    "error_type": "column",
+                                    "data": entry,
+                                    "error_message": error_message,
+                                }
+                            )
+                            errors_added += 1
+                            continue
+                    else:
+                        scientific_name = entry
+                        qs = Taxonomy.objects.filter(scientific_name=scientific_name)
+                        if not qs.exists():
+                            error_message = (
+                                f"No taxonomy found with scientific name '{scientific_name}' "
+                                f"for column '{self.xlsx_column_header_name}'"
+                            )
+                            errors.append(
+                                {
+                                    "row_index": index,
+                                    "error_type": "column",
+                                    "data": entry,
+                                    "error_message": error_message,
+                                }
+                            )
+                            errors_added += 1
+                            continue
+
+                        # Check whether this name spans multiple group types — if so the
+                        # user must add [group_type] to disambiguate.
+                        group_type_names = (
+                            qs.filter(species__group_type__isnull=False)
+                            .values_list("species__group_type__name", flat=True)
+                            .distinct()
+                        )
+                        if group_type_names.count() > 1:
+                            ambiguous_types = ", ".join(sorted(group_type_names))
+                            error_message = (
+                                f"Scientific name '{scientific_name}' is ambiguous — it exists "
+                                f"in multiple group types ({ambiguous_types}). "
+                                f"Append the group type in square brackets to disambiguate, "
+                                f"e.g. '{scientific_name} [flora]'. "
+                                f"Column: '{self.xlsx_column_header_name}'"
+                            )
+                            errors.append(
+                                {
+                                    "row_index": index,
+                                    "error_type": "column",
+                                    "data": entry,
+                                    "error_message": error_message,
+                                }
+                            )
+                            errors_added += 1
+                            continue
+
+                    resolved_taxa.append(qs.first())
+                cell_value = resolved_taxa
+                return cell_value, errors_added
+
             related_model = field.related_model
             related_model_qs = related_model.objects.all()
 

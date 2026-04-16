@@ -506,8 +506,8 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             canonical["SubmitterInformation__email_user"] = en_name if en_name else None
             canonical["SubmitterInformation__name"] = en_name if en_name else None
 
-            # ── reported_date = lodgement_date (EnDate) ─────────
-            canonical["reported_date"] = canonical.get("lodgement_date")
+            # ── datetime_created = lodgement_date (EnDate) ─────────────────────
+            canonical["datetime_created"] = canonical.get("lodgement_date")
 
             # ── Observer contact: Address + Phone ───────────────
             addr = (raw.get("Address") or "").strip()

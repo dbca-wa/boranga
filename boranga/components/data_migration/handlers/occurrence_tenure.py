@@ -89,51 +89,32 @@ class OccurrenceTenureImporter(BaseSheetImporter):
     integrity_tables = ["boranga_occurrence"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
-        """Delete OccurrenceTenure target data. Respect `ctx.dry_run`."""
+        """Delete OccurrenceTenure target data.
+
+        OccurrenceTenure rows and their reversion history are deleted inside
+        occurrence_legacy.clear_targets, immediately before OccurrenceGeometry is removed
+        (while the occurrence_geometry FK is still intact for source-scoped filtering).
+        By the time this method is called the records are already gone, so this is a no-op.
+        """
         if ctx.dry_run:
-            logger.info("Dry run: Would delete all OccurrenceTenure objects")
+            logger.info("Dry run: OccurrenceTenure is cleared by occurrence_legacy --wipe-targets (no-op here)")
             return
+        remaining = OccurrenceTenure.objects.count()
+        if remaining:
+            logger.warning(
+                "occurrence_tenure.clear_targets: %d OccurrenceTenure rows still present — "
+                "expected 0 after occurrence_legacy --wipe-targets ran first. "
+                "Deleting now as a fallback.",
+                remaining,
+            )
+            from django.contrib.contenttypes.models import ContentType
+            from reversion.models import Version
 
-        # We don't delete parent Occurrences, only the Tenure links
-        # OccurrenceTenure is just a linking model between OccurrenceGeometry and Tenure features
-        count = OccurrenceTenure.objects.count()
-        logger.info(f"Deleting {count} OccurrenceTenure objects...")
-
-        # Delete reversion history first (more efficient than waiting for cascade)
-        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
-
-        cleaner = ReversionHistoryCleaner(batch_size=2000)
-        cleaner.clear_for_model(OccurrenceTenure, {})
-        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
-
-        OccurrenceTenure.objects.all().delete()
-
-        # Reset the primary key sequence for OccurrenceTenure when using PostgreSQL.
-        try:
-            from django.db import connection as conn
-
-            if getattr(conn, "vendor", None) == "postgresql":
-                table = OccurrenceTenure._meta.db_table
-                with conn.cursor() as cur:
-                    cur.execute(f"SELECT MAX(id) FROM {table}")
-                    row = cur.fetchone()
-                    max_id = row[0] if row else None
-
-                    if max_id is not None:
-                        cur.execute(
-                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                            [table, "id", max_id, True],
-                        )
-                    else:
-                        cur.execute(
-                            "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                            [table, "id", 1, False],
-                        )
-                logger.info("Reset primary key sequence for table %s to %s", table, max_id)
-        except Exception:
-            logger.exception("Failed to reset OccurrenceTenure primary key sequence")
-
-        logger.info("Deletion complete.")
+            ct = ContentType.objects.get_for_model(OccurrenceTenure)
+            Version.objects.filter(content_type=ct).delete()
+            OccurrenceTenure.objects.all().delete()
+        else:
+            logger.info("occurrence_tenure.clear_targets: no OccurrenceTenure rows to delete (already cleared).")
 
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
@@ -146,7 +127,11 @@ class OccurrenceTenureImporter(BaseSheetImporter):
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
 
-        # Get the user for versioning
+        # Get the user for versioning.
+        # Prefer an explicit user_id on the context; fall back to the migration service
+        # account for the adapter's source (e.g. boranga.tpfl@dbca.wa.gov.au for TPFL).
+        # Never fall back to a random superuser — that would stamp unrelated users onto the
+        # reversion history of migrated tenures.
         user = None
         if ctx.user_id:
             try:
@@ -154,16 +139,20 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             except EmailUserRO.DoesNotExist:
                 pass
 
-        # If no user found, try to find a system user or similar, or just use None (might fail if save expects user)
-        # populate_occurrence_tenure_data uses request.user.
         if not user:
-            # Fallback to first superuser or similar if needed, but for migration usually we might have a specific user
-            # For now let's assume ctx.user_id is provided or we can use a dummy user if allowed.
-            # If ctx.user_id is None, we might need to fetch a default user.
-            try:
-                user = EmailUserRO.objects.filter(is_superuser=True).first()
-            except Exception:
-                pass
+            from boranga.components.data_migration.registry import _SOURCE_DEFAULT_USER_MAP
+
+            source_email = _SOURCE_DEFAULT_USER_MAP.get(OccurrenceTenureAdapter.source_key.upper())
+            if source_email:
+                try:
+                    user = EmailUserRO.objects.get(email=source_email)
+                except EmailUserRO.DoesNotExist:
+                    logger.warning(
+                        "Migration service account '%s' for source '%s' not found; "
+                        "OccurrenceTenure revisions will be attributed to no user.",
+                        source_email,
+                        OccurrenceTenureAdapter.source_key,
+                    )
 
         request = DummyRequest(user)
 
@@ -262,6 +251,12 @@ class OccurrenceTenureImporter(BaseSheetImporter):
         # Silence spatial utils logger to avoid chattiness
         logging.getLogger("boranga.components.spatial.utils").setLevel(logging.WARNING)
 
+        # Track geometry PKs already processed in this run to avoid re-processing the same
+        # geometry multiple times (e.g. when the source CSV has duplicate POP_ID rows).
+        # Without this, each duplicate row would call populate_occurrence_tenure_data again
+        # on the same geometry/tenures, compounding reversion versions per record.
+        processed_geom_pks: set[int] = set()
+
         for row in all_rows:
             processed += 1
             if processed % 500 == 0:
@@ -352,6 +347,14 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             occurrence_pk = occ_data["pk"]
             geom_pk = occ_data["geom_pk"]
 
+            # Skip if this geometry was already processed in this run (e.g. duplicate CSV rows
+            # for the same POP_ID). Re-processing the same geometry would call
+            # populate_occurrence_tenure_data again on already-created tenures, creating an
+            # extra reversion Version on each tenure for every duplicate row.
+            if geom_pk in processed_geom_pks:
+                skipped += 1
+                continue
+
             # Use hollow object for FK lookup
             occurrence = Occurrence(pk=occurrence_pk)
             occurrence_str = f"Occurrence {occurrence_pk} ({migrated_from_id})"
@@ -377,6 +380,9 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 logger.info(f"Dry run: Would process tenure for Occurrence {occurrence}")
                 continue
 
+            # Mark this geometry as processed so that any later duplicate CSV rows skip it.
+            processed_geom_pks.add(geom_pk)
+
             try:
                 # Use preloaded set to check existence without DB hit
                 exists_before = options.get("wipe_targets") is not True and geometry_instance.id in geometry_has_tenure
@@ -390,11 +396,11 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                     skipped += 1
                     continue
 
-                # Populate Tenure
-                # This creates/updates OccurrenceTenure objects
+                # Populate Tenure without creating a revision yet — purpose/vesting/significant
+                # will be set below and a single final save will create one clean version.
                 tenure_count_before = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).count()
 
-                populate_occurrence_tenure_data(geometry_instance, features, request)
+                populate_occurrence_tenure_data(geometry_instance, features, request, skip_revision=True)
 
                 # Now update with CSV data
                 purpose_id = transformed.get("OccurrenceTenure__purpose_id")
@@ -414,27 +420,16 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                     created += num_new
                     updated += tenure_count_before
 
-                # Apply CSV data to the tenures
-                # If there are multiple tenures, we apply it to all of them as it is likely
-                # intended for the entire occurrence population represented by this row.
+                # Apply CSV data and do the single versioned save for each tenure.
+                # populate_occurrence_tenure_data ran with skip_revision=True above, so this
+                # save creates exactly one version containing the complete final state.
                 for tenure in tenures:
-                    updated_fields = []
                     if purpose_id:
                         tenure.purpose_id = purpose_id
-                        updated_fields.append("purpose")
                     if vesting_id:
                         tenure.vesting_id = vesting_id
-                        updated_fields.append("vesting")
-
                     tenure.significant_to_occurrence = True
-                    updated_fields.append("significant_to_occurrence")
-
                     tenure.save(version_user=user)
-
-                    # duration = time.time() - row_start_time
-                    # logger.info(
-                    #     f"Processed Occurrence {occurrence} ({action_str}) in {duration:.4f}s"
-                    # )
 
             except Exception as e:
                 logger.exception(f"Error processing tenure for Occurrence {occurrence}: {e}")

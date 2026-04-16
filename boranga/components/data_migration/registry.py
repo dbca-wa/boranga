@@ -118,7 +118,7 @@ _SOURCE_DEFAULT_USER_MAP = {
     "TEC_SURVEYS": "boranga.tec@dbca.wa.gov.au",
     "TEC_SURVEY_THREATS": "boranga.tec@dbca.wa.gov.au",
     "TEC_BOUNDARIES": "boranga.tec@dbca.wa.gov.au",
-    "TPFL": "boranga.ptfl@dbca.wa.gov.au",
+    "TPFL": "boranga.tpfl@dbca.wa.gov.au",
     "TFAUNA": "boranga.tfauna@dbca.wa.gov.au",
 }
 
@@ -698,7 +698,9 @@ def t_ocr_comments_transform(value, ctx):
 
     # OTHER_COMMENTS: plain text, no prefix
     _append_part(OTHER_COMMENTS if OTHER_COMMENTS else None)
-    _next_sep = "\n"  # <LINE BREAK> before PURPOSE section
+    _next_sep = "\n\n"  # <LINE BREAK> before PURPOSE section
+
+    _purpose_vesting_parts = []
 
     if PURPOSE1:
         purpose1 = LegacyValueMap.get_target(
@@ -712,7 +714,7 @@ def t_ocr_comments_transform(value, ctx):
                 TransformIssue("error", f"No Purpose found that maps to legacy value: {PURPOSE1!r}")
             )
         else:
-            _append_part(purpose1)
+            _purpose_vesting_parts.append(purpose1)
 
     if PURPOSE2:
         purpose2 = LegacyValueMap.get_target(
@@ -726,7 +728,7 @@ def t_ocr_comments_transform(value, ctx):
                 TransformIssue("error", f"No Purpose found that maps to legacy value: {PURPOSE2!r}")
             )
         else:
-            _append_part(purpose2)
+            _purpose_vesting_parts.append(purpose2)
 
     if VESTING:
         vesting = LegacyValueMap.get_target(
@@ -738,7 +740,10 @@ def t_ocr_comments_transform(value, ctx):
         if not vesting:
             transform_issues.append(TransformIssue("error", f"No Vesting found that maps to legacy value: {VESTING!r}"))
         else:
-            _append_part(vesting)
+            _purpose_vesting_parts.append(vesting)
+
+    if _purpose_vesting_parts:
+        _append_part("Purpose & Vesting: " + ", ".join(_purpose_vesting_parts))
 
     _next_sep = "\n"  # <LINE BREAK> before fencing section
     _append_part(f"Fencing Status: {FENCING_STATUS}" if FENCING_STATUS else None)

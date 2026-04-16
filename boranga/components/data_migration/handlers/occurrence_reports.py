@@ -693,13 +693,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
             defaults = report_row.to_model_defaults()
 
-            # Ensure `reported_date` is populated when missing by copying
-            # from `lodgement_date`. The schema treats `reported_date` as a
+            # Ensure `datetime_created` is populated when missing by copying
+            # from `lodgement_date`. The schema treats `datetime_created` as a
             # copy of `lodgement_date` but the TPFL pipelines only produce
             # `lodgement_date`, so fill it here to avoid NULLs for the
-            # model's non-nullable `reported_date` field.
-            if defaults.get("reported_date") is None and defaults.get("lodgement_date") is not None:
-                defaults["reported_date"] = defaults.get("lodgement_date")
+            # model's non-nullable `datetime_created` field.
+            if defaults.get("datetime_created") is None and defaults.get("lodgement_date") is not None:
+                defaults["datetime_created"] = defaults.get("lodgement_date")
 
             # If transforms produced None for fields that have model defaults
             # (for example CharFields with default=''), prefer the model's
@@ -1146,7 +1146,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # non-None on every instance. Using the union (fields present on
             # some instances) can cause bulk_update to write NULL into rows
             # for instances where the attribute is None, which violates NOT
-            # NULL constraints (e.g. `reported_date`). Restricting to fields
+            # NULL constraints (e.g. `datetime_created`). Restricting to fields
             # present on all instances avoids that.
             fields = []
             if update_instances:
@@ -1173,7 +1173,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         # include only model fields that currently have a non-None
                         # value on the instance. This avoids attempting to write
                         # NULL into non-nullable DB columns such as
-                        # `reported_date` when the instance attribute is None.
+                        # `datetime_created` when the instance attribute is None.
                         update_fields = [
                             f.name
                             for f in inst._meta.fields
@@ -1208,7 +1208,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # Load associated-species mapping (SHEETNO -> [species names]) from
         # mappings module. The loader will look for
-        # DRF_SHEET_VEG_CLASSES_Ass_species.csv alongside the provided `path`.
+        # DRF_SHEET_VEG_CLASSES_Ass_Species.csv alongside the provided `path`.
         # During dry-run, load a small sample and produce a concise debug
         # preview instead of performing full DB resolution/creation.
         # During dry-run we already emit a per-OCR associated-species preview
@@ -1217,8 +1217,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # duplicate logs, skip loading the full mapping in dry-run mode.
         if getattr(ctx, "dry_run", False):
             sheet_to_species = None
-        else:
+        elif Source.TPFL.value in sources:
             sheet_to_species = load_sheet_associated_species_names(path, split_values=True)
+        else:
+            sheet_to_species = None
 
         # If any mapping rows found, resolve names to AssociatedSpeciesTaxonomy
         # Also, scan OCRAssociatedSpecies__comment for additional species names

@@ -127,6 +127,8 @@ SPECIES_HEADER = [
     "Family",
     "Genus",
     "Informal Group(s)",
+    "Fauna Group",
+    "Fauna Subgroup",
     "Region(s)",
     "District(s)",
     "WA Legislative List",
@@ -147,6 +149,8 @@ def get_species_export(filters, limit):
         "taxonomy",
         "group_type",
         "species_publishing_status",
+        "fauna_group",
+        "fauna_sub_group",
     ).prefetch_related(
         "taxonomy__vernaculars",
         "taxonomy__informal_groups__classification_system_fk",
@@ -189,6 +193,8 @@ def get_species_export_fields(data, include_group_type=False):
             _safe(getattr(t, "family_name", "")),
             _safe(getattr(t, "genera_name", "")),
             informal,
+            _safe(obj.fauna_group.name if obj.fauna_group else ""),
+            _safe(obj.fauna_sub_group.name if obj.fauna_sub_group else ""),
             regions,
             districts,
             _approved_cs_field(cs, "wa_legislative_list.code"),
@@ -292,6 +298,8 @@ SPECIES_AND_COMMUNITIES_HEADER = [
     "Family",
     "Genus",
     "Informal Group(s)",
+    "Fauna Group",
+    "Fauna Subgroup",
     "Region(s)",
     "District(s)",
     "WA Legislative List",
@@ -314,6 +322,8 @@ def get_species_and_communities_export(filters, limit):
         "taxonomy",
         "group_type",
         "species_publishing_status",
+        "fauna_group",
+        "fauna_sub_group",
     ).prefetch_related(
         "taxonomy__vernaculars",
         "taxonomy__informal_groups__classification_system_fk",
@@ -357,6 +367,8 @@ def get_species_and_communities_export_fields(data, include_group_type=False):
             family = ""
             genus = ""
             informal = ""
+            fauna_group = ""
+            fauna_subgroup = ""
             pub = ""
             try:
                 pub = obj.community_publishing_status.community_public
@@ -376,6 +388,8 @@ def get_species_and_communities_export_fields(data, include_group_type=False):
             community_name = ""
             family = _safe(getattr(t, "family_name", ""))
             genus = _safe(getattr(t, "genera_name", ""))
+            fauna_group = _safe(obj.fauna_group.name if obj.fauna_group else "")
+            fauna_subgroup = _safe(obj.fauna_sub_group.name if obj.fauna_sub_group else "")
             pub = ""
             try:
                 pub = obj.species_publishing_status.species_public
@@ -395,6 +409,8 @@ def get_species_and_communities_export_fields(data, include_group_type=False):
                 family,
                 genus,
                 informal,
+                fauna_group,
+                fauna_subgroup,
                 regions,
                 districts,
                 _approved_cs_field(cs, "wa_legislative_list.code"),
@@ -420,7 +436,9 @@ CS_SPECIES_HEADER = [
     "Family",
     "Genus",
     "Informal Group(s)",
-    "Change Code",
+    "Fauna Group",
+    "Fauna Subgroup",
+    "Change Type",
     "WA Priority List",
     "WA Priority Category",
     "WA Legislative List",
@@ -449,6 +467,8 @@ def get_conservation_status_species_export(filters, limit):
         .select_related(
             "species__taxonomy",
             "species__group_type",
+            "species__fauna_group",
+            "species__fauna_sub_group",
             "wa_legislative_list",
             "wa_legislative_category",
             "wa_priority_list",
@@ -491,6 +511,8 @@ def get_conservation_status_species_export_fields(data, include_group_type=False
             _safe(getattr(t, "family_name", "")),
             _safe(getattr(t, "genera_name", "")),
             informal,
+            _safe(sp.fauna_group.name if sp and sp.fauna_group else ""),
+            _safe(sp.fauna_sub_group.name if sp and sp.fauna_sub_group else ""),
             _safe(getattr(obj.change_code, "code", "") if obj.change_code else ""),
             _safe(getattr(obj.wa_priority_list, "code", "") if obj.wa_priority_list else ""),
             _safe(getattr(obj.wa_priority_category, "code", "") if obj.wa_priority_category else ""),
@@ -530,7 +552,7 @@ CS_COMMUNITY_HEADER = [
     "Community Name",
     "Region(s)",
     "District(s)",
-    "Change Code",
+    "Change Type",
     "WA Priority List",
     "WA Priority Category",
     "WA Legislative List",
@@ -628,6 +650,7 @@ OCC_HEADER = [
     "Number",
     "Occurrence Name",
     "Scientific Name",
+    "Common Name",
     "Community Name",
     "Community ID",
     "Wild Status",
@@ -642,6 +665,8 @@ OCC_HEADER = [
     "Created Date",
     "Family",
     "Informal Group(s)",
+    "Fauna Group",
+    "Fauna Subgroup",
     "Processing Status",
 ]
 
@@ -652,6 +677,8 @@ def get_occurrence_export(filters, limit):
     qs = (
         Occurrence.objects.select_related(
             "species__taxonomy",
+            "species__fauna_group",
+            "species__fauna_sub_group",
             "community__taxonomy",
             "group_type",
             "wild_status",
@@ -661,6 +688,7 @@ def get_occurrence_export(filters, limit):
         .prefetch_related(
             "occurrence_reports",
             "species__taxonomy__informal_groups__classification_system_fk",
+            "species__taxonomy__vernaculars",
         )
         .annotate(num_reports=Count("occurrence_reports"))
     )
@@ -685,10 +713,16 @@ def get_occurrence_export_fields(data, include_group_type=False):
             for ig in (t.informal_groups.all() if t else [])
             if ig.classification_system_fk
         )
+        common_name = ""
+        if t:
+            v = t.vernaculars.all().first()
+            if v:
+                common_name = v.vernacular_name
         row = [
             _safe(obj.occurrence_number),
             _safe(obj.occurrence_name),
             _safe(getattr(t, "scientific_name", "")),
+            common_name,
             _safe(getattr(ct, "community_name", "")),
             _safe(getattr(ct, "community_common_id", "")),
             _safe(getattr(obj.wild_status, "name", "") if obj.wild_status else ""),
@@ -703,6 +737,8 @@ def get_occurrence_export_fields(data, include_group_type=False):
             _fmt_date(obj.datetime_created, "%d/%m/%Y"),
             _safe(getattr(t, "family_name", "")),
             informal,
+            _safe(sp.fauna_group.name if sp and sp.fauna_group else ""),
+            _safe(sp.fauna_sub_group.name if sp and sp.fauna_sub_group else ""),
             _safe(obj.get_processing_status_display()),
         ]
         if include_group_type:
@@ -721,6 +757,7 @@ OCR_HEADER = [
     "Occurrence",
     "Occurrence Name",
     "Scientific Name",
+    "Common Name",
     "Community Name",
     "Community ID",
     "Observation Date",
@@ -735,7 +772,8 @@ OCR_HEADER = [
     "Last Modified By",
     "Last Modified Date",
     "Family",
-    "Common Name",
+    "Fauna Group",
+    "Fauna Subgroup",
     "Processing Status",
 ]
 
@@ -745,6 +783,8 @@ def get_occurrence_report_export(filters, limit):
 
     qs = OccurrenceReport.objects.select_related(
         "species__taxonomy",
+        "species__fauna_group",
+        "species__fauna_sub_group",
         "community__taxonomy",
         "group_type",
         "occurrence",
@@ -788,6 +828,7 @@ def get_occurrence_report_export_fields(data, include_group_type=False):
             _safe(getattr(occ, "occurrence_number", "")),
             _safe(getattr(occ, "occurrence_name", "")),
             _safe(getattr(t, "scientific_name", "")),
+            common_name,
             _safe(getattr(ct, "community_name", "")),
             _safe(getattr(ct, "community_common_id", "")),
             _fmt_date(obj.observation_date, "%d/%m/%Y"),
@@ -802,7 +843,8 @@ def get_occurrence_report_export_fields(data, include_group_type=False):
             _user_name(obj.last_modified_by, user_cache),
             _fmt_date(obj.datetime_updated, "%d/%m/%Y"),
             _safe(getattr(t, "family_name", "")),
-            common_name,
+            _safe(sp.fauna_group.name if sp and sp.fauna_group else ""),
+            _safe(sp.fauna_sub_group.name if sp and sp.fauna_sub_group else ""),
             _safe(obj.get_processing_status_display()),
         ]
         if include_group_type:

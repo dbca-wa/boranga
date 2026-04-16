@@ -13,7 +13,7 @@
 9. Open 'Microsoft Azure Storage Explorer' and navigate to dbcaoimdevtransfer > Blob Containers > transfer > <YourNAME>
 10. Create a new folder named after the legacy system name and today's date e.g. tpfl-20260130
 11. Select all the CSV files from the 'DRF-2025-11-04T09_10_43_3' folder and drag them into the new Azure folder
-12. Open the rancher environment being used for data verification (in this case UAT)
+12. Open the rancher environment being used for data verification (in this case DEV)
 13. Navigate to the Deployment being used (in this case 'boranga-dev')
 14. Open a shell and navigate to the folder that will be housing the files (e.g. private-media/legacy_data/TPFL)
 15. If there are existing files in the folder, move them to an archive folder:
@@ -83,18 +83,12 @@ The occurrence reports run is quite time intenstive (~2.5 hrs in AKS when run on
 Before running in AKS, raise the CPU request on the deployment to 2000m (matching the limit) via the Rancher UI > Resources section. This gives the pod guaranteed CPU for the duration and helps avoid throttling from other pods on the same node. Remember to drop it back to 10m after the migration is complete.
 
 python scripts/split_csv.py private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv \
-    --chunk-size 13573 \
+    --chunk-size 5000 \
     --output-dir private-media/legacy_data/TPFL/chunks \
     --handler occurrence_report_legacy \
     --handler-args "--sources TPFL --seed-history"
 
-The command will output a list of migration runs to process each of the chunks. E.g.:
-
---- Commands to run ---
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0001.csv --wipe-targets --sources TPFL --seed-history && \
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0002.csv --sources TPFL --seed-history && \
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0003.csv --sources TPFL --seed-history && \
-./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TPFL/chunks/DRF_RFR_FORMS_0004.csv --sources TPFL --seed-history
+The command will output a list of migration runs to process each of the chunks as a detached process that will keep running even if the rancher shell disconnects
 
 ./manage.py migrate_data run occurrence_report_documents_legacy private-media/legacy_data/TPFL/DRF_RFR_FORMS.csv --sources TPFL --wipe-targets --seed-history
 ./manage.py migrate_data run occurrence_report_threats_legacy private-media/legacy_data/TPFL/DRF_SHEET_THREATS.csv --sources TPFL --wipe-targets --seed-history

@@ -286,7 +286,7 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
     return res.json()
 
 
-def populate_occurrence_tenure_data(geometry_instance, features, request):
+def populate_occurrence_tenure_data(geometry_instance, features, request, skip_revision=False):
     # Get existing occurrence tenures for this geometry
     occurrence_tenures_before = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance)
     # Keep a track of the occurrence tenure IDs that are created or updated
@@ -314,7 +314,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request):
                     owner_count=owner_count,
                     tenure_area_ewkb=tenure_area_ewkb,
                 )
-                occurrence_tenure.save(version_user=request.user)
+                occurrence_tenure.save(no_revision=skip_revision, version_user=request.user)
             except IntegrityError as e:
                 logger.error(f"Error creating OccurrenceTenure: {e}")
                 continue
@@ -338,7 +338,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request):
                 occurrence_tenure.owner_name = owner_name
                 occurrence_tenure.owner_count = owner_count
                 occurrence_tenure.tenure_area_ewkb = tenure_area_ewkb
-                occurrence_tenure.save(version_user=request.user)
+                occurrence_tenure.save(no_revision=skip_revision, version_user=request.user)
             else:
                 created = True
                 # Restore historical tenure details to current one if applicable
@@ -354,7 +354,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request):
                     significant_to_occurrence=(historical.significant_to_occurrence if historical else None),
                     comments=historical.comments if historical else None,
                 )
-                occurrence_tenure.save(version_user=request.user)
+                occurrence_tenure.save(no_revision=skip_revision, version_user=request.user)
 
         if created:
             logger.info(f"Created OccurrenceTenure: {occurrence_tenure}")

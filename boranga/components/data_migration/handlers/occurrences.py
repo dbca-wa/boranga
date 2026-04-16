@@ -176,6 +176,27 @@ class OccurrenceImporter(BaseSheetImporter):
                 # Nullify self-reference that blocks deletion of Occurrence
                 Occurrence.objects.filter(**occ_filter).update(combined_occurrence=None)
 
+                # Delete OccurrenceTenure before OccurrenceGeometry: deleting OccurrenceGeometry
+                # triggers SET_NULL_AND_HISTORICAL which severs the occurrence_geometry FK on
+                # OccurrenceTenure rows, making any subsequent source-scoped lookup return 0.
+                # We must also catch already-historical tenures (occurrence_geometry=NULL) from
+                # prior runs — those can't be found via the FK path, but their historical_occurrence
+                # integer field still references the occurrence ID.
+                from django.db.models import Q
+
+                from boranga.components.occurrence.models import OccurrenceTenure
+
+                if is_filtered:
+                    occ_ids = list(
+                        Occurrence.objects.filter(group_type__name__in=target_group_types).values_list("id", flat=True)
+                    )
+                    OccurrenceTenure.objects.filter(
+                        Q(occurrence_geometry__occurrence__group_type__name__in=target_group_types)
+                        | Q(historical_occurrence__in=occ_ids)
+                    ).delete()
+                else:
+                    OccurrenceTenure.objects.all().delete()
+
                 relations = [
                     OCCContactDetail,
                     OCCLocation,
@@ -208,10 +229,14 @@ class OccurrenceImporter(BaseSheetImporter):
             if not was_autocommit:
                 conn.set_autocommit(False)
 
-        # Reset the primary key sequence for Occurrence and OccurrenceReport when using PostgreSQL.
+        # Reset the primary key sequence for Occurrence, OccurrenceReport and OccurrenceTenure
+        # when using PostgreSQL. OccurrenceTenure is included here because it is deleted above
+        # (before OccurrenceGeometry) so its sequence must also be reset at this point.
         try:
+            from boranga.components.occurrence.models import OccurrenceTenure
+
             if getattr(conn, "vendor", None) == "postgresql":
-                for model in [Occurrence, OccurrenceReport]:
+                for model in [Occurrence, OccurrenceReport, OccurrenceTenure]:
                     table = model._meta.db_table
                     with conn.cursor() as cur:
                         cur.execute(f"SELECT MAX(id) FROM {table}")

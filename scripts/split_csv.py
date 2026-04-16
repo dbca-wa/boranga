@@ -112,10 +112,20 @@ def main():
     if args.handler and output_files:
         handler = args.handler.strip()
         extra = (" " + args.handler_args.strip()) if args.handler_args.strip() else ""
-        print("\n--- Commands to run ---")
+        log_dir = os.path.dirname(output_dir.rstrip("/"))
+        log_var = f"{log_dir}/{handler}_$(date +%Y%m%d_%H%M%S).log"
+
+        lines = ["set -euo pipefail"]
         for i, path in enumerate(output_files):
             wipe = " --wipe-targets" if i == 0 else ""
-            print(f"./manage.py migrate_data run {handler} {path}{wipe}{extra}")
+            lines.append(f"./manage.py migrate_data run {handler} {path}{wipe}{extra}")
+
+        inner = "\n".join(lines)
+        print("\n--- Command to run (paste as-is) ---")
+        print(f"LOG={log_var}")
+        print(f"nohup bash -c '\n{inner}\n' >\"$LOG\" 2>&1 &")
+        print('echo "PID $!  Log: $LOG"')
+
         total = len(output_files)
         est_seconds_per_chunk = math.ceil(args.chunk_size / 500 * 83)  # ~83 sec/500 rows observed on AKS
         est_minutes_per_chunk = round(est_seconds_per_chunk / 60)

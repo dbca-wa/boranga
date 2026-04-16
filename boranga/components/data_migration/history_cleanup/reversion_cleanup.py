@@ -144,6 +144,55 @@ class ReversionHistoryCleaner:
             logger.info("Deleted %d %s versions total", total_deleted, model_name)
         return total_deleted
 
+    def clear_orphaned_for_model(self, model_class: type[models.Model]) -> int:
+        """
+        Delete Version records for a model where the referenced object no longer exists.
+
+        These "orphaned" Versions are left behind when model instances are cascade-deleted
+        (e.g. OCCConservationThreat Task-12681 records deleted because their parent
+        OCRConservationThreat was wiped) without the reversion history being explicitly
+        cleaned first.  If the PK sequence is later reset and new records reuse those PKs,
+        the seeder's ``_already_versioned_ids`` check will incorrectly treat the stale
+        Versions as valid history and skip reseeding — leaving mismatched history.
+
+        Args:
+            model_class: Django model class (e.g., OCCConservationThreat)
+
+        Returns:
+            Number of orphaned Version records deleted
+        """
+        content_type = ContentType.objects.get_for_model(model_class)
+        model_name = model_class.__name__
+
+        # All PKs that currently have Version records for this model
+        all_version_oids = set(
+            Version.objects.filter(content_type=content_type).values_list("object_id", flat=True).distinct()
+        )
+        if not all_version_oids:
+            self.stats.setdefault(f"{model_name}_orphaned", 0)
+            return 0
+
+        # All PKs that actually exist in the DB
+        existing_pks = set(str(pk) for pk in model_class.objects.values_list("pk", flat=True))
+
+        orphaned_ids = list(all_version_oids - existing_pks)
+        if not orphaned_ids:
+            logger.info("clear_orphaned(%s): no orphaned Versions found", model_name)
+            self.stats.setdefault(f"{model_name}_orphaned", 0)
+            return 0
+
+        logger.info("clear_orphaned(%s): %d orphaned Version object_id(s) to clean", model_name, len(orphaned_ids))
+
+        total_deleted = 0
+        for i in range(0, len(orphaned_ids), self.batch_size):
+            batch = orphaned_ids[i : i + self.batch_size]
+            deleted_count, _ = Version.objects.filter(content_type=content_type, object_id__in=batch).delete()
+            total_deleted += deleted_count
+
+        self.stats[f"{model_name}_orphaned"] = total_deleted
+        logger.info("clear_orphaned(%s): deleted %d orphaned Versions", model_name, total_deleted)
+        return total_deleted
+
     def clear_species_and_related(self, group_type_filter: dict[str, Any]) -> int:
         """
         Delete all Species and related model versions for group_type filter.
@@ -257,6 +306,7 @@ class ReversionHistoryCleaner:
             OccurrenceReportDocument,
             OccurrenceReportGeometry,
             OccurrenceSite,
+            OccurrenceTenure,
             OCCVegetationStructure,
             OCRAnimalObservation,
             OCRAssociatedSpecies,
@@ -278,7 +328,12 @@ class ReversionHistoryCleaner:
         self.clear_for_model(OccurrenceReport, group_type_filter)
 
         # Occurrence-related models (OCC*)
+        # OccurrenceTenure must be cleaned before OccurrenceGeometry is deleted: when
+        # OccurrenceGeometry is deleted, Django calls SET_NULL_AND_HISTORICAL on related
+        # OccurrenceTenure rows (setting occurrence_geometry=NULL), severing the FK that
+        # would be needed for any subsequent relationship-based version lookup.
         occ_models = [
+            (OccurrenceTenure, "occurrence_geometry__occurrence"),
             (OccurrenceGeometry, "occurrence"),
             (OCCContactDetail, "occurrence"),
             (OCCLocation, "occurrence"),
@@ -383,6 +438,24 @@ class ReversionHistoryCleaner:
                 self.clear_for_related_model(model_class, related_path, group_type_filter)
             except Exception as e:
                 logger.warning("Failed to clear %s versions: %s", model_class.__name__, e)
+
+        # Also clean Version records for Task-12681 OCCConservationThreat records.
+        # These are cascade-deleted when their parent OCRConservationThreat records are
+        # deleted (which happens when OccurrenceReports are deleted).  If their Versions
+        # are not cleaned now, they become orphaned in the Version table.  A subsequent
+        # occurrence_threats_legacy --wipe-targets run may then reset the OCC PK sequence
+        # low enough to reuse those PKs, causing the seeder to skip the new records
+        # (finding the stale Versions) and leave incorrect history.
+        try:
+            from boranga.components.occurrence.models import OCCConservationThreat
+
+            self.clear_for_related_model(
+                OCCConservationThreat,
+                "occurrence_report_threat__occurrence_report",
+                group_type_filter,
+            )
+        except Exception as e:
+            logger.warning("Failed to clear OCCConservationThreat (Task-12681) versions: %s", e)
 
         total = sum(self.stats.values())
         logger.info("=== Total OccurrenceReport-related versions deleted: %d ===", total)
