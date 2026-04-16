@@ -398,7 +398,7 @@ def get_sheetno_for_pop_id(pop_id: Any, legacy_system: str = "TPFL", path: str |
 
 def load_sheet_associated_species_names(
     path: str | None = None,
-    filename: str = "DRF_SHEET_VEG_CLASSES_Ass_species.csv",
+    filename: str = "DRF_SHEET_VEG_CLASSES_Ass_Species.csv",
     max_lines: int | None = None,
     split_values: bool = False,
 ) -> dict[str, list[str]]:
@@ -452,7 +452,7 @@ def load_sheet_associated_species_names(
                 count += 1
         return mapping
     except FileNotFoundError:
-        logger.debug("Associated-species CSV not found: %s", resolved)
+        logger.warning("Associated-species CSV not found: %s", resolved)
         return {}
     except Exception as exc:
         logger.exception("Error reading associated-species CSV %s: %s", resolved, exc)

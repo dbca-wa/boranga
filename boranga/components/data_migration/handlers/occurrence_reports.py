@@ -1208,7 +1208,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # Load associated-species mapping (SHEETNO -> [species names]) from
         # mappings module. The loader will look for
-        # DRF_SHEET_VEG_CLASSES_Ass_species.csv alongside the provided `path`.
+        # DRF_SHEET_VEG_CLASSES_Ass_Species.csv alongside the provided `path`.
         # During dry-run, load a small sample and produce a concise debug
         # preview instead of performing full DB resolution/creation.
         # During dry-run we already emit a per-OCR associated-species preview
