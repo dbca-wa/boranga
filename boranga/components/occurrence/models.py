@@ -7745,6 +7745,16 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         # Check if the field for this column exists in the database
         return self.field_exists
 
+    @cached_property
+    def invalid_lookup_field(self):
+        """Returns True when the custom lookup field cannot be resolved on the related model."""
+        if not self.django_lookup_field_name:
+            return False
+        if not self.related_model:
+            return False
+        # A None queryset means the field resolution failed with a FieldError
+        return self.related_model_qs is None
+
     @property
     def field(self):
         if not self.django_import_content_type or not self.django_import_field_name:
@@ -7826,18 +7836,21 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
     def related_model_qs(self):
         display_field = self.display_field
 
-        filter_dict = {f"{display_field}__isnull": False}
-        related_model_qs = self.related_model.objects.filter(**filter_dict)
+        try:
+            filter_dict = {f"{display_field}__isnull": False}
+            related_model_qs = self.related_model.objects.filter(**filter_dict)
 
-        if issubclass(self.related_model, ArchivableModel):
-            related_model_qs = self.related_model.objects.exclude(archived=True)
+            if issubclass(self.related_model, ArchivableModel):
+                related_model_qs = self.related_model.objects.exclude(archived=True)
 
-        # If the related model has a group_type field, filter by the schema's group type
-        # (i.e. flora, fauna or community)
-        if hasattr(self.related_model, "group_type"):
-            related_model_qs = related_model_qs.filter(group_type=self.schema.group_type)
+            # If the related model has a group_type field, filter by the schema's group type
+            # (i.e. flora, fauna or community)
+            if hasattr(self.related_model, "group_type"):
+                related_model_qs = related_model_qs.filter(group_type=self.schema.group_type)
 
-        return related_model_qs.order_by(display_field)
+            return related_model_qs.order_by(display_field)
+        except FieldError:
+            return None
 
     @cached_property
     def filtered_related_model_qs(self):
@@ -8184,6 +8197,38 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     @property
     def preview_foreign_key_values_xlsx(self):
+        display_field = self.display_field
+
+        # Special case: OCRAssociatedSpecies.related_species with a taxonomy-traversing
+        # lookup field (e.g. 'taxonomy__scientific_name'). The related model is
+        # AssociatedSpeciesTaxonomy, which only contains rows that are already linked to
+        # existing OCRs. For the preview we want every valid Taxonomy name instead, so
+        # query Taxonomy directly using the trailing part of the lookup path.
+        if (
+            self.django_import_content_type_id
+            and self.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+            and self.django_import_field_name == "related_species"
+            and self.django_lookup_field_name
+        ):
+            # Strip the leading "taxonomy__" or any intermediate path and resolve the
+            # field name directly on Taxonomy (e.g. 'taxonomy__scientific_name' → 'scientific_name').
+            leaf_field = self.django_lookup_field_name.split("__")[-1]
+            preview_qs = Taxonomy.objects.values_list(leaf_field, flat=True).order_by(leaf_field).distinct()
+            max_length = (
+                preview_qs.aggregate(max_length=Max(Length(Cast(leaf_field, output_field=CharField()))))["max_length"]
+                or 0
+            )
+            if len(self.xlsx_column_header_name) > max_length:
+                max_length = len(self.xlsx_column_header_name)
+            workbook = openpyxl.Workbook()
+            worksheet = workbook.active
+            worksheet.append([self.xlsx_column_header_name])
+            for cell_value in preview_qs:
+                worksheet.append([cell_value])
+            worksheet["A1"].font = Font(bold=True)
+            worksheet.column_dimensions["A"].width = max_length + 2
+            return workbook
+
         related_model_qs = self.filtered_related_model_qs
 
         if not related_model_qs:
@@ -8204,7 +8249,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
         headers = [self.xlsx_column_header_name]
         worksheet.append(headers)
-        for cell_value in related_model_qs.order_by(display_field).values_list(display_field, flat=True):
+        for cell_value in related_model_qs.order_by(display_field).values_list(display_field, flat=True).distinct():
             worksheet.append([cell_value])
 
         # Make the headers bold

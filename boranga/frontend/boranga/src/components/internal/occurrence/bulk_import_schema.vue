@@ -373,6 +373,13 @@
                                                 class="bi bi-exclamation-circle-fill text-danger"
                                                 title="This column is no longer present in the underlying database"
                                             ></i>
+                                            <i
+                                                v-if="
+                                                    column.invalid_lookup_field
+                                                "
+                                                class="bi bi-exclamation-triangle-fill text-warning ms-1"
+                                                title="The custom lookup field cannot be resolved on this model"
+                                            ></i>
                                             <small
                                                 class="d-block text-capitalize mb-0"
                                                 :class="
@@ -1164,6 +1171,11 @@
                                                         selectedColumn.django_lookup_field_name
                                                     "
                                                     class="form-control form-control-sm"
+                                                    :class="
+                                                        selectedColumn.invalid_lookup_field
+                                                            ? 'is-invalid'
+                                                            : ''
+                                                    "
                                                     type="text"
                                                     placeholder="Enter Custom Lookup Field"
                                                     aria-label="Custom Lookup Field"
@@ -1182,6 +1194,25 @@
                                                     }}
                                                     Choices</a
                                                 >
+                                            </div>
+                                            <div
+                                                v-if="
+                                                    customLookupField &&
+                                                    selectedColumn.invalid_lookup_field
+                                                "
+                                                class="alert alert-danger py-1 px-2 mb-2 small"
+                                                role="alert"
+                                            >
+                                                <i
+                                                    class="bi bi-exclamation-triangle-fill me-1"
+                                                ></i>
+                                                The lookup field
+                                                <strong>{{
+                                                    selectedColumn.django_lookup_field_name
+                                                }}</strong>
+                                                cannot be resolved on this
+                                                model. Save a valid field name
+                                                to restore the schema endpoint.
                                             </div>
                                             <div>
                                                 <button
@@ -1612,6 +1643,8 @@ export default {
             // FileField columns store files and are always allowed to be blank
             // (an empty cell simply means no file is attached for that row)
             if (this.selectedField.type == 'FileField') return false;
+            // ManyToManyField columns are always allowed to be blank (m2m accepts empty)
+            if (this.selectedField.type == 'ManyToManyField') return false;
             // Disabled when field does not allow null and there is no default and it's not the occurrence_number special case
             return (
                 !this.selectedField.allow_null &&
@@ -1817,6 +1850,7 @@ export default {
                         ) || !!this.selectedField.has_default;
                     this.selectedColumn.xlsx_data_validation_allow_blank =
                         this.selectedField.type == 'FileField' ||
+                        this.selectedField.type == 'ManyToManyField' ||
                         this.selectedField.allow_null ||
                         hasDefault;
                 }
@@ -1927,6 +1961,7 @@ export default {
                                 django_import_field_name: modelField.name,
                                 xlsx_column_header_name: `${this.selectedContentType.model_abbreviation.toUpperCase()} ${modelField.display_name}`,
                                 xlsx_data_validation_allow_blank:
+                                    modelField.type == 'ManyToManyField' ||
                                     modelField.allow_null ||
                                     !!modelField.has_default,
                                 default_value: null,
