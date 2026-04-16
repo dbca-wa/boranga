@@ -89,24 +89,59 @@ class OccurrenceTenureImporter(BaseSheetImporter):
     integrity_tables = ["boranga_occurrence"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
-        """Delete OccurrenceTenure target data. Respect `ctx.dry_run`."""
+        """Delete OccurrenceTenure target data. Respect `ctx.dry_run` and `--sources`."""
         if ctx.dry_run:
-            logger.info("Dry run: Would delete all OccurrenceTenure objects")
+            logger.info("Dry run: Would delete OccurrenceTenure objects")
             return
 
-        # We don't delete parent Occurrences, only the Tenure links
-        # OccurrenceTenure is just a linking model between OccurrenceGeometry and Tenure features
-        count = OccurrenceTenure.objects.count()
+        from boranga.components.data_migration.adapters.sources import SOURCE_GROUP_TYPE_MAP
+
+        sources = options.get("sources")
+        target_group_types = set()
+        if sources:
+            for s in sources:
+                if s in SOURCE_GROUP_TYPE_MAP:
+                    target_group_types.add(SOURCE_GROUP_TYPE_MAP[s])
+
+        is_filtered = bool(target_group_types)
+
+        # OccurrenceTenure has no group_type of its own; filter via the linked Occurrence.
+        if is_filtered:
+            tenure_qs = OccurrenceTenure.objects.filter(
+                occurrence_geometry__occurrence__group_type__name__in=target_group_types
+            )
+            logger.info("Deleting OccurrenceTenure objects for group_types %s ...", target_group_types)
+        else:
+            tenure_qs = OccurrenceTenure.objects.all()
+            logger.info("Deleting ALL OccurrenceTenure objects...")
+
+        # Delete reversion history first.
+        # OccurrenceTenure has no group_type field so we cannot use the group_type-filtered
+        # helper.  Instead we resolve the object IDs from the already-scoped queryset and
+        # delete their Version rows directly.  For an unfiltered wipe we delete *all*
+        # Version rows by content type — this safely removes stale versions from prior runs
+        # whose PKs have since been reused, which the ID-enumeration path would miss.
+        from django.contrib.contenttypes.models import ContentType
+        from reversion.models import Version
+
+        ct = ContentType.objects.get_for_model(OccurrenceTenure)
+
+        if is_filtered:
+            str_ids = [str(pk) for pk in tenure_qs.values_list("id", flat=True)]
+            batch_size = 2000
+            deleted_versions = 0
+            for i in range(0, len(str_ids), batch_size):
+                batch = str_ids[i : i + batch_size]
+                n, _ = Version.objects.filter(content_type=ct, object_id__in=batch).delete()
+                deleted_versions += n
+        else:
+            deleted_versions, _ = Version.objects.filter(content_type=ct).delete()
+
+        logger.info("Deleted %d OccurrenceTenure reversion Version records", deleted_versions)
+
+        count = tenure_qs.count()
         logger.info(f"Deleting {count} OccurrenceTenure objects...")
-
-        # Delete reversion history first (more efficient than waiting for cascade)
-        from boranga.components.data_migration.history_cleanup.reversion_cleanup import ReversionHistoryCleaner
-
-        cleaner = ReversionHistoryCleaner(batch_size=2000)
-        cleaner.clear_for_model(OccurrenceTenure, {})
-        logger.info("Reversion cleanup completed. Stats: %s", cleaner.get_stats())
-
-        OccurrenceTenure.objects.all().delete()
+        tenure_qs.delete()
 
         # Reset the primary key sequence for OccurrenceTenure when using PostgreSQL.
         try:
@@ -262,6 +297,12 @@ class OccurrenceTenureImporter(BaseSheetImporter):
         # Silence spatial utils logger to avoid chattiness
         logging.getLogger("boranga.components.spatial.utils").setLevel(logging.WARNING)
 
+        # Track geometry PKs already processed in this run to avoid re-processing the same
+        # geometry multiple times (e.g. when the source CSV has duplicate POP_ID rows).
+        # Without this, each duplicate row would call populate_occurrence_tenure_data again
+        # on the same geometry/tenures, compounding reversion versions per record.
+        processed_geom_pks: set[int] = set()
+
         for row in all_rows:
             processed += 1
             if processed % 500 == 0:
@@ -352,6 +393,14 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             occurrence_pk = occ_data["pk"]
             geom_pk = occ_data["geom_pk"]
 
+            # Skip if this geometry was already processed in this run (e.g. duplicate CSV rows
+            # for the same POP_ID). Re-processing the same geometry would call
+            # populate_occurrence_tenure_data again on already-created tenures, creating an
+            # extra reversion Version on each tenure for every duplicate row.
+            if geom_pk in processed_geom_pks:
+                skipped += 1
+                continue
+
             # Use hollow object for FK lookup
             occurrence = Occurrence(pk=occurrence_pk)
             occurrence_str = f"Occurrence {occurrence_pk} ({migrated_from_id})"
@@ -376,6 +425,9 @@ class OccurrenceTenureImporter(BaseSheetImporter):
             if ctx.dry_run:
                 logger.info(f"Dry run: Would process tenure for Occurrence {occurrence}")
                 continue
+
+            # Mark this geometry as processed so that any later duplicate CSV rows skip it.
+            processed_geom_pks.add(geom_pk)
 
             try:
                 # Use preloaded set to check existence without DB hit
