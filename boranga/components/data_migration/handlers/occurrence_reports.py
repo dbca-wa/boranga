@@ -1217,8 +1217,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # duplicate logs, skip loading the full mapping in dry-run mode.
         if getattr(ctx, "dry_run", False):
             sheet_to_species = None
-        else:
+        elif Source.TPFL.value in sources:
             sheet_to_species = load_sheet_associated_species_names(path, split_values=True)
+        else:
+            sheet_to_species = None
 
         # If any mapping rows found, resolve names to AssociatedSpeciesTaxonomy
         # Also, scan OCRAssociatedSpecies__comment for additional species names
