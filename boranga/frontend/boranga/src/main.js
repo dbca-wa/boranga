@@ -173,7 +173,8 @@ window.fetch = ((orig) => {
         if (
             sameOrigin &&
             args.length > 1 &&
-            typeof args[1]?.body === 'string'
+            typeof args[1]?.body === 'string' &&
+            args[1].body.length > 0
         ) {
             headers.set('Content-Type', 'application/json');
         }
