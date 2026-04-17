@@ -143,7 +143,7 @@ class ConservationStatusTpflAdapter(SourceAdapter):
                 dt_str = canonical["effective_from_date"]
                 dt = None
                 if isinstance(dt_str, str):
-                    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+                    for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
                         try:
                             dt = datetime.strptime(dt_str.strip(), fmt).date()
                             break
