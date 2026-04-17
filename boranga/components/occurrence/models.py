@@ -6466,7 +6466,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         # records from different tasks can coexist and be re-imported idempotently per task.
         _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
         _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
-        prefixed_migrated_from_id = f"{_prefix}-{self.pk:0{_pad}d}-{ocr_migrated_from_id}"
+        # self.pk may be None when process_row is called from schema validation (the task
+        # is intentionally unsaved so the transaction can be rolled back).  Use 0 as a
+        # sentinel so the format string doesn't raise TypeError.
+        _task_pk = self.pk if self.pk is not None else 0
+        prefixed_migrated_from_id = f"{_prefix}-{_task_pk:0{_pad}d}-{ocr_migrated_from_id}"
 
         mode = "create"
         if (
