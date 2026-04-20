@@ -6449,19 +6449,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
         ocr_migrated_from_id = row[0]
 
-        # If the migrated from id is None then complain and return
-        if not ocr_migrated_from_id:
-            error_message = "Row does not have an Occurrence Report migrated from id"
-            errors.append(
-                {
-                    "row_index": row_index,
-                    "error_type": "missing_migrated_from_id",
-                    "data": row,
-                    "error_message": error_message,
-                }
-            )
-            return
-
         # Prefix with the bulk import task id (zero-padded to pad_length digits) so that
         # records from different tasks can coexist and be re-imported idempotently per task.
         _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
@@ -6470,7 +6457,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         # is intentionally unsaved so the transaction can be rolled back).  Use 0 as a
         # sentinel so the format string doesn't raise TypeError.
         _task_pk = self.pk if self.pk is not None else 0
-        prefixed_migrated_from_id = f"{_prefix}-{_task_pk:0{_pad}d}-{ocr_migrated_from_id}"
+        # If the cell is empty, fall back to the spreadsheet row index as the unique suffix.
+        _suffix = ocr_migrated_from_id if ocr_migrated_from_id else row_index
+        prefixed_migrated_from_id = f"{_prefix}-{_task_pk:0{_pad}d}-{_suffix}"
 
         mode = "create"
         if (
