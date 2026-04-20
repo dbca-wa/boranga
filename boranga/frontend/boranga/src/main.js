@@ -173,9 +173,22 @@ window.fetch = ((orig) => {
         if (
             sameOrigin &&
             args.length > 1 &&
-            typeof args[1]?.body === 'string'
+            typeof args[1]?.body === 'string' &&
+            args[1].body.length > 0
         ) {
             headers.set('Content-Type', 'application/json');
+        }
+
+        // If the body is FormData, the browser must set Content-Type itself so
+        // it can include the multipart boundary. Strip any explicit Content-Type
+        // (e.g. an incorrectly hard-coded 'application/json') to prevent DRF
+        // from trying to JSON-parse a multipart body.
+        const requestBody =
+            (args.length > 1 && args[1]?.body) ||
+            (args[0] instanceof Request && args[0].body) ||
+            null;
+        if (requestBody instanceof FormData) {
+            headers.delete('Content-Type');
         }
 
         if (args.length > 1) {

@@ -50,12 +50,27 @@
                             <div>
                                 <button
                                     v-if="groupType"
-                                    class="btn btn-primary float"
+                                    class="btn btn-primary float me-2"
                                     @click="createNewVersion"
                                 >
                                     <i class="bi bi-plus-circle-fill me-2"></i
                                     >Create New Version
                                 </button>
+                                <button
+                                    v-if="groupType"
+                                    class="btn btn-secondary float"
+                                    @click="triggerImport"
+                                >
+                                    <i class="bi bi-download me-2"></i>Import
+                                    Schema
+                                </button>
+                                <input
+                                    ref="importFileInput"
+                                    type="file"
+                                    accept=".json"
+                                    class="d-none"
+                                    @change="importSchema"
+                                />
                             </div>
                         </div>
                     </div>
@@ -165,7 +180,7 @@
                                             ).toLocaleTimeString()
                                         }}
                                     </td>
-                                    <td>
+                                    <td class="text-nowrap">
                                         <a
                                             class="btn btn-sm btn-primary my-0 me-2"
                                             role="button"
@@ -185,14 +200,23 @@
                                         >
 
                                         <button
-                                            class="btn btn-sm btn-primary my-0"
+                                            class="btn btn-sm btn-primary my-0 me-2"
                                             @click.prevent="
                                                 copySchema(schema.id)
                                             "
                                         >
                                             <i class="bi bi-copy me-2"></i>
-                                            Create a Copy
+                                            Copy
                                         </button>
+
+                                        <a
+                                            class="btn btn-sm btn-secondary my-0"
+                                            role="button"
+                                            :href="`/api/occurrence_report_bulk_import_schemas/${schema.id}/export_schema/`"
+                                        >
+                                            <i class="bi bi-upload me-2"></i>
+                                            Export
+                                        </a>
                                     </td>
                                 </tr>
                             </tbody>
@@ -320,6 +344,56 @@ export default {
                 })
                 .catch((error) => {
                     console.error(error);
+                });
+        },
+        triggerImport() {
+            this.$refs.importFileInput.value = '';
+            this.$refs.importFileInput.click();
+        },
+        importSchema(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch(
+                `${api_endpoints.occurrence_report_bulk_import_schemas}import_schema/`,
+                {
+                    method: 'POST',
+                    body: formData,
+                }
+            )
+                .then(async (response) => {
+                    const data = await response.json();
+                    if (response.status === 201) {
+                        swal.fire({
+                            title: 'Success',
+                            text: 'Schema imported successfully',
+                            icon: 'success',
+                            showConfirmButton: false,
+                            timer: 1200,
+                        });
+                        this.$router.push(
+                            `/internal/occurrence-report/bulk_import_schema/${data.id}`
+                        );
+                    } else {
+                        swal.fire({
+                            title: 'Error',
+                            text:
+                                data.detail ||
+                                'An error occurred while importing the schema',
+                            icon: 'error',
+                        });
+                    }
+                })
+                .catch((error) => {
+                    console.error(error);
+                    swal.fire({
+                        title: 'Error',
+                        text: 'An error occurred while importing the schema',
+                        icon: 'error',
+                    });
                 });
         },
         tags_to_show(tags) {

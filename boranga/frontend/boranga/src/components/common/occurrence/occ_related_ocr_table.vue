@@ -16,16 +16,15 @@
             </div>
         </FormSection>
 
-        <div v-if="sectionOCRId">
-            <SectionModal
-                ref="section_modal"
-                :key="sectionOCRId"
-                :section-type-display="sectionTypeFormatted"
-                :section-type="section_type"
-                :ocr-number="sectionOCRId"
-                :section-obj="sectionObj"
-            />
-        </div>
+        <SectionModal
+            v-if="sectionOCRId"
+            :key="sectionOCRId"
+            :section-type-display="sectionTypeFormatted"
+            :section-type="section_type"
+            :ocr-number="sectionOCRNumber"
+            :section-obj="sectionObj"
+            @close="sectionOCRId = null"
+        />
     </div>
 </template>
 
@@ -93,8 +92,9 @@ export default {
             uuid: uuid(),
             datatable_id: 'datatable-related-ocr-' + uuid(),
             sectionOCRId: null,
-            sectionTypeFormatted: null,
-            sectionObj: null,
+            sectionOCRNumber: '',
+            sectionTypeFormatted: '',
+            sectionObj: {},
         };
     },
     computed: {
@@ -329,15 +329,13 @@ export default {
                     let ocrObj = await response.json();
 
                     vm.sectionObj = ocrObj[vm.section_type];
-                    vm.sectionOCRId = id;
+                    vm.sectionOCRNumber = ocrObj.occurrence_report_number;
                     vm.sectionTypeFormatted = vm.section_type
                         .split('_')
                         .map((s) => s.charAt(0).toUpperCase() + s.substring(1))
                         .join(' ');
-
-                    this.$nextTick(() => {
-                        this.$refs.section_modal.isModalOpen = true;
-                    });
+                    // Setting sectionOCRId mounts SectionModal, which auto-opens in mounted()
+                    vm.sectionOCRId = id;
                 },
                 (err) => {
                     console.log(err);

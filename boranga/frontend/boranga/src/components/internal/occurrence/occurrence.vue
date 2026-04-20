@@ -262,6 +262,7 @@
             :main_occurrence_obj="occurrence"
             :is_internal="true"
             @refresh-from-response="refreshFromResponse"
+            @combine-success="onCombineSuccess"
         />
     </div>
 </template>
@@ -300,23 +301,24 @@ export default {
     },
     beforeRouteLeave() {
         if (
-            this.occurrence &&
-            !this.occurrence.locked &&
-            this.shouldShowTimerAndPoll
+            this.combineSucceeded ||
+            !this.occurrence ||
+            this.occurrence.locked ||
+            !this.shouldShowTimerAndPoll
         ) {
-            return swal
-                .fire({
-                    title: 'Occurrence Unlocked',
-                    text: 'Please lock the occurrence before leaving.',
-                    icon: 'warning',
-                    confirmButtonText: 'Ok',
-                    customClass: {
-                        confirmButton: 'btn btn-primary',
-                    },
-                })
-                .then(() => false);
+            return true;
         }
-        return true;
+        return swal
+            .fire({
+                title: 'Occurrence Unlocked',
+                text: 'Please lock the occurrence before leaving.',
+                icon: 'warning',
+                confirmButtonText: 'Ok',
+                customClass: {
+                    confirmButton: 'btn btn-primary',
+                },
+            })
+            .then(() => false);
     },
     data: function () {
         return {
@@ -329,6 +331,7 @@ export default {
             imageURL: '',
             isSaved: false,
             combine_key: 0,
+            combineSucceeded: false,
             DATE_TIME_FORMAT: 'DD/MM/YYYY HH:mm:ss',
             comparing: false,
             isDirty: false,
@@ -908,6 +911,10 @@ export default {
         },
         combineOccurrence: async function () {
             this.$refs.occurrence_combine.isModalOpen = true;
+        },
+        onCombineSuccess: function () {
+            this.combineSucceeded = true;
+            this.$router.go();
         },
         fetchOccurrence: async function () {
             let vm = this;

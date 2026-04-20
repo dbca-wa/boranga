@@ -179,6 +179,16 @@
                                                     ></i>
                                                     Preview</a
                                                 >
+                                                <a
+                                                    role="button"
+                                                    class="btn btn-secondary ms-2"
+                                                    :href="`/api/occurrence_report_bulk_import_schemas/${schema.id}/export_schema/`"
+                                                >
+                                                    <i
+                                                        class="bi bi-upload me-1"
+                                                    ></i>
+                                                    Export
+                                                </a>
                                             </div>
                                         </div>
                                     </div>
