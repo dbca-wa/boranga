@@ -6827,6 +6827,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             isinstance(current_model_instance, OCRAssociatedSpecies)
                             and m2m_field["field"] == "related_species"
                         ):
+                            if not m2m_field["value"]:
+                                continue
                             ast_instances = [
                                 AssociatedSpeciesTaxonomy.objects.create(taxonomy=taxonomy)
                                 for taxonomy in m2m_field["value"]
@@ -6834,6 +6836,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             current_model_instance.related_species.set(ast_instances)
                             continue
 
+                        if m2m_field["value"] is None:
+                            continue
                         field = getattr(current_model_instance, m2m_field["field"])
                         field.set(m2m_field["value"])
 
