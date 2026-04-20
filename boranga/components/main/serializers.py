@@ -309,8 +309,16 @@ class ContentTypeSerializer(BaseModelSerializer):
                 try:
                     default_val = field.default
                     if callable(default_val):
-                        # Represent callables in a human-friendly way
-                        field_default = "<callable>"
+                        # Represent callables by a human-friendly short name, e.g. "timezone.now"
+                        module = getattr(default_val, "__module__", None)
+                        qualname = getattr(default_val, "__qualname__", None) or getattr(default_val, "__name__", None)
+                        if module and qualname:
+                            short_module = module.split(".")[-1]
+                            field_default = f"{short_module}.{qualname}"
+                        elif qualname:
+                            field_default = qualname
+                        else:
+                            field_default = repr(default_val)
                     else:
                         field_default = str(default_val)
                 except Exception:
