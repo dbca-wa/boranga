@@ -58,7 +58,6 @@
 {% block footer %}
   {% application_version as application_version %}
   {% support_email as support_email %}
-  {% dept_support_phone as dept_support_phone %}
   <footer class="footer fixed-bottom mt-3">
     <div class="container-fluid border-top py-2 bg-light text-secondary">
       <div class="row">
@@ -66,7 +65,7 @@
           <small class="float-start">Version:{% application_version %}</small>
         </div>
         <div class="col">
-          <small>Support: <a href="mailto:{% support_email %}">{% support_email %}</a> | <a href="tel:{% dept_support_phone %}">{% dept_support_phone %}</a></small>
+          <small>Support: <a href="mailto:{% support_email %}">{% support_email %}</a></small>
         </div>
         <div class="col">
           <small class="float-end">&copy; {% dept_name %}</small>
