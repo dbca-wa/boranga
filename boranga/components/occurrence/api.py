@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, time
 from io import BytesIO
 
+from django.contrib.contenttypes import models as ct_models
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.geos.error import GEOSException
 from django.core.cache import cache
@@ -111,6 +112,7 @@ from boranga.components.occurrence.models import (
     SampleDestination,
     SampleType,
     SchemaColumnLookupFilter,
+    SchemaColumnLookupFilterValue,
     SecondarySign,
     SiteType,
     SoilColour,
@@ -5679,6 +5681,169 @@ class OccurrenceReportBulkImportSchemaViewSet(
     def default_value_choices(self, request, *args, **kwargs):
         default_value_field = OccurrenceReportBulkImportSchemaColumn._meta.get_field("default_value")
         return Response(default_value_field.choices, status=status.HTTP_200_OK)
+
+    @detail_route(methods=["get"], detail=True)
+    def export_schema(self, request, *args, **kwargs):
+        instance = self.get_object()
+        schema_data = {
+            "schema_format_version": 1,
+            "name": instance.name,
+            "group_type": instance.group_type.name,
+            "is_master": instance.is_master,
+            "tags": list(instance.tags.names()),
+            "columns": [],
+        }
+        for column in instance.columns.all():
+            column_data = {
+                "xlsx_column_header_name": column.xlsx_column_header_name,
+                "django_import_content_type": (
+                    f"{column.django_import_content_type.app_label}" f".{column.django_import_content_type.model}"
+                ),
+                "django_import_field_name": column.django_import_field_name,
+                "django_lookup_field_name": column.django_lookup_field_name,
+                "xlsx_data_validation_allow_blank": column.xlsx_data_validation_allow_blank,
+                "is_editable": column.is_editable,
+                "default_value": column.default_value,
+                "is_emailuser_column": column.is_emailuser_column,
+                "order": column.order,
+                "lookup_filters": [],
+            }
+            for lookup_filter in column.lookup_filters.all():
+                filter_data = {
+                    "filter_field_name": lookup_filter.filter_field_name,
+                    "filter_type": lookup_filter.filter_type,
+                    "values": [{"filter_value": v.filter_value} for v in lookup_filter.values.all()],
+                }
+                column_data["lookup_filters"].append(filter_data)
+            schema_data["columns"].append(column_data)
+
+        json_content = json.dumps(schema_data, indent=2)
+        filename = f"bulk-import-schema-{instance.group_type.name}" f"-version-{instance.version}.json"
+        response = HttpResponse(json_content, content_type="application/json")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @list_route(methods=["post"], detail=False)
+    def import_schema(self, request, *args, **kwargs):
+        if "file" not in request.FILES:
+            return Response({"detail": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        schema_file = request.FILES["file"]
+        try:
+            schema_data = json.loads(schema_file.read())
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            return Response(
+                {"detail": f"Invalid JSON file: {e}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if schema_data.get("schema_format_version") != 1:
+            return Response(
+                {"detail": "Unsupported schema format version"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        group_type_name = schema_data.get("group_type")
+        try:
+            from boranga.components.species_and_communities.models import GroupType
+
+            group_type = GroupType.objects.get(name=group_type_name)
+        except GroupType.DoesNotExist:
+            return Response(
+                {"detail": f"Group type '{group_type_name}' not found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing_qs = OccurrenceReportBulkImportSchema.objects.filter(group_type=group_type)
+        latest_version = existing_qs.order_by("-version").first().version if existing_qs.exists() else 0
+
+        # Only admins may set is_master
+        is_master = schema_data.get("is_master", False)
+        if not is_django_admin(request):
+            is_master = False
+
+        columns_data = sorted(schema_data.get("columns", []), key=lambda c: c.get("order", 0))
+
+        with transaction.atomic():
+            new_schema = OccurrenceReportBulkImportSchema.objects.create(
+                group_type=group_type,
+                version=latest_version + 1,
+                name=schema_data.get("name"),
+                is_master=is_master,
+            )
+
+            tags = schema_data.get("tags", [])
+            if tags:
+                new_schema.tags.add(*tags)
+
+            ocr_ct = ct_models.ContentType.objects.get_for_model(OccurrenceReport)
+
+            for column_data in columns_data:
+                ct_string = column_data.get("django_import_content_type", "")
+                try:
+                    app_label, model_name = ct_string.split(".", 1)
+                except (ValueError, AttributeError):
+                    return Response(
+                        {"detail": (f"Invalid content type format: '{ct_string}'." " Expected 'app_label.model'")},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                try:
+                    content_type = ct_models.ContentType.objects.get(app_label=app_label, model=model_name)
+                except ct_models.ContentType.DoesNotExist:
+                    return Response(
+                        {"detail": f"Content type '{ct_string}' not found"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                field_name = column_data.get("django_import_field_name", "")
+
+                # The schema.save() auto-creates the migrated_from_id column for
+                # OccurrenceReport; update it rather than creating a duplicate.
+                if content_type == ocr_ct and field_name == "migrated_from_id":
+                    new_schema.columns.filter(
+                        django_import_content_type=content_type,
+                        django_import_field_name="migrated_from_id",
+                    ).update(
+                        xlsx_column_header_name=column_data.get("xlsx_column_header_name", "migrated_from_id"),
+                        xlsx_data_validation_allow_blank=column_data.get("xlsx_data_validation_allow_blank", False),
+                        is_editable=column_data.get("is_editable", True),
+                        default_value=column_data.get("default_value"),
+                        is_emailuser_column=column_data.get("is_emailuser_column", False),
+                        order=column_data.get("order", 0),
+                    )
+                    continue
+
+                # Use the same pattern as copy() to preserve explicit ordering
+                new_column = OccurrenceReportBulkImportSchemaColumn()
+                new_column.schema = new_schema
+                new_column.django_import_content_type = content_type
+                new_column.django_import_field_name = field_name
+                new_column.django_lookup_field_name = column_data.get("django_lookup_field_name")
+                new_column.xlsx_column_header_name = column_data.get("xlsx_column_header_name", field_name)
+                new_column.xlsx_data_validation_allow_blank = column_data.get("xlsx_data_validation_allow_blank", False)
+                new_column.is_editable = column_data.get("is_editable", True)
+                new_column.default_value = column_data.get("default_value")
+                new_column.is_emailuser_column = column_data.get("is_emailuser_column", False)
+                new_column.order = column_data.get("order", 0)
+                new_column.save()
+
+                for filter_data in column_data.get("lookup_filters", []):
+                    lookup_filter = SchemaColumnLookupFilter.objects.create(
+                        schema_column=new_column,
+                        filter_field_name=filter_data.get("filter_field_name"),
+                        filter_type=filter_data.get(
+                            "filter_type",
+                            SchemaColumnLookupFilter.LOOKUP_FILTER_TYPE_EXACT,
+                        ),
+                    )
+                    for value_data in filter_data.get("values", []):
+                        SchemaColumnLookupFilterValue.objects.create(
+                            lookup_filter=lookup_filter,
+                            filter_value=value_data.get("filter_value"),
+                        )
+
+        serializer = OccurrenceReportBulkImportSchemaSerializer(new_schema, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class OccurrenceReportBulkImportSchemaColumnViewSet(
