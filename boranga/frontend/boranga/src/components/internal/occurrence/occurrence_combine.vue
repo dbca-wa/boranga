@@ -1065,7 +1065,7 @@ export default {
                             confirmButton: 'btn btn-primary',
                         },
                     }).then(() => {
-                        vm.$router.go();
+                        vm.$emit('combine-success');
                     });
                 },
                 (err) => {

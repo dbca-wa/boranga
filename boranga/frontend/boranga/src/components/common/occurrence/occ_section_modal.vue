@@ -106,6 +106,7 @@ export default {
         modal,
         FormSection,
     },
+    emits: ['close'],
     props: {
         sectionObj: {
             type: Object,
@@ -179,6 +180,7 @@ export default {
     },
     mounted() {
         let vm = this;
+        this.isModalOpen = true;
         this.$nextTick(() => {
             vm.fetchSectionData();
         });
@@ -186,6 +188,7 @@ export default {
     methods: {
         close() {
             this.isModalOpen = false;
+            this.$emit('close');
             this.errors = false;
             $('.has-error').removeClass('has-error');
         },

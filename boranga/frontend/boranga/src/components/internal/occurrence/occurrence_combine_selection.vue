@@ -8,17 +8,16 @@
             :dt-headers="occurrences_headers"
         />
 
-        <div v-if="sectionOCCId">
-            <SectionModal
-                ref="section_modal"
-                :key="sectionOCCId"
-                :section-type-display="sectionTypeFormatted"
-                :section-type="section_type"
-                :occ-number="sectionOCCId"
-                :section-obj="sectionObj"
-                :data-loss-warning-on-cancel="false"
-            />
-        </div>
+        <SectionModal
+            v-if="sectionOCCId"
+            :key="sectionOCCId"
+            :section-type-display="sectionTypeFormatted"
+            :section-type="section_type"
+            :occ-number="sectionOCCNumber"
+            :section-obj="sectionObj"
+            :data-loss-warning-on-cancel="false"
+            @close="sectionOCCId = null"
+        />
     </div>
 </template>
 
@@ -113,6 +112,7 @@ export default {
             sectionTypeFormatted: null,
             sectionObj: null,
             sectionOCCId: null,
+            sectionOCCNumber: '',
             occurrences_headers: headers,
             occurrences_options: {
                 autowidth: true,
@@ -181,18 +181,16 @@ export default {
             //get occ object with id
             fetch(helpers.add_endpoint_json(api_endpoints.occurrence, id)).then(
                 async (response) => {
-                    let occObj = response.json();
+                    let occObj = await response.json();
 
                     vm.sectionObj = occObj[vm.section_type];
-                    vm.sectionOCCId = id;
                     vm.sectionTypeFormatted = vm.section_type
                         .split('_')
                         .map((s) => s.charAt(0).toUpperCase() + s.substring(1))
                         .join(' ');
-
-                    this.$nextTick(() => {
-                        this.$refs.section_modal.isModalOpen = true;
-                    });
+                    vm.sectionOCCNumber = occObj.occurrence_number;
+                    // Setting sectionOCCId mounts SectionModal, which auto-opens in mounted()
+                    vm.sectionOCCId = id;
                 },
                 (err) => {
                     console.log(err);
