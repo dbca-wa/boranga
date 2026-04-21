@@ -973,6 +973,8 @@ class OccurrenceReportViewSet(
                         # support both list-like and comma-separated string storage
                         if isinstance(id_list, str):
                             id_iter = [s for s in id_list.split(",") if s != ""]
+                        elif id_list is None:
+                            id_iter = []
                         else:
                             id_iter = id_list
 
@@ -3655,6 +3657,8 @@ class OccurrenceViewSet(
                         values_list = []
                         if isinstance(id_list, str):
                             id_iter = [s for s in id_list.split(",") if s != ""]
+                        elif id_list is None:
+                            id_iter = []
                         else:
                             id_iter = id_list
 
