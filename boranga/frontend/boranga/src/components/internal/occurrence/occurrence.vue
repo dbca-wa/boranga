@@ -1055,15 +1055,17 @@ export default {
         },
         handleBeforeUnload(event) {
             if (
-                this.occurrence &&
-                this.occurrence.processing_status === 'Active' &&
-                !this.occurrence.locked &&
-                this.shouldShowTimerAndPoll
+                this.combineSucceeded ||
+                !this.occurrence ||
+                this.occurrence.processing_status !== 'Active' ||
+                this.occurrence.locked ||
+                !this.shouldShowTimerAndPoll
             ) {
-                event.preventDefault();
-                event.returnValue = ''; // Required for Chrome
-                return '';
+                return;
             }
+            event.preventDefault();
+            event.returnValue = ''; // Required for Chrome
+            return '';
         },
     },
 };
