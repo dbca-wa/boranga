@@ -199,15 +199,14 @@ export default {
             let vm = this;
             let reports = [];
             vm.selectedThreats.forEach((threat) => {
+                const reportNum =
+                    threat.occurrence_report_threat__threat_number;
                 if (
                     vm.combineThreatIds.includes(threat.id) &&
-                    !reports.includes(
-                        threat.occurrence_report_threat__threat_number
-                    )
+                    reportNum != null &&
+                    !reports.includes(reportNum)
                 ) {
-                    reports.push(
-                        threat.occurrence_report_threat__threat_number
-                    );
+                    reports.push(reportNum);
                 }
             });
             vm.checkedOriginalReports = reports;
