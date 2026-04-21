@@ -10,7 +10,7 @@ from django.core.cache import cache
 from django.db import models, transaction
 from django.db.models import CharField, Q, Value
 from django.db.models.functions import Concat
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django_filters import rest_framework as filters
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
@@ -255,6 +255,7 @@ from boranga.helpers import (
     is_occurrence_assessor,
     is_occurrence_report_referee,
     is_readonly_user,
+    parse_request_json,
 )
 from boranga.ordered_model import OrderedModel
 
@@ -301,7 +302,12 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
             def get_date(filter_date):
                 date = request.POST.get(filter_date)
                 if date:
-                    date = datetime.strptime(date, "%Y-%m-%d")
+                    try:
+                        date = datetime.strptime(date, "%Y-%m-%d")
+                    except ValueError:
+                        raise serializers.ValidationError(
+                            f"Invalid date format for '{filter_date}'. Expected YYYY-MM-DD."
+                        )
                 return date
 
             filter_submitted_from_date = get_date("filter_submitted_from_date")
@@ -349,6 +355,8 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
 
             filter_last_modified_by = request.POST.get("filter_last_modified_by")
             if filter_last_modified_by and not filter_last_modified_by.lower() == "all":
+                if not str(filter_last_modified_by).lstrip("-").isnumeric():
+                    raise serializers.ValidationError("filter_last_modified_by must be an integer")
                 queryset = queryset.filter(last_modified_by=int(filter_last_modified_by))
 
             filter_approved_from_date = get_date("filter_approved_from_date")
@@ -589,7 +597,10 @@ class OccurrenceReportViewSet(
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        group_type_id = GroupType.objects.get(id=request.data.get("group_type_id"))
+        try:
+            group_type_id = GroupType.objects.get(id=request.data.get("group_type_id"))
+        except GroupType.DoesNotExist:
+            raise serializers.ValidationError("Invalid group_type_id")
 
         new_instance = OccurrenceReport(
             submitter=request.user.id,
@@ -692,8 +703,11 @@ class OccurrenceReportViewSet(
     )
     def transform_geometry(self, request, *args, **kwargs):
         geometry = request.GET.get("geometry", None)
-        from_srid = int(request.GET.get("from", settings.DEFAULT_SRID))
-        to_srid = int(request.GET.get("to", settings.DEFAULT_SRID))
+        try:
+            from_srid = int(request.GET.get("from", settings.DEFAULT_SRID))
+            to_srid = int(request.GET.get("to", settings.DEFAULT_SRID))
+        except ValueError:
+            raise serializers.ValidationError("'from' and 'to' must be integer SRID values")
 
         if not geometry:
             return HttpResponse({}, content_type="application/json")
@@ -2106,7 +2120,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
         serializer = OCRObserverDetailSerializer(
             instance,
-            data=json.loads(request.data.get("data")),
+            data=parse_request_json(request.data, "data"),
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
@@ -2146,7 +2160,7 @@ class ObserverDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
     def create(self, request, *args, **kwargs):
         serializer = OCRObserverDetailSerializer(
-            data=json.loads(request.data.get("data")), context={"request": request}
+            data=parse_request_json(request.data, "data"), context={"request": request}
         )
         serializer.is_valid(raise_exception=True)
         occurrence_report = serializer.validated_data["occurrence_report"]
@@ -2219,7 +2233,7 @@ class OccurrenceReportAmendmentRequestViewSet(viewsets.GenericViewSet, mixins.Re
         return OccurrenceReportAmendmentRequest.objects.none()
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=json.loads(request.data.get("data")))
+        serializer = self.get_serializer(data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
         instance.add_documents(request)
@@ -2236,7 +2250,13 @@ class OccurrenceReportAmendmentRequestViewSet(viewsets.GenericViewSet, mixins.Re
     @renderer_classes((JSONRenderer,))
     def delete_document(self, request, *args, **kwargs):
         instance = self.get_object()
-        OccurrenceReportAmendmentRequestDocument.objects.get(id=request.data.get("id")).delete()
+        doc_id = request.data.get("id")
+        if doc_id is None:
+            raise serializers.ValidationError("id is required")
+        try:
+            OccurrenceReportAmendmentRequestDocument.objects.get(id=doc_id).delete()
+        except OccurrenceReportAmendmentRequestDocument.DoesNotExist:
+            raise Http404
         return Response(
             [
                 dict(id=i.id, name=i.name, _file=get_relative_url(i._file.url))
@@ -2338,7 +2358,7 @@ class OccurrenceReportDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveMo
     @transaction.atomic
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        data = json.loads(request.data.get("data"))
+        data = parse_request_json(request.data, "data")
         serializer = SaveOccurrenceReportDocumentSerializer(instance, data=data)
         if is_internal(self.request):
             serializer = InternalSaveOccurrenceReportDocumentSerializer(instance, data=data)
@@ -2368,7 +2388,7 @@ class OccurrenceReportDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveMo
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        data = json.loads(request.data.get("data"))
+        data = parse_request_json(request.data, "data")
         serializer = SaveOccurrenceReportDocumentSerializer(data=data)
         if is_internal(self.request):
             serializer = InternalSaveOccurrenceReportDocumentSerializer(data=data)
@@ -2427,7 +2447,10 @@ class OCRConservationThreatFilterBackend(DatatablesFilterBackend):
         def get_date(filter_date):
             date = request.GET.get(filter_date)
             if date:
-                date = datetime.strptime(date, "%Y-%m-%d")
+                try:
+                    date = datetime.strptime(date, "%Y-%m-%d")
+                except ValueError:
+                    raise serializers.ValidationError(f"Invalid date format for '{filter_date}'. Expected YYYY-MM-DD.")
             return date
 
         filter_observed_from_date = get_date("filter_observed_from_date")
@@ -2538,7 +2561,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
     @transaction.atomic
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SaveOCRConservationThreatSerializer(instance, data=json.loads(request.data.get("data")))
+        serializer = SaveOCRConservationThreatSerializer(instance, data=parse_request_json(request.data, "data"))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         serializer.save(version_user=request.user)
@@ -2565,7 +2588,7 @@ class OCRConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveOCRConservationThreatSerializer(data=json.loads(request.data.get("data")))
+        serializer = SaveOCRConservationThreatSerializer(data=parse_request_json(request.data, "data"))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save(version_user=request.user)
@@ -2647,12 +2670,17 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
 
         filter_last_modified_by = request.POST.get("filter_last_modified_by")
         if filter_last_modified_by and not filter_last_modified_by.lower() == "all":
+            if not str(filter_last_modified_by).lstrip("-").isnumeric():
+                raise serializers.ValidationError("filter_last_modified_by must be an integer")
             queryset = queryset.filter(last_modified_by=int(filter_last_modified_by))
 
         def get_date(filter_date):
             date = request.POST.get(filter_date)
             if date:
-                date = datetime.strptime(date, "%Y-%m-%d")
+                try:
+                    date = datetime.strptime(date, "%Y-%m-%d")
+                except ValueError:
+                    raise serializers.ValidationError(f"Invalid date format for '{filter_date}'. Expected YYYY-MM-DD.")
             return date
 
         filter_from_review_due_date = request.POST.get("filter_from_due_date")
@@ -2919,7 +2947,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def combine_key_contacts_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
-            occ_ids = json.loads(request.POST.get("occurrence_ids"))
+            occ_ids = parse_request_json(request.POST, "occurrence_ids")
             contacts = OCCContactDetail.objects.filter(occurrence__id__in=occ_ids).filter(visible=True)
 
             values_list = list(
@@ -2947,7 +2975,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def combine_documents_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
-            occ_ids = json.loads(request.POST.get("occurrence_ids"))
+            occ_ids = parse_request_json(request.POST, "occurrence_ids")
             documents = OccurrenceDocument.objects.filter(occurrence__id__in=occ_ids).filter(active=True)
 
             values_list = list(
@@ -2977,7 +3005,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def combine_threats_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
-            occ_ids = json.loads(request.POST.get("occurrence_ids"))
+            occ_ids = parse_request_json(request.POST, "occurrence_ids")
             threats = OCCConservationThreat.objects.filter(occurrence__id__in=occ_ids).filter(visible=True)
 
             values_list = list(
@@ -3009,7 +3037,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def combine_sites_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
-            occ_ids = json.loads(request.POST.get("occurrence_ids"))
+            occ_ids = parse_request_json(request.POST, "occurrence_ids")
             sites = OccurrenceSite.objects.filter(occurrence__id__in=occ_ids).filter(visible=True)
 
             values_list = OccurrenceSiteSerializer(sites, context={"request": request}, many=True)
@@ -3026,7 +3054,7 @@ class OccurrencePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     )
     def combine_tenures_lookup(self, request, *args, **kwargs):
         if is_internal(self.request):
-            occ_ids = json.loads(request.POST.get("occurrence_ids"))
+            occ_ids = parse_request_json(request.POST, "occurrence_ids")
             tenures = OccurrenceTenure.objects.filter(
                 Q(occurrence_geometry__occurrence__id__in=occ_ids) | Q(historical_occurrence__in=occ_ids)
             )
@@ -3209,7 +3237,7 @@ class OccurrenceDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
     @transaction.atomic
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SaveOccurrenceDocumentSerializer(instance, data=json.loads(request.data.get("data")))
+        serializer = SaveOccurrenceDocumentSerializer(instance, data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         serializer.save(no_revision=True)
         instance.occurrence.log_user_action(
@@ -3233,7 +3261,7 @@ class OccurrenceDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveOccurrenceDocumentSerializer(data=json.loads(request.data.get("data")))
+        serializer = SaveOccurrenceDocumentSerializer(data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         instance = serializer.save(no_revision=True)
         instance.add_documents(request, no_revision=True)
@@ -3292,7 +3320,10 @@ class OCCConservationThreatFilterBackend(DatatablesFilterBackend):
         def get_date(filter_date):
             date = request.GET.get(filter_date)
             if date:
-                date = datetime.strptime(date, "%Y-%m-%d")
+                try:
+                    date = datetime.strptime(date, "%Y-%m-%d")
+                except ValueError:
+                    raise serializers.ValidationError(f"Invalid date format for '{filter_date}'. Expected YYYY-MM-DD.")
             return date
 
         filter_observed_from_date = get_date("filter_observed_from_date")
@@ -3416,7 +3447,7 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
     @transaction.atomic
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SaveOCCConservationThreatSerializer(instance, data=json.loads(request.data.get("data")))
+        serializer = SaveOCCConservationThreatSerializer(instance, data=parse_request_json(request.data, "data"))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         serializer.save(version_user=request.user)
@@ -3439,7 +3470,7 @@ class OCCConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModel
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveOCCConservationThreatSerializer(data=json.loads(request.data.get("data")))
+        serializer = SaveOCCConservationThreatSerializer(data=parse_request_json(request.data, "data"))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save(version_user=request.user)
@@ -3490,7 +3521,10 @@ class OccurrenceViewSet(
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        group_type_id = GroupType.objects.get(id=request.data.get("group_type_id"))
+        try:
+            group_type_id = GroupType.objects.get(id=request.data.get("group_type_id"))
+        except GroupType.DoesNotExist:
+            raise serializers.ValidationError("Invalid group_type_id")
 
         new_instance = Occurrence(
             submitter=request.user.id,
@@ -3648,7 +3682,7 @@ class OccurrenceViewSet(
     )
     def combine(self, request, *args, **kwargs):
         instance = self.get_object()
-        occ_combine_data = json.loads(request.POST.get("data"))
+        occ_combine_data = parse_request_json(request.POST, "data")
         combine_occurrences = Occurrence.objects.exclude(id=instance.id).filter(id__in=occ_combine_data["combine_ids"])
         # validate species
         if instance.group_type.name in [
@@ -4175,7 +4209,7 @@ class OccurrenceViewSet(
                     populate_occurrence_tenure_data(occurrence_geometry, value.get("features", []), request)
 
         occ_sites = OccurrenceSite.objects
-        site_geometry_data = json.loads(request.data.get("site_geometry", None))
+        site_geometry_data = parse_request_json(request.data, "site_geometry", required=False)
         posted_site_ids = []  # Track sites we received in the payload
         if site_geometry_data and "features" in site_geometry_data:
             for i in site_geometry_data["features"]:
@@ -4238,12 +4272,17 @@ class OccurrenceViewSet(
     @transaction.atomic
     def copy_ocr_section(self, request, *args, **kwargs):
         instance = self.get_object()
-        data = json.loads(request.data["data"])
+        data = parse_request_json(request.data, "data")
 
-        ocrId = data["occurrence_report_id"]
-        section = data["section"]
+        ocrId = data.get("occurrence_report_id")
+        section = data.get("section")
+        if ocrId is None or section is None:
+            raise serializers.ValidationError("occurrence_report_id and section are required")
 
-        ocr = OccurrenceReport.objects.get(id=ocrId)
+        try:
+            ocr = OccurrenceReport.objects.get(id=ocrId)
+        except OccurrenceReport.DoesNotExist:
+            raise Http404
         ocrSection = getattr(ocr, section)
         occSection = getattr(instance, section)
 
@@ -4292,7 +4331,7 @@ class OccurrenceViewSet(
                     populate_occurrence_tenure_data(occurrence_geometry, value.get("features", []), request)
 
         occ_sites = OccurrenceSite.objects
-        site_geometry_data = json.loads(request.data.get("site_geometry", None))
+        site_geometry_data = parse_request_json(request.data, "site_geometry", required=False)
         posted_site_ids = []  # Track sites we received in the payload
         if site_geometry_data and "features" in site_geometry_data:
             for i in site_geometry_data["features"]:
@@ -5303,7 +5342,7 @@ class ContactDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         if not instance.visible:
             raise serializers.ValidationError("Discarded contact cannot be updated.")
 
-        serializer = OCCContactDetailSerializer(instance, data=json.loads(request.data.get("data")))
+        serializer = OCCContactDetailSerializer(instance, data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
 
         occurrence = serializer.validated_data["occurrence"]
@@ -5321,7 +5360,7 @@ class ContactDetailViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        serializer = OCCContactDetailSerializer(data=json.loads(request.data.get("data")))
+        serializer = OCCContactDetailSerializer(data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         occurrence = serializer.validated_data["occurrence"]
         contact_name = serializer.validated_data["contact_name"]
@@ -5391,7 +5430,7 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         if not instance.visible:
             raise serializers.ValidationError("Discarded site cannot be updated.")
 
-        data = json.loads(request.data.get("data"))
+        data = parse_request_json(request.data, "data")
         point_data = "POINT({} {})".format(data["point_coord1"], data["point_coord2"])
 
         datum = data.get("datum", None)
@@ -5428,7 +5467,7 @@ class OccurrenceSiteViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        data = json.loads(request.data.get("data"))
+        data = parse_request_json(request.data, "data")
         try:
             point_data = "POINT({} {})".format(data["point_coord1"], data["point_coord2"])
         except KeyError:
@@ -5697,7 +5736,7 @@ class OccurrenceReportBulkImportSchemaViewSet(
             column_data = {
                 "xlsx_column_header_name": column.xlsx_column_header_name,
                 "django_import_content_type": (
-                    f"{column.django_import_content_type.app_label}" f".{column.django_import_content_type.model}"
+                    f"{column.django_import_content_type.app_label}.{column.django_import_content_type.model}"
                 ),
                 "django_import_field_name": column.django_import_field_name,
                 "django_lookup_field_name": column.django_lookup_field_name,
@@ -5718,7 +5757,7 @@ class OccurrenceReportBulkImportSchemaViewSet(
             schema_data["columns"].append(column_data)
 
         json_content = json.dumps(schema_data, indent=2)
-        filename = f"bulk-import-schema-{instance.group_type.name}" f"-version-{instance.version}.json"
+        filename = f"bulk-import-schema-{instance.group_type.name}-version-{instance.version}.json"
         response = HttpResponse(json_content, content_type="application/json")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
@@ -5784,7 +5823,7 @@ class OccurrenceReportBulkImportSchemaViewSet(
                     app_label, model_name = ct_string.split(".", 1)
                 except (ValueError, AttributeError):
                     return Response(
-                        {"detail": (f"Invalid content type format: '{ct_string}'." " Expected 'app_label.model'")},
+                        {"detail": (f"Invalid content type format: '{ct_string}'. Expected 'app_label.model'")},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 try:

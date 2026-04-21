@@ -2,10 +2,12 @@ import json
 import logging
 
 from django.apps import apps
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models import F, JSONField, Q
 from django.db.models.fields.json import KeyTransform
 from django.db.models.functions import Cast
+from django.http import Http404
 from rest_framework import views
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -258,8 +260,14 @@ class GetPaginatedVersionsView(InternalAuthorizationView):
         """
         super().get(request, model_name)
 
-        model = apps.get_model(app_label=app_label, model_name=model_name)
-        instance = model.objects.get(pk=int(pk))
+        try:
+            model = apps.get_model(app_label=app_label, model_name=model_name)
+        except LookupError:
+            raise Http404(f"Model {app_label}.{model_name} not found")
+        try:
+            instance = model.objects.get(pk=int(pk))
+        except (ValueError, ObjectDoesNotExist):
+            raise Http404
 
         queryset = Version.objects.get_for_object(instance)
 
@@ -349,7 +357,10 @@ class GetRevisionVersionsView(InternalAuthorizationView):
         if primary_version.count() < 1:
             return Response()
 
-        model = apps.get_model(app_label=app_label, model_name=model_name)
+        try:
+            model = apps.get_model(app_label=app_label, model_name=model_name)
+        except LookupError:
+            raise Http404(f"Model {app_label}.{model_name} not found")
         self.lookup_getter.getVersionModelLookUpFieldValues(primary_version, model)
 
         user_email = ""
