@@ -412,7 +412,7 @@ class OccurrencePermission(BasePermission):
 
     def is_authorised_to_update(self, request, obj):
         return (is_occurrence_approver(request) or request.user.is_superuser) and (
-            obj.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE
+            (obj.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE and not obj.locked)
             or obj.processing_status == Occurrence.PROCESSING_STATUS_DRAFT
             or obj.processing_status == Occurrence.PROCESSING_STATUS_DISCARDED
         )

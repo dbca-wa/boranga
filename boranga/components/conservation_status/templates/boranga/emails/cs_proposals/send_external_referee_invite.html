@@ -15,7 +15,7 @@
             We sent the original referral request to this email address on {{external_referee_invite.datetime_sent|date:'d/m/Y'}}.
         </p>
         {% else %}
-        <p>You have been invited to complete referral for Conservation Status Proposal: <strong>{{conservation_status.conservation_status_number}}</strong> {% if conservation_status.species %}{{ conservation_status.species.taxonomy.scientific_name }}{% elif conservation_status.community %}{{ conservation_status.community.taxonomy.community_name }}{% endif %} in DBCA's Boranga System.</p>
+        <p>You have been invited to complete a referral for Conservation Status Proposal: <strong>{{conservation_status.conservation_status_number}}</strong> {% if conservation_status.species %}{{ conservation_status.species.taxonomy.scientific_name }}{% elif conservation_status.community %}{{ conservation_status.community.taxonomy.community_name }}{% endif %} in DBCA's Boranga System.</p>
         {% endif %}
     </p>
 
