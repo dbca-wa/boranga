@@ -1447,13 +1447,18 @@ export default {
                         }
                     });
                     //add new ids to combine list if not in old list - unless they share an original report
+                    //threats with no original report (null) are never deduplicated
                     data.id_list.forEach((id) => {
+                        const reportNum = threat_original_reports[id];
                         if (
                             !old_list.includes(id) &&
-                            !taken_reports.includes(threat_original_reports[id])
+                            (reportNum == null ||
+                                !taken_reports.includes(reportNum))
                         ) {
                             vm.occ_combine_data.combine_threat_ids.push(id);
-                            taken_reports.push(threat_original_reports[id]);
+                            if (reportNum != null) {
+                                taken_reports.push(reportNum);
+                            }
                         }
                     });
                     vm.threat_table_key++;
