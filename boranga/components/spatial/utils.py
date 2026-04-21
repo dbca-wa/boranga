@@ -436,7 +436,14 @@ def save_geometry(
         logger.info(f"Processing {instance_model_name} {instance} geometry feature type: {geometry_type}")
 
         # Check if the feature has a buffer radius to later update or create a buffer geometry
-        buffer_radius = feature.get("properties", {}).get("buffer_radius", None)
+        # Normalise to float; treat zero (or "0.00" etc.) as no buffer
+        _raw_buffer_radius = feature.get("properties", {}).get("buffer_radius", None)
+        try:
+            buffer_radius = float(_raw_buffer_radius) if _raw_buffer_radius is not None else None
+        except (TypeError, ValueError):
+            buffer_radius = None
+        if not buffer_radius:
+            buffer_radius = None
         created_from = feature.get("properties", {}).get("created_from_object", {})
         object_id = feature.get("properties", {}).get("object_id", None)
         content_type = feature.get("properties", {}).get("content_type", None)
@@ -457,10 +464,10 @@ def save_geometry(
 
         opacity = feature.get("properties", {}).get("opacity", 0.5)
 
-        geom_4326 = feature_json_to_geosgeometry(feature)
+        geom_default = feature_json_to_geosgeometry(feature)
 
         original_geometry = feature.get("properties", {}).get("original_geometry")
-        srid_original = original_geometry.get("properties", {}).get("srid", 4326)
+        srid_original = original_geometry.get("properties", {}).get("srid", settings.DEFAULT_SRID)
         if not srid_original:
             raise ValidationError(f"Geometry must have an SRID set: {original_geometry.get('coordinates', [])}")
 
@@ -469,7 +476,7 @@ def save_geometry(
         feature_json = {"type": "Feature", "geometry": original_geometry}
         geom_original = feature_json_to_geosgeometry(feature_json, srid_original)
 
-        geoms = [(geom_4326, geom_original)]
+        geoms = [(geom_default, geom_original)]
 
         for geom in geoms:
             content_type_id = getattr(content_type_object, "id", content_type)
@@ -481,8 +488,14 @@ def save_geometry(
                 except ct_models.ContentType.DoesNotExist:
                     pass
                 else:
-                    created_from_geometry = content_type_model.model_class().objects.get(pk=object_id)
-                    logger.info(f"Created from geometry: {created_from_geometry}")
+                    try:
+                        created_from_geometry = content_type_model.model_class().objects.get(pk=object_id)
+                    except Exception:
+                        logger.warning(
+                            f"Could not find geometry source object: content_type={content_type_id}, object_id={object_id}"
+                        )
+                    else:
+                        logger.info(f"Created from geometry: {created_from_geometry}")
 
             geometry_data = {
                 f"{instance_fk_field_name}_id": instance.id,
