@@ -144,12 +144,16 @@ export default {
         };
     },
     watch: {
-        selectedOccurrences: function () {
-            let vm = this;
-            vm.tableKey++;
-            this.$nextTick(() => {
-                vm.addEventListeners();
-            });
+        selectedOccurrences: {
+            handler: function (newVal) {
+                let vm = this;
+                vm.occurrences_options.data = newVal;
+                vm.tableKey++;
+                this.$nextTick(() => {
+                    vm.addEventListeners();
+                });
+            },
+            deep: true,
         },
     },
     mounted: function () {
