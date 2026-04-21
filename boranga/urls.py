@@ -6,6 +6,7 @@ from django.conf.urls import include
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
 from django.urls import path, re_path
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from ledger_api_client.urls import urlpatterns as ledger_patterns
 from rest_framework import routers
 
@@ -21,6 +22,7 @@ from boranga.components.spatial import views as spatial_views
 from boranga.components.species_and_communities import api as species_communities_api
 from boranga.components.users import api as users_api
 from boranga.management.default_data_manager import DefaultDataManager
+from boranga.permissions import IsInternal
 
 
 def are_migrations_running():
@@ -386,6 +388,18 @@ api_patterns = [
 urlpatterns = [
     path(r"admin/", admin.site.urls),
     path(r"", include(api_patterns)),
+    # drf-spectacular schema endpoints (internal users only)
+    path("api/schema/", SpectacularAPIView.as_view(permission_classes=[IsInternal]), name="schema"),
+    path(
+        "api/schema/swagger-ui/",
+        SpectacularSwaggerView.as_view(url_name="schema", permission_classes=[IsInternal]),
+        name="swagger-ui",
+    ),
+    path(
+        "api/schema/redoc/",
+        SpectacularRedocView.as_view(url_name="schema", permission_classes=[IsInternal]),
+        name="redoc",
+    ),
     re_path(r"^$", views.BorangaRoutingView.as_view(), name="home"),
     re_path(r"^contact/", views.BorangaContactView.as_view(), name="ds_contact"),
     re_path(
