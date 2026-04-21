@@ -3,7 +3,7 @@ import logging
 from django.core.exceptions import ValidationError
 from django.http import Http404
 from rest_framework import serializers
-from rest_framework.exceptions import APIException, NotAuthenticated, PermissionDenied
+from rest_framework.exceptions import APIException, PermissionDenied
 from rest_framework.views import exception_handler
 
 logger = logging.getLogger(__name__)
@@ -68,11 +68,10 @@ def custom_exception_handler(exc, context):
     exceptions are in html format
     """
 
-    # Django rest framework errors are already in json format
-    if isinstance(exc, serializers.ValidationError | Http404 | NotAuthenticated | PermissionDenied):
+    # All DRF APIExceptions and Http404 are already in JSON format — pass straight through.
+    if isinstance(exc, APIException | Http404):
         pass
-
-    # handle django validation errors
+    # Convert Django ValidationError to a DRF ValidationError (JSON 400).
     elif isinstance(exc, ValidationError):
         if hasattr(exc, "error_dict"):
             exc = serializers.ValidationError(repr(exc.error_dict))
@@ -80,10 +79,9 @@ def custom_exception_handler(exc, context):
             exc = serializers.ValidationError(exc.message)
         else:
             exc = serializers.ValidationError(str(exc))
-
     else:
-        # Handle all other exceptions
+        # Unexpected exception — log full detail and return a generic 500 to the client.
         logger.exception(str(exc))
-        exc = InternalServerError(str(exc))
+        exc = InternalServerError()
 
     return exception_handler(exc, context)
