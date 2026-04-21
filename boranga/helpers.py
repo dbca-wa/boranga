@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import tarfile
@@ -14,6 +15,7 @@ from django.db.models import Q
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 from ledger_api_client.managed_models import SystemGroup
 from multiselectfield import MultiSelectField
+from rest_framework import serializers as drf_serializers
 
 from boranga.settings import (
     DJANGO_ADMIN_GROUP,
@@ -647,3 +649,19 @@ no_commas_validator = RegexValidator(
     message="Commas not allowed in the display field for a django lookup.",
     inverse_match=True,
 )
+
+
+def parse_request_json(source, key, required=True):
+    """Safely parse a JSON field from a request data/POST dict.
+
+    Raises a DRF 400 ValidationError instead of TypeError/JSONDecodeError.
+    """
+    raw = source.get(key)
+    if raw is None:
+        if required:
+            raise drf_serializers.ValidationError({key: "This field is required."})
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as e:
+        raise drf_serializers.ValidationError({key: f"Invalid JSON: {e}"})

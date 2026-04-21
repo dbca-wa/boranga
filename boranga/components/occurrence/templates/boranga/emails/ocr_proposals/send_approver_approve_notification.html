@@ -1,7 +1,7 @@
 {%  extends 'boranga/emails/base_email.html' %}
 
 {% block greetings %}
-<p>{{ assessor }},</p>
+<p>Hello Team,</p>
 {% endblock %}
 
 {%  block content %}
@@ -11,7 +11,6 @@
 
     <p>Recommendation: Approve</p>
     <p>
-        Add to Existing Occurrence/Create New Occurrence:
         {% if approval_details.occurrence %}
             Add to Existing Occurrence: {{ approval_details.occurrence.occurrence_number }} - {{ approval_details.occurrence.occurrence_name }}
         {% else %}

@@ -6,7 +6,7 @@ import pandas as pd
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 from openpyxl import Workbook
 from openpyxl.styles import Font
@@ -96,6 +96,7 @@ from boranga.helpers import (
     is_occurrence_assessor,
     is_readonly_user,
     is_species_communities_approver,
+    parse_request_json,
 )
 
 logger = logging.getLogger(__name__)
@@ -1084,7 +1085,7 @@ class ConservationStatusViewSet(CheckUpdatedActionMixin, viewsets.GenericViewSet
         instance = self.get_object()
         request_data = request.data
         # to resolve error for serializer submitter id as object is received in request
-        if request_data["submitter"]:
+        if request_data.get("submitter"):
             request.data["submitter"] = "{}".format(request_data["submitter"].get("id"))
         if (
             instance.application_type.name == GroupType.GROUP_TYPE_FLORA
@@ -1115,7 +1116,7 @@ class ConservationStatusViewSet(CheckUpdatedActionMixin, viewsets.GenericViewSet
     def draft(self, request, *args, **kwargs):
         instance = self.get_object()
         request_data = request.data
-        if request_data["submitter"]:
+        if request_data.get("submitter"):
             request.data["submitter"] = "{}".format(request_data["submitter"].get("id"))
         if (
             instance.application_type.name == GroupType.GROUP_TYPE_FLORA
@@ -1141,7 +1142,10 @@ class ConservationStatusViewSet(CheckUpdatedActionMixin, viewsets.GenericViewSet
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        group_type_id = GroupType.objects.get(id=request.data.get("application_type_id"))
+        try:
+            group_type_id = GroupType.objects.get(id=request.data.get("application_type_id"))
+        except GroupType.DoesNotExist:
+            raise serializers.ValidationError("Invalid application_type_id")
         internal_application = False
         if request.data.get("internal_application"):
             internal_application = request.data.get("internal_application")
@@ -1337,7 +1341,7 @@ class ConservationStatusViewSet(CheckUpdatedActionMixin, viewsets.GenericViewSet
     )
     def final_approval(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = ProposedApprovalSerializer(data=json.loads(request.data.get("data")))
+        serializer = ProposedApprovalSerializer(data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         instance.final_approval(request, serializer.validated_data)
         serializer = self.get_serializer(instance, context={"request": request})
@@ -1933,7 +1937,7 @@ class ConservationStatusAmendmentRequestViewSet(viewsets.GenericViewSet, mixins.
         return qs
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=json.loads(request.data.get("data")))
+        serializer = self.get_serializer(data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
         instance.add_documents(request)
@@ -1950,7 +1954,13 @@ class ConservationStatusAmendmentRequestViewSet(viewsets.GenericViewSet, mixins.
     @renderer_classes((JSONRenderer,))
     def delete_document(self, request, *args, **kwargs):
         instance = self.get_object()
-        ConservationStatusAmendmentRequestDocument.objects.get(id=request.data.get("id")).delete()
+        doc_id = request.data.get("id")
+        if doc_id is None:
+            raise serializers.ValidationError("id is required")
+        try:
+            ConservationStatusAmendmentRequestDocument.objects.get(id=doc_id).delete()
+        except ConservationStatusAmendmentRequestDocument.DoesNotExist:
+            raise Http404
         return Response(
             [
                 dict(id=i.id, name=i.name, _file=get_relative_url(i._file.url))
@@ -2031,7 +2041,7 @@ class ConservationStatusDocumentViewSet(viewsets.GenericViewSet, mixins.Retrieve
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        data = json.loads(request.data.get("data"))
+        data = parse_request_json(request.data, "data")
         serializer = SaveConservationStatusDocumentSerializer(instance, data=data)
         if is_internal(self.request):
             serializer = InternalSaveConservationStatusDocumentSerializer(instance, data=data)
@@ -2044,7 +2054,7 @@ class ConservationStatusDocumentViewSet(viewsets.GenericViewSet, mixins.Retrieve
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        data = json.loads(request.data.get("data"))
+        data = parse_request_json(request.data, "data")
         serializer = SaveConservationStatusDocumentSerializer(data=data)
         if is_internal(self.request):
             serializer = InternalSaveConservationStatusDocumentSerializer(data=data)

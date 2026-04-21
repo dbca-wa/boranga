@@ -116,6 +116,7 @@ INSTALLED_APPS += [
     "rest_framework",
     "rest_framework_datatables",
     "rest_framework_gis",
+    "drf_spectacular",
     "reset_migrations",
     "multiselectfield",
     "import_export",
@@ -149,11 +150,22 @@ else:
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": rest_framework_renderer_classes,
     "EXCEPTION_HANDLER": "boranga.exceptions.custom_exception_handler",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework_datatables.pagination.DatatablesPageNumberPagination",
     "PAGE_SIZE": 100,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Boranga API",
+    "DESCRIPTION": "Boranga biodiversity conservation management API",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }
 
 MIDDLEWARE_CLASSES += [

@@ -198,7 +198,7 @@ class GetListItems(views.APIView):
             raise Http404
 
         if not issubclass(model, AbstractOrderedList):
-            raise ValueError(
+            raise Http404(
                 f"Model {AbstractOrderedList.Meta.app_label}.{model_name} is not an instance of AbstractOrderedList"
             )
 

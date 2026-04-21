@@ -9164,6 +9164,7 @@ reversion.register(OCRObservationDetail)
 reversion.register(OCRPlantCount)
 reversion.register(OCRAnimalObservation)
 reversion.register(OCRIdentification)
+reversion.register(OCRLocation)
 
 # Occurrence Report
 reversion.register(
@@ -9171,6 +9172,7 @@ reversion.register(
     follow=[
         "species",
         "community",
+        "location",
         "habitat_composition",
         "habitat_condition",
         "vegetation_structure",
@@ -9207,6 +9209,7 @@ reversion.register(OCCObservationDetail)
 reversion.register(OCCPlantCount)
 reversion.register(OCCAnimalObservation)
 reversion.register(OCCIdentification)
+reversion.register(OCCLocation)
 
 # Occurrence
 reversion.register(
@@ -9214,6 +9217,7 @@ reversion.register(
     follow=[
         "species",
         "community",
+        "location",
         "habitat_composition",
         "habitat_condition",
         "vegetation_structure",

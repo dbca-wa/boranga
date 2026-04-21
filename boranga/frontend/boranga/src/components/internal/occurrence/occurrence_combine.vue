@@ -90,18 +90,6 @@
                             </li>
                             <li class="nav-item">
                                 <a
-                                    id="pills-habitat-tab"
-                                    class="nav-link"
-                                    data-bs-toggle="pill"
-                                    :href="'#' + habitatBody"
-                                    role="tab"
-                                    aria-selected="false"
-                                >
-                                    Habitat
-                                </a>
-                            </li>
-                            <li class="nav-item">
-                                <a
                                     id="pills-observation-tab"
                                     class="nav-link"
                                     data-bs-toggle="pill"
@@ -110,6 +98,18 @@
                                     aria-selected="false"
                                 >
                                     Observation
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a
+                                    id="pills-habitat-tab"
+                                    class="nav-link"
+                                    data-bs-toggle="pill"
+                                    :href="'#' + habitatBody"
+                                    role="tab"
+                                    aria-selected="false"
+                                >
+                                    Habitat
                                 </a>
                             </li>
                             <li class="nav-item">
@@ -488,6 +488,145 @@
                                 </FormSection>
                             </div>
                             <div
+                                :id="observationBody"
+                                class="tab-pane fade"
+                                role="tabpanel"
+                                aria-labelledby="pills-observation-tab"
+                            >
+                                <!--Observation Details Form-->
+                                <FormSection
+                                    :form-collapse="true"
+                                    label="Observation Details"
+                                    :subtitle="
+                                        ' - OCC' +
+                                        occ_combine_data.chosen_observation_detail_section
+                                    "
+                                    Index="combine_observation_details"
+                                >
+                                    <div class="row mb-3">
+                                        <OccurrenceCombineSelect
+                                            :occ_chosen_section="
+                                                occ_combine_data.chosen_observation_detail_section
+                                            "
+                                            :section_type="'observation_detail'"
+                                            :selected-occurrences="
+                                                selectedOccurrences
+                                            "
+                                            :selected-occurrence-ids="
+                                                selectedOccurrenceIds
+                                            "
+                                            :main-occurrence-id="
+                                                main_occurrence_obj.id
+                                            "
+                                            @update-chosen-section="
+                                                updateChosenSection
+                                            "
+                                        />
+                                    </div>
+                                </FormSection>
+                                <!--Animal Observation Form (fauna only)-->
+                                <FormSection
+                                    v-if="
+                                        main_occurrence_obj.group_type ==
+                                        'fauna'
+                                    "
+                                    :form-collapse="true"
+                                    label="Animal Observation"
+                                    :subtitle="
+                                        ' - OCC' +
+                                        occ_combine_data.chosen_animal_observation_section
+                                    "
+                                    Index="combine_animal_observation"
+                                >
+                                    <div class="row mb-3">
+                                        <OccurrenceCombineSelect
+                                            :occ_chosen_section="
+                                                occ_combine_data.chosen_animal_observation_section
+                                            "
+                                            :section_type="'animal_observation'"
+                                            :selected-occurrences="
+                                                selectedOccurrences
+                                            "
+                                            :selected-occurrence-ids="
+                                                selectedOccurrenceIds
+                                            "
+                                            :main-occurrence-id="
+                                                main_occurrence_obj.id
+                                            "
+                                            @update-chosen-section="
+                                                updateChosenSection
+                                            "
+                                        />
+                                    </div>
+                                </FormSection>
+                                <!--Plant Count Form (flora only)-->
+                                <FormSection
+                                    v-if="
+                                        main_occurrence_obj.group_type ==
+                                        'flora'
+                                    "
+                                    :form-collapse="true"
+                                    label="Plant Count"
+                                    :subtitle="
+                                        ' - OCC' +
+                                        occ_combine_data.chosen_plant_count_section
+                                    "
+                                    Index="combine_plant_count"
+                                >
+                                    <div class="row mb-3">
+                                        <OccurrenceCombineSelect
+                                            :occ_chosen_section="
+                                                occ_combine_data.chosen_plant_count_section
+                                            "
+                                            :section_type="'plant_count'"
+                                            :selected-occurrences="
+                                                selectedOccurrences
+                                            "
+                                            :selected-occurrence-ids="
+                                                selectedOccurrenceIds
+                                            "
+                                            :main-occurrence-id="
+                                                main_occurrence_obj.id
+                                            "
+                                            @update-chosen-section="
+                                                updateChosenSection
+                                            "
+                                        />
+                                    </div>
+                                </FormSection>
+                                <!--Identification Form-->
+                                <FormSection
+                                    :form-collapse="true"
+                                    label="Identification"
+                                    :subtitle="
+                                        ' - OCC' +
+                                        occ_combine_data.chosen_identification_section
+                                    "
+                                    Index="combine_identification"
+                                >
+                                    <div class="row mb-3">
+                                        <OccurrenceCombineSelect
+                                            :occ_chosen_section="
+                                                occ_combine_data.chosen_identification_section
+                                            "
+                                            :section_type="'identification'"
+                                            :selected-occurrences="
+                                                selectedOccurrences
+                                            "
+                                            :selected-occurrence-ids="
+                                                selectedOccurrenceIds
+                                            "
+                                            :main-occurrence-id="
+                                                main_occurrence_obj.id
+                                            "
+                                            @update-chosen-section="
+                                                updateChosenSection
+                                            "
+                                        />
+                                    </div>
+                                </FormSection>
+                            </div>
+                            <div
                                 :id="habitatBody"
                                 class="tab-pane fade"
                                 role="tabpanel"
@@ -633,145 +772,6 @@
                                                 occ_combine_data.chosen_associated_species_section
                                             "
                                             :section_type="'associated_species'"
-                                            :selected-occurrences="
-                                                selectedOccurrences
-                                            "
-                                            :selected-occurrence-ids="
-                                                selectedOccurrenceIds
-                                            "
-                                            :main-occurrence-id="
-                                                main_occurrence_obj.id
-                                            "
-                                            @update-chosen-section="
-                                                updateChosenSection
-                                            "
-                                        />
-                                    </div>
-                                </FormSection>
-                            </div>
-                            <div
-                                :id="observationBody"
-                                class="tab-pane fade"
-                                role="tabpanel"
-                                aria-labelledby="pills-observation-tab"
-                            >
-                                <!--Observation Details Form-->
-                                <FormSection
-                                    :form-collapse="true"
-                                    label="Observation Details"
-                                    :subtitle="
-                                        ' - OCC' +
-                                        occ_combine_data.chosen_observation_detail_section
-                                    "
-                                    Index="combine_observation_details"
-                                >
-                                    <div class="row mb-3">
-                                        <OccurrenceCombineSelect
-                                            :occ_chosen_section="
-                                                occ_combine_data.chosen_observation_detail_section
-                                            "
-                                            :section_type="'observation_detail'"
-                                            :selected-occurrences="
-                                                selectedOccurrences
-                                            "
-                                            :selected-occurrence-ids="
-                                                selectedOccurrenceIds
-                                            "
-                                            :main-occurrence-id="
-                                                main_occurrence_obj.id
-                                            "
-                                            @update-chosen-section="
-                                                updateChosenSection
-                                            "
-                                        />
-                                    </div>
-                                </FormSection>
-                                <!--Animal Observation Form (fauna only)-->
-                                <FormSection
-                                    v-if="
-                                        main_occurrence_obj.group_type ==
-                                        'fauna'
-                                    "
-                                    :form-collapse="true"
-                                    label="Animal Observation"
-                                    :subtitle="
-                                        ' - OCC' +
-                                        occ_combine_data.chosen_animal_observation_section
-                                    "
-                                    Index="combine_animal_observation"
-                                >
-                                    <div class="row mb-3">
-                                        <OccurrenceCombineSelect
-                                            :occ_chosen_section="
-                                                occ_combine_data.chosen_animal_observation_section
-                                            "
-                                            :section_type="'animal_observation'"
-                                            :selected-occurrences="
-                                                selectedOccurrences
-                                            "
-                                            :selected-occurrence-ids="
-                                                selectedOccurrenceIds
-                                            "
-                                            :main-occurrence-id="
-                                                main_occurrence_obj.id
-                                            "
-                                            @update-chosen-section="
-                                                updateChosenSection
-                                            "
-                                        />
-                                    </div>
-                                </FormSection>
-                                <!--Plant Count Form (flora only)-->
-                                <FormSection
-                                    v-if="
-                                        main_occurrence_obj.group_type ==
-                                        'flora'
-                                    "
-                                    :form-collapse="true"
-                                    label="Plant Count"
-                                    :subtitle="
-                                        ' - OCC' +
-                                        occ_combine_data.chosen_plant_count_section
-                                    "
-                                    Index="combine_plant_count"
-                                >
-                                    <div class="row mb-3">
-                                        <OccurrenceCombineSelect
-                                            :occ_chosen_section="
-                                                occ_combine_data.chosen_plant_count_section
-                                            "
-                                            :section_type="'plant_count'"
-                                            :selected-occurrences="
-                                                selectedOccurrences
-                                            "
-                                            :selected-occurrence-ids="
-                                                selectedOccurrenceIds
-                                            "
-                                            :main-occurrence-id="
-                                                main_occurrence_obj.id
-                                            "
-                                            @update-chosen-section="
-                                                updateChosenSection
-                                            "
-                                        />
-                                    </div>
-                                </FormSection>
-                                <!--Identification Form-->
-                                <FormSection
-                                    :form-collapse="true"
-                                    label="Identification"
-                                    :subtitle="
-                                        ' - OCC' +
-                                        occ_combine_data.chosen_identification_section
-                                    "
-                                    Index="combine_identification"
-                                >
-                                    <div class="row mb-3">
-                                        <OccurrenceCombineSelect
-                                            :occ_chosen_section="
-                                                occ_combine_data.chosen_identification_section
-                                            "
-                                            :section_type="'identification'"
                                             :selected-occurrences="
                                                 selectedOccurrences
                                             "
@@ -1065,6 +1065,7 @@ export default {
                             confirmButton: 'btn btn-primary',
                         },
                     }).then(() => {
+                        vm.close();
                         vm.$emit('combine-success');
                     });
                 },

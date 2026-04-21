@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils.dataframe import dataframe_to_rows
-from rest_framework import mixins, views, viewsets
+from rest_framework import mixins, serializers, views, viewsets
 from rest_framework.decorators import action as detail_route
 from rest_framework.decorators import action as list_route
 from rest_framework.decorators import renderer_classes
@@ -45,7 +45,7 @@ from boranga.components.meetings.serializers import (
     SaveMeetingSerializer,
     SaveMinutesSerializer,
 )
-from boranga.helpers import is_conservation_status_approver
+from boranga.helpers import is_conservation_status_approver, parse_request_json
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +240,7 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         instance = self.get_object()
         request_data = request.data
         # to resolve error for serializer submitter id as object is received in request
-        if request_data["submitter"]:
+        if request_data.get("submitter"):
             request.data["submitter"] = "{}".format(request_data["submitter"].get("id"))
         serializer = SaveMeetingSerializer(instance, data=request_data, partial=True)
 
@@ -417,8 +417,12 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     def add_agenda_item(self, request, *args, **kwargs):
         instance = self.get_object()
         request_data = request.data
-        if request_data["conservation_status_id"]:
-            cs = ConservationStatus.objects.get(id=request_data["conservation_status_id"])
+        cs_id = request_data.get("conservation_status_id")
+        if cs_id:
+            try:
+                cs = ConservationStatus.objects.get(id=cs_id)
+            except ConservationStatus.DoesNotExist:
+                raise serializers.ValidationError("Conservation status not found")
             instance.agenda_items.create(conservation_status=cs)
             cs.processing_status = ConservationStatus.PROCESSING_STATUS_ON_AGENDA
             cs.save()
@@ -432,9 +436,15 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
     def remove_agenda_item(self, request, *args, **kwargs):
         instance = self.get_object()
         request_data = request.data
-        if request_data["conservation_status_id"]:
-            cs = ConservationStatus.objects.get(id=request_data["conservation_status_id"])
-            agenda_item = AgendaItem.objects.get(meeting=instance, conservation_status=cs)
+        cs_id = request_data.get("conservation_status_id")
+        if cs_id:
+            try:
+                cs = ConservationStatus.objects.get(id=cs_id)
+                agenda_item = AgendaItem.objects.get(meeting=instance, conservation_status=cs)
+            except ConservationStatus.DoesNotExist:
+                raise serializers.ValidationError("Conservation status not found")
+            except AgendaItem.DoesNotExist:
+                raise serializers.ValidationError("Agenda item not found")
             agenda_item.delete()
             cs.processing_status = ConservationStatus.PROCESSING_STATUS_READY_FOR_AGENDA
             cs.save()
@@ -594,7 +604,7 @@ class MinutesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
-        serializer = SaveMinutesSerializer(instance, data=json.loads(request.data.get("data")))
+        serializer = SaveMinutesSerializer(instance, data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         serializer.save(no_revision=True)
         instance.add_documents(request, version_user=request.user)
@@ -609,7 +619,7 @@ class MinutesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        serializer = SaveMinutesSerializer(data=json.loads(request.data.get("data")))
+        serializer = SaveMinutesSerializer(data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         instance = serializer.save(no_revision=True)
         instance.add_documents(request, version_user=request.user)

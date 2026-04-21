@@ -131,7 +131,7 @@ from boranga.components.species_and_communities.utils import (
     species_form_submit,
 )
 from boranga.components.users.models import SubmitterCategory
-from boranga.helpers import is_internal
+from boranga.helpers import is_internal, parse_request_json
 from boranga.permissions import IsSuperuser
 
 logger = logging.getLogger(__name__)
@@ -1208,7 +1208,7 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         if not instance.image_exists():
-            logger.error(
+            logger.warning(
                 "Public image requested for community id %s but file does not exist",
                 instance.id,
             )
@@ -1218,7 +1218,10 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             content_type = mimetypes.types_map["." + str(extension)]
         except KeyError:
-            raise ValueError(f"File type {extension} not supported")
+            return Response(
+                {"detail": f"File type '{extension}' is not supported"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         return HttpResponse(instance.image_doc._file, content_type=content_type)
 
@@ -1336,7 +1339,7 @@ class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         if not instance.image_exists():
-            logger.error(
+            logger.warning(
                 "Public image requested for species id %s but file does not exist",
                 instance.id,
             )
@@ -1346,7 +1349,10 @@ class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             content_type = mimetypes.types_map["." + str(extension)]
         except KeyError:
-            raise ValueError(f"File type {extension} not supported")
+            return Response(
+                {"detail": f"File type '{extension}' is not supported"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         return HttpResponse(instance.image_doc._file, content_type=content_type)
 
@@ -1442,19 +1448,25 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             raise serializers.ValidationError("Cannot save species record in current state")
 
         request_data = request.data
-        if request_data["submitter"]:
+        if request_data.get("submitter"):
             request.data["submitter"] = "{}".format(request_data["submitter"].get("id"))
 
         regions = request_data.get("regions")
         instance.regions.clear()
         for r in regions:
-            region = Region.objects.get(pk=r)
+            try:
+                region = Region.objects.get(pk=r)
+            except Region.DoesNotExist:
+                raise serializers.ValidationError(f"Region with pk {r} not found")
             instance.regions.add(region)
 
         districts = request_data.get("districts")
         instance.districts.clear()
         for d in districts:
-            district = District.objects.get(pk=d)
+            try:
+                district = District.objects.get(pk=d)
+            except District.DoesNotExist:
+                raise serializers.ValidationError(f"District with pk {d} not found")
             instance.districts.add(district)
 
         if request_data.get("distribution"):
@@ -2007,7 +2019,10 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             raise serializers.ValidationError("Cannot rename species record in current state")
 
         # Make sure the taxonomy is actually changing
-        if request.data["taxonomy_id"] == instance.taxonomy_id:
+        taxonomy_id = request.data.get("taxonomy_id")
+        if taxonomy_id is None:
+            raise serializers.ValidationError("taxonomy_id is required")
+        if taxonomy_id == instance.taxonomy_id:
             raise serializers.ValidationError("Cannot rename species to the same taxonomy")
 
         rename_instance = None
@@ -2017,7 +2032,7 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         RENAME_FROM_ACTION = SpeciesUserAction.ACTION_RENAME_SPECIES_FROM_NEW
 
         # Check if the taxonomy is already in use
-        species_queryset = Species.objects.filter(taxonomy_id=request.data["taxonomy_id"])
+        species_queryset = Species.objects.filter(taxonomy_id=taxonomy_id)
         species_exists = species_queryset.exists()
         if species_exists:
             RENAME_TO_ACTION = SpeciesUserAction.ACTION_RENAME_SPECIES_TO_EXISTING
@@ -2044,7 +2059,7 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             rename_instance.save(version_user=request.user)
         else:
             rename_instance = rename_deep_copy(request, instance)
-            rename_instance.taxonomy_id = request.data["taxonomy_id"]
+            rename_instance.taxonomy_id = taxonomy_id
             rename_instance.processing_status = Species.PROCESSING_STATUS_ACTIVE
             species_form_submit(rename_instance, request, rename=True)
 
@@ -2478,7 +2493,7 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             raise serializers.ValidationError("Cannot save community record in current state")
 
         request_data = request.data
-        if request_data["submitter"]:
+        if request_data.get("submitter"):
             request.data["submitter"] = "{}".format(request_data["submitter"].get("id"))
 
         if request_data.get("taxonomy_details"):
@@ -3156,7 +3171,7 @@ class SpeciesDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin)
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         self.can_update_species(request, instance)
-        serializer = SaveSpeciesDocumentSerializer(instance, data=json.loads(request.data.get("data")))
+        serializer = SaveSpeciesDocumentSerializer(instance, data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         serializer.save(no_revision=True)
         instance.add_documents(request, version_user=request.user)
@@ -3172,7 +3187,7 @@ class SpeciesDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin)
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveSpeciesDocumentSerializer(data=json.loads(request.data.get("data")))
+        serializer = SaveSpeciesDocumentSerializer(data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
 
         self.can_create_document(request)
@@ -3276,7 +3291,7 @@ class CommunityDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixi
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         self.can_update_community(request, instance)
-        serializer = SaveCommunityDocumentSerializer(instance, data=json.loads(request.data.get("data")))
+        serializer = SaveCommunityDocumentSerializer(instance, data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
         serializer.save(no_revision=True)
         instance.add_documents(request, version_user=request.user)
@@ -3296,7 +3311,7 @@ class CommunityDocumentViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixi
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveCommunityDocumentSerializer(data=json.loads(request.data.get("data")))
+        serializer = SaveCommunityDocumentSerializer(data=parse_request_json(request.data, "data"))
         serializer.is_valid(raise_exception=True)
 
         self.can_create_document(request)
@@ -3344,7 +3359,10 @@ class ConservationThreatFilterBackend(DatatablesFilterBackend):
         def get_date(filter_date):
             date = request.GET.get(filter_date)
             if date:
-                date = datetime.strptime(date, "%Y-%m-%d")
+                try:
+                    date = datetime.strptime(date, "%Y-%m-%d")
+                except ValueError:
+                    raise serializers.ValidationError(f"Invalid date format for '{filter_date}'. Expected YYYY-MM-DD.")
             return date
 
         filter_observed_from_date = get_date("filter_observed_from_date")
@@ -3656,7 +3674,7 @@ class ConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         self.can_update_threat(request, instance)
-        serializer = SaveConservationThreatSerializer(instance, data=json.loads(request.data.get("data")))
+        serializer = SaveConservationThreatSerializer(instance, data=parse_request_json(request.data, "data"))
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
         serializer.save(version_user=request.user)
@@ -3690,7 +3708,7 @@ class ConservationThreatViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMix
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        serializer = SaveConservationThreatSerializer(data=json.loads(request.data.get("data")))
+        serializer = SaveConservationThreatSerializer(data=parse_request_json(request.data, "data"))
         self.can_create_threat(request)
         validate_threat_request(request)
         serializer.is_valid(raise_exception=True)
