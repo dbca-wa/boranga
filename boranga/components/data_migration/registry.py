@@ -368,7 +368,7 @@ def t_date_iso(value, ctx):
     return _result(value, TransformIssue("error", f"Unrecognized date format: {value!r}"))
 
 
-def _parse_datetime_iso(value: Any, default_tz: Any = None) -> TransformResult:
+def _parse_datetime_iso(value: Any, default_tz: Any = None, override_utc_offset: str | None = None) -> TransformResult:
     """
     Parse datetimes (including ISO strings) and return a timezone-aware datetime
     in UTC suitable for Django (USE_TZ=True).
@@ -380,6 +380,11 @@ def _parse_datetime_iso(value: Any, default_tz: Any = None) -> TransformResult:
     This behaviour is useful when source systems emit +0000 style offsets for
     local times (mojibake-like timezone handling) or when some parsers don't
     accept +0000.
+
+    If `override_utc_offset` is provided (e.g. "+0800"), any explicit UTC offset
+    token (+0000 / +00:00 / Z) is replaced with that offset instead of being
+    stripped. This is useful when the source system incorrectly exports local
+    timestamps with a zero UTC offset (e.g. TPFL exporting AWST times as +0000).
     """
     if not value:
         return _result(None)
@@ -394,8 +399,12 @@ def _parse_datetime_iso(value: Any, default_tz: Any = None) -> TransformResult:
         # Treat explicit UTC tokens as no-offset (strip them and parse as naive,
         # then we'll apply default_tz or UTC later)
         if tz_token in ("Z", "+0000", "+00:00"):
-            # remove trailing offset (handles both +0000 and +00:00)
-            s = s[: m.start(1)].rstrip()
+            if override_utc_offset is not None:
+                # Replace the wrong zero-offset with the real local offset
+                s = s[: m.start(1)] + override_utc_offset
+            else:
+                # remove trailing offset (handles both +0000 and +00:00)
+                s = s[: m.start(1)].rstrip()
         # else: leave non-UTC offsets intact so parser can handle/convert them
 
     # try stdlib ISO parsing first (handles offsets like +00:00; note +0000 not accepted)
@@ -467,7 +476,7 @@ def t_datetime_iso(value, ctx):
     return _parse_datetime_iso(value)
 
 
-def datetime_iso_factory(default_tz: str | None = None) -> str:
+def datetime_iso_factory(default_tz: str | None = None, override_utc_offset: str | None = None) -> str:
     """
     Return a registered transform name that parses datetimes (ISO or legacy)
     and returns a UTC-aware datetime.
@@ -478,19 +487,28 @@ def datetime_iso_factory(default_tz: str | None = None) -> str:
 
     Parameters:
       - default_tz: optional timezone name (e.g. 'Australia/Perth') or tzinfo
+      - override_utc_offset: if provided (e.g. '+0800'), any zero-UTC offset
+        token (+0000/+00:00/Z) in the source is replaced with this offset
+        before parsing, rather than being stripped and re-localised via
+        default_tz. Useful when the source incorrectly emits +0000 for local
+        timestamps (e.g. TPFL exports AWST times as +0000).
 
     Usage:
       PERTH_DT = datetime_iso_factory('Australia/Perth')
       PIPELINES['created_at'] = [PERTH_DT]
+
+      # When source wrongly labels local times as +0000:
+      PERTH_DT_FIXED = datetime_iso_factory(override_utc_offset='+0800')
+      PIPELINES['uploaded_date'] = [PERTH_DT_FIXED]
     """
-    key = f"datetime_iso_{default_tz or 'UTC'}"
+    key = f"datetime_iso_{default_tz or 'UTC'}_{override_utc_offset or ''}"
     name = "datetime_iso_" + hashlib.sha1(key.encode()).hexdigest()[:8]
     if name in registry._fns:
         return name
 
     @registry.register(name)
     def inner(value, ctx):
-        return _parse_datetime_iso(value, default_tz=default_tz)
+        return _parse_datetime_iso(value, default_tz=default_tz, override_utc_offset=override_utc_offset)
 
     return name
 
