@@ -701,6 +701,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if defaults.get("datetime_created") is None and defaults.get("lodgement_date") is not None:
                 defaults["datetime_created"] = defaults.get("lodgement_date")
 
+            # If MODIFIED_DATE/modified_date was blank, fall back to datetime_created
+            # so we don't store the migration run time as the last-modified date.
+            if defaults.get("datetime_updated") is None and defaults.get("datetime_created") is not None:
+                defaults["datetime_updated"] = defaults["datetime_created"]
+
             # If transforms produced None for fields that have model defaults
             # (for example CharFields with default=''), prefer the model's
             # default value. This keeps transforms simple (they can return

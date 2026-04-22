@@ -544,6 +544,11 @@ class OccurrenceImporter(BaseSheetImporter):
             # Apply model defaults (handles None -> "" for non-nullable text fields, etc.)
             apply_model_defaults(Occurrence, defaults)
 
+            # If MODIFIED_DATE was blank, fall back to datetime_created so we
+            # don't store the migration run time as the last-modified date.
+            if defaults.get("datetime_updated") is None and defaults.get("datetime_created") is not None:
+                defaults["datetime_updated"] = defaults["datetime_created"]
+
             # If dry-run, log planned defaults and skip adding to ops so no DB work
             if ctx.dry_run:
                 pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
