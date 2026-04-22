@@ -265,10 +265,14 @@ class CheckUpdatedActionMixin:
                 f"CheckUpdatedActionMixin requires {instance._meta.model_name} "
                 f"to have a field named '{datetime_updated_field_name}'"
             )
-        if not instance._meta.get_field(datetime_updated_field_name).auto_now:
+        _field = instance._meta.get_field(datetime_updated_field_name)
+        # Accept auto_now=True fields, or fields kept current via save() (e.g. default=timezone.now).
+        # Only reject if neither auto_now nor a default is configured.
+        if not _field.auto_now and not _field.has_default():
             raise ImproperlyConfigured(
                 "CheckUpdatedActionMixin requires "
-                f"{instance._meta.model_name}.{datetime_updated_field_name} to have auto_now=True"
+                f"{instance._meta.model_name}.{datetime_updated_field_name} to have auto_now=True "
+                "or a default value"
             )
         client_dt_str = request.query_params.get(datetime_updated_field_name)
         if not client_dt_str:
