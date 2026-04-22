@@ -88,14 +88,16 @@ class OccurrenceDocumentTpflAdapter(SourceAdapter):
         if not legacy_value:
             return None
 
+        stripped = str(legacy_value).strip()
+
         canonical = LegacyValueMap.get_target(
             legacy_system="TPFL",
-            list_name="NOTIFICATION_TYPE",
-            legacy_value=str(legacy_value).strip(),
+            list_name="NOTIFICATION_TYPE (DRF_LOV_LIAISON_TYPES_VWS)",
+            legacy_value=stripped,
         )
 
         if not canonical:
-            return None
+            return stripped
 
         canonical_str = str(canonical).strip()
         if not canonical_str or canonical_str.upper() == "__IGNORE__":
