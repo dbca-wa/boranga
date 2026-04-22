@@ -1180,7 +1180,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             if getattr(inst, f.name, None) is not None and f.name not in ("id", "migrated_from_id")
                         ]
                         if update_fields:
-                            inst.save(update_fields=update_fields)
+                            inst.save(update_fields=update_fields, override_datetime_updated=True)
                         else:
                             # Nothing to update (all values are None or only PK), skip
                             logger.debug(
@@ -3219,10 +3219,23 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     try:
                         buffered_geom = gd.get("geometry")
-                        if buffered_geom and hasattr(buffered_geom, "centroid"):
-                            original_point = buffered_geom.centroid
-                            if original_point:
-                                geom_create_kwargs["original_geometry_ewkb"] = original_point.ewkb
+                        if buffered_geom:
+                            from django.contrib.gis.geos import Point as GEOSPoint
+
+                            _merged = op_map.get(mig_key, {}).get("merged") or {}
+                            if _merged.get("_source") == Source.TPFL.value:
+                                # TPFL: store raw GDA94 point (EPSG:4283) as original
+                                _lat = _merged.get("GDA94LAT")
+                                _lon = _merged.get("GDA94LONG")
+                                if _lat and _lon:
+                                    geom_create_kwargs["original_geometry_ewkb"] = GEOSPoint(
+                                        float(_lon), float(_lat), srid=4283
+                                    ).ewkb
+                                else:
+                                    geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
+                            else:
+                                # TFAUNA (already a Point) or TEC (actual polygon): store geometry directly
+                                geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
                     except Exception:
                         pass
 
@@ -3570,10 +3583,23 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     try:
                         buffered_geom = gd.get("geometry")
-                        if buffered_geom and hasattr(buffered_geom, "centroid"):
-                            original_point = buffered_geom.centroid
-                            if original_point:
-                                geom_create_kwargs["original_geometry_ewkb"] = original_point.ewkb
+                        if buffered_geom:
+                            from django.contrib.gis.geos import Point as GEOSPoint
+
+                            _merged = op_map.get(mig, {}).get("merged") or {}
+                            if _merged.get("_source") == Source.TPFL.value:
+                                # TPFL: store raw GDA94 point (EPSG:4283) as original
+                                _lat = _merged.get("GDA94LAT")
+                                _lon = _merged.get("GDA94LONG")
+                                if _lat and _lon:
+                                    geom_create_kwargs["original_geometry_ewkb"] = GEOSPoint(
+                                        float(_lon), float(_lat), srid=4283
+                                    ).ewkb
+                                else:
+                                    geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
+                            else:
+                                # TFAUNA (already a Point) or TEC (actual polygon): store geometry directly
+                                geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
                     except Exception:
                         pass
 
