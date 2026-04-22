@@ -423,13 +423,54 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                 # Apply CSV data and do the single versioned save for each tenure.
                 # populate_occurrence_tenure_data ran with skip_revision=True above, so this
                 # save creates exactly one version containing the complete final state.
-                for tenure in tenures:
+                if tenure_count_after == 0:
+                    skipped += 1
+                    continue
+                elif tenure_count_after == 1:
+                    # Single tenure: apply purpose/vesting/significant directly.
+                    tenure = tenures.first()
                     if purpose_id:
                         tenure.purpose_id = purpose_id
                     if vesting_id:
                         tenure.vesting_id = vesting_id
                     tenure.significant_to_occurrence = True
                     tenure.save(version_user=user)
+                else:
+                    # Multiple tenures: use the original point geometry to decide which
+                    # tenure(s) are significant and should receive purpose/vesting data.
+                    # The original_geometry_ewkb is in EPSG:4283 (GDA94); intersect_geometry_with_layer
+                    # transforms internally to match the cadastre layer's CRS.
+                    point_geom = geometry_instance.original_geometry  # GEOSGeometry, original SRID
+                    matched_tenure_area_ids: set[str] = set()
+
+                    if point_geom is None:
+                        logger.warning(
+                            "Multiple tenures for %s but original_geometry_ewkb is missing; "
+                            "skipping purpose/vesting/significant assignment.",
+                            occurrence_str,
+                        )
+                    else:
+                        point_intersect_data = intersect_geometry_with_layer(point_geom, intersect_layer)
+                        point_features = point_intersect_data.get("features", [])
+                        if not point_features:
+                            logger.debug(
+                                "Original point for %s did not intersect any cadastre parcel; "
+                                "skipping purpose/vesting/significant assignment.",
+                                occurrence_str,
+                            )
+                        else:
+                            matched_tenure_area_ids = {f.get("id") for f in point_features if f.get("id")}
+
+                    for tenure in tenures:
+                        if tenure.tenure_area_id in matched_tenure_area_ids:
+                            if purpose_id:
+                                tenure.purpose_id = purpose_id
+                            if vesting_id:
+                                tenure.vesting_id = vesting_id
+                            tenure.significant_to_occurrence = True
+                        else:
+                            tenure.significant_to_occurrence = False
+                        tenure.save(version_user=user)
 
             except Exception as e:
                 logger.exception(f"Error processing tenure for Occurrence {occurrence}: {e}")
