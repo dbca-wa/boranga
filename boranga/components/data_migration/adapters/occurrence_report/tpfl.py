@@ -1,5 +1,6 @@
 from django.conf import settings
 
+from boranga.components.data_migration import utils
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
@@ -846,7 +847,21 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             REASON_DEACTIVATED = raw.get("REASON_DEACTIVATED", "").strip()
             if REASON_DEACTIVATED:
                 DEACTIVATED_DATE = raw.get("DEACTIVATED_DATE", "").strip()
-                assessor_data = f"Reason Deactivated: {REASON_DEACTIVATED}, {DEACTIVATED_DATE}"
+                deactivated_dt = utils.parse_date_iso(DEACTIVATED_DATE) if DEACTIVATED_DATE else None
+                if DEACTIVATED_DATE and not deactivated_dt:
+                    warnings.append(
+                        ExtractionWarning(
+                            f"[{sheetno}] DEACTIVATED_DATE: could not parse date '{DEACTIVATED_DATE}'; "
+                            "assessor_data will omit the date",
+                            row_hint=sheetno,
+                        )
+                    )
+                    formatted_date = ""
+                else:
+                    formatted_date = deactivated_dt.strftime("%d/%m/%Y") if deactivated_dt else ""
+                assessor_data = f"Reason Deactivated: {REASON_DEACTIVATED}"
+                if formatted_date:
+                    assessor_data += f", {formatted_date}"
             canonical["assessor_data"] = assessor_data
             # Build occurrence_name: concat POP_NUMBER + SUBPOP_CODE (no space)
             pop = str(canonical.get("SHEET_POP_NUMBER", "") or "").strip()
