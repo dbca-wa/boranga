@@ -460,28 +460,22 @@ CS_SPECIES_HEADER = [
 def get_conservation_status_species_export(filters, limit):
     from boranga.components.conservation_status.models import ConservationStatus
 
-    qs = (
-        ConservationStatus.objects.filter(
-            species__isnull=False,
-        )
-        .select_related(
-            "species__taxonomy",
-            "species__group_type",
-            "species__fauna_group",
-            "species__fauna_sub_group",
-            "wa_legislative_list",
-            "wa_legislative_category",
-            "wa_priority_list",
-            "wa_priority_category",
-            "commonwealth_conservation_category",
-            "other_conservation_assessment",
-            "change_code",
-            "submitter_information__submitter_category",
-        )
-        .prefetch_related(
-            "species__taxonomy__vernaculars",
-            "species__taxonomy__informal_groups__classification_system_fk",
-        )
+    qs = ConservationStatus.objects.select_related(
+        "species__taxonomy",
+        "species__group_type",
+        "species__fauna_group",
+        "species__fauna_sub_group",
+        "wa_legislative_list",
+        "wa_legislative_category",
+        "wa_priority_list",
+        "wa_priority_category",
+        "commonwealth_conservation_category",
+        "other_conservation_assessment",
+        "change_code",
+        "submitter_information__submitter_category",
+    ).prefetch_related(
+        "species__taxonomy__vernaculars",
+        "species__taxonomy__informal_groups__classification_system_fk",
     )
     if filters.get("processing_status") and filters["processing_status"] != "all":
         qs = qs.filter(processing_status=filters["processing_status"])
@@ -574,26 +568,20 @@ CS_COMMUNITY_HEADER = [
 def get_conservation_status_community_export(filters, limit):
     from boranga.components.conservation_status.models import ConservationStatus
 
-    qs = (
-        ConservationStatus.objects.filter(
-            community__isnull=False,
-        )
-        .select_related(
-            "community__taxonomy",
-            "community__group_type",
-            "wa_legislative_list",
-            "wa_legislative_category",
-            "wa_priority_list",
-            "wa_priority_category",
-            "commonwealth_conservation_category",
-            "other_conservation_assessment",
-            "change_code",
-            "submitter_information__submitter_category",
-        )
-        .prefetch_related(
-            "community__regions",
-            "community__districts",
-        )
+    qs = ConservationStatus.objects.select_related(
+        "community__taxonomy",
+        "community__group_type",
+        "wa_legislative_list",
+        "wa_legislative_category",
+        "wa_priority_list",
+        "wa_priority_category",
+        "commonwealth_conservation_category",
+        "other_conservation_assessment",
+        "change_code",
+        "submitter_information__submitter_category",
+    ).prefetch_related(
+        "community__regions",
+        "community__districts",
     )
     if filters.get("processing_status") and filters["processing_status"] != "all":
         qs = qs.filter(processing_status=filters["processing_status"])
