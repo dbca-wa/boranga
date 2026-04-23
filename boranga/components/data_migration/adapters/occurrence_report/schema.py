@@ -243,6 +243,7 @@ class OccurrenceReportRow:
     lodgement_date: date | None = None
     approved_by: int | None = None  # FK id (EmailUser) after transform
     submitter: int | None = None  # FK id (EmailUser) after transform
+    last_modified_by: int | None = None  # FK id (EmailUser) from MODIFIED_BY
     assigned_approver_id: int | None = None
     assigned_officer_id: int | None = None
     internal_application: bool | None = None
@@ -407,6 +408,7 @@ class OccurrenceReportRow:
             lodgement_date=lodgement_dt,
             approved_by=utils.to_int_maybe(d.get("approved_by")),
             submitter=utils.to_int_maybe(d.get("submitter")),
+            last_modified_by=utils.to_int_maybe(d.get("last_modified_by")),
             assigned_approver_id=utils.to_int_maybe(d.get("assigned_approver_id")),
             assigned_officer_id=utils.to_int_maybe(d.get("assigned_officer_id")),
             internal_application=d.get("internal_application"),
@@ -614,5 +616,6 @@ class OccurrenceReportRow:
             "lodgement_date": self.lodgement_date,
             "approved_by": self.approved_by,
             "submitter": self.submitter,
+            "last_modified_by": self.last_modified_by,
             "occurrence": self.Occurrence__migrated_from_id,
         }

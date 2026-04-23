@@ -568,6 +568,7 @@ PIPELINES = {
         MAP_FORM_STATUS_CODE_TO_PROCESSING_STATUS,
     ],
     "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
+    "last_modified_by": [dependent_from_column_factory("modified_by", mapping=EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM)],
     "approved_by": [APPROVED_BY_TRANSFORM],
     "OCRObserverDetail__role": ["strip", "blank_to_none", ROLE_TRANSFORM],
     "OCRObserverDetail__observer_name": [
