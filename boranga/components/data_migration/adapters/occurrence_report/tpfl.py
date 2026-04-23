@@ -562,7 +562,7 @@ PIPELINES = {
     "customer_status": [CUSTOMER_STATUS_FROM_FORM_STATUS_CODE],
     "comments": ["ocr_comments_transform"],
     "ocr_for_occ_name": ["strip", "blank_to_none"],
-    "ocr_for_occ_number": [POP_ID_FROM_SHEETNO],
+    "ocr_for_occ_number": [OCCURRENCE_NUMBER_FROM_POP_ID],
     "processing_status": [
         "strip",
         "required",
