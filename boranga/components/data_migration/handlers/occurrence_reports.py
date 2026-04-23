@@ -701,7 +701,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if defaults.get("datetime_created") is None and defaults.get("lodgement_date") is not None:
                 defaults["datetime_created"] = defaults.get("lodgement_date")
 
-            # If MODIFIED_DATE/modified_date was blank, fall back to datetime_created
+            # If MODIFIED_DATE/datetime_updated was blank, fall back to datetime_created
             # so we don't store the migration run time as the last-modified date.
             if defaults.get("datetime_updated") is None and defaults.get("datetime_created") is not None:
                 defaults["datetime_updated"] = defaults["datetime_created"]
@@ -868,7 +868,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 "temp_document_description",
                 "lodgement_date",
                 "modified_by",
-                "modified_date",
+                "datetime_updated",
                 "processing_status",
                 "ChDate",
                 "ChName",
@@ -1573,9 +1573,54 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         assoc_warnings_count,
                     )
 
-            # Load existing AssociatedSpeciesTaxonomy rows for all resolved taxonomy ids
+            # Load existing AssociatedSpeciesTaxonomy rows for all resolved taxonomy ids.
+            # We only consider role-less ASTs (species_role=None) — OCR associated species
+            # never carry a species role.  This prevents accidentally reusing role-bearing
+            # ASTs that were created by OCC handlers (e.g. TEC occurrences with
+            # SPEC_SP_ROLE_CODE), which would cause wrong species_role values to propagate
+            # into the OCR records.
             tax_ids = {t.pk for t in name_to_tax.values()}
-            ast_qs = AssociatedSpeciesTaxonomy.objects.filter(taxonomy__in=list(tax_ids))
+
+            # Targeted wipe: clear existing M2M links for the current run's target OCRs,
+            # then delete any AST rows that become fully orphaned (not referenced by any
+            # OCRAssociatedSpecies or OCCAssociatedSpecies M2M).  This ensures each source
+            # run produces fresh AST records and that no stale rows from a prior run for a
+            # different source can be silently reused.
+            if not ctx.dry_run:
+                _ocr_through = OCRAssociatedSpecies.related_species.through
+                _occ_through = OCCAssociatedSpecies.related_species.through
+                _ocr_assoc_pks = list(
+                    OCRAssociatedSpecies.objects.filter(occurrence_report__in=target_occs).values_list("pk", flat=True)
+                )
+                if _ocr_assoc_pks:
+                    _prev_ast_pks = set(
+                        _ocr_through.objects.filter(ocrassociatedspecies_id__in=_ocr_assoc_pks).values_list(
+                            "associatedspeciestaxonomy_id", flat=True
+                        )
+                    )
+                    # Remove the through-table rows (unlinking ASTs from these OCRs)
+                    _ocr_through.objects.filter(ocrassociatedspecies_id__in=_ocr_assoc_pks).delete()
+                    # Delete ASTs that are now unreferenced by any M2M table
+                    if _prev_ast_pks:
+                        _still_ocr = set(
+                            _ocr_through.objects.filter(associatedspeciestaxonomy_id__in=_prev_ast_pks).values_list(
+                                "associatedspeciestaxonomy_id", flat=True
+                            )
+                        )
+                        _still_occ = set(
+                            _occ_through.objects.filter(associatedspeciestaxonomy_id__in=_prev_ast_pks).values_list(
+                                "associatedspeciestaxonomy_id", flat=True
+                            )
+                        )
+                        _orphaned = _prev_ast_pks - _still_ocr - _still_occ
+                        if _orphaned:
+                            _del_count, _ = AssociatedSpeciesTaxonomy.objects.filter(pk__in=_orphaned).delete()
+                            logger.info(
+                                "OccurrenceReportImporter [TPFL]: deleted %d orphaned AssociatedSpeciesTaxonomy rows",
+                                _del_count,
+                            )
+
+            ast_qs = AssociatedSpeciesTaxonomy.objects.filter(taxonomy__in=list(tax_ids), species_role__isnull=True)
             # Map taxonomy_id -> AssociatedSpeciesTaxonomy (take first if multiple)
             taxid_to_ast = {}
             for ast in ast_qs:
@@ -2197,7 +2242,41 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     for a in OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=tec_ocr_ids)
                 }
 
-            # 4. Create AssociatedSpeciesTaxonomy and links
+            # 4. Create AssociatedSpeciesTaxonomy and links.
+            # Targeted wipe first: clear existing M2M links for these TEC OCRs and delete
+            # any AST rows that become fully orphaned.  Without this, re-runs accumulate
+            # duplicate AST rows because the block below always bulk-creates fresh instances
+            # without checking for existing ones.
+            if not ctx.dry_run:
+                _ocr_through = OCRAssociatedSpecies.related_species.through
+                _occ_through = OCCAssociatedSpecies.related_species.through
+                _tec_assoc_pks = [a.pk for a in existing_assocs.values()]
+                if _tec_assoc_pks:
+                    _prev_ast_pks = set(
+                        _ocr_through.objects.filter(ocrassociatedspecies_id__in=_tec_assoc_pks).values_list(
+                            "associatedspeciestaxonomy_id", flat=True
+                        )
+                    )
+                    _ocr_through.objects.filter(ocrassociatedspecies_id__in=_tec_assoc_pks).delete()
+                    if _prev_ast_pks:
+                        _still_ocr = set(
+                            _ocr_through.objects.filter(associatedspeciestaxonomy_id__in=_prev_ast_pks).values_list(
+                                "associatedspeciestaxonomy_id", flat=True
+                            )
+                        )
+                        _still_occ = set(
+                            _occ_through.objects.filter(associatedspeciestaxonomy_id__in=_prev_ast_pks).values_list(
+                                "associatedspeciestaxonomy_id", flat=True
+                            )
+                        )
+                        _orphaned = _prev_ast_pks - _still_ocr - _still_occ
+                        if _orphaned:
+                            _del_count, _ = AssociatedSpeciesTaxonomy.objects.filter(pk__in=_orphaned).delete()
+                            logger.info(
+                                "OccurrenceReportImporter [TEC]: deleted %d orphaned AssociatedSpeciesTaxonomy rows",
+                                _del_count,
+                            )
+
             ast_batch = []
             links_batch = []  # List of OCRAssociatedSpecies instances corresponding to ast_batch
 
@@ -4320,7 +4399,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 continue
             merged = op.get("merged") or {}
             modified_by = merged.get("modified_by")
-            modified_date = merged.get("modified_date")
+            modified_date = merged.get("datetime_updated")
             # Condition: both must be present
             if not modified_by or not modified_date:
                 continue

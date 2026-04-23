@@ -36,7 +36,7 @@ COLUMN_MAP = {
     "CREATED_BY": "submitter",
     "USERNAME": "submitter",  # Map Survey USERNAME to submitter as well
     "MODIFIED_BY": "modified_by",  # used in tpfl adapter to derive submitter
-    "MODIFIED_DATE": "modified_date",  # used in tpfl adapter to create user action log
+    "MODIFIED_DATE": "datetime_updated",  # populates datetime_updated on OCR model; also used in tpfl action log
     # OCRObserverDetail fields
     "OBS_ROLE_CODE": "OCRObserverDetail__role",
     # OCRObserverDetail__main_observer - is pre-populated in tpfl adapter
@@ -239,6 +239,7 @@ class OccurrenceReportRow:
     ocr_for_occ_name: str | None = None
     assessor_data: str | None = None
     datetime_created: date | None = None  # copy of lodgement_date
+    datetime_updated: date | None = None  # from MODIFIED_DATE
     lodgement_date: date | None = None
     approved_by: int | None = None  # FK id (EmailUser) after transform
     submitter: int | None = None  # FK id (EmailUser) after transform
@@ -383,6 +384,7 @@ class OccurrenceReportRow:
         # lodgement_date and datetime_created are datetimes; observation_date is date
         lodgement_dt = utils.parse_date_iso(d.get("lodgement_date"))
         reported_dt = utils.parse_date_iso(d.get("datetime_created"))
+        updated_dt = utils.parse_date_iso(d.get("datetime_updated"))
         obs_dt = utils.parse_date_iso(d.get("observation_date"))
         obs_date = obs_dt.date() if obs_dt is not None else None
 
@@ -401,6 +403,7 @@ class OccurrenceReportRow:
             ocr_for_occ_name=utils.safe_strip(d.get("ocr_for_occ_name")),
             assessor_data=utils.safe_strip(d.get("assessor_data")),
             datetime_created=reported_dt,
+            datetime_updated=updated_dt,
             lodgement_date=lodgement_dt,
             approved_by=utils.to_int_maybe(d.get("approved_by")),
             submitter=utils.to_int_maybe(d.get("submitter")),
@@ -607,6 +610,7 @@ class OccurrenceReportRow:
             "ocr_for_occ_name": self.ocr_for_occ_name or "",
             "assessor_data": self.assessor_data or "",
             "datetime_created": self.datetime_created,
+            "datetime_updated": self.datetime_updated,
             "lodgement_date": self.lodgement_date,
             "approved_by": self.approved_by,
             "submitter": self.submitter,

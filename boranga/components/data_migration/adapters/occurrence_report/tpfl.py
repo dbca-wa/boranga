@@ -555,6 +555,7 @@ PIPELINES = {
     "species_id": ["strip", "blank_to_none", SPECIES_TRANSFORM],
     "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
     "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
+    "datetime_updated": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
     "observation_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     "record_source": ["strip", "blank_to_none", RECORD_SOURCE_FROM_CSV],
     "customer_status": [CUSTOMER_STATUS_FROM_FORM_STATUS_CODE],
