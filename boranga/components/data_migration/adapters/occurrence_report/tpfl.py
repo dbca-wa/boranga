@@ -19,6 +19,7 @@ from boranga.components.data_migration.registry import (
     occurrence_number_from_pop_id_factory,
     pop_id_from_sheetno_factory,
     region_from_district_factory,
+    registry,
     static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
     to_decimal_factory,
@@ -533,7 +534,8 @@ def ocr_fire_history_comment_transform(value, ctx):
     parts = []
     # value is FIRE_SEASON (mapped to OCRFireHistory__comment) — apply lookup transform
     if value and str(value).strip():
-        season_result = FIRE_SEASON_TRANSFORM(str(value).strip(), ctx)
+        season_fn = registry._fns[FIRE_SEASON_TRANSFORM]
+        season_result = season_fn(str(value).strip(), ctx)
         season_canonical = season_result.value if season_result is not None else None
         parts.append(str(season_canonical).strip() if season_canonical else str(value).strip())
 
@@ -549,6 +551,7 @@ FIRE_SEASON_TRANSFORM = build_legacy_map_transform(
     "TPFL",
     "FIRE_SEASON (DRF_LOV_SEASONS_VWS)",
     required=False,
+    return_type="canonical",
 )
 
 FIRE_INTENSITY_TRANSFORM = build_legacy_map_transform(
