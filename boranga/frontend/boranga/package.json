@@ -36,7 +36,7 @@
         "shpjs": "^6.1.0",
         "sortablejs": "^1.15.6",
         "sweetalert2": "11.4.8",
-        "uuid": "^13.0.0",
+        "uuid": "^14.0.0",
         "vite": "^8.0.0",
         "vite-plugin-eslint2": "^5.0.5",
         "vite-plugin-static-copy": "^4.0",

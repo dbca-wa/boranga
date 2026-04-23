@@ -396,6 +396,73 @@ def get_sheetno_for_pop_id(pop_id: Any, legacy_system: str = "TPFL", path: str |
     return _POP_SHEET_CACHE.get(key, {}).get(str(pop_id).strip())
 
 
+# Cached mapping helpers for SHEETNO -> POP_ID using DRF_SHEET_VWS.csv.
+# Unlike DRF_POP_SECTION_MAP.csv (which has multiple rows per SHEETNO—one per
+# section type—and can associate a SHEETNO with several different POP_IDs),
+# DRF_SHEET_VWS.csv has exactly one record per SHEETNO and is the authoritative
+# source for the primary POP_ID that an OCR (sheet) belongs to.
+
+_SHEET_VWS_POP_CACHE: dict[str, dict[str, str]] = {}
+
+
+def preload_sheet_vws_pop_map(legacy_system: str = "TPFL", path: str | None = None) -> None:
+    """
+    Populate the in-memory SHEETNO -> POP_ID cache from DRF_SHEET_VWS.csv.
+    Safe to call multiple times; cheap after first call.
+    """
+    key = str(legacy_system or "TPFL")
+    if key in _SHEET_VWS_POP_CACHE:
+        return
+    mapping, resolved = load_csv_mapping(
+        "DRF_SHEET_VWS.csv",
+        key_column="SHEETNO",
+        value_column="POP_ID",
+        legacy_system=legacy_system,
+        path=path,
+        case_insensitive=True,
+    )
+    if not mapping:
+        logger.debug(
+            "preload_sheet_vws_pop_map: no mapping found at %s (legacy=%s)",
+            resolved,
+            legacy_system,
+        )
+        _SHEET_VWS_POP_CACHE[key] = {}
+        return
+
+    norm_map: dict[str, str] = {}
+    for k, v in mapping.items():
+        if k is None or v is None:
+            continue
+        ks = str(k).strip().casefold()
+        vs = str(v).strip()
+        if not ks:
+            continue
+        norm_map[ks] = vs
+
+    _SHEET_VWS_POP_CACHE[key] = norm_map
+    logger.debug(
+        "preload_sheet_vws_pop_map: loaded %d entries for legacy=%s from %s",
+        len(norm_map),
+        legacy_system,
+        resolved,
+    )
+
+
+def get_pop_id_for_sheetno_from_vws(sheetno: Any, legacy_system: str = "TPFL", path: str | None = None) -> str | None:
+    """
+    Return POP_ID for the given SHEETNO using DRF_SHEET_VWS.csv (one record per SHEETNO).
+    This is the correct source for resolving an OCR's parent Occurrence, because
+    DRF_POP_SECTION_MAP.csv can map a single SHEETNO to multiple POP_IDs (one per section
+    type), producing incorrect results when the dict overwrites duplicates.
+    """
+    if sheetno in (None, ""):
+        return None
+    key = str(legacy_system or "TPFL")
+    preload_sheet_vws_pop_map(legacy_system=legacy_system, path=path)
+    return _SHEET_VWS_POP_CACHE.get(key, {}).get(str(sheetno).strip().casefold())
+
+
 def load_sheet_associated_species_names(
     path: str | None = None,
     filename: str = "DRF_SHEET_VEG_CLASSES_Ass_Species.csv",

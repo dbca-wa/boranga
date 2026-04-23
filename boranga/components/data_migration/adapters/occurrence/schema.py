@@ -523,4 +523,6 @@ class OccurrenceRow:
             "submitter": self.submitter,
             "lodgement_date": self.datetime_created,
             "locked": self.locked,
+            "datetime_created": self.datetime_created,
+            "datetime_updated": self.datetime_updated,
         }

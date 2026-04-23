@@ -544,6 +544,11 @@ class OccurrenceImporter(BaseSheetImporter):
             # Apply model defaults (handles None -> "" for non-nullable text fields, etc.)
             apply_model_defaults(Occurrence, defaults)
 
+            # If MODIFIED_DATE was blank, fall back to datetime_created so we
+            # don't store the migration run time as the last-modified date.
+            if defaults.get("datetime_updated") is None and defaults.get("datetime_created") is not None:
+                defaults["datetime_updated"] = defaults["datetime_created"]
+
             # If dry-run, log planned defaults and skip adding to ops so no DB work
             if ctx.dry_run:
                 pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
@@ -732,7 +737,7 @@ class OccurrenceImporter(BaseSheetImporter):
                             if getattr(inst, f.name, None) is not None and f.name not in ("id", "migrated_from_id")
                         ]
                         if update_fields:
-                            inst.save(update_fields=update_fields)
+                            inst.save(update_fields=update_fields, override_datetime_updated=True)
                         else:
                             # Nothing to update (all values are None or only PK), skip
                             logger.debug(
@@ -1083,9 +1088,12 @@ class OccurrenceImporter(BaseSheetImporter):
                             circ_alb = pt_alb.buffer(1)
                             circ_sh = shapely_transform(lambda x, y: from_albers.transform(x, y), circ_alb)
                             circle = GEOSGeometry(circ_sh.wkt, srid=settings.DEFAULT_SRID)
+                            from django.contrib.gis.geos import Point as GEOSPoint
+
+                            original_point = GEOSPoint(tpfl_lon, tpfl_lat, srid=4283)
                             defaults = {
                                 "geometry": circle,
-                                "original_geometry_ewkb": circle.ewkb,
+                                "original_geometry_ewkb": original_point.ewkb,
                                 "locked": True,
                             }
                             if occ_content_type:

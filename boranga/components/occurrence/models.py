@@ -388,7 +388,7 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
     assigned_approver = models.IntegerField(null=True)  # EmailUserRO
     approved_by = models.IntegerField(null=True)  # EmailUserRO
     datetime_approved = models.DateTimeField(blank=True, null=True)
-    datetime_updated = models.DateTimeField(auto_now=True)
+    datetime_updated = models.DateTimeField(default=timezone.now)
     last_modified_by = models.IntegerField(null=True)  # EmailUserRO
     # internal user who edits the approved conservation status(only specific fields)
     # modified_by = models.IntegerField(null=True) #EmailUserRO
@@ -445,6 +445,9 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
         if version_user is not None:
             user_id = version_user.id if hasattr(version_user, "id") else int(version_user)
             self.last_modified_by = user_id
+        override_datetime_updated = kwargs.pop("override_datetime_updated", False)
+        if not override_datetime_updated:
+            self.datetime_updated = timezone.now()
         if self.occurrence_report_number == "":
             force_insert = kwargs.pop("force_insert", False)
             super().save(no_revision=True, force_insert=force_insert)
@@ -3849,8 +3852,8 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         default=REVIEW_STATUS_CHOICES[0][0],
     )
 
-    datetime_created = models.DateTimeField(auto_now_add=True, null=False, blank=False)
-    datetime_updated = models.DateTimeField(auto_now=True, null=False, blank=False)
+    datetime_created = models.DateTimeField(default=timezone.now, null=False, blank=False)
+    datetime_updated = models.DateTimeField(default=timezone.now, null=False, blank=False)
     last_modified_by = models.IntegerField(null=True)  # EmailUserRO
 
     combined_occurrence = models.ForeignKey(
@@ -3898,6 +3901,10 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         if version_user is not None:
             user_id = version_user.id if hasattr(version_user, "id") else int(version_user)
             self.last_modified_by = user_id
+
+        override_datetime_updated = kwargs.pop("override_datetime_updated", False)
+        if not override_datetime_updated:
+            self.datetime_updated = timezone.now()
 
         if self.occurrence_number == "":
             force_insert = kwargs.pop("force_insert", False)

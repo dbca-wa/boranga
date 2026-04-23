@@ -1055,6 +1055,16 @@ class OccurrenceReportViewSet(
 
         if associated_species_taxonomy in related_species.all():
             related_species.remove(associated_species_taxonomy)
+            # Delete the AST row if it is now unreferenced by any through table.
+            _ocr_through = OCRAssociatedSpecies.related_species.through
+            _occ_through = OCCAssociatedSpecies.related_species.through
+            ast_pk = associated_species_taxonomy.pk
+            still_referenced = (
+                _ocr_through.objects.filter(associatedspeciestaxonomy_id=ast_pk).exists()
+                or _occ_through.objects.filter(associatedspeciestaxonomy_id=ast_pk).exists()
+            )
+            if not still_referenced:
+                associated_species_taxonomy.delete()
         else:
             raise serializers.ValidationError("Species not related")
 
@@ -3953,6 +3963,16 @@ class OccurrenceViewSet(
 
         if associated_species_taxonomy in related_species.all():
             related_species.remove(associated_species_taxonomy)
+            # Delete the AST row if it is now unreferenced by any through table.
+            _ocr_through = OCRAssociatedSpecies.related_species.through
+            _occ_through = OCCAssociatedSpecies.related_species.through
+            ast_pk = associated_species_taxonomy.pk
+            still_referenced = (
+                _ocr_through.objects.filter(associatedspeciestaxonomy_id=ast_pk).exists()
+                or _occ_through.objects.filter(associatedspeciestaxonomy_id=ast_pk).exists()
+            )
+            if not still_referenced:
+                associated_species_taxonomy.delete()
         else:
             raise serializers.ValidationError("Species not related")
 

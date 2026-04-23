@@ -1,5 +1,6 @@
 from django.conf import settings
 
+from boranga.components.data_migration import utils
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
@@ -18,6 +19,7 @@ from boranga.components.data_migration.registry import (
     occurrence_number_from_pop_id_factory,
     pop_id_from_sheetno_factory,
     region_from_district_factory,
+    registry,
     static_value_factory,
     taxonomy_lookup_legacy_mapping_species,
     to_decimal_factory,
@@ -530,9 +532,12 @@ def ocr_fire_history_comment_transform(value, ctx):
         return _result("")
 
     parts = []
-    # value is FIRE_SEASON (mapped to OCRFireHistory__comment)
+    # value is FIRE_SEASON (mapped to OCRFireHistory__comment) — apply lookup transform
     if value and str(value).strip():
-        parts.append(str(value).strip())
+        season_fn = registry._fns[FIRE_SEASON_TRANSFORM]
+        season_result = season_fn(str(value).strip(), ctx)
+        season_canonical = season_result.value if season_result is not None else None
+        parts.append(str(season_canonical).strip() if season_canonical else str(value).strip())
 
     # FIRE_YEAR is mapped to itself in schema, so it should be in row
     year = row.get("FIRE_YEAR")
@@ -541,6 +546,13 @@ def ocr_fire_history_comment_transform(value, ctx):
 
     return _result(" ".join(parts))
 
+
+FIRE_SEASON_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "FIRE_SEASON (DRF_LOV_SEASONS_VWS)",
+    required=False,
+    return_type="canonical",
+)
 
 FIRE_INTENSITY_TRANSFORM = build_legacy_map_transform(
     "TPFL",
@@ -555,18 +567,20 @@ PIPELINES = {
     "species_id": ["strip", "blank_to_none", SPECIES_TRANSFORM],
     "community_id": ["strip", "blank_to_none", COMMUNITY_TRANSFORM],
     "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
+    "datetime_updated": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
     "observation_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
     "record_source": ["strip", "blank_to_none", RECORD_SOURCE_FROM_CSV],
     "customer_status": [CUSTOMER_STATUS_FROM_FORM_STATUS_CODE],
     "comments": ["ocr_comments_transform"],
     "ocr_for_occ_name": ["strip", "blank_to_none"],
-    "ocr_for_occ_number": [POP_ID_FROM_SHEETNO],
+    "ocr_for_occ_number": [OCCURRENCE_NUMBER_FROM_POP_ID],
     "processing_status": [
         "strip",
         "required",
         MAP_FORM_STATUS_CODE_TO_PROCESSING_STATUS,
     ],
     "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM],
+    "last_modified_by": [dependent_from_column_factory("modified_by", mapping=EMAILUSER_BY_LEGACY_USERNAME_TRANSFORM)],
     "approved_by": [APPROVED_BY_TRANSFORM],
     "OCRObserverDetail__role": ["strip", "blank_to_none", ROLE_TRANSFORM],
     "OCRObserverDetail__observer_name": [
@@ -844,7 +858,21 @@ class OccurrenceReportTpflAdapter(SourceAdapter):
             REASON_DEACTIVATED = raw.get("REASON_DEACTIVATED", "").strip()
             if REASON_DEACTIVATED:
                 DEACTIVATED_DATE = raw.get("DEACTIVATED_DATE", "").strip()
-                assessor_data = f"Reason Deactivated: {REASON_DEACTIVATED}, {DEACTIVATED_DATE}"
+                deactivated_dt = utils.parse_date_iso(DEACTIVATED_DATE) if DEACTIVATED_DATE else None
+                if DEACTIVATED_DATE and not deactivated_dt:
+                    warnings.append(
+                        ExtractionWarning(
+                            f"[{sheetno}] DEACTIVATED_DATE: could not parse date '{DEACTIVATED_DATE}'; "
+                            "assessor_data will omit the date",
+                            row_hint=sheetno,
+                        )
+                    )
+                    formatted_date = ""
+                else:
+                    formatted_date = deactivated_dt.strftime("%d/%m/%Y") if deactivated_dt else ""
+                assessor_data = f"Reason Deactivated: {REASON_DEACTIVATED}"
+                if formatted_date:
+                    assessor_data += f", {formatted_date}"
             canonical["assessor_data"] = assessor_data
             # Build occurrence_name: concat POP_NUMBER + SUBPOP_CODE (no space)
             pop = str(canonical.get("SHEET_POP_NUMBER", "") or "").strip()

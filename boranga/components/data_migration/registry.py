@@ -2841,8 +2841,11 @@ def occurrence_from_pop_id_factory(legacy_system: str = "TPFL"):
             if sheetno_str.startswith(prefix):
                 sheetno_str = sheetno_str[len(prefix) :]
 
-            # Get POP_ID from SHEETNO using the mapping
-            pop_id = dm_mappings.get_pop_id_for_sheetno(sheetno_str, legacy_system=legacy_system)
+            # Get POP_ID from SHEETNO using DRF_SHEET_VWS.csv (one record per SHEETNO).
+            # DRF_POP_SECTION_MAP.csv must NOT be used here: it has multiple rows per
+            # SHEETNO (one per section type), so the same SHEETNO can resolve to
+            # several different POP_IDs and the last one wins—producing wrong results.
+            pop_id = dm_mappings.get_pop_id_for_sheetno_from_vws(sheetno_str, legacy_system=legacy_system)
             if not pop_id:
                 return _result(None)
 
@@ -2926,8 +2929,8 @@ def occurrence_number_from_pop_id_factory(legacy_system: str = "TPFL"):
             if sheetno_str.startswith(prefix):
                 sheetno_str = sheetno_str[len(prefix) :]
 
-            # Get POP_ID from SHEETNO using the mapping
-            pop_id = dm_mappings.get_pop_id_for_sheetno(sheetno_str, legacy_system=legacy_system)
+            # Get POP_ID from SHEETNO using DRF_SHEET_VWS.csv (one record per SHEETNO).
+            pop_id = dm_mappings.get_pop_id_for_sheetno_from_vws(sheetno_str, legacy_system=legacy_system)
             if not pop_id:
                 return _result(None)
 
@@ -2988,8 +2991,8 @@ def pop_id_from_sheetno_factory(legacy_system: str = "TPFL"):
             if sheetno_str.startswith(prefix):
                 sheetno_str = sheetno_str[len(prefix) :]
 
-            # Get POP_ID from SHEETNO using the mapping
-            pop_id = dm_mappings.get_pop_id_for_sheetno(sheetno_str, legacy_system=legacy_system)
+            # Get POP_ID from SHEETNO using DRF_SHEET_VWS.csv (one record per SHEETNO).
+            pop_id = dm_mappings.get_pop_id_for_sheetno_from_vws(sheetno_str, legacy_system=legacy_system)
             if not pop_id:
                 return _result(None)
 
