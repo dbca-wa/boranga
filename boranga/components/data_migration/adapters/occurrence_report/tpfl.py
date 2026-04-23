@@ -531,9 +531,11 @@ def ocr_fire_history_comment_transform(value, ctx):
         return _result("")
 
     parts = []
-    # value is FIRE_SEASON (mapped to OCRFireHistory__comment)
+    # value is FIRE_SEASON (mapped to OCRFireHistory__comment) — apply lookup transform
     if value and str(value).strip():
-        parts.append(str(value).strip())
+        season_result = FIRE_SEASON_TRANSFORM(str(value).strip(), ctx)
+        season_canonical = season_result.value if season_result is not None else None
+        parts.append(str(season_canonical).strip() if season_canonical else str(value).strip())
 
     # FIRE_YEAR is mapped to itself in schema, so it should be in row
     year = row.get("FIRE_YEAR")
@@ -542,6 +544,12 @@ def ocr_fire_history_comment_transform(value, ctx):
 
     return _result(" ".join(parts))
 
+
+FIRE_SEASON_TRANSFORM = build_legacy_map_transform(
+    "TPFL",
+    "FIRE_SEASON (DRF_LOV_SEASONS_VWS)",
+    required=False,
+)
 
 FIRE_INTENSITY_TRANSFORM = build_legacy_map_transform(
     "TPFL",
