@@ -208,57 +208,41 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                 if taxonomy:
                     taxonomy_ids_needed.add(taxonomy.pk)  # Use taxonomy.pk (the id field)
 
-            # Step 3: Load existing AssociatedSpeciesTaxonomy rows (following occurrence_reports.py pattern)
-            # Only care about taxonomy_id matching; comments and species_role are not unique constraints
-            ast_qs = AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=list(taxonomy_ids_needed))
+            # Step 3 & 4: Always create fresh AssociatedSpeciesTaxonomy rows — never reuse existing ones.
+            # AST rows contain parent-specific data (comments, species_role) so sharing them across
+            # different parent records causes cross-contamination.
             taxid_to_ast = {}
-            for ast in ast_qs:
-                # Per occurrence_reports.py: take first if multiple exist for same taxonomy
-                if ast.taxonomy_id not in taxid_to_ast:
-                    taxid_to_ast[ast.taxonomy_id] = ast
 
-            # Step 4: Create missing AssociatedSpeciesTaxonomy rows
-            missing_tax_ids = taxonomy_ids_needed - set(taxid_to_ast.keys())
-
-            if missing_tax_ids:
-                create_objs = [AssociatedSpeciesTaxonomy(taxonomy_id=tid) for tid in missing_tax_ids]
+            if taxonomy_ids_needed:
+                create_objs = [AssociatedSpeciesTaxonomy(taxonomy_id=tid) for tid in taxonomy_ids_needed]
 
                 try:
-                    with transaction.atomic():
-                        # We have pre-filtered existing IDs, so collisions shouldn't happen unless race condition.
-                        # Try normal bulk_create first to catch errors.
-                        created = AssociatedSpeciesTaxonomy.objects.bulk_create(create_objs, batch_size=500)
-                        logger.info(f"Bulk created {len(created)} new AssociatedSpeciesTaxonomy records.")
-                        stats["ast_created"] = len(created)
+                    created = AssociatedSpeciesTaxonomy.objects.bulk_create(create_objs, batch_size=500)
+                    logger.info(f"Bulk created {len(created)} new AssociatedSpeciesTaxonomy records.")
+                    stats["ast_created"] = len(created)
+                    # Django 4.1+ on Postgres sets PKs on returned instances directly.
+                    for ast in created:
+                        if ast.pk and ast.taxonomy_id not in taxid_to_ast:
+                            taxid_to_ast[ast.taxonomy_id] = ast
+                    # Fallback: fetch back any that didn't get their PK set.
+                    unfetched = taxonomy_ids_needed - set(taxid_to_ast.keys())
+                    if unfetched:
+                        for ast in AssociatedSpeciesTaxonomy.objects.filter(
+                            taxonomy_id__in=list(unfetched), species_role__isnull=True
+                        ).order_by("-pk"):
+                            if ast.taxonomy_id not in taxid_to_ast:
+                                taxid_to_ast[ast.taxonomy_id] = ast
                 except Exception as e:
-                    logger.error(f"Bulk create failed: {e}. Falling back to safe individual creation.")
+                    logger.error(f"Bulk create failed: {e}. Falling back to individual creation.")
                     created_count = 0
-                    for tid in missing_tax_ids:
-                        # Use get_or_create to handle potential races/duplicates gracefully
+                    for tid in taxonomy_ids_needed:
                         try:
-                            AssociatedSpeciesTaxonomy.objects.get_or_create(taxonomy_id=tid)
+                            ast = AssociatedSpeciesTaxonomy.objects.create(taxonomy_id=tid)
+                            taxid_to_ast[ast.taxonomy_id] = ast
                             created_count += 1
                         except Exception as inner_e:
-                            logger.error(
-                                f"Failed to get_or_create AssociatedSpeciesTaxonomy for taxonomy_id={tid}: {inner_e}"
-                            )
+                            logger.error(f"Failed to create AssociatedSpeciesTaxonomy for taxonomy_id={tid}: {inner_e}")
                     stats["ast_created"] = created_count
-
-                # Refresh to get PKs for all records (both created and existing)
-                for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=list(missing_tax_ids)):
-                    if ast.taxonomy_id not in taxid_to_ast:
-                        taxid_to_ast[ast.taxonomy_id] = ast
-
-                # Validation check
-                still_missing = missing_tax_ids - set(taxid_to_ast.keys())
-                if still_missing:
-                    logger.error(
-                        f"Critical: The following taxonomy_ids are still missing from AssociatedSpeciesTaxonomy after creation: {still_missing}"
-                    )
-                    # Force check specific problem ID
-                    if 147457 in still_missing:
-                        exists = AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id=147457).exists()
-                        logger.error(f"DEBUG: Explicit check for 147457.exists() -> {exists}")
 
             # Step 5: Build many-to-many relationships
             # Group ASTs by OCRAssociatedSpecies to minimize queries
