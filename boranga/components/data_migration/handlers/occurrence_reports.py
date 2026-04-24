@@ -706,6 +706,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if defaults.get("datetime_updated") is None and defaults.get("datetime_created") is not None:
                 defaults["datetime_updated"] = defaults["datetime_created"]
 
+            # If last_modified_by is not set (MODIFIED_BY was blank), fall back to
+            # submitter (from CREATED_BY) so the field is never left empty.
+            if defaults.get("last_modified_by") is None and defaults.get("submitter") is not None:
+                defaults["last_modified_by"] = defaults["submitter"]
+
             # If transforms produced None for fields that have model defaults
             # (for example CharFields with default=''), prefer the model's
             # default value. This keeps transforms simple (they can return
@@ -1581,14 +1586,39 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # into the OCR records.
             tax_ids = {t.pk for t in name_to_tax.values()}
 
-            # Targeted wipe: clear existing M2M links for the current run's target OCRs,
-            # then delete any AST rows that become fully orphaned (not referenced by any
-            # OCRAssociatedSpecies or OCCAssociatedSpecies M2M).  This ensures each source
-            # run produces fresh AST records and that no stale rows from a prior run for a
-            # different source can be silently reused.
+            # Orphan cleanup (two-phase):
+            #
+            # Phase 1 — global: delete all AssociatedSpeciesTaxonomy rows that have no
+            # through-table link to any OCRAssociatedSpecies or OCCAssociatedSpecies.  This
+            # handles the --wipe-targets case where Django cascade-deletes OCRAssociatedSpecies
+            # (and therefore through-table rows) when OCRs are wiped, leaving ASTs dangling
+            # before this handler even runs.  In that situation _ocr_assoc_pks below is
+            # empty and the targeted wipe is a no-op, so without this phase those orphans
+            # accumulate across runs.
+            #
+            # Phase 2 — targeted: unlink ASTs that are still attached to the current run's
+            # OCRAssociatedSpecies rows (re-run without --wipe-targets), then delete any that
+            # become fully unreferenced.  This prevents duplicate AST rows accumulating when
+            # the same OCR is processed more than once without wiping.
             if not ctx.dry_run:
+                from django.db.models import Exists, OuterRef
+
                 _ocr_through = OCRAssociatedSpecies.related_species.through
                 _occ_through = OCCAssociatedSpecies.related_species.through
+
+                # Phase 1: global orphan sweep
+                _global_orphans_qs = AssociatedSpeciesTaxonomy.objects.filter(
+                    ~Exists(_ocr_through.objects.filter(associatedspeciestaxonomy_id=OuterRef("pk"))),
+                    ~Exists(_occ_through.objects.filter(associatedspeciestaxonomy_id=OuterRef("pk"))),
+                )
+                _global_del_count, _ = _global_orphans_qs.delete()
+                if _global_del_count:
+                    logger.info(
+                        "OccurrenceReportImporter [TPFL]: deleted %d globally orphaned AssociatedSpeciesTaxonomy rows",
+                        _global_del_count,
+                    )
+
+                # Phase 2: targeted wipe for OCRs that already have linked ASTs
                 _ocr_assoc_pks = list(
                     OCRAssociatedSpecies.objects.filter(occurrence_report__in=target_occs).values_list("pk", flat=True)
                 )
@@ -1620,38 +1650,37 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 _del_count,
                             )
 
-            ast_qs = AssociatedSpeciesTaxonomy.objects.filter(taxonomy__in=list(tax_ids), species_role__isnull=True)
-            # Map taxonomy_id -> AssociatedSpeciesTaxonomy (take first if multiple)
+            # Always create fresh AST rows for this run — never reuse existing ones.
+            # AST rows contain parent-specific data (comments, species_role) so sharing
+            # them across different parent records causes cross-contamination.
             taxid_to_ast = {}
-            for ast in ast_qs:
-                if ast.taxonomy_id not in taxid_to_ast:
-                    taxid_to_ast[ast.taxonomy_id] = ast
-            # Create missing AST rows for taxonomy ids that have none
-            missing_tax_ids = tax_ids - set(taxid_to_ast.keys())
-            if missing_tax_ids:
-                # Create missing AssociatedSpeciesTaxonomy rows in bulk to
-                # avoid per-id DB roundtrips. Fall back to individual creates
-                # if bulk_create fails for any reason.
+            if not ctx.dry_run and tax_ids:
                 try:
-                    create_objs = [AssociatedSpeciesTaxonomy(taxonomy_id=tid) for tid in missing_tax_ids]
-                    AssociatedSpeciesTaxonomy.objects.bulk_create(create_objs, batch_size=BATCH)
-                    # Refresh created rows to ensure we have their PKs
-                    for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=list(missing_tax_ids)):
-                        if ast.taxonomy_id not in taxid_to_ast:
+                    create_objs = [AssociatedSpeciesTaxonomy(taxonomy_id=tid) for tid in tax_ids]
+                    created_objs = AssociatedSpeciesTaxonomy.objects.bulk_create(create_objs, batch_size=BATCH)
+                    # Django 4.1+ on Postgres sets PKs on the returned instances directly.
+                    for ast in created_objs:
+                        if ast.pk and ast.taxonomy_id not in taxid_to_ast:
                             taxid_to_ast[ast.taxonomy_id] = ast
+                    # Fallback: fetch back any that didn't get their PK set.
+                    unfetched = tax_ids - set(taxid_to_ast.keys())
+                    if unfetched:
+                        for ast in AssociatedSpeciesTaxonomy.objects.filter(
+                            taxonomy_id__in=list(unfetched), species_role__isnull=True
+                        ).order_by("-pk"):
+                            if ast.taxonomy_id not in taxid_to_ast:
+                                taxid_to_ast[ast.taxonomy_id] = ast
                 except Exception:
                     logger.exception("Bulk create failed for AssociatedSpeciesTaxonomy; trying individual creates")
-                    created_asts = []
-                    for tid in missing_tax_ids:
+                    for tid in tax_ids:
                         try:
-                            created_asts.append(AssociatedSpeciesTaxonomy.objects.create(taxonomy_id=tid))
+                            ast = AssociatedSpeciesTaxonomy.objects.create(taxonomy_id=tid)
+                            taxid_to_ast[ast.taxonomy_id] = ast
                         except Exception:
                             logger.exception(
                                 "Failed to create AssociatedSpeciesTaxonomy for taxonomy_id %s",
                                 tid,
                             )
-                    for ast in created_asts:
-                        taxid_to_ast[ast.taxonomy_id] = ast
 
             # Build final name -> ast mapping
             name_to_assoc: dict[str, AssociatedSpeciesTaxonomy] = {}
@@ -1788,13 +1817,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     return v.value
                 return v
 
-            # DEBUG: Check what we're working with
-            tec_site_in_target = sum(1 for k in target_map if k.startswith("tec-site-"))
-            tec_site_in_op = sum(1 for k in op_map if k.startswith("tec-site-"))
-            logger.info(
-                f"DEBUG Update: target_map={len(target_map)}, existing_assoc={len(existing_assoc)}, op_map={len(op_map)}, tec-site in target={tec_site_in_target}, tec-site in op={tec_site_in_op}"
-            )
-
             for sheetno, ocr in target_map.items():
                 if ocr.pk not in existing_assoc:
                     continue
@@ -1808,12 +1830,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     species_list_relates_to_id = extract_value(
                         merged.get("OCRAssociatedSpecies__species_list_relates_to")
                     )
-
-                    # DEBUG: Log what we found
-                    if sheetno.startswith("tec-site-") and species_list_relates_to_id:
-                        logger.info(
-                            f"DEBUG: Found species_list_relates_to_id={species_list_relates_to_id} for {sheetno}"
-                        )
 
                     if comment and assoc.comment != comment:
                         assoc.comment = comment
@@ -2243,13 +2259,29 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 }
 
             # 4. Create AssociatedSpeciesTaxonomy and links.
-            # Targeted wipe first: clear existing M2M links for these TEC OCRs and delete
-            # any AST rows that become fully orphaned.  Without this, re-runs accumulate
-            # duplicate AST rows because the block below always bulk-creates fresh instances
-            # without checking for existing ones.
+            # Orphan cleanup (two-phase) — same rationale as the TPFL block above:
+            # Phase 1 deletes globally unreferenced ASTs (handles --wipe-targets cascade);
+            # Phase 2 unlinks ASTs still attached to these TEC OCRs (prevents duplicates
+            # on re-runs without --wipe-targets).
             if not ctx.dry_run:
+                from django.db.models import Exists, OuterRef
+
                 _ocr_through = OCRAssociatedSpecies.related_species.through
                 _occ_through = OCCAssociatedSpecies.related_species.through
+
+                # Phase 1: global orphan sweep
+                _global_orphans_qs = AssociatedSpeciesTaxonomy.objects.filter(
+                    ~Exists(_ocr_through.objects.filter(associatedspeciestaxonomy_id=OuterRef("pk"))),
+                    ~Exists(_occ_through.objects.filter(associatedspeciestaxonomy_id=OuterRef("pk"))),
+                )
+                _global_del_count, _ = _global_orphans_qs.delete()
+                if _global_del_count:
+                    logger.info(
+                        "OccurrenceReportImporter [TEC]: deleted %d globally orphaned AssociatedSpeciesTaxonomy rows",
+                        _global_del_count,
+                    )
+
+                # Phase 2: targeted wipe for TEC OCRs that already have linked ASTs
                 _tec_assoc_pks = [a.pk for a in existing_assocs.values()]
                 if _tec_assoc_pks:
                     _prev_ast_pks = set(
