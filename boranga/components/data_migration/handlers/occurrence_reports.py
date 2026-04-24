@@ -706,6 +706,11 @@ class OccurrenceReportImporter(BaseSheetImporter):
             if defaults.get("datetime_updated") is None and defaults.get("datetime_created") is not None:
                 defaults["datetime_updated"] = defaults["datetime_created"]
 
+            # If last_modified_by is not set (MODIFIED_BY was blank), fall back to
+            # submitter (from CREATED_BY) so the field is never left empty.
+            if defaults.get("last_modified_by") is None and defaults.get("submitter") is not None:
+                defaults["last_modified_by"] = defaults["submitter"]
+
             # If transforms produced None for fields that have model defaults
             # (for example CharFields with default=''), prefer the model's
             # default value. This keeps transforms simple (they can return
