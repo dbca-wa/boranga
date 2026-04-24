@@ -9,6 +9,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from boranga.components.data_migration.adapters.occurrence import (  # shared canonical schema
@@ -55,6 +56,7 @@ from boranga.components.occurrence.models import (
     OccurrenceSite,
     OccurrenceUserAction,
     OCCVegetationStructure,
+    OCRAssociatedSpecies,
     SpeciesRole,
 )
 from boranga.components.species_and_communities.models import District, Taxonomy
@@ -1711,14 +1713,38 @@ class OccurrenceImporter(BaseSheetImporter):
                 tax_map = {t.taxon_name_id: t for t in Taxonomy.objects.filter(taxon_name_id__in=needed_taxa)}
                 role_map = {r.name: r for r in SpeciesRole.objects.filter(name__in=needed_roles)}
 
-                relevant_tax_ids = [t.id for t in tax_map.values()]
+                _ocr_through = OCRAssociatedSpecies.related_species.through
+                _occ_through = OCCAssociatedSpecies.related_species.through
 
-                existing_asts = defaultdict(list)
-                for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=relevant_tax_ids):
-                    # Key by (taxonomy, role, comments) to preserve distinct voucher values
-                    existing_asts[(ast.taxonomy_id, ast.species_role_id, ast.comments)].append(ast)
+                if not ctx.dry_run:
+                    # Phase 1: Global orphan sweep — delete ASTs not referenced by any OCR or OCC.
+                    # This handles the --wipe-targets cascade where OCCs are deleted before this point.
+                    AssociatedSpeciesTaxonomy.objects.filter(
+                        ~Exists(_occ_through.objects.filter(associatedspeciestaxonomy_id=OuterRef("pk"))),
+                        ~Exists(_ocr_through.objects.filter(associatedspeciestaxonomy_id=OuterRef("pk"))),
+                    ).delete()
 
-                missing_keys = set()
+                    # Phase 2: Targeted wipe — for OCCs being re-processed without --wipe-targets,
+                    # clear their existing through-table links and delete any newly-orphaned ASTs.
+                    if not getattr(ctx, "wipe_targets", False) and existing_assoc:
+                        _occ_assoc_ids_to_wipe = [a.id for a in existing_assoc.values()]
+                        _ast_ids_to_check = set(
+                            _occ_through.objects.filter(occassociatedspecies_id__in=_occ_assoc_ids_to_wipe).values_list(
+                                "associatedspeciestaxonomy_id", flat=True
+                            )
+                        )
+                        _occ_through.objects.filter(occassociatedspecies_id__in=_occ_assoc_ids_to_wipe).delete()
+                        if _ast_ids_to_check:
+                            AssociatedSpeciesTaxonomy.objects.filter(
+                                pk__in=_ast_ids_to_check,
+                            ).filter(
+                                ~Exists(_occ_through.objects.filter(associatedspeciestaxonomy_id=OuterRef("pk"))),
+                                ~Exists(_ocr_through.objects.filter(associatedspeciestaxonomy_id=OuterRef("pk"))),
+                            ).delete()
+
+                # Collect unique (taxonomy_id, role_id, voucher) combos and valid ops.
+                needed_combos = set()
+                valid_species_ops = []
                 for occ_pk, taxon_id, role_name, voucher, mig in species_ops:
                     tax = tax_map.get(taxon_id)
                     if not tax:
@@ -1736,63 +1762,83 @@ class OccurrenceImporter(BaseSheetImporter):
                         continue
                     role = role_map.get(role_name)
                     role_id = role.id if role else None
-                    # Key by (taxonomy, role, voucher) to preserve distinct voucher values
                     voucher_normalized = str(voucher).strip() if voucher else ""
-                    key = (tax.id, role_id, voucher_normalized)
-                    if not existing_asts.get(key):
-                        missing_keys.add(key)
+                    needed_combos.add((tax.id, role_id, voucher_normalized))
+                    valid_species_ops.append((occ_pk, tax.id, role_id, voucher_normalized))
 
-                if missing_keys:
-                    new_asts = [
+                # Always create fresh AssociatedSpeciesTaxonomy rows — never reuse existing ones.
+                # AST rows contain parent-specific data (role, voucher/comments) so sharing them
+                # across different parent records causes cross-contamination.
+                ast_lookup = {}  # (taxonomy_id, role_id, voucher) -> AST instance
+                if not ctx.dry_run and needed_combos:
+                    create_objs = [
                         AssociatedSpeciesTaxonomy(
                             taxonomy_id=tid,
                             species_role_id=rid,
                             comments=voucher,
                         )
-                        for tid, rid, voucher in missing_keys
+                        for tid, rid, voucher in needed_combos
                     ]
-                    AssociatedSpeciesTaxonomy.objects.bulk_create(new_asts, batch_size=BATCH)
-
-                    existing_asts = defaultdict(list)
-                    for ast in AssociatedSpeciesTaxonomy.objects.filter(taxonomy_id__in=relevant_tax_ids):
-                        existing_asts[(ast.taxonomy_id, ast.species_role_id, ast.comments)].append(ast)
+                    try:
+                        created_asts = AssociatedSpeciesTaxonomy.objects.bulk_create(create_objs, batch_size=BATCH)
+                        # Django 4.1+ on Postgres sets PKs on returned instances directly.
+                        for ast in created_asts:
+                            if ast.pk:
+                                key = (ast.taxonomy_id, ast.species_role_id, ast.comments or "")
+                                if key not in ast_lookup:
+                                    ast_lookup[key] = ast
+                        # Fallback: fetch back any that didn't get their PK set.
+                        unfetched = needed_combos - {
+                            (ast.taxonomy_id, ast.species_role_id, ast.comments or "") for ast in ast_lookup.values()
+                        }
+                        if unfetched:
+                            tax_ids_needed = {tid for tid, rid, v in unfetched}
+                            for ast in AssociatedSpeciesTaxonomy.objects.filter(
+                                taxonomy_id__in=list(tax_ids_needed)
+                            ).order_by("-pk"):
+                                key = (ast.taxonomy_id, ast.species_role_id, ast.comments or "")
+                                if key in unfetched and key not in ast_lookup:
+                                    ast_lookup[key] = ast
+                    except Exception:
+                        logger.exception("Bulk create failed for AssociatedSpeciesTaxonomy; trying individual creates")
+                        for tid, rid, voucher in needed_combos:
+                            try:
+                                ast = AssociatedSpeciesTaxonomy.objects.create(
+                                    taxonomy_id=tid,
+                                    species_role_id=rid,
+                                    comments=voucher,
+                                )
+                                ast_lookup[(ast.taxonomy_id, ast.species_role_id, ast.comments or "")] = ast
+                            except Exception:
+                                logger.exception(
+                                    "Failed to create AssociatedSpeciesTaxonomy for "
+                                    "(taxonomy_id=%s, role=%s, voucher=%s)",
+                                    tid,
+                                    rid,
+                                    voucher,
+                                )
 
                 occ_assoc_ids = [a.id for a in existing_assoc.values()]
                 if occ_assoc_ids:
                     through_model = OCCAssociatedSpecies.related_species.through
-                    existing_links = set()
-                    if not getattr(ctx, "wipe_targets", False):
-                        existing_links = set(
-                            through_model.objects.filter(occassociatedspecies_id__in=occ_assoc_ids).values_list(
-                                "occassociatedspecies_id",
-                                "associatedspeciestaxonomy_id",
-                            )
-                        )
-
                     through_objs = []
-                    for occ_pk, taxon_id, role_name, voucher, mig in species_ops:
-                        tax = tax_map.get(taxon_id)
-                        if not tax:
+                    seen_links = set()
+                    for occ_pk, tax_id, role_id, voucher_normalized in valid_species_ops:
+                        key = (tax_id, role_id, voucher_normalized)
+                        ast = ast_lookup.get(key)
+                        if not ast:
                             continue
-                        role = role_map.get(role_name)
-                        role_id = role.id if role else None
-                        voucher_normalized = str(voucher).strip() if voucher else ""
-
-                        asts = existing_asts.get((tax.id, role_id, voucher_normalized))
-                        if not asts:
-                            continue
-                        ast = asts[0]
-
                         occ_assoc = existing_assoc.get(occ_pk)
                         if occ_assoc:
-                            if (occ_assoc.id, ast.id) not in existing_links:
+                            link = (occ_assoc.id, ast.id)
+                            if link not in seen_links:
                                 through_objs.append(
                                     through_model(
                                         occassociatedspecies_id=occ_assoc.id,
                                         associatedspeciestaxonomy_id=ast.id,
                                     )
                                 )
-                                existing_links.add((occ_assoc.id, ast.id))
+                                seen_links.add(link)
 
                     if through_objs:
                         through_model.objects.bulk_create(through_objs, batch_size=BATCH)
