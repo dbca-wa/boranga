@@ -541,13 +541,15 @@ class OccurrenceImporter(BaseSheetImporter):
 
             defaults = occ_row.to_model_defaults()
 
-            # Apply model defaults (handles None -> "" for non-nullable text fields, etc.)
-            apply_model_defaults(Occurrence, defaults)
-
             # If MODIFIED_DATE was blank, fall back to datetime_created so we
             # don't store the migration run time as the last-modified date.
+            # This must happen before apply_model_defaults, which would otherwise
+            # replace the None with timezone.now() (the field's Python default).
             if defaults.get("datetime_updated") is None and defaults.get("datetime_created") is not None:
                 defaults["datetime_updated"] = defaults["datetime_created"]
+
+            # Apply model defaults (handles None -> "" for non-nullable text fields, etc.)
+            apply_model_defaults(Occurrence, defaults)
 
             # If dry-run, log planned defaults and skip adding to ops so no DB work
             if ctx.dry_run:
