@@ -323,6 +323,7 @@ class MigratedHistorySeeder:
             OccurrenceReport.objects.filter(migrated_from_id__isnull=False)
             .exclude(migrated_from_id="")
             .select_related(
+                "location",
                 "habitat_composition",
                 "habitat_condition",
                 "vegetation_structure",
@@ -335,6 +336,7 @@ class MigratedHistorySeeder:
             )
         )
         follow_names = [
+            "location",
             "habitat_composition",
             "habitat_condition",
             "vegetation_structure",
@@ -407,6 +409,7 @@ class MigratedHistorySeeder:
             Occurrence.objects.filter(migrated_from_id__isnull=False)
             .exclude(migrated_from_id="")
             .select_related(
+                "location",
                 "habitat_composition",
                 "habitat_condition",
                 "vegetation_structure",
@@ -419,6 +422,7 @@ class MigratedHistorySeeder:
             )
         )
         follow_names = [
+            "location",
             "habitat_composition",
             "habitat_condition",
             "vegetation_structure",

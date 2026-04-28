@@ -5215,21 +5215,16 @@ class OccurrenceTenurePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         if occurrence_id:
             queryset = self.current_and_historical_tenures(queryset, occurrence_id)
 
+        results = []
         if search_term:
-            feature_id = models.Func(
-                models.F("tenure_area_id"),
-                Value("([0-9]+$)"),
-                function="substring",
-                output=models.TextField(),
-            )
-            queryset = queryset.annotate(feature_id=feature_id)
-
             queryset = (
-                queryset.filter(feature_id__icontains=search_term)
+                queryset.filter(cad_pin__icontains=search_term)
+                .exclude(cad_pin=None)
+                .exclude(cad_pin="")
                 .distinct()
-                .values("tenure_area_id", "feature_id")[:10]
+                .values("tenure_area_id", "cad_pin")[:10]
             )
-            results = [{"id": row["tenure_area_id"], "text": row["feature_id"]} for row in queryset]
+            results = [{"id": row["tenure_area_id"], "text": row["cad_pin"]} for row in queryset]
 
         return Response({"results": results})
 

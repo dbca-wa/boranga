@@ -280,7 +280,7 @@ export async function queryLayerAtPoint(map_component, layer, coordinate) {
         return;
     }
 
-    _helper.validateFeatureQuery(query_str).then(async (features) => {
+    return _helper.validateFeatureQuery(query_str).then(async (features) => {
         if (features.length === 0) {
             console.warn('No features found at this location.');
             map_component.overlay(undefined);
