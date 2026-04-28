@@ -173,7 +173,9 @@ class CadastreLayer(models.Model):
     geom = gis_models.GeometryField(srid=settings.DEFAULT_SRID, null=True)
 
     cad_pin = models.IntegerField(null=True, blank=True)
-    cad_owner_name = models.CharField(max_length=512, null=True, blank=True)
+    # cad_owner_name is not yet available in all KB cadastre layer versions.
+    # Add the field back here (and in the local feature-building in spatial/utils.py)
+    # once it is confirmed present in the prod layer.
     cad_owner_count = models.IntegerField(null=True, blank=True)
 
     class Meta:

@@ -229,7 +229,9 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
                         "id": feature_id,
                         "type": "Feature",
                         "properties": {
-                            "CAD_OWNER_NAME": getattr(row, "cad_owner_name", None),
+                            # CAD_OWNER_NAME is not yet present in the prod KB cadastre layer.
+                            # Restore this once confirmed available in prod.
+                            "CAD_OWNER_NAME": None,
                             "CAD_OWNER_COUNT": getattr(row, "cad_owner_count", None),
                             "CAD_PIN": str(row.cad_pin) if getattr(row, "cad_pin", None) is not None else None,
                         },
