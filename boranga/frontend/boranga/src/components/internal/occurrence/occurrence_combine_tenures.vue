@@ -40,7 +40,7 @@ export default {
             checkedTenureNames: [],
             tenures_headers: [
                 'Occurrence',
-                'Feature Id',
+                'CAD PIN',
                 'Status',
                 'Vesting',
                 'Purpose',
@@ -76,7 +76,7 @@ export default {
                         searchable: true,
                     },
                     {
-                        data: 'featureid',
+                        data: 'cad_pin',
                         orderable: true,
                         searchable: true,
                     },
@@ -118,19 +118,19 @@ export default {
                         mRender: function (data, type, full) {
                             if (vm.combineTenureIds.includes(full.id)) {
                                 if (full.occurrence_id == vm.mainOccurrenceId) {
-                                    return `<input id='${full.id}' data-tenure-checkbox='${full.id}' tenure-feature-id='${full.featureid}' tenure-status='${full.status_display}' type='checkbox' checked disabled/>`;
+                                    return `<input id='${full.id}' data-tenure-checkbox='${full.id}' tenure-feature-id='${full.cad_pin || full.featureid}' tenure-status='${full.status_display}' type='checkbox' checked disabled/>`;
                                 } else {
-                                    return `<input id='${full.id}' data-tenure-checkbox='${full.id}' tenure-feature-id='${full.featureid}' tenure-status='${full.status_display}' type='checkbox' checked/>`;
+                                    return `<input id='${full.id}' data-tenure-checkbox='${full.id}' tenure-feature-id='${full.cad_pin || full.featureid}' tenure-status='${full.status_display}' type='checkbox' checked/>`;
                                 }
                             } else {
                                 if (
                                     vm.checkedTenureNames.includes(
-                                        full.featureid
+                                        full.cad_pin || full.featureid
                                     )
                                 ) {
-                                    return `<input id='${full.id}' data-tenure-checkbox='${full.id}' tenure-feature-id='${full.featureid}' tenure-status='${full.status_display}' type='checkbox' disabled/>`;
+                                    return `<input id='${full.id}' data-tenure-checkbox='${full.id}' tenure-feature-id='${full.cad_pin || full.featureid}' tenure-status='${full.status_display}' type='checkbox' disabled/>`;
                                 } else {
-                                    return `<input id='${full.id}' data-tenure-checkbox='${full.id}' tenure-feature-id='${full.featureid}' tenure-status='${full.status_display}' type='checkbox'/>`;
+                                    return `<input id='${full.id}' data-tenure-checkbox='${full.id}' tenure-feature-id='${full.cad_pin || full.featureid}' tenure-status='${full.status_display}' type='checkbox'/>`;
                                 }
                             }
                         },
@@ -167,9 +167,9 @@ export default {
             vm.selectedTenures.forEach((tenure) => {
                 if (
                     vm.combineTenureIds.includes(tenure.id) &&
-                    !names.includes(tenure.featureid)
+                    !names.includes(tenure.cad_pin || tenure.featureid)
                 ) {
-                    names.push(tenure.featureid);
+                    names.push(tenure.cad_pin || tenure.featureid);
                 }
             });
             vm.checkedTenureNames = names;

@@ -1567,10 +1567,13 @@ export default {
                             ) &&
                             tenure.status_display == 'Current'
                         ) {
-                            taken_feature_ids.push(tenure.featureid);
+                            taken_feature_ids.push(
+                                tenure.cad_pin || tenure.featureid
+                            );
                         }
                         if (tenure.status_display == 'Current') {
-                            tenure_feature_ids[tenure.id] = tenure.featureid;
+                            tenure_feature_ids[tenure.id] =
+                                tenure.cad_pin || tenure.featureid;
                         }
                     });
 

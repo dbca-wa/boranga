@@ -10,7 +10,7 @@
                 <div class="col-md-3">
                     <div class="form-group">
                         <label for="occurrence_tenure_feature_id_lookup"
-                            >Feature ID:</label
+                            >CAD PIN:</label
                         >
                         <select
                             id="occurrence_tenure_feature_id_lookup"
@@ -155,7 +155,7 @@ export default {
                 api_endpoints.occurrence_tenure_paginated_internal,
             occ_tenure_url: api_endpoints.occurrence_tenure,
             headers: [
-                'Feature ID',
+                'CAD PIN',
                 'Status',
                 'Vesting',
                 'Purpose',
@@ -200,7 +200,7 @@ export default {
                 searchable: true,
                 visible: true,
                 render: function (data, type, row) {
-                    return row.featureid;
+                    return row.cad_pin || row.featureid;
                 },
             };
         },

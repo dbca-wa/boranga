@@ -1362,6 +1362,7 @@
                     <template v-if="overlayFeatureInfo">
                         <div class="toast-header">
                             <strong class="me-auto">{{
+                                overlayFeatureInfo.CAD_PIN ||
                                 overlayFeatureInfo.featureId
                             }}</strong>
                             <button

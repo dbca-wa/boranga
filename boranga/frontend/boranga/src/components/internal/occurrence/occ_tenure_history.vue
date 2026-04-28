@@ -86,7 +86,7 @@ export default {
                 'Number',
                 'Date Modified',
                 'Modified By',
-                'Feature ID',
+                'CAD PIN',
                 'Status',
                 'Vesting',
                 'Purpose',
@@ -194,26 +194,25 @@ export default {
         },
         column_feature_id: function () {
             return {
-                data: 'data.data.occurrencetenure.fields.tenure_area_id',
+                data: 'data.data.occurrencetenure.fields.cad_pin',
                 defaultContent: '',
                 orderable: true,
                 searchable: true,
                 visible: true,
                 render: function (row, type, full) {
-                    if (
-                        full.data.occurrencetenure.fields.tenure_area_id &&
-                        full.data.occurrencetenure.fields.tenure_area_id.split(
-                            '.'
-                        ).length > 1
-                    ) {
-                        return full.data.occurrencetenure.fields.tenure_area_id.split(
-                            '.'
-                        )[1];
-                    } else {
-                        return '';
+                    const cad_pin = full.data.occurrencetenure.fields.cad_pin;
+                    if (cad_pin) {
+                        return cad_pin;
                     }
+                    // fallback to numeric part of tenure_area_id
+                    const taid =
+                        full.data.occurrencetenure.fields.tenure_area_id;
+                    if (taid && taid.split('.').length > 1) {
+                        return taid.split('.')[1];
+                    }
+                    return '';
                 },
-                name: 'feature_id', //_name',
+                name: 'feature_id',
             };
         },
         column_status: function () {

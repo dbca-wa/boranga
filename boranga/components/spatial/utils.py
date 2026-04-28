@@ -296,6 +296,9 @@ def populate_occurrence_tenure_data(geometry_instance, features, request, skip_r
         feature_id = feature.get("id", None)
         owner_name = feature.get("properties", {}).get("CAD_OWNER_NAME", None)
         owner_count = feature.get("properties", {}).get("CAD_OWNER_COUNT", None)
+        cad_pin = feature.get("properties", {}).get("CAD_PIN", None)
+        if cad_pin is not None:
+            cad_pin = str(cad_pin)
         tenure_area_ewkb = feature_json_to_geosgeometry(feature).ewkb
 
         if not feature_id:
@@ -310,6 +313,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request, skip_r
                 occurrence_tenure = OccurrenceTenure(
                     occurrence_geometry=geometry_instance,
                     tenure_area_id=feature_id,
+                    cad_pin=cad_pin,
                     owner_name=owner_name,
                     owner_count=owner_count,
                     tenure_area_ewkb=tenure_area_ewkb,
@@ -337,6 +341,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request, skip_r
                 occurrence_tenure = occurrence_tenures_current.first()
                 occurrence_tenure.owner_name = owner_name
                 occurrence_tenure.owner_count = owner_count
+                occurrence_tenure.cad_pin = cad_pin
                 occurrence_tenure.tenure_area_ewkb = tenure_area_ewkb
                 occurrence_tenure.save(no_revision=skip_revision, version_user=request.user)
             else:
@@ -346,6 +351,7 @@ def populate_occurrence_tenure_data(geometry_instance, features, request, skip_r
                 occurrence_tenure = OccurrenceTenure(
                     occurrence_geometry=geometry_instance,
                     tenure_area_id=feature_id,
+                    cad_pin=cad_pin,
                     owner_name=owner_name,
                     owner_count=owner_count,
                     tenure_area_ewkb=tenure_area_ewkb,

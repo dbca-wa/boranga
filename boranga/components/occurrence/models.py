@@ -5743,6 +5743,7 @@ class OccurrenceTenure(RevisionedMixin):
     historical_occurrence = models.IntegerField(blank=True, null=True)
 
     tenure_area_id = models.CharField(max_length=100, blank=True, null=True)  # E.g. CPT_CADASTRE_SCDB.314159265
+    cad_pin = models.CharField(max_length=100, blank=True, null=True)  # CAD_PIN from cadastre layer
     tenure_area_ewkb = models.BinaryField(blank=True, null=True, editable=True)
     owner_name = models.CharField(max_length=255, blank=True, null=True)
     owner_count = models.IntegerField(blank=True, null=True)

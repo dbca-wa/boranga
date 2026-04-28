@@ -564,3 +564,26 @@ class Command(BaseCommand):
             pass
 
         self.stdout.write(self.style.SUCCESS(f"Imported {url} into {schema}.{table}"))
+
+        # Backfill cad_pin on OccurrenceTenure rows that were created before the
+        # cad_pin field existed, or whose cad_pin is otherwise NULL.  The
+        # tenure_area_id is stored as "<layer>.<gid>" so we extract the numeric
+        # suffix and join against the freshly-imported cadastre table.
+        self.stdout.write("Backfilling cad_pin on OccurrenceTenure from imported cadastre...")
+        backfill_sql = f"""
+            UPDATE boranga_occurrencetenure ot
+            SET cad_pin = kc.cad_pin::text
+            FROM {schema}.{table} kc
+            WHERE ot.cad_pin IS NULL
+              AND ot.tenure_area_id IS NOT NULL
+              AND ot.tenure_area_id LIKE '%.%'
+              AND split_part(ot.tenure_area_id, '.', 2) ~ '^[0-9]+$'
+              AND split_part(ot.tenure_area_id, '.', 2)::bigint = kc.gid
+        """
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(backfill_sql)
+                updated = cursor.rowcount
+            self.stdout.write(self.style.SUCCESS(f"Backfilled cad_pin on {updated} OccurrenceTenure row(s)."))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"cad_pin backfill failed (non-fatal): {e}"))
