@@ -5185,6 +5185,11 @@ export default {
                 console.log('Adding optional layer', tileLayer);
                 vm.map.addLayer(tileLayer);
                 tileLayer.on('change:visible', function (e) {
+                    // Update optionalLayersActive since optionalLayers is markRaw
+                    // and Vue cannot deep-track visibility changes on OL objects
+                    vm.optionalLayersActive = vm.optionalLayers.some(
+                        (l) => l.values_.visible === true
+                    );
                     if (e.oldValue == false) {
                         $('#legend')
                             .find('img')
