@@ -16,6 +16,21 @@
                         <div class="col-sm-12">
                             <div class="form-group">
                                 <div class="row mb-3">
+                                    <label for="" class="col-sm-3 control-label"
+                                        >CAD PIN</label
+                                    >
+                                    <div class="col-sm-9">
+                                        <textarea
+                                            id="cad_pin"
+                                            v-model="tenureObj.cad_pin"
+                                            :disabled="true"
+                                            class="form-control"
+                                            maxlength="100"
+                                            placeholder="CAD PIN"
+                                        ></textarea>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
                                     <div class="col-sm-3">
                                         <label class="control-label pull-left"
                                             >Status</label
@@ -35,24 +50,6 @@
                                             placeholder="Status"
                                         ></textarea>
                                     </div>
-                                </div>
-                            </div>
-                            <div class="row mb-3">
-                                <label for="" class="col-sm-3 control-label"
-                                    >Tenure Area Id</label
-                                >
-                                <div class="col-sm-9">
-                                    <textarea
-                                        id="tenure_area_id"
-                                        v-model="tenureObj.tenure_area_id"
-                                        :disabled="
-                                            isReadOnly ||
-                                            isAlwaysReadOnly('tenure_area_id')
-                                        "
-                                        class="form-control"
-                                        maxlength="100"
-                                        placeholder="Tenure Area Id"
-                                    ></textarea>
                                 </div>
                             </div>
                             <div class="row mb-3">

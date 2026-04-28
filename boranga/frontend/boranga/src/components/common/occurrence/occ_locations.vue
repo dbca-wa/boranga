@@ -1045,12 +1045,15 @@ export default {
                 occurrenceReportId
             );
         },
-        highlightPointOnMap: function (coordinates) {
+        highlightPointOnMap: function (coordinates, cadPin = null) {
             if (!coordinates) {
                 console.warn('No coordinates found');
                 return;
             }
-            this.$refs.component_map.highlightPointOnTenureLayer(coordinates);
+            this.$refs.component_map.highlightPointOnTenureLayer(
+                coordinates,
+                cadPin
+            );
         },
         highlightOCROnMapLayer: function (id) {
             const feature = this.getMapFeatureById(id);

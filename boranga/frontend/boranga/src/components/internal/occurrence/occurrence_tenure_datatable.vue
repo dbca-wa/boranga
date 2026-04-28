@@ -297,7 +297,8 @@ export default {
                               row.tenure_area_point_on_surface.coordinates
                           )
                         : '';
-                    let html = `<a href="#${vm.hrefContainerId}" data-highlight-on-map-coordinates="${coordinates}">Highlight on Map</a>`;
+                    const cadPin = row.cad_pin || row.featureid || '';
+                    let html = `<a href="#${vm.hrefContainerId}" data-highlight-on-map-coordinates="${coordinates}" data-highlight-on-map-cad-pin="${cadPin}">Highlight on Map</a>`;
                     html += `<br><a href="#" data-edit-tenure-details="${data}">Edit Tenure Details</a>`;
                     html += `<br><a href='#' data-history-tenure='${data}'>History</a><br>`;
                     return html;
@@ -477,7 +478,9 @@ export default {
                     if (!coordinates) {
                         e.preventDefault();
                     }
-                    vm.highlightOnMap(coordinates);
+                    const cadPin =
+                        $(this).attr('data-highlight-on-map-cad-pin') || null;
+                    vm.highlightOnMap(coordinates, cadPin);
                 }
             );
             this.$refs.occurrence_tenure_datatable.vmDataTable.on(
@@ -505,8 +508,8 @@ export default {
                 }
             );
         },
-        highlightOnMap: function (coordinates = null) {
-            this.$emit('highlight-on-map', JSON.parse(coordinates));
+        highlightOnMap: function (coordinates = null, cadPin = null) {
+            this.$emit('highlight-on-map', JSON.parse(coordinates), cadPin);
         },
         editTenureDetails: function (id) {
             let vm = this;

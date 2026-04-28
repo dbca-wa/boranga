@@ -92,7 +92,7 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
         "maxFeatures": "5000",
         "srsName": f"EPSG:{settings.DEFAULT_SRID}",
         "outputFormat": "application/json",
-        "propertyName": f"{geometry_name},CAD_OWNER_NAME,CAD_OWNER_COUNT",
+        "propertyName": f"{geometry_name},CAD_OWNER_NAME,CAD_OWNER_COUNT,CAD_PIN",
         "resultType": result_type,
         "CQL_FILTER": f"INTERSECTS({geometry_name}, {test_geom_wkt})",
     }
@@ -231,6 +231,7 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
                         "properties": {
                             "CAD_OWNER_NAME": getattr(row, "cad_owner_name", None),
                             "CAD_OWNER_COUNT": getattr(row, "cad_owner_count", None),
+                            "CAD_PIN": str(row.cad_pin) if getattr(row, "cad_pin", None) is not None else None,
                         },
                         "geometry": geom_json,
                     }
