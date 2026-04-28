@@ -6453,7 +6453,10 @@ export default {
          * Queries the tenure layer at point coordinates and pans/zooms to coordinates
          * @param {Array} coordinates Point coordinates
          */
-        highlightPointOnTenureLayer: function (coordinates) {
+        highlightPointOnTenureLayer: async function (
+            coordinates,
+            cadPin = null
+        ) {
             if (!coordinates) {
                 return;
             }
@@ -6461,7 +6464,14 @@ export default {
                 return layer.get('is_tenure_intersects_query_layer') == true;
             })[0];
             if (tenureLayer) {
-                queryLayerAtPoint(this, tenureLayer, coordinates);
+                await queryLayerAtPoint(this, tenureLayer, coordinates);
+                // Override the CAD_PIN shown in the popover with the value
+                // from the OccurrenceTenure record, which may differ from the
+                // WFS query result when the point_on_surface falls near a
+                // parcel boundary.
+                if (cadPin && this.overlayFeatureInfo) {
+                    this.overlayFeatureInfo['CAD_PIN'] = cadPin;
+                }
             }
             const feature = new Feature({
                 geometry: new Point(coordinates),
