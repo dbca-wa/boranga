@@ -211,6 +211,7 @@ class OccurrenceRow:
     datetime_created: datetime | None = None
     datetime_updated: datetime | None = None
     locked: bool = False
+    last_modified_by: int | None = None
 
     OCCContactDetail__contact: str | None = None
     OCCContactDetail__contact_name: str | None = None
@@ -346,6 +347,7 @@ class OccurrenceRow:
             datetime_created=d.get("datetime_created"),
             datetime_updated=d.get("datetime_updated"),
             locked=d.get("locked", False),
+            last_modified_by=utils.to_int_maybe(d.get("last_modified_by") or d.get("modified_by")),
             OCCContactDetail__contact=utils.safe_strip(d.get("OCCContactDetail__contact")),
             OCCContactDetail__contact_name=utils.safe_strip(d.get("OCCContactDetail__contact_name")),
             OCCContactDetail__notes=utils.safe_strip(d.get("OCCContactDetail__notes")),
@@ -521,6 +523,7 @@ class OccurrenceRow:
             "processing_status": self.processing_status,
             "review_due_date": self.review_due_date,
             "submitter": self.submitter,
+            "last_modified_by": self.last_modified_by,
             "lodgement_date": self.datetime_created,
             "locked": self.locked,
             "datetime_created": self.datetime_created,
