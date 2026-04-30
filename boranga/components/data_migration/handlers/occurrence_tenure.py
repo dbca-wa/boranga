@@ -116,23 +116,6 @@ class OccurrenceTenureImporter(BaseSheetImporter):
         else:
             logger.info("occurrence_tenure.clear_targets: no OccurrenceTenure rows to delete (already cleared).")
 
-    def add_arguments(self, parser):
-        import argparse
-
-        try:
-            parser.add_argument(
-                "--sources",
-                nargs="+",
-                choices=[Source.TPFL.value, Source.TEC.value],
-                default=[Source.TPFL.value],
-                help=(
-                    "Sources to process (default: TPFL only). "
-                    "Pass TEC to also create tenures for TEC occurrences via spatial intersection."
-                ),
-            )
-        except argparse.ArgumentError:
-            pass
-
     def run(self, path: str, ctx: ImportContext, **options):
         start_time = timezone.now()
         logger.info(
@@ -173,33 +156,10 @@ class OccurrenceTenureImporter(BaseSheetImporter):
 
         request = DummyRequest(user)
 
-        # Determine which sources to process
-        sources = options.get("sources") or [Source.TPFL.value]
-
-        # Resolve TEC user: if ctx.user_id was resolved above, reuse that user;
-        # otherwise look up the TEC migration service account.
-        tec_user = user
-        if not tec_user:
-            from boranga.components.data_migration.registry import _SOURCE_DEFAULT_USER_MAP
-
-            tec_email = _SOURCE_DEFAULT_USER_MAP.get(Source.TEC.value)
-            if tec_email:
-                try:
-                    tec_user = EmailUserRO.objects.get(email=tec_email)
-                except EmailUserRO.DoesNotExist:
-                    logger.warning(
-                        "Migration service account '%s' for source TEC not found; "
-                        "OccurrenceTenure revisions will be attributed to no user.",
-                        tec_email,
-                    )
-        tec_request = DummyRequest(tec_user)
-
-        # 1. Extract (TPFL only — TEC occurrences are sourced from the database)
-        all_rows = []
-        if Source.TPFL.value in sources:
-            adapter = OccurrenceTenureAdapter()
-            result = adapter.extract(path, **options)
-            all_rows = result.rows
+        # 1. Extract
+        adapter = OccurrenceTenureAdapter()
+        result = adapter.extract(path, **options)
+        all_rows = result.rows
 
         # Apply limit
         limit = getattr(ctx, "limit", None)
@@ -527,99 +487,6 @@ class OccurrenceTenureImporter(BaseSheetImporter):
                         "timestamp": timezone.now().isoformat(),
                     }
                 )
-
-        # --- TEC source: create tenures from spatial intersection with all default values ---
-        if Source.TEC.value in sources:
-            logger.info("OccurrenceTenureImporter: processing TEC occurrences from database...")
-            tec_mids = sorted(mid for mid in occurrence_map if mid.startswith("tec-"))
-            logger.info("Found %d TEC occurrences in occurrence_map", len(tec_mids))
-
-            for mid in tec_mids:
-                processed += 1
-                if processed % 500 == 0:
-                    logger.info("Processed %d total rows", processed)
-
-                occ_data = occurrence_map[mid]
-
-                if not occ_data["active"]:
-                    skipped += 1
-                    continue
-
-                if not occ_data["geom_pk"]:
-                    skipped += 1
-                    continue
-
-                geom_pk = occ_data["geom_pk"]
-
-                # Skip geometries already processed in this run (avoid double-processing)
-                if geom_pk in processed_geom_pks:
-                    skipped += 1
-                    continue
-
-                try:
-                    geometry_instance = OccurrenceGeometry.objects.get(pk=geom_pk)
-                except OccurrenceGeometry.DoesNotExist:
-                    skipped += 1
-                    continue
-
-                if not geometry_instance.geometry:
-                    skipped += 1
-                    continue
-
-                if ctx.dry_run:
-                    logger.info("Dry run: Would process tenure for TEC Occurrence %s", mid)
-                    continue
-
-                processed_geom_pks.add(geom_pk)
-
-                try:
-                    exists_before = not options.get("wipe_targets") and geometry_instance.id in geometry_has_tenure
-
-                    intersect_data = intersect_geometry_with_layer(geometry_instance.geometry, intersect_layer)
-                    features = intersect_data.get("features", [])
-
-                    if not features:
-                        skipped += 1
-                        continue
-
-                    tenure_count_before = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).count()
-
-                    populate_occurrence_tenure_data(geometry_instance, features, tec_request, skip_revision=True)
-
-                    tenures = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).order_by("id")
-                    tenure_count_after = tenures.count()
-
-                    # Update stats
-                    if not exists_before:
-                        created += tenure_count_after
-                    else:
-                        num_new = max(0, tenure_count_after - tenure_count_before)
-                        created += num_new
-                        updated += tenure_count_before
-
-                    if tenure_count_after == 0:
-                        skipped += 1
-                        continue
-
-                    # For TEC: save with all defaults — no purpose/vesting/significant assignment
-                    for tenure in tenures:
-                        tenure.save(version_user=tec_user)
-
-                except Exception as e:
-                    logger.exception("Error processing tenure for TEC Occurrence %s: %s", mid, e)
-                    errors += 1
-                    errors_details.append(
-                        {
-                            "migrated_from_id": mid,
-                            "column": "general",
-                            "level": "error",
-                            "message": str(e),
-                            "raw_value": None,
-                            "reason": "Exception",
-                            "row_json": json.dumps({"migrated_from_id": mid}, default=str),
-                            "timestamp": timezone.now().isoformat(),
-                        }
-                    )
 
         # Write error CSV
         if errors_details:
