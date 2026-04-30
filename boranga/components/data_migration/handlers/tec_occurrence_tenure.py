@@ -141,12 +141,6 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
 
         qs_occs = (
             Occurrence.objects.filter(migrated_from_id__startswith="tec-")
-            .filter(
-                processing_status__in=(
-                    Occurrence.PROCESSING_STATUS_ACTIVE,
-                    Occurrence.PROCESSING_STATUS_HISTORICAL,
-                )
-            )
             .annotate(geom_pk=Subquery(geom_qs))
             .exclude(geom_pk=None)
             .values_list("migrated_from_id", "pk", "geom_pk")
