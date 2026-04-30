@@ -24,6 +24,36 @@ div#app .container h3 {
     padding-left: 2em;
 }
 
+.official-sensitive-badge-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    z-index: 10;
+}
+
+.official-sensitive-badge-container .container {
+    display: flex;
+    justify-content: flex-end;
+    padding-right: 28px;
+}
+
+.official-sensitive-badge {
+    background-color: #c00;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 0.3em 0.75em;
+    border-radius: 3px;
+    pointer-events: none;
+}
+
 .parks_bg_banner .col-lg-9 h1 {
     font-size: 2.7em;
 }
