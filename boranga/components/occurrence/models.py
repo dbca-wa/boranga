@@ -1520,7 +1520,7 @@ class OccurrenceReportApprovalDetails(BaseModel):
         "Occurrence", on_delete=models.PROTECT, null=True, blank=True
     )  # If being added to an existing occurrence
     new_occurrence_name = models.CharField(max_length=200, null=True, blank=True)
-    officer = models.IntegerField()  # EmailUserRO
+    officer = models.IntegerField(null=True)  # EmailUserRO
     copy_ocr_comments_to_occ_comments = models.BooleanField(default=True)
     details = models.TextField(blank=True, default="")
     cc_email = models.TextField(null=True)
@@ -8388,12 +8388,23 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 ).first()
                 assigned_approver_email = row[headers.index(assigned_approver_column.xlsx_column_header_name)]
                 assigned_approver_id = None
+                if assigned_approver_email is None or assigned_approver_email == "":
+                    errors.append(
+                        {
+                            "row_index": index,
+                            "error_type": "column",
+                            "data": assigned_approver_email,
+                            "error_message": ("assigned_approver is required when processing status is 'Approved'"),
+                        }
+                    )
+                    errors_added += 1
+                    return cell_value, errors_added
                 try:
                     assigned_approver_id = EmailUser.objects.get(email=assigned_approver_email).id
                 except EmailUser.DoesNotExist:
                     try:
                         assigned_approver_id = EmailUser.objects.get(id=int(assigned_approver_email)).id
-                    except (ValueError, EmailUser.DoesNotExist):
+                    except (TypeError, ValueError, EmailUser.DoesNotExist):
                         error_message = (
                             "No ledger user found for assigned_approver with "
                             f"email address or ID: {assigned_approver_email}"
