@@ -304,6 +304,18 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
         PROCESSING_STATUS_CLOSED,
     ]
 
+    # Maps processing_status → customer_status for use during bulk import
+    PROCESSING_STATUS_TO_CUSTOMER_STATUS = {
+        PROCESSING_STATUS_DRAFT: CUSTOMER_STATUS_DRAFT,
+        PROCESSING_STATUS_WITH_ASSESSOR: CUSTOMER_STATUS_WITH_ASSESSOR,
+        PROCESSING_STATUS_WITH_REFERRAL: CUSTOMER_STATUS_WITH_ASSESSOR,
+        PROCESSING_STATUS_WITH_APPROVER: CUSTOMER_STATUS_WITH_APPROVER,
+        PROCESSING_STATUS_APPROVED: CUSTOMER_STATUS_APPROVED,
+        PROCESSING_STATUS_DECLINED: CUSTOMER_STATUS_DECLINED,
+        PROCESSING_STATUS_DISCARDED: CUSTOMER_STATUS_DISCARDED,
+        PROCESSING_STATUS_CLOSED: CUSTOMER_STATUS_CLOSED,
+    }
+
     customer_status = models.CharField(
         "Customer Status",
         max_length=40,
@@ -6599,6 +6611,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     current_model_instance = OccurrenceReport.objects.get(migrated_from_id=prefixed_migrated_from_id)
                     for field, value in model_data.items():
                         setattr(current_model_instance, field, value)
+
+                # Auto-derive customer_status from processing_status when not
+                # explicitly provided in the import data.
+                if "customer_status" not in model_data and current_model_instance.processing_status:
+                    derived = OccurrenceReport.PROCESSING_STATUS_TO_CUSTOMER_STATUS.get(
+                        current_model_instance.processing_status
+                    )
+                    if derived:
+                        current_model_instance.customer_status = derived
+
             elif current_model_name == Occurrence._meta.model_name:
                 occ_migrated_from_id = model_data.pop("migrated_from_id", None)
                 occurrence_number = model_data.pop("occurrence_number", None)
