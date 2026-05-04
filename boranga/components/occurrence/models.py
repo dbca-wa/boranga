@@ -2060,9 +2060,6 @@ class OCRLocation(BaseModel):
     location_description = models.TextField(blank=True, default="")
     boundary_description = models.TextField(blank=True, default="")
     mapped_boundary = models.BooleanField(null=True, blank=True)
-    buffer_radius = models.IntegerField(null=True, blank=True, default=0)
-    datum = models.ForeignKey(Datum, on_delete=models.SET_NULL, null=True, blank=True)
-    epsg_code = models.IntegerField(null=False, blank=False, default=settings.DEFAULT_SRID)
     coordinate_source = models.ForeignKey(CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True)
     location_accuracy = models.ForeignKey(LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
 
@@ -4903,9 +4900,6 @@ class OCCLocation(BaseModel):
     location_description = models.TextField(blank=True, default="")
     boundary_description = models.TextField(blank=True, default="")
     mapped_boundary = models.BooleanField(null=True, blank=True)
-    buffer_radius = models.IntegerField(null=True, blank=True, default=0)
-    datum = models.ForeignKey(Datum, on_delete=models.SET_NULL, null=True, blank=True)
-    epsg_code = models.IntegerField(null=False, blank=False, default=settings.DEFAULT_SRID)
     coordinate_source = models.ForeignKey(CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True)
     location_accuracy = models.ForeignKey(LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
 
