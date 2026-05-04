@@ -122,7 +122,7 @@ def _load_community_threats(path: str) -> dict:
 @register
 class CommunityImporter(BaseSheetImporter):
     slug = "communities_legacy"
-    description = "Import communities data from legacy TPFL sources"
+    description = "Import communities data from legacy TEC sources"
     integrity_tables = ["boranga_community"]
 
     def clear_targets(self, ctx: ImportContext, include_children: bool = False, **options):
@@ -267,7 +267,7 @@ class CommunityImporter(BaseSheetImporter):
             "--path-map",
             nargs="+",
             metavar="SRC=PATH",
-            help="Per-source path overrides (e.g. TPFL=/tmp/tpfl.xlsx). If omitted, --path is reused.",
+            help="Per-source path overrides (e.g. TEC=/tmp/tec.xlsx). If omitted, --path is reused.",
         )
 
     def _parse_path_map(self, pairs):
