@@ -6566,6 +6566,24 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         if row_error_count > 0:
             return
 
+        # Gate status-dependent models based on processing_status of the OCR row.
+        # OccurrenceReportApprovalDetails: only import when status is with_approver or approved.
+        # Occurrence: only import when status is approved.
+        ocr_model_data = dict(
+            zip(
+                models.get(OccurrenceReport._meta.model_name, {}).get("field_names", []),
+                models.get(OccurrenceReport._meta.model_name, {}).get("values", []),
+            )
+        )
+        row_processing_status = ocr_model_data.get("processing_status")
+        if row_processing_status not in (
+            OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
+            OccurrenceReport.PROCESSING_STATUS_APPROVED,
+        ):
+            models.pop(OccurrenceReportApprovalDetails._meta.model_name, None)
+        if row_processing_status != OccurrenceReport.PROCESSING_STATUS_APPROVED:
+            models.pop(Occurrence._meta.model_name, None)
+
         model_instances = {}
         for current_model_name in models:
             model_data = dict(
