@@ -3791,6 +3791,7 @@ class OccurrenceManager(models.Manager):
 
 class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     BULK_IMPORT_ABBREVIATION = "occ"
+    BULK_IMPORT_INCLUDE_FIELDS = ["wild_status", "comment"]
 
     REVIEW_STATUS_CHOICES = (
         ("not_reviewed", "Not Reviewed"),
@@ -6753,7 +6754,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         else:
                             current_model_instance.community = ocr_instance.community
                     else:
-                        if Occurrence.objects.filter(migrated_from_id=occ_migrated_from_id).exists():
+                        occ_is_new = not Occurrence.objects.filter(migrated_from_id=occ_migrated_from_id).exists()
+                        if not occ_is_new:
                             current_model_instance = Occurrence.objects.get(migrated_from_id=occ_migrated_from_id)
                         else:
                             current_model_instance = Occurrence.objects.create(
@@ -6815,8 +6817,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             return
 
-                        for field, value in model_data.items():
-                            setattr(current_model_instance, field, value)
+                        # Only apply extra fields (e.g. wild_status, comment) when the
+                        # OCC was newly created — not when linking to an existing one.
+                        if occ_is_new:
+                            for field, value in model_data.items():
+                                setattr(current_model_instance, field, value)
 
             elif current_model_name == SubmitterInformation._meta.model_name:
                 # Submitter information is created automatically when an OccurrenceReport is created
