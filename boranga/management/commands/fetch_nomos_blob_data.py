@@ -264,23 +264,23 @@ class Command(BaseCommand):
                                                 },
                                             )
                                             class_system_fk = class_system_obj
-                                            if class_system_obj:
-                                                try:
-                                                    obj, created = InformalGroup.objects.update_or_create(
-                                                        taxonomy=taxon_obj,
-                                                        classification_system_fk=class_system_fk,
-                                                        defaults={
-                                                            "classification_system_id": class_system_fk.classification_system_id,  # noqa
-                                                            "taxon_name_id": taxon_obj.taxon_name_id,
-                                                        },
-                                                    )
-                                                except Exception as e:
-                                                    err_msg = "Create informal group:"
-                                                    logger.error(f"{err_msg}\n{str(e)}")
-                                                    errors.append(str(e))
-
                                         except Exception as e:
                                             err_msg = "Create Taxon Classification Systems:"
+                                            logger.error(f"{err_msg}\n{str(e)}")
+                                            errors.append(str(e))
+
+                                    if class_system_fk:
+                                        try:
+                                            obj, created = InformalGroup.objects.update_or_create(
+                                                taxonomy=taxon_obj,
+                                                classification_system_fk=class_system_fk,
+                                                defaults={
+                                                    "classification_system_id": class_system_fk.classification_system_id,  # noqa
+                                                    "taxon_name_id": taxon_obj.taxon_name_id,
+                                                },
+                                            )
+                                        except Exception as e:
+                                            err_msg = "Create informal group:"
                                             logger.error(f"{err_msg}\n{str(e)}")
                                             errors.append(str(e))
 

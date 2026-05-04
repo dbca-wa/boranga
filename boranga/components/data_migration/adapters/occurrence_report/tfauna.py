@@ -379,7 +379,6 @@ PIPELINES = {
     "OCRLocation__location_accuracy": ["strip", "blank_to_none", LOCATION_ACCURACY_TRANSFORM],
     "OCRLocation__district": ["strip", "blank_to_none"],
     "OCRLocation__region": ["strip", "blank_to_none"],  # region resolved in extract()
-    "OCRLocation__epsg_code": [EPSG_CODE_DEFAULT],
     # OCRObservationDetail
     "OCRObservationDetail__comments": ["strip", "blank_to_none"],
     # OCRIdentification

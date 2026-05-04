@@ -16,6 +16,20 @@
 {% block header_top_menu %}
 {% endblock %}
 
+{% block main_header %}
+<div style="position: relative;">
+    {{ block.super }}
+    {% is_internal as badge_is_internal %}
+    {% if badge_is_internal %}
+    <div class="official-sensitive-badge-container">
+        <div class="container">
+            <div class="official-sensitive-badge">OFFICIAL Sensitive</div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
 {% block extra_css %}
   <link rel="icon" type="image/png" href="/static/boranga/favicon.ico" />
 

@@ -558,7 +558,6 @@ export default {
             filtered_district_list: [],
             updatingLocationDetails: false,
             listOfValuesDict: {},
-            datum_list: [],
             coordinate_source_list: [],
             location_accuracy_list: [],
             mapReady: false,
@@ -725,7 +724,6 @@ export default {
             })
             .then((data) => {
                 vm.listOfValuesDict = Object.assign({}, data);
-                vm.datum_list = vm.listOfValuesDict.datum_list;
                 vm.coordinate_source_list =
                     vm.listOfValuesDict.coordinate_source_list;
                 vm.coordinate_source_list.splice(0, 0, {

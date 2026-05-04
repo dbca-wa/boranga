@@ -1155,8 +1155,6 @@ class OCRLocationSerializer(BaseModelSerializer):
             "location_description",
             "boundary_description",
             "mapped_boundary",
-            "buffer_radius",
-            "datum_id",
             "coordinate_source_id",
             "coordinate_source",
             "location_accuracy_id",
@@ -2376,7 +2374,6 @@ class SaveOCRLocationSerializer(BaseModelSerializer):
     region_id = serializers.IntegerField(required=False, allow_null=True)
     district_id = serializers.IntegerField(required=False, allow_null=True)
     occurrence_report_id = serializers.IntegerField(required=True, allow_null=False)
-    datum_id = serializers.IntegerField(required=False, allow_null=True)
     coordinate_source_id = serializers.IntegerField(required=False, allow_null=True)
     location_accuracy_id = serializers.IntegerField(required=False, allow_null=True)
     has_boundary = serializers.SerializerMethodField()
@@ -2390,8 +2387,6 @@ class SaveOCRLocationSerializer(BaseModelSerializer):
             "location_description",
             "boundary_description",
             "mapped_boundary",
-            "buffer_radius",
-            "datum_id",
             "coordinate_source_id",
             "location_accuracy_id",
             "region_id",
@@ -3703,8 +3698,6 @@ class OCCLocationSerializer(BaseModelSerializer):
             "location_description",
             "boundary_description",
             "mapped_boundary",
-            "buffer_radius",
-            "datum_id",
             "coordinate_source_id",
             "coordinate_source",
             "location_accuracy_id",
@@ -3781,7 +3774,6 @@ class SaveOCCLocationSerializer(BaseModelSerializer):
     region_id = serializers.IntegerField(required=False, allow_null=True)
     district_id = serializers.IntegerField(required=False, allow_null=True)
     occurrence_id = serializers.IntegerField(required=False, allow_null=True)
-    datum_id = serializers.IntegerField(required=False, allow_null=True)
     coordinate_source_id = serializers.IntegerField(required=False, allow_null=True)
     location_accuracy_id = serializers.IntegerField(required=False, allow_null=True)
     has_boundary = serializers.SerializerMethodField()
@@ -3795,8 +3787,6 @@ class SaveOCCLocationSerializer(BaseModelSerializer):
             "location_description",
             "boundary_description",
             "mapped_boundary",
-            "buffer_radius",
-            "datum_id",
             "coordinate_source_id",
             "location_accuracy_id",
             "region_id",

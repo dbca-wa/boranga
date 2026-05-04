@@ -207,97 +207,100 @@ class Command(BaseCommand):
         chunk_index = 0
         outfh = None
         try:
-            with open(src_file, "rb") as srcf:
-                features = ijson.items(srcf, "features.item")
+            try:
+                with open(src_file, "rb") as srcf:
+                    features = ijson.items(srcf, "features.item")
 
-                def _json_default(o):
-                    try:
-                        if isinstance(o, decimal.Decimal):
-                            return float(o)
-                    except Exception:
-                        pass
-                    return str(o)
+                    def _json_default(o):
+                        try:
+                            if isinstance(o, decimal.Decimal):
+                                return float(o)
+                        except Exception:
+                            pass
+                        return str(o)
 
-                first_in_chunk = True
-                for feat in features:
-                    if current % int(chunk_size) == 0:
-                        if outfh:
-                            outfh.write("]}")
-                            outfh.close()
-                        partname = os.path.join(work_dir, f"part_{chunk_index:05d}.geojson")
-                        outfh = open(partname, "w", encoding="utf-8")
-                        outfh.write('{"type":"FeatureCollection","features":[')
-                        chunk_files.append(partname)
-                        chunk_index += 1
-                        first_in_chunk = True
-                    if not first_in_chunk:
-                        outfh.write(",")
+                    first_in_chunk = True
+                    for feat in features:
+                        if current % int(chunk_size) == 0:
+                            if outfh:
+                                outfh.write("]}")
+                                outfh.close()
+                            partname = os.path.join(work_dir, f"part_{chunk_index:05d}.geojson")
+                            outfh = open(partname, "w", encoding="utf-8")
+                            outfh.write('{"type":"FeatureCollection","features":[')
+                            chunk_files.append(partname)
+                            chunk_index += 1
+                            first_in_chunk = True
+                        if not first_in_chunk:
+                            outfh.write(",")
+                        else:
+                            first_in_chunk = False
+                        outfh.write(json.dumps(feat, ensure_ascii=False, default=_json_default))
+                        current += 1
+                    if outfh:
+                        outfh.write("]}")
+                        outfh.close()
+            except Exception as e:
+                try:
+                    if outfh and not outfh.closed:
+                        outfh.close()
+                except Exception:
+                    pass
+                raise CommandError(f"Failed to stream features for chunking: {e}")
+
+            if do_import:
+                imported_any = False
+                for i, chunk in enumerate(chunk_files):
+                    self.stdout.write(f"Importing chunk {i + 1}/{len(chunk_files)}: {os.path.basename(chunk)}")
+                    if not imported_any:
+                        self._run_ogr2ogr(chunk, dst_pg, layer_name, srid, True, env, cachemax=cachemax)
+                        imported_any = True
                     else:
-                        first_in_chunk = False
-                    outfh.write(json.dumps(feat, ensure_ascii=False, default=_json_default))
-                    current += 1
-                if outfh:
-                    outfh.write("]}")
-                    outfh.close()
-        except Exception as e:
-            try:
-                if outfh and not outfh.closed:
-                    outfh.close()
-            except Exception:
-                pass
-            raise CommandError(f"Failed to stream features for chunking: {e}")
-
-        if do_import:
-            imported_any = False
-            for i, chunk in enumerate(chunk_files):
-                self.stdout.write(f"Importing chunk {i + 1}/{len(chunk_files)}: {os.path.basename(chunk)}")
-                if not imported_any:
-                    self._run_ogr2ogr(chunk, dst_pg, layer_name, srid, True, env, cachemax=cachemax)
-                    imported_any = True
-                else:
-                    cmd = [
-                        "ogr2ogr",
-                        "--config",
-                        "PG_USE_COPY",
-                        "YES",
-                        "--config",
-                        "GDAL_CACHEMAX",
-                        str(cachemax),
-                        "-append",
-                        "-f",
-                        "PostgreSQL",
-                        dst_pg,
-                        chunk,
-                        "-nln",
-                        layer_name,
-                        "-nlt",
-                        "PROMOTE_TO_MULTI",
-                        "-s_srs",
-                        "EPSG:4283",
-                        "-t_srs",
-                        f"EPSG:{srid}",
-                        "-lco",
-                        "GEOMETRY_NAME=geom",
-                        "-lco",
-                        "FID=gid",
-                        "-lco",
-                        "PRECISION=NO",
-                    ]
-                    try:
-                        subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
-                    except subprocess.CalledProcessError as e:
-                        raise CommandError(f"ogr2ogr append failed for chunk {chunk}: {e.stderr or e.stdout or str(e)}")
-
-        # Remove chunk files unless caller requested they be kept (e.g., --chunks-only + --keep-temp)
-        if keep_chunks:
-            self.stdout.write(self.style.NOTICE(f"Keeping chunk directory: {work_dir}"))
-        else:
-            try:
-                for f in os.listdir(work_dir):
-                    os.unlink(os.path.join(work_dir, f))
-                os.rmdir(work_dir)
-            except Exception:
-                pass
+                        cmd = [
+                            "ogr2ogr",
+                            "--config",
+                            "PG_USE_COPY",
+                            "YES",
+                            "--config",
+                            "GDAL_CACHEMAX",
+                            str(cachemax),
+                            "-append",
+                            "-f",
+                            "PostgreSQL",
+                            dst_pg,
+                            chunk,
+                            "-nln",
+                            layer_name,
+                            "-nlt",
+                            "PROMOTE_TO_MULTI",
+                            "-s_srs",
+                            "EPSG:4283",
+                            "-t_srs",
+                            f"EPSG:{srid}",
+                            "-lco",
+                            "GEOMETRY_NAME=geom",
+                            "-lco",
+                            "FID=gid",
+                            "-lco",
+                            "PRECISION=NO",
+                        ]
+                        try:
+                            subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
+                        except subprocess.CalledProcessError as e:
+                            raise CommandError(
+                                f"ogr2ogr append failed for chunk {chunk}: {e.stderr or e.stdout or str(e)}"
+                            )
+        finally:
+            # Always remove the chunk directory unless the caller requested it be kept
+            if keep_chunks:
+                self.stdout.write(self.style.NOTICE(f"Keeping chunk directory: {work_dir}"))
+            else:
+                try:
+                    for f in os.listdir(work_dir):
+                        os.unlink(os.path.join(work_dir, f))
+                    os.rmdir(work_dir)
+                except Exception:
+                    pass
 
     def _find_geometry_column(self, schema, table):
         return _find_geometry_column(connection, schema, table)
@@ -532,6 +535,11 @@ class Command(BaseCommand):
                             pass
                     return
             except Exception as e:
+                if not options.get("keep_temp") and not options.get("use_cached"):
+                    try:
+                        os.unlink(tmp_name)
+                    except Exception:
+                        pass
                 raise CommandError(f"Chunked import failed: {e}")
         else:
             gdal_cachemax = options.get("gdal_cachemax", 64)

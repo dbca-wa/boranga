@@ -205,7 +205,6 @@ class OccurrenceRow:
     wild_status_id: int | None = None
     occurrence_source: str | None = None
     comment: str | None = None
-    review_status: str | None = None
     processing_status: str | None = None
     review_due_date: date | None = None
     datetime_created: datetime | None = None
@@ -341,7 +340,6 @@ class OccurrenceRow:
             wild_status_id=utils.to_int_maybe(d.get("wild_status_id") or d.get("wild_status")),
             occurrence_source=d.get("occurrence_source") or [],
             comment=utils.safe_strip(d.get("comment")),
-            review_status=utils.safe_strip(d.get("review_status")),
             processing_status=utils.safe_strip(d.get("processing_status")),
             review_due_date=d.get("review_due_date"),
             datetime_created=d.get("datetime_created"),
@@ -519,7 +517,6 @@ class OccurrenceRow:
             "wild_status_id": self.wild_status_id,
             "occurrence_source": occ_source,
             "comment": self.comment,
-            "review_status": self.review_status,
             "processing_status": self.processing_status,
             "review_due_date": self.review_due_date,
             "submitter": self.submitter,

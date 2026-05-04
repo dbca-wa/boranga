@@ -656,7 +656,6 @@ PIPELINES = {
         location_description_wrap_result,
     ],
     "OCRLocation__boundary_description": [BOUNDARY_DESCRIPTION_DEFAULT],
-    "OCRLocation__epsg_code": [EPSG_CODE_DEFAULT],
     # OCRObservationDetail pipelines (Tasks 11380, 11382, 11383, 11385)
     "OCRObservationDetail__area_assessment": [
         "strip",

@@ -13,6 +13,7 @@ from boranga.components.conservation_status.models import (
     WAPriorityList,
 )
 from boranga.components.occurrence.models import OccurrenceReport
+from boranga.components.species_and_communities.models import Kingdom
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,17 @@ class DefaultDataManager:
         for sg in SystemGroup.objects.exclude(name__in=[group_name for group_name in settings.GROUP_NAME_CHOICES]):
             sg.systemgrouppermission_set.all().delete()
             sg.delete()
+
+        # Warn if any Kingdom records are missing a grouptype — this causes all
+        # species/fauna/flora select2 lookups to return empty results.
+        kingdoms_without_grouptype = Kingdom.objects.filter(grouptype__isnull=True)
+        if kingdoms_without_grouptype.exists():
+            names = ", ".join(k.kingdom_name or str(k.kingdom_id) for k in kingdoms_without_grouptype)
+            logger.warning(
+                f"Kingdom records with no grouptype set: {names}. "
+                "Species lookup filters will return empty results for these kingdoms. "
+                "Set the grouptype for each Kingdom via Django admin (Species and Communities > Kingdoms)."
+            )
 
         for conservation_change_code in settings.CONSERVATION_CHANGE_CODES:
             try:

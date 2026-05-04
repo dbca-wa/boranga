@@ -229,7 +229,7 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
 
     MODEL_PREFIX = "ORF"
     BULK_IMPORT_ABBREVIATION = "orf"
-    BULK_IMPORT_EXCLUDE_FIELDS = ["occurrence_report_number", "import_hash"]
+    BULK_IMPORT_EXCLUDE_FIELDS = ["occurrence_report_number", "import_hash", "occurrence", "customer_status"]
 
     CUSTOMER_STATUS_DRAFT = "draft"
     CUSTOMER_STATUS_WITH_ASSESSOR = "with_assessor"
@@ -303,6 +303,18 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
         PROCESSING_STATUS_DISCARDED,
         PROCESSING_STATUS_CLOSED,
     ]
+
+    # Maps processing_status → customer_status for use during bulk import
+    PROCESSING_STATUS_TO_CUSTOMER_STATUS = {
+        PROCESSING_STATUS_DRAFT: CUSTOMER_STATUS_DRAFT,
+        PROCESSING_STATUS_WITH_ASSESSOR: CUSTOMER_STATUS_WITH_ASSESSOR,
+        PROCESSING_STATUS_WITH_REFERRAL: CUSTOMER_STATUS_WITH_ASSESSOR,
+        PROCESSING_STATUS_WITH_APPROVER: CUSTOMER_STATUS_WITH_APPROVER,
+        PROCESSING_STATUS_APPROVED: CUSTOMER_STATUS_APPROVED,
+        PROCESSING_STATUS_DECLINED: CUSTOMER_STATUS_DECLINED,
+        PROCESSING_STATUS_DISCARDED: CUSTOMER_STATUS_DISCARDED,
+        PROCESSING_STATUS_CLOSED: CUSTOMER_STATUS_CLOSED,
+    }
 
     customer_status = models.CharField(
         "Customer Status",
@@ -1520,7 +1532,7 @@ class OccurrenceReportApprovalDetails(BaseModel):
         "Occurrence", on_delete=models.PROTECT, null=True, blank=True
     )  # If being added to an existing occurrence
     new_occurrence_name = models.CharField(max_length=200, null=True, blank=True)
-    officer = models.IntegerField()  # EmailUserRO
+    officer = models.IntegerField(null=True)  # EmailUserRO
     copy_ocr_comments_to_occ_comments = models.BooleanField(default=True)
     details = models.TextField(blank=True, default="")
     cc_email = models.TextField(null=True)
@@ -2032,6 +2044,7 @@ class LocationAccuracy(OrderedModel, ArchivableModel):
 # NOTE: this and OCCLocation have a number of unused fields that should be removed
 class OCRLocation(BaseModel):
     BULK_IMPORT_ABBREVIATION = "orfloc"
+    BULK_IMPORT_EXCLUDE_FIELDS = ["region"]
 
     """
     Location data  for occurrence report
@@ -2048,9 +2061,6 @@ class OCRLocation(BaseModel):
     location_description = models.TextField(blank=True, default="")
     boundary_description = models.TextField(blank=True, default="")
     mapped_boundary = models.BooleanField(null=True, blank=True)
-    buffer_radius = models.IntegerField(null=True, blank=True, default=0)
-    datum = models.ForeignKey(Datum, on_delete=models.SET_NULL, null=True, blank=True)
-    epsg_code = models.IntegerField(null=False, blank=False, default=settings.DEFAULT_SRID)
     coordinate_source = models.ForeignKey(CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True)
     location_accuracy = models.ForeignKey(LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
 
@@ -3603,6 +3613,7 @@ class OCRIdentification(BaseModel):
 
 class OccurrenceReportDocument(Document):
     BULK_IMPORT_ABBREVIATION = "orfdoc"
+    BULK_IMPORT_EXCLUDE_FIELDS = ["name"]
 
     document_number = models.CharField(max_length=9, blank=True, default="")
     occurrence_report = models.ForeignKey("OccurrenceReport", related_name="documents", on_delete=models.CASCADE)
@@ -3845,12 +3856,6 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     comment = models.TextField(null=True, blank=True)
 
     review_due_date = models.DateField(null=True, blank=True)
-    review_status = models.CharField(
-        "Review Status",
-        max_length=30,
-        choices=REVIEW_STATUS_CHOICES,
-        default=REVIEW_STATUS_CHOICES[0][0],
-    )
 
     datetime_created = models.DateTimeField(default=timezone.now, null=False, blank=False)
     datetime_updated = models.DateTimeField(default=timezone.now, null=False, blank=False)
@@ -4897,9 +4902,6 @@ class OCCLocation(BaseModel):
     location_description = models.TextField(blank=True, default="")
     boundary_description = models.TextField(blank=True, default="")
     mapped_boundary = models.BooleanField(null=True, blank=True)
-    buffer_radius = models.IntegerField(null=True, blank=True, default=0)
-    datum = models.ForeignKey(Datum, on_delete=models.SET_NULL, null=True, blank=True)
-    epsg_code = models.IntegerField(null=False, blank=False, default=settings.DEFAULT_SRID)
     coordinate_source = models.ForeignKey(CoordinateSource, on_delete=models.SET_NULL, null=True, blank=True)
     location_accuracy = models.ForeignKey(LocationAccuracy, on_delete=models.SET_NULL, null=True, blank=True)
 
@@ -6605,6 +6607,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     current_model_instance = OccurrenceReport.objects.get(migrated_from_id=prefixed_migrated_from_id)
                     for field, value in model_data.items():
                         setattr(current_model_instance, field, value)
+
+                # Auto-derive customer_status from processing_status when not
+                # explicitly provided in the import data.
+                if "customer_status" not in model_data and current_model_instance.processing_status:
+                    derived = OccurrenceReport.PROCESSING_STATUS_TO_CUSTOMER_STATUS.get(
+                        current_model_instance.processing_status
+                    )
+                    if derived:
+                        current_model_instance.customer_status = derived
+
             elif current_model_name == Occurrence._meta.model_name:
                 occ_migrated_from_id = model_data.pop("migrated_from_id", None)
                 occurrence_number = model_data.pop("occurrence_number", None)
@@ -6804,6 +6816,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
             try:
                 if mode == "create" or (mode == "update" and len(model_data.keys())):
+                    # Auto-populate OCRLocation.region from district if region is not provided
+                    if current_model_name == OCRLocation._meta.model_name:
+                        if current_model_instance.district_id and not current_model_instance.region_id:
+                            current_model_instance.region = current_model_instance.district.region
+
+                    # Auto-populate OccurrenceReportDocument.name from the uploaded file name
+                    if current_model_name == OccurrenceReportDocument._meta.model_name:
+                        if not current_model_instance.name and "_file" in model_data and model_data["_file"]:
+                            current_model_instance.name = model_data["_file"].name
+
                     current_model_instance.save()
 
                 self.ocr_bulk_import_generate_action_logs(mode, current_model_instance)
@@ -6859,6 +6881,36 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         "error_message": f"Error creating model instance: {e}",
                     }
                 )
+
+        # Post-processing: auto-link OccurrenceReport.occurrence for approved OCRs
+        # from OccurrenceReportApprovalDetails when it hasn't already been set
+        # (e.g. by an Occurrence model row linking via occurrence_reports.add()).
+        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
+        approval_instance = model_instances.get(OccurrenceReportApprovalDetails._meta.model_name)
+        if (
+            ocr_instance
+            and approval_instance
+            and ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED
+            and not ocr_instance.occurrence_id
+        ):
+            if approval_instance.occurrence_id:
+                # Case 1: existing OCC assigned via the "ORFAPP Occurrence" column
+                ocr_instance.occurrence = approval_instance.occurrence
+                ocr_instance.save()
+            elif approval_instance.new_occurrence_name:
+                # Case 2: create a new Occurrence from the new_occurrence_name
+                new_occ = Occurrence(
+                    occurrence_name=approval_instance.new_occurrence_name,
+                    group_type=ocr_instance.group_type,
+                    occurrence_source=Occurrence.OCCURRENCE_CHOICE_OCR,
+                )
+                if ocr_instance.species_id:
+                    new_occ.species_id = ocr_instance.species_id
+                elif ocr_instance.community_id:
+                    new_occ.community_id = ocr_instance.community_id
+                new_occ.save()
+                ocr_instance.occurrence = new_occ
+                ocr_instance.save()
 
         return
 
@@ -8388,12 +8440,23 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 ).first()
                 assigned_approver_email = row[headers.index(assigned_approver_column.xlsx_column_header_name)]
                 assigned_approver_id = None
+                if assigned_approver_email is None or assigned_approver_email == "":
+                    errors.append(
+                        {
+                            "row_index": index,
+                            "error_type": "column",
+                            "data": assigned_approver_email,
+                            "error_message": ("assigned_approver is required when processing status is 'Approved'"),
+                        }
+                    )
+                    errors_added += 1
+                    return cell_value, errors_added
                 try:
                     assigned_approver_id = EmailUser.objects.get(email=assigned_approver_email).id
                 except EmailUser.DoesNotExist:
                     try:
                         assigned_approver_id = EmailUser.objects.get(id=int(assigned_approver_email)).id
-                    except (ValueError, EmailUser.DoesNotExist):
+                    except (TypeError, ValueError, EmailUser.DoesNotExist):
                         error_message = (
                             "No ledger user found for assigned_approver with "
                             f"email address or ID: {assigned_approver_email}"
