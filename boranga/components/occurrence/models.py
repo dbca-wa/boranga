@@ -6875,6 +6875,36 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     }
                 )
 
+        # Post-processing: auto-link OccurrenceReport.occurrence for approved OCRs
+        # from OccurrenceReportApprovalDetails when it hasn't already been set
+        # (e.g. by an Occurrence model row linking via occurrence_reports.add()).
+        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
+        approval_instance = model_instances.get(OccurrenceReportApprovalDetails._meta.model_name)
+        if (
+            ocr_instance
+            and approval_instance
+            and ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED
+            and not ocr_instance.occurrence_id
+        ):
+            if approval_instance.occurrence_id:
+                # Case 1: existing OCC assigned via the "ORFAPP Occurrence" column
+                ocr_instance.occurrence = approval_instance.occurrence
+                ocr_instance.save()
+            elif approval_instance.new_occurrence_name:
+                # Case 2: create a new Occurrence from the new_occurrence_name
+                new_occ = Occurrence(
+                    occurrence_name=approval_instance.new_occurrence_name,
+                    group_type=ocr_instance.group_type,
+                    occurrence_source=Occurrence.OCCURRENCE_CHOICE_OCR,
+                )
+                if ocr_instance.species_id:
+                    new_occ.species_id = ocr_instance.species_id
+                elif ocr_instance.community_id:
+                    new_occ.community_id = ocr_instance.community_id
+                new_occ.save()
+                ocr_instance.occurrence = new_occ
+                ocr_instance.save()
+
         return
 
     def ocr_bulk_import_generate_action_logs(self, mode, model_instance):
