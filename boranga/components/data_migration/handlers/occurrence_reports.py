@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from collections import defaultdict
+from datetime import datetime
 from typing import Any
 
 from django.conf import settings
@@ -4469,23 +4470,13 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 (merged.get("processing_status") or "").lower(), merged.get("processing_status") or ""
             )
             what_text = f"Edited in TPFL; {status_label}"
-            # Parse when: MODIFIED_DATE as datetime.
-            # The data export has a known bad offset: +00:00 was written where +08:00
-            # (Australia/Perth) was intended.  Strip any parsed tzinfo and always
-            # re-attach Perth so the stored value is correct.
-            when_dt = None
-            try:
-                import zoneinfo
-
-                from boranga.components.data_migration import utils as dm_utils
-
-                when_dt = dm_utils.parse_date_iso(str(modified_date).strip())
-                if when_dt:
-                    # Drop whatever offset was parsed (it may be a corrupt +00:00)
-                    # and treat the wall-clock time as Perth local time.
-                    when_dt = when_dt.replace(tzinfo=None).replace(tzinfo=zoneinfo.ZoneInfo("Australia/Perth"))
-            except Exception:
-                pass
+            # `modified_date` comes from merged["datetime_updated"], which was already
+            # processed by the DATETIME_ISO_PERTH pipeline.  That pipeline correctly
+            # strips the bogus "+00:00" label from the source data and converts the
+            # Perth wall-clock time to UTC.  Use it directly — re-parsing the string
+            # representation and re-applying Perth would double the offset correction,
+            # shifting the stored time 8 hours too early.
+            when_dt = modified_date if isinstance(modified_date, datetime) else None
             ua = OccurrenceReportUserAction(
                 occurrence_report=ocr,
                 who=who_id,
