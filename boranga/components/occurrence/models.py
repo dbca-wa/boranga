@@ -6814,6 +6814,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
             try:
                 if mode == "create" or (mode == "update" and len(model_data.keys())):
+                    # Auto-populate OCRLocation.region from district if region is not provided
+                    if current_model_name == OCRLocation._meta.model_name:
+                        if current_model_instance.district_id and not current_model_instance.region_id:
+                            current_model_instance.region = current_model_instance.district.region
+
                     current_model_instance.save()
 
                 self.ocr_bulk_import_generate_action_logs(mode, current_model_instance)
