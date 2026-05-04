@@ -6635,6 +6635,13 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     if derived:
                         current_model_instance.customer_status = derived
 
+                # Approved OCRs should default to locked=True when not explicitly provided.
+                if (
+                    "locked" not in model_data
+                    and current_model_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED
+                ):
+                    current_model_instance.locked = True
+
             elif current_model_name == Occurrence._meta.model_name:
                 occ_migrated_from_id = model_data.pop("migrated_from_id", None)
                 occurrence_number = model_data.pop("occurrence_number", None)
