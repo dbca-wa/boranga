@@ -3845,12 +3845,6 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     comment = models.TextField(null=True, blank=True)
 
     review_due_date = models.DateField(null=True, blank=True)
-    review_status = models.CharField(
-        "Review Status",
-        max_length=30,
-        choices=REVIEW_STATUS_CHOICES,
-        default=REVIEW_STATUS_CHOICES[0][0],
-    )
 
     datetime_created = models.DateTimeField(default=timezone.now, null=False, blank=False)
     datetime_updated = models.DateTimeField(default=timezone.now, null=False, blank=False)
