@@ -6881,6 +6881,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         "error_message": f"Error creating model instance: {e}",
                     }
                 )
+            except ValidationError as e:
+                logger.error(f"Validation error saving model instance: {e}")
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": model_data,
+                        "error_message": str(e.message if hasattr(e, "message") else e),
+                    }
+                )
 
         # Post-processing: auto-link OccurrenceReport.occurrence for approved OCRs
         # from OccurrenceReportApprovalDetails when it hasn't already been set
