@@ -229,7 +229,7 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
 
     MODEL_PREFIX = "ORF"
     BULK_IMPORT_ABBREVIATION = "orf"
-    BULK_IMPORT_EXCLUDE_FIELDS = ["occurrence_report_number", "import_hash"]
+    BULK_IMPORT_EXCLUDE_FIELDS = ["occurrence_report_number", "import_hash", "occurrence", "customer_status"]
 
     CUSTOMER_STATUS_DRAFT = "draft"
     CUSTOMER_STATUS_WITH_ASSESSOR = "with_assessor"
@@ -2044,6 +2044,7 @@ class LocationAccuracy(OrderedModel, ArchivableModel):
 # NOTE: this and OCCLocation have a number of unused fields that should be removed
 class OCRLocation(BaseModel):
     BULK_IMPORT_ABBREVIATION = "orfloc"
+    BULK_IMPORT_EXCLUDE_FIELDS = ["region"]
 
     """
     Location data  for occurrence report
@@ -3612,6 +3613,7 @@ class OCRIdentification(BaseModel):
 
 class OccurrenceReportDocument(Document):
     BULK_IMPORT_ABBREVIATION = "orfdoc"
+    BULK_IMPORT_EXCLUDE_FIELDS = ["name"]
 
     document_number = models.CharField(max_length=9, blank=True, default="")
     occurrence_report = models.ForeignKey("OccurrenceReport", related_name="documents", on_delete=models.CASCADE)
@@ -6818,6 +6820,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     if current_model_name == OCRLocation._meta.model_name:
                         if current_model_instance.district_id and not current_model_instance.region_id:
                             current_model_instance.region = current_model_instance.district.region
+
+                    # Auto-populate OccurrenceReportDocument.name from the uploaded file name
+                    if current_model_name == OccurrenceReportDocument._meta.model_name:
+                        if not current_model_instance.name and "_file" in model_data and model_data["_file"]:
+                            current_model_instance.name = model_data["_file"].name
 
                     current_model_instance.save()
 
