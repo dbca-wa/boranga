@@ -6584,6 +6584,52 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         if row_processing_status != OccurrenceReport.PROCESSING_STATUS_APPROVED:
             models.pop(Occurrence._meta.model_name, None)
 
+        # Validate that approved OCRs have enough data to link or create an Occurrence.
+        if row_processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED:
+            approval_model_name = OccurrenceReportApprovalDetails._meta.model_name
+            approval_data = dict(
+                zip(
+                    models.get(approval_model_name, {}).get("field_names", []),
+                    models.get(approval_model_name, {}).get("values", []),
+                )
+            )
+            has_occurrence = bool(approval_data.get("occurrence"))
+            has_new_occurrence_name = bool(approval_data.get("new_occurrence_name"))
+            has_occurrence_number = bool(
+                dict(
+                    zip(
+                        models.get(Occurrence._meta.model_name, {}).get("field_names", []),
+                        models.get(Occurrence._meta.model_name, {}).get("values", []),
+                    )
+                ).get("occurrence_number")
+            )
+            if not has_occurrence and not has_new_occurrence_name and not has_occurrence_number:
+
+                def _col_header(model_name, field_name):
+                    """Return the xlsx column header for a given model/field, falling back to 'model.field'."""
+                    col = self.schema.columns.filter(
+                        django_import_content_type__model=model_name,
+                        django_import_field_name=field_name,
+                    ).first()
+                    return col.xlsx_column_header_name if col else f"{model_name}.{field_name}"
+
+                orfapp = OccurrenceReportApprovalDetails._meta.model_name
+                occ = Occurrence._meta.model_name
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": row,
+                        "error_message": (
+                            "Approved occurrence reports must have either an existing occurrence "
+                            f"('{_col_header(orfapp, 'occurrence')}' or "
+                            f"'{_col_header(occ, 'occurrence_number')}') or a new occurrence name "
+                            f"('{_col_header(orfapp, 'new_occurrence_name')}')."
+                        ),
+                    }
+                )
+                return
+
         model_instances = {}
         for current_model_name in models:
             model_data = dict(
