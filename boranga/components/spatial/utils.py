@@ -130,8 +130,7 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
             if db_table in _cadastre_local_check_cache:
                 exists, has_row = _cadastre_local_check_cache[db_table]
                 logger.debug(
-                    "intersect_geometry_with_layer: using cached local cadastre check for %s "
-                    "(exists=%s, has_row=%s)",
+                    "intersect_geometry_with_layer: using cached local cadastre check for %s (exists=%s, has_row=%s)",
                     db_table,
                     exists,
                     has_row,
