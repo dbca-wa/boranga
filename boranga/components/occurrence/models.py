@@ -6615,7 +6615,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     return col.xlsx_column_header_name if col else f"{model_name}.{field_name}"
 
                 orfapp = OccurrenceReportApprovalDetails._meta.model_name
-                occ = Occurrence._meta.model_name
                 errors.append(
                     {
                         "row_index": row_index,
@@ -6623,8 +6622,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         "data": row,
                         "error_message": (
                             "Approved occurrence reports must have either an existing occurrence "
-                            f"('{_col_header(orfapp, 'occurrence')}' or "
-                            f"'{_col_header(occ, 'occurrence_number')}') or a new occurrence name "
+                            f"('{_col_header(orfapp, 'occurrence')}' or a new occurrence name "
                             f"('{_col_header(orfapp, 'new_occurrence_name')}')."
                         ),
                     }
