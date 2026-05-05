@@ -6507,6 +6507,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         row = [i for j, i in enumerate(row) if j not in indexes_to_remove]
         headers = [i for j, i in enumerate(headers) if j not in indexes_to_remove]
 
+        # Pre-resolve 'bulk_import_submitter' default values so that any validation
+        # code reading directly from the raw row (e.g. the processing_status cross-column
+        # checks) sees the actual email address rather than the sentinel string.
+        for _submitter_col in self.schema.columns.filter(
+            django_import_content_type__in=required_content_types,
+            default_value=OccurrenceReportBulkImportSchemaColumn.DEFAULT_VALUE_BULK_IMPORT_SUBMITTER,
+        ):
+            if _submitter_col.xlsx_column_header_name in headers:
+                row[headers.index(_submitter_col.xlsx_column_header_name)] = self.email_user
+
         # Validate each cell
         for column_index, column in enumerate(
             self.schema.columns.filter(django_import_content_type__in=required_content_types)
