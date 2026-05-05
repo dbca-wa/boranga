@@ -8181,6 +8181,32 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return random_value
 
         if isinstance(field, models.ManyToManyField):
+            # Special case: OCRAssociatedSpecies.related_species uses a traversing lookup
+            # (e.g. 'taxonomy__scientific_name'). The related model is AssociatedSpeciesTaxonomy
+            # which may have no rows and has no useful display field. Query Taxonomy directly
+            # using the leaf part of the lookup path so the sample value is a real scientific name.
+            if (
+                self.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+                and self.django_import_field_name == "related_species"
+                and self.django_lookup_field_name
+            ):
+                leaf_field = self.django_lookup_field_name.split("__")[-1]
+                random_value = (
+                    Taxonomy.objects.order_by("?")
+                    .values_list(leaf_field, flat=True)
+                    .exclude(**{f"{leaf_field}__isnull": True})
+                    .first()
+                )
+                if random_value is None:
+                    errors.append(
+                        {
+                            "error_type": "no_records",
+                            "error_message": f"No Taxonomy records found for related_species lookup field '{leaf_field}'",
+                        }
+                    )
+                    return None
+                return str(random_value)
+
             related_model_qs = self.filtered_related_model_qs
 
             if not related_model_qs.exists():
