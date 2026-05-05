@@ -268,8 +268,13 @@ class ContentTypeSerializer(BaseModelSerializer):
         exclude_fields = []
         if hasattr(obj.model_class(), "BULK_IMPORT_EXCLUDE_FIELDS"):
             exclude_fields = obj.model_class().BULK_IMPORT_EXCLUDE_FIELDS
+        include_fields = None
+        if hasattr(obj.model_class(), "BULK_IMPORT_INCLUDE_FIELDS"):
+            include_fields = obj.model_class().BULK_IMPORT_INCLUDE_FIELDS
 
         def filter_fields(field):
+            if include_fields is not None and field.name not in include_fields:
+                return False
             return (
                 field.name not in exclude_fields
                 and field.name != "occurrence_report"

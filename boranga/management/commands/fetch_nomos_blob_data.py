@@ -271,14 +271,32 @@ class Command(BaseCommand):
 
                                     if class_system_fk:
                                         try:
-                                            obj, created = InformalGroup.objects.update_or_create(
+                                            igs = InformalGroup.objects.filter(
                                                 taxonomy=taxon_obj,
                                                 classification_system_fk=class_system_fk,
-                                                defaults={
-                                                    "classification_system_id": class_system_fk.classification_system_id,  # noqa
-                                                    "taxon_name_id": taxon_obj.taxon_name_id,
-                                                },
                                             )
+                                            count_igs = igs.count()
+                                            if count_igs == 0:
+                                                InformalGroup.objects.create(
+                                                    taxonomy=taxon_obj,
+                                                    classification_system_fk=class_system_fk,
+                                                    classification_system_id=class_system_fk.classification_system_id,  # noqa
+                                                    taxon_name_id=taxon_obj.taxon_name_id,
+                                                )
+                                            else:
+                                                # Keep the first record; delete any duplicates
+                                                if count_igs > 1:
+                                                    duplicate_ids = list(igs.values_list("id", flat=True)[1:])
+                                                    InformalGroup.objects.filter(id__in=duplicate_ids).delete()
+                                                    logger.warning(
+                                                        f"Deleted {len(duplicate_ids)} duplicate InformalGroup "
+                                                        f"record(s) for taxonomy={taxon_obj.taxon_name_id}, "
+                                                        f"classification_system_id={class_system_fk.classification_system_id}"
+                                                    )
+                                                igs.filter(id=igs.values_list("id", flat=True).first()).update(
+                                                    classification_system_id=class_system_fk.classification_system_id,  # noqa
+                                                    taxon_name_id=taxon_obj.taxon_name_id,
+                                                )
                                         except Exception as e:
                                             err_msg = "Create informal group:"
                                             logger.error(f"{err_msg}\n{str(e)}")

@@ -31,7 +31,7 @@
 {% endblock %}
 
 {% block extra_css %}
-  <link rel="icon" type="image/png" href="/static/boranga/favicon.ico" />
+  <link rel="icon" type="image/png" href="/static/boranga/img/bcs-icon-white-bg-32x32.png" />
 
   <link rel="stylesheet" href="{% static 'boranga/css/base.css' %}?v={{ GIT_COMMIT_HASH }}" />
 {% endblock %}
@@ -53,7 +53,7 @@
 {% block menu_items_left_brand %}
   <div class="navbar-nav">
     <div class="nav-item">
-      <a class="nav-link{% if request.path == '/' %} active{% endif %}" href="{% url 'home' %}"><img src="/static/img/pwl_icon.png" />Home</a>
+      <a class="nav-link{% if request.path == '/' %} active{% endif %}" href="{% url 'home' %}"><img src="/static/boranga/img/bcs-icon-20x20.png" class="me-1" />Home</a>
     </div>
   </div>
 {% endblock %}

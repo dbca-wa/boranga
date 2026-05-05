@@ -3791,6 +3791,7 @@ class OccurrenceManager(models.Manager):
 
 class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     BULK_IMPORT_ABBREVIATION = "occ"
+    BULK_IMPORT_INCLUDE_FIELDS = ["wild_status", "comment"]
 
     REVIEW_STATUS_CHOICES = (
         ("not_reviewed", "Not Reviewed"),
@@ -6566,6 +6567,68 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         if row_error_count > 0:
             return
 
+        # Gate status-dependent models based on processing_status of the OCR row.
+        # OccurrenceReportApprovalDetails: only import when status is with_approver or approved.
+        # Occurrence: only import when status is approved.
+        ocr_model_data = dict(
+            zip(
+                models.get(OccurrenceReport._meta.model_name, {}).get("field_names", []),
+                models.get(OccurrenceReport._meta.model_name, {}).get("values", []),
+            )
+        )
+        row_processing_status = ocr_model_data.get("processing_status")
+        if row_processing_status not in (
+            OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
+            OccurrenceReport.PROCESSING_STATUS_APPROVED,
+        ):
+            models.pop(OccurrenceReportApprovalDetails._meta.model_name, None)
+        if row_processing_status != OccurrenceReport.PROCESSING_STATUS_APPROVED:
+            models.pop(Occurrence._meta.model_name, None)
+
+        # Validate that approved OCRs have enough data to link or create an Occurrence.
+        if row_processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED:
+            approval_model_name = OccurrenceReportApprovalDetails._meta.model_name
+            approval_data = dict(
+                zip(
+                    models.get(approval_model_name, {}).get("field_names", []),
+                    models.get(approval_model_name, {}).get("values", []),
+                )
+            )
+            has_occurrence = bool(approval_data.get("occurrence"))
+            has_new_occurrence_name = bool(approval_data.get("new_occurrence_name"))
+            has_occurrence_number = bool(
+                dict(
+                    zip(
+                        models.get(Occurrence._meta.model_name, {}).get("field_names", []),
+                        models.get(Occurrence._meta.model_name, {}).get("values", []),
+                    )
+                ).get("occurrence_number")
+            )
+            if not has_occurrence and not has_new_occurrence_name and not has_occurrence_number:
+
+                def _col_header(model_name, field_name):
+                    """Return the xlsx column header for a given model/field, falling back to 'model.field'."""
+                    col = self.schema.columns.filter(
+                        django_import_content_type__model=model_name,
+                        django_import_field_name=field_name,
+                    ).first()
+                    return col.xlsx_column_header_name if col else f"{model_name}.{field_name}"
+
+                orfapp = OccurrenceReportApprovalDetails._meta.model_name
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": row,
+                        "error_message": (
+                            "Approved occurrence reports must have either an existing occurrence "
+                            f"('{_col_header(orfapp, 'occurrence')}' or a new occurrence name "
+                            f"('{_col_header(orfapp, 'new_occurrence_name')}')."
+                        ),
+                    }
+                )
+                return
+
         model_instances = {}
         for current_model_name in models:
             model_data = dict(
@@ -6616,6 +6679,13 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     )
                     if derived:
                         current_model_instance.customer_status = derived
+
+                # Approved OCRs should default to locked=True when not explicitly provided.
+                if (
+                    "locked" not in model_data
+                    and current_model_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED
+                ):
+                    current_model_instance.locked = True
 
             elif current_model_name == Occurrence._meta.model_name:
                 occ_migrated_from_id = model_data.pop("migrated_from_id", None)
@@ -6682,7 +6752,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         else:
                             current_model_instance.community = ocr_instance.community
                     else:
-                        if Occurrence.objects.filter(migrated_from_id=occ_migrated_from_id).exists():
+                        occ_is_new = not Occurrence.objects.filter(migrated_from_id=occ_migrated_from_id).exists()
+                        if not occ_is_new:
                             current_model_instance = Occurrence.objects.get(migrated_from_id=occ_migrated_from_id)
                         else:
                             current_model_instance = Occurrence.objects.create(
@@ -6744,8 +6815,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                             )
                             return
 
-                        for field, value in model_data.items():
-                            setattr(current_model_instance, field, value)
+                        # Only apply extra fields (e.g. wild_status, comment) when the
+                        # OCC was newly created — not when linking to an existing one.
+                        if occ_is_new:
+                            for field, value in model_data.items():
+                                setattr(current_model_instance, field, value)
 
             elif current_model_name == SubmitterInformation._meta.model_name:
                 # Submitter information is created automatically when an OccurrenceReport is created
@@ -6879,6 +6953,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         "error_type": "integrity",
                         "data": model_data,
                         "error_message": f"Error creating model instance: {e}",
+                    }
+                )
+            except ValidationError as e:
+                logger.error(f"Validation error saving model instance: {e}")
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": model_data,
+                        "error_message": str(e.message if hasattr(e, "message") else e),
                     }
                 )
 
@@ -7378,21 +7462,57 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 django_import_field_name="occurrence_number",
             ).exists()
         )
-
-        # Special case where only an existing occurrence or a new_occurrence_name
-        # Should be provided when both columns are present otherwise validation will fail
-        row_contains_ocr_approval_occurrence_and_new_name = (
-            columns.filter(
-                django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReportApprovalDetails),
-                django_import_field_name="occurrence",
-            ).exists()
-            and columns.filter(
-                django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReportApprovalDetails),
-                django_import_field_name="new_occurrence_name",
-            ).exists()
-        )
         species_or_community_identifier = None
         for column in columns:
+            # --- Compute static override values BEFORE calling get_sample_value so that
+            #     get_sample_value is never called for these columns and cannot append
+            #     spurious errors into the errors list. ---
+
+            # When both occurrence and new_occurrence_name columns exist for
+            # OccurrenceReportApprovalDetails, always use the new_occurrence_name path
+            # so that schema validation doesn't require real Occurrence records in the DB.
+            if (
+                column.django_import_content_type.model == OccurrenceReportApprovalDetails._meta.model_name
+                and column.django_import_field_name == "occurrence"
+            ):
+                sample_value = None
+                sample_row.append(sample_value)
+                continue
+
+            if (
+                column.django_import_content_type.model == OccurrenceReportApprovalDetails._meta.model_name
+                and column.django_import_field_name == "new_occurrence_name"
+            ):
+                sample_value = "Schema Validation Occurrence"
+                sample_row.append(sample_value)
+                continue
+
+            # For OCRAssociatedSpecies.related_species, always resolve sample values
+            # directly from Taxonomy so we get valid scientific names rather than
+            # AssociatedSpeciesTaxonomy PKs (which would fail the validate() lookup).
+            if (
+                column.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+                and column.django_import_field_name == "related_species"
+            ):
+                lookup_field = column.django_lookup_field_name or "scientific_name"
+                leaf_field = lookup_field.split("__")[-1]
+                random_value = (
+                    Taxonomy.objects.order_by("?")
+                    .values_list(leaf_field, flat=True)
+                    .exclude(**{f"{leaf_field}__isnull": True})
+                    .first()
+                )
+                if random_value is None:
+                    errors.append(
+                        {
+                            "error_type": "no_records",
+                            "error_message": f"No Taxonomy records found for related_species lookup field '{leaf_field}'",
+                        }
+                    )
+                sample_row.append(str(random_value) if random_value is not None else None)
+                continue
+
+            # --- Default path: ask the column for a sample value ---
             sample_value = column.get_sample_value(errors, species_or_community_identifier)
 
             if (
@@ -7461,13 +7581,6 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 column.django_import_content_type.model == Occurrence._meta.model_name
                 and column.django_import_field_name == "migrated_from_id"
                 and row_contains_occ_migrated_from_id
-            ):
-                sample_value = ""
-
-            if (
-                column.django_import_content_type.model == OccurrenceReportApprovalDetails._meta.model_name
-                and column.django_import_field_name == "new_occurrence_name"
-                and row_contains_ocr_approval_occurrence_and_new_name
             ):
                 sample_value = ""
 
@@ -8068,6 +8181,32 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return random_value
 
         if isinstance(field, models.ManyToManyField):
+            # Special case: OCRAssociatedSpecies.related_species uses a traversing lookup
+            # (e.g. 'taxonomy__scientific_name'). The related model is AssociatedSpeciesTaxonomy
+            # which may have no rows and has no useful display field. Query Taxonomy directly
+            # using the leaf part of the lookup path so the sample value is a real scientific name.
+            if (
+                self.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+                and self.django_import_field_name == "related_species"
+                and self.django_lookup_field_name
+            ):
+                leaf_field = self.django_lookup_field_name.split("__")[-1]
+                random_value = (
+                    Taxonomy.objects.order_by("?")
+                    .values_list(leaf_field, flat=True)
+                    .exclude(**{f"{leaf_field}__isnull": True})
+                    .first()
+                )
+                if random_value is None:
+                    errors.append(
+                        {
+                            "error_type": "no_records",
+                            "error_message": f"No Taxonomy records found for related_species lookup field '{leaf_field}'",
+                        }
+                    )
+                    return None
+                return str(random_value)
+
             related_model_qs = self.filtered_related_model_qs
 
             if not related_model_qs.exists():
@@ -8202,7 +8341,15 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 return random_occurrence.filter(**filter_field).order_by("?").first().occurrence_number
 
             if hasattr(field, "max_length") and field.max_length:
-                random_length = random.randint(1, field.max_length)
+                _max = field.max_length
+                if (
+                    self.django_import_field_name == "migrated_from_id"
+                    and self.django_import_content_type.model == OccurrenceReport._meta.model_name
+                ):
+                    _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _max -= len(_prefix) + 1 + _pad + 1
+                random_length = random.randint(1, max(1, _max))
             else:
                 random_length = random.randint(1, 1000)
             return "".join(random.choices(string.ascii_letters + string.digits + " ", k=random_length))

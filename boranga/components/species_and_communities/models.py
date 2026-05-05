@@ -2257,7 +2257,7 @@ class CommunityTaxonomy(BaseModel):
     community = models.OneToOneField(Community, on_delete=models.CASCADE, null=True, related_name="taxonomy")
     community_common_id = models.CharField(max_length=200, null=True, blank=True, unique=True)
     community_name = models.CharField(max_length=512, null=True, blank=True, unique=True)
-    community_description = models.CharField(max_length=2048, null=True, blank=True)
+    community_description = models.TextField(null=True, blank=True)
     previous_name = models.CharField(max_length=512, null=True, blank=True)
     name_authority = models.CharField(max_length=500, null=True, blank=True)
     name_comments = models.CharField(max_length=500, null=True, blank=True)
@@ -2730,7 +2730,7 @@ class ConservationThreat(RevisionedMixin):
         null=True,
         blank=True,
     )
-    comment = models.CharField(max_length=512, blank=True, null=True)
+    comment = models.TextField(blank=True, null=True)
     date_observed = models.DateField(blank=True, null=True)
     visible = models.BooleanField(default=True)  # to prevent deletion, hidden and still be available in history
 

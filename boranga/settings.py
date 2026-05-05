@@ -544,6 +544,7 @@ OCR_BULK_IMPORT_LOOKUP_TABLE_DISPLAY_FIELDS = [
     "label",
     "display_name",
     "code",
+    "occurrence_number",
 ]
 
 OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT = env("OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT", 30)
