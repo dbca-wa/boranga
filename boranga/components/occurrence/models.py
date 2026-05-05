@@ -8341,7 +8341,15 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 return random_occurrence.filter(**filter_field).order_by("?").first().occurrence_number
 
             if hasattr(field, "max_length") and field.max_length:
-                random_length = random.randint(1, field.max_length)
+                _max = field.max_length
+                if (
+                    self.django_import_field_name == "migrated_from_id"
+                    and self.django_import_content_type.model == OccurrenceReport._meta.model_name
+                ):
+                    _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _max -= len(_prefix) + 1 + _pad + 1
+                random_length = random.randint(1, max(1, _max))
             else:
                 random_length = random.randint(1, 1000)
             return "".join(random.choices(string.ascii_letters + string.digits + " ", k=random_length))
