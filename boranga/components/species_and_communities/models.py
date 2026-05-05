@@ -2730,7 +2730,7 @@ class ConservationThreat(RevisionedMixin):
         null=True,
         blank=True,
     )
-    comment = models.CharField(max_length=512, blank=True, null=True)
+    comment = models.TextField(blank=True, null=True)
     date_observed = models.DateField(blank=True, null=True)
     visible = models.BooleanField(default=True)  # to prevent deletion, hidden and still be available in history
 
