@@ -44,11 +44,14 @@ logger = logging.getLogger(__name__)
 # round-trips per occurrence during bulk operations.
 _cadastre_local_check_cache: dict[str, tuple[bool, bool]] = {}
 
-# Albers Equal Area projection string for Western Australia
-aea_wa_string = (
-    "+proj=aea +lat_1=-17.5 +lat_2=-31.5 +lat_0=0 +lon_0=121 +x_0=0 +y_0=0 "
-    "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-)
+# Albers Equal Area projection string for Western Australia.
+# No +towgs84 here: GDA2020 (EPSG:7844) already uses the GRS80 ellipsoid, so
+# PROJ can do a direct ellipsoidal transformation without a datum-grid lookup.
+# Including +towgs84=0,0,0,0,0,0,0 forces PROJ to route through WGS84, which
+# triggers binary grid-file log messages that cause a UnicodeDecodeError in
+# pyproj's UTF-8 log callback, ultimately producing NaN coordinates and
+# GEOS "Shell empty after removing invalid points" errors.
+aea_wa_string = "+proj=aea +lat_1=-17.5 +lat_2=-31.5 +lat_0=0 +lon_0=121 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs"
 
 
 def invert_xy_coordinates(geometries):
