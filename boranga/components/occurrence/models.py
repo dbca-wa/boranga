@@ -7477,6 +7477,55 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         )
         species_or_community_identifier = None
         for column in columns:
+            # --- Compute static override values BEFORE calling get_sample_value so that
+            #     get_sample_value is never called for these columns and cannot append
+            #     spurious errors into the errors list. ---
+
+            # When both occurrence and new_occurrence_name columns exist for
+            # OccurrenceReportApprovalDetails, always use the new_occurrence_name path
+            # so that schema validation doesn't require real Occurrence records in the DB.
+            if (
+                column.django_import_content_type.model == OccurrenceReportApprovalDetails._meta.model_name
+                and column.django_import_field_name == "occurrence"
+            ):
+                sample_value = None
+                sample_row.append(sample_value)
+                continue
+
+            if (
+                column.django_import_content_type.model == OccurrenceReportApprovalDetails._meta.model_name
+                and column.django_import_field_name == "new_occurrence_name"
+            ):
+                sample_value = "Schema Validation Occurrence"
+                sample_row.append(sample_value)
+                continue
+
+            # For OCRAssociatedSpecies.related_species, always resolve sample values
+            # directly from Taxonomy so we get valid scientific names rather than
+            # AssociatedSpeciesTaxonomy PKs (which would fail the validate() lookup).
+            if (
+                column.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+                and column.django_import_field_name == "related_species"
+            ):
+                lookup_field = column.django_lookup_field_name or "scientific_name"
+                leaf_field = lookup_field.split("__")[-1]
+                random_value = (
+                    Taxonomy.objects.order_by("?")
+                    .values_list(leaf_field, flat=True)
+                    .exclude(**{f"{leaf_field}__isnull": True})
+                    .first()
+                )
+                if random_value is None:
+                    errors.append(
+                        {
+                            "error_type": "no_records",
+                            "error_message": f"No Taxonomy records found for related_species lookup field '{leaf_field}'",
+                        }
+                    )
+                sample_row.append(str(random_value) if random_value is not None else None)
+                continue
+
+            # --- Default path: ask the column for a sample value ---
             sample_value = column.get_sample_value(errors, species_or_community_identifier)
 
             if (
