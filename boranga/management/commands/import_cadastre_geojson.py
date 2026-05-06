@@ -50,7 +50,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--keep-temp",
             action="store_true",
-            help=("Do not delete the downloaded temp file after import (keeps file under .kb_layer_cache)."),
+            help=("Do not delete the downloaded temp file after import (keeps file in private-media/kb_layer_cache)."),
         )
         parser.add_argument(
             "--chunk-size",
@@ -67,8 +67,8 @@ class Command(BaseCommand):
             "--use-cached",
             action="store_true",
             help=(
-                "If present and a previously downloaded temp file exists under "
-                ".kb_layer_cache, reuse that file instead of downloading again. "
+                "If present and a previously downloaded temp file exists in "
+                "private-media/kb_layer_cache, reuse that file instead of downloading again. "
                 "Useful for faster local testing (requires --keep-temp was used previously)."
             ),
         )
@@ -77,7 +77,7 @@ class Command(BaseCommand):
             action="store_true",
             help=(
                 "Only split the GeoJSON into chunk files and do not run ogr2ogr. "
-                "Chunk files are written under .kb_layer_cache/chunks_<ts>/. Use "
+                "Chunk files are written under private-media/kb_layer_cache/chunks_<ts>/. Use "
                 "this to validate chunking without importing."
             ),
         )

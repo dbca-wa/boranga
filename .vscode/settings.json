@@ -30,14 +30,6 @@
   "[jsonc]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "files.watcherExclude": {
-    "**/.kb_layer_cache/**": true,
-    "**/*.geojson": true
-  },
-  "search.exclude": {
-    "**/.kb_layer_cache/**": true,
-    "**/*.geojson": true
-  },
   "files.associations": {
     "**/*.geojson": "plaintext"
   },
