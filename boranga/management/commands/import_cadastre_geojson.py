@@ -290,6 +290,13 @@ class Command(BaseCommand):
                             raise CommandError(
                                 f"ogr2ogr append failed for chunk {chunk}: {e.stderr or e.stdout or str(e)}"
                             )
+                    # Delete each chunk immediately after import to keep peak disk usage
+                    # at ~original_file + one_chunk rather than ~2x the full download.
+                    if not keep_chunks:
+                        try:
+                            os.unlink(chunk)
+                        except Exception:
+                            pass
         finally:
             # Always remove the chunk directory unless the caller requested it be kept
             if keep_chunks:
@@ -443,11 +450,13 @@ class Command(BaseCommand):
         ts = int(time.time())
         tmp_name = os.path.join(meta_dir, f"kb_layer_{ts}.geojson")
 
+        # Resolve the --use-cached candidate first so the orphan sweep below
+        # knows to preserve it.
         use_cached = options.get("use_cached")
+        cached_candidate = None
         if use_cached:
-            candidate = None
             if saved.get("file"):
-                candidate = os.path.join(meta_dir, saved.get("file"))
+                cached_candidate = os.path.join(meta_dir, saved.get("file"))
             else:
                 globs = [
                     os.path.join(meta_dir, p)
@@ -455,10 +464,35 @@ class Command(BaseCommand):
                     if p.startswith("kb_layer_") and p.endswith(".geojson")
                 ]
                 if globs:
-                    candidate = sorted(globs)[-1]
-            if candidate and os.path.exists(candidate):
-                self.stdout.write(self.style.NOTICE(f"Reusing cached file: {candidate}"))
-                tmp_name = candidate
+                    cached_candidate = sorted(globs)[-1]
+            if cached_candidate and os.path.exists(cached_candidate):
+                self.stdout.write(self.style.NOTICE(f"Reusing cached file: {cached_candidate}"))
+                tmp_name = cached_candidate
+
+        # Remove any orphaned files/directories left by interrupted previous runs
+        # (e.g. pod OOM-kill or restart mid-import).  We do this before starting the
+        # download so stale files don't accumulate across restarts.
+        # Each interrupted run can leave up to ~5.4 GB: the downloaded geojson (~2.7 GB)
+        # plus an equally-sized chunks_<ts>/ directory, so a few failed runs can fill
+        # a 16 GB disk before a successful one completes.
+        # We preserve tmp_name (the file this run will use, whether new or --use-cached).
+        try:
+            for entry in os.listdir(meta_dir):
+                orphan = os.path.join(meta_dir, entry)
+                if entry.startswith("kb_layer_") and entry.endswith(".geojson") and orphan != tmp_name:
+                    try:
+                        os.unlink(orphan)
+                        self.stdout.write(self.style.NOTICE(f"Removed orphaned temp file: {orphan}"))
+                    except Exception:
+                        pass
+                elif entry.startswith("chunks_") and os.path.isdir(orphan):
+                    try:
+                        shutil.rmtree(orphan, ignore_errors=True)
+                        self.stdout.write(self.style.NOTICE(f"Removed orphaned chunk directory: {orphan}"))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
         if not (use_cached and os.path.exists(tmp_name)):
             self.stdout.write(f"Downloading {url} to temporary file {tmp_name} ...")
@@ -476,13 +510,19 @@ class Command(BaseCommand):
                     headers["Authorization"] = auth_header.strip()
                 req_kwargs["headers"] = headers
 
-            with requests.get(url, **req_kwargs) as r:
-                r.raise_for_status()
-                remote_headers = r.headers
-                with open(tmp_name, "wb") as tmpf:
-                    for chunk in r.iter_content(chunk_size=4 * 1024 * 1024):
-                        if chunk:
-                            tmpf.write(chunk)
+            try:
+                with requests.get(url, **req_kwargs) as r:
+                    r.raise_for_status()
+                    remote_headers = r.headers
+                    with open(tmp_name, "wb") as tmpf:
+                        for chunk in r.iter_content(chunk_size=4 * 1024 * 1024):
+                            if chunk:
+                                tmpf.write(chunk)
+            except Exception:
+                if os.path.exists(tmp_name):
+                    self.stdout.write(self.style.WARNING(f"Download failed; removing partial file {tmp_name}"))
+                    os.unlink(tmp_name)
+                raise
             elapsed = time.perf_counter() - start
             try:
                 size = os.path.getsize(tmp_name)
