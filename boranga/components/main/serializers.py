@@ -272,11 +272,16 @@ class ContentTypeSerializer(BaseModelSerializer):
         if hasattr(obj.model_class(), "BULK_IMPORT_INCLUDE_FIELDS"):
             include_fields = obj.model_class().BULK_IMPORT_INCLUDE_FIELDS
 
+        # obs_date is always auto-populated from the parent OCR's observation_date
+        # during bulk import — it must never appear as a schema column.
+        ALWAYS_EXCLUDE = {"obs_date"}
+
         def filter_fields(field):
             if include_fields is not None and field.name not in include_fields:
                 return False
             return (
                 field.name not in exclude_fields
+                and field.name not in ALWAYS_EXCLUDE
                 and field.name != "occurrence_report"
                 and not field.auto_created
                 and not getattr(field, "auto_now", False)
