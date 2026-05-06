@@ -1587,7 +1587,14 @@ class OccurrenceImporter(BaseSheetImporter):
                         site_create.append(s)
 
             if site_create:
-                OccurrenceSite.objects.bulk_create(site_create, batch_size=BATCH)
+                created_sites = OccurrenceSite.objects.bulk_create(site_create, batch_size=BATCH)
+                # bulk_create bypasses save(), so site_number is never set.
+                # Assign it now using the same "ST{pk}" pattern as the model's save().
+                to_number = [s for s in created_sites if s.pk and not s.site_number]
+                if to_number:
+                    for s in to_number:
+                        s.site_number = f"ST{s.pk}"
+                    OccurrenceSite.objects.bulk_update(to_number, ["site_number"], batch_size=BATCH)
             if site_update:
                 OccurrenceSite.objects.bulk_update(
                     site_update,
