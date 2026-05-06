@@ -27,11 +27,12 @@ import logging
 
 from boranga.components.conservation_status.models import (
     CommonwealthConservationList,
+    ConservationChangeCode,
     ConservationStatus,
     IUCNVersion,
 )
 from boranga.components.data_migration.mappings import get_group_type_id
-from boranga.components.data_migration.registry import fk_lookup
+from boranga.components.data_migration.registry import fk_lookup, fk_lookup_static
 from boranga.components.species_and_communities.models import GroupType
 
 from ..base import ExtractionResult, SourceAdapter
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 IUCN_LOOKUP = fk_lookup(IUCNVersion, "code")
 COMMONWEALTH_LOOKUP = fk_lookup(CommonwealthConservationList, "code")
+MIGRATED_RECORD_CHANGE_CODE = fk_lookup_static(ConservationChangeCode, "code", "Migrated Record")
 
 # Valid processing_status values derived directly from the model's choices tuple —
 # no need to duplicate the string literals here.
@@ -83,8 +85,8 @@ PIPELINES: dict[str, list] = {
     "listing_date": ["strip", "smart_date_parse"],
     # Task 12091: lodgement_date - no data, leave null
     "lodgement_date": ["strip", "blank_to_none"],
-    # Task 12060: change_code - no data, leave null
-    "change_code": ["strip", "blank_to_none"],
+    # Task 12060: change_code - always 'Migrated Record'
+    "change_code": [MIGRATED_RECORD_CHANGE_CODE],
     # Text fields - Tasks 12081, 12080
     "conservation_criteria": ["strip", "blank_to_none"],
     "comment": ["strip", "blank_to_none"],
@@ -170,7 +172,6 @@ class ConservationStatusTecAdapter(SourceAdapter):
                 "assigned_approver",
                 "review_due_date",
                 "lodgement_date",
-                "change_code",
             ):
                 canonical.setdefault(field, None)
 
