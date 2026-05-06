@@ -326,7 +326,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         continue
 
                     # Extract fields
-                    taxon_id = row.get("taxon_name_id", "").strip()
+                    taxon_id = row.get("SSP_NAME_ID", "").strip()
+                    if not taxon_id:
+                        continue
                     # Build comments from SSP_ fields using shared function
                     comments = build_site_species_comments(row)
 
