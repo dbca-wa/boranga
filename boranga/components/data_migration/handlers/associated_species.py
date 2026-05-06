@@ -388,7 +388,12 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
             if errors_details:
                 import os
 
-                csv_path = "private-media/handler_output/associated_species_errors.csv"
+                ts = timezone.now().strftime("%Y%m%d_%H%M%S")
+                csv_path = os.path.join(
+                    os.getcwd(),
+                    "private-media/handler_output",
+                    f"{self.slug}_errors_{ts}.csv",
+                )
                 os.makedirs(os.path.dirname(csv_path), exist_ok=True)
                 try:
                     with open(csv_path, "w", newline="") as f:
