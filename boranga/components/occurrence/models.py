@@ -8873,6 +8873,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
                 return cell_value, errors_added
 
+            errors_before = len(errors)
             cell_value = get_geometry_array_from_geojson(
                 geom_json,
                 cell_value,
@@ -8881,6 +8882,9 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors,
                 errors_added,
             )
+            # get_geometry_array_from_geojson appends to the errors list in-place but
+            # takes errors_added as a value, so we must compute the delta here.
+            errors_added += len(errors) - errors_before
 
             return cell_value, errors_added
 
