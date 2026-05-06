@@ -767,7 +767,7 @@ class CommunityImporter(BaseSheetImporter):
                         publication_desc = " ".join(parts)
 
                         if publication_desc:
-                            description = f"{publication_desc}. CP_PUB_NO: {pub_no}"
+                            description = f"{publication_desc}\n\nCP_PUB_NO: {pub_no}"
                         else:
                             description = f"CP_PUB_NO: {pub_no}"
 
