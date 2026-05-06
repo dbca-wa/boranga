@@ -138,6 +138,8 @@ PIPELINES: dict[str, list] = {
     "change_code": [MIGRATED_RECORD_CHANGE_CODE],
     # review_due_date: effective_from + 10 years for approved CR/EN/VU BCA listings
     "review_due_date": ["tec_cs_review_due_date"],
+    # submitter: always the default TEC email user
+    "submitter": ["default_user_for_source"],
     # Text fields - Tasks 12081, 12080
     "conservation_criteria": ["strip", "blank_to_none"],
     "comment": ["strip", "blank_to_none"],
