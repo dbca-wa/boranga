@@ -24,6 +24,9 @@ Key task rules (from work items 12060-12093):
 """
 
 import logging
+from datetime import datetime
+
+from dateutil.relativedelta import relativedelta
 
 from boranga.components.conservation_status.models import (
     CommonwealthConservationList,
@@ -32,7 +35,13 @@ from boranga.components.conservation_status.models import (
     IUCNVersion,
 )
 from boranga.components.data_migration.mappings import get_group_type_id
-from boranga.components.data_migration.registry import fk_lookup, fk_lookup_static
+from boranga.components.data_migration.registry import (
+    TransformIssue,
+    TransformResult,
+    fk_lookup,
+    fk_lookup_static,
+    registry,
+)
 from boranga.components.species_and_communities.models import GroupType
 
 from ..base import ExtractionResult, SourceAdapter
@@ -40,6 +49,46 @@ from ..sources import Source
 from . import schema
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# review_due_date transform: approved CR/EN/VU BCA listings -> effective_from + 10 years
+# Runs as a pipeline step so failures are recorded in the error CSV.
+# ---------------------------------------------------------------------------
+_REVIEW_DUE_DATE_CATS = frozenset(("CR", "EN", "VU"))
+_REVIEW_DUE_DATE_FMTS = ("%d-%b-%y", "%d-%b-%Y", "%Y-%m-%d", "%d/%m/%Y")
+
+
+@registry.register("tec_cs_review_due_date")
+def t_tec_cs_review_due_date(value, ctx):
+    """Set review_due_date = effective_from_date + 10 years for approved CR/EN/VU listings."""
+    row = ctx.row
+    p_status = str(row.get("processing_status") or "").strip()
+    if p_status != ConservationStatus.PROCESSING_STATUS_APPROVED:
+        return TransformResult(None)
+
+    wa_leg_cat = str(row.get("wa_legislative_category") or "").strip().upper()
+    if wa_leg_cat not in _REVIEW_DUE_DATE_CATS:
+        return TransformResult(None)
+
+    eff_from_raw = str(row.get("effective_from_date") or "").strip()
+    if not eff_from_raw:
+        return TransformResult(
+            None,
+            [TransformIssue("error", "review_due_date: effective_from_date is empty for approved CR/EN/VU record")],
+        )
+
+    for fmt in _REVIEW_DUE_DATE_FMTS:
+        try:
+            eff_from = datetime.strptime(eff_from_raw, fmt).date()
+            return TransformResult(eff_from + relativedelta(years=10))
+        except ValueError:
+            pass
+
+    return TransformResult(
+        None,
+        [TransformIssue("error", f"review_due_date: could not parse effective_from_date {eff_from_raw!r}")],
+    )
+
 
 # ---------------------------------------------------------------------------
 # FK lookups (return model PK on hit, raw value + error on miss)
@@ -87,6 +136,8 @@ PIPELINES: dict[str, list] = {
     "lodgement_date": ["strip", "blank_to_none"],
     # Task 12060: change_code - always 'Migrated Record'
     "change_code": [MIGRATED_RECORD_CHANGE_CODE],
+    # review_due_date: effective_from + 10 years for approved CR/EN/VU BCA listings
+    "review_due_date": ["tec_cs_review_due_date"],
     # Text fields - Tasks 12081, 12080
     "conservation_criteria": ["strip", "blank_to_none"],
     "comment": ["strip", "blank_to_none"],
