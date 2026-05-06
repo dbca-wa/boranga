@@ -1541,7 +1541,18 @@ class OccurrenceImporter(BaseSheetImporter):
                                     transformed_site[col] = res.value
                             sites_to_process.append(transformed_site)
                     elif any(k.startswith("OccurrenceSite__") for k in merged):
-                        sites_to_process.append(merged)
+                        # Only create a site from the main row when it carries
+                        # meaningful site-identifying data (name or coordinates).
+                        # Prevents phantom null-site creation when sources like
+                        # TEC_BOUNDARIES are run separately: they populate
+                        # OccurrenceSite__ pipeline keys but leave all values None.
+                        has_name = bool(merged.get("OccurrenceSite__site_name"))
+                        has_coords = bool(merged.get("OccurrenceSite__latitude")) and bool(
+                            merged.get("OccurrenceSite__longitude")
+                        )
+                        has_geo = bool(merged.get("OccurrenceSite__geometry"))
+                        if has_name or has_coords or has_geo:
+                            sites_to_process.append(merged)
 
                 for mapped_site in sites_to_process:
                     site_name = mapped_site.get("OccurrenceSite__site_name")
