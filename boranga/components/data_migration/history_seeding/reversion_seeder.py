@@ -498,6 +498,83 @@ class MigratedHistorySeeder:
 
         return total
 
+    def seed_bulk_import_occurrence_reports(self, task_id: int) -> int:
+        """
+        Seed initial django-reversion history for all OccurrenceReports (and their
+        sub-records) created by a specific bulk import task.
+
+        This is the bulk-import equivalent of seed_occurrence_reports(), scoped
+        to a single task via OccurrenceReport.bulk_import_task_id rather than
+        migrated_from_id (which is a legacy-migration concept).
+        """
+        from boranga.components.occurrence.models import (
+            OccurrenceReport,
+            OccurrenceReportDocument,
+            OCRConservationThreat,
+            OCRObserverDetail,
+        )
+
+        total = 0
+        qs = OccurrenceReport.objects.filter(bulk_import_task_id=task_id).select_related(
+            "location",
+            "habitat_composition",
+            "habitat_condition",
+            "vegetation_structure",
+            "fire_history",
+            "associated_species",
+            "observation_detail",
+            "plant_count",
+            "animal_observation",
+            "identification",
+        )
+        follow_names = [
+            "location",
+            "habitat_composition",
+            "habitat_condition",
+            "vegetation_structure",
+            "fire_history",
+            "associated_species",
+            "observation_detail",
+            "plant_count",
+            "animal_observation",
+            "identification",
+        ]
+        total += self._seed_parent_objects(
+            qs,
+            follow_names,
+            lambda ocr: f"Bulk import task {task_id} (initial baseline)",
+            "OccurrenceReport",
+        )
+
+        doc_qs = OccurrenceReportDocument.objects.filter(occurrence_report__bulk_import_task_id=task_id).select_related(
+            "occurrence_report"
+        )
+        total += self._seed_simple_objects(
+            doc_qs,
+            lambda d: f"Bulk import task {task_id} (initial baseline)",
+            "OccurrenceReportDocument",
+        )
+
+        threat_qs = OCRConservationThreat.objects.filter(occurrence_report__bulk_import_task_id=task_id).select_related(
+            "occurrence_report"
+        )
+        total += self._seed_simple_objects(
+            threat_qs,
+            lambda t: f"Bulk import task {task_id} (initial baseline)",
+            "OCRConservationThreat",
+        )
+
+        observer_qs = OCRObserverDetail.objects.filter(occurrence_report__bulk_import_task_id=task_id).select_related(
+            "occurrence_report"
+        )
+        total += self._seed_simple_objects(
+            observer_qs,
+            lambda o: f"Bulk import task {task_id} (initial baseline)",
+            "OCRObserverDetail",
+        )
+
+        return total
+
     # ------------------------------------------------------------------
     # Core bulk-seed helpers
     # ------------------------------------------------------------------

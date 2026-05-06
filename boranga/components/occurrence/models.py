@@ -6435,6 +6435,19 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             self.processing_status = self.PROCESSING_STATUS_COMPLETED
             self.datetime_completed = timezone.now()
             self.save()
+
+            # Seed initial reversion history for all records created by this task.
+            try:
+                from boranga.components.data_migration.history_seeding.reversion_seeder import (
+                    MigratedHistorySeeder,
+                )
+
+                seeder = MigratedHistorySeeder(batch_size=500)
+                count = seeder.seed_bulk_import_occurrence_reports(self.pk)
+                logger.info(f"Bulk import task {self.pk}: seeded {count} reversion version(s)")
+            except Exception:
+                logger.exception(f"Bulk import task {self.pk}: history seeding failed (non-fatal)")
+
             return []
 
     def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
