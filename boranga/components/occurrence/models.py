@@ -6989,6 +6989,25 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     }
                 )
 
+        # Post-processing: propagate OccurrenceReport.observation_date -> obs_date on
+        # any child model instance that has an obs_date field and was not given an
+        # explicit value via the import schema (i.e. obs_date is still None).
+        # Group by class so we issue one UPDATE per model rather than one per instance.
+        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
+        if ocr_instance and ocr_instance.observation_date:
+            _obs_date_pks_by_class: dict[type, list] = {}
+            for _child_instance in model_instances.values():
+                if _child_instance is ocr_instance:
+                    continue
+                try:
+                    _child_instance._meta.get_field("obs_date")
+                except Exception:
+                    continue
+                if _child_instance.obs_date is None:
+                    _obs_date_pks_by_class.setdefault(type(_child_instance), []).append(_child_instance.pk)
+            for _model_class, _pks in _obs_date_pks_by_class.items():
+                _model_class.objects.filter(pk__in=_pks).update(obs_date=ocr_instance.observation_date)
+
         # Post-processing: auto-link OccurrenceReport.occurrence for approved OCRs
         # from OccurrenceReportApprovalDetails when it hasn't already been set
         # (e.g. by an Occurrence model row linking via occurrence_reports.add()).
