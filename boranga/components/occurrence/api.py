@@ -4264,11 +4264,9 @@ class OccurrenceViewSet(
                 id__in=posted_site_ids
             )
 
-            count = 0
-            for site in to_hide_qs:
-                site.visible = False
-                site.save(version_user=request.user)
-                count += 1
+            # Use queryset update to avoid calling GeometryBase.save() validation, which rejects
+            # sites that have geometry=None (e.g. migrated TEC sites where lat/lon was unavailable).
+            count = to_hide_qs.update(visible=False)
             if count:
                 logger.info(
                     "Discarded %s OccurrenceSite records for Occurrence %s",
@@ -4386,11 +4384,7 @@ class OccurrenceViewSet(
                 id__in=posted_site_ids
             )
 
-            count = 0
-            for site in to_hide_qs:
-                site.visible = False
-                site.save(version_user=request.user)
-                count += 1
+            count = to_hide_qs.update(visible=False)
             if count:
                 logger.info(
                     "Soft-deleted %s OccurrenceSite records for Occurrence %s (update_location_details)",
