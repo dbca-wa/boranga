@@ -616,13 +616,17 @@ class MigratedHistorySeeder:
 
         str_ids = [str(pk) for pk in all_ids]
         already = self._already_versioned_ids(model_class, str_ids)
-        logger.info(
-            "seed_simple(%s): %d total, %d already have history → %d to seed",
-            label,
-            len(all_ids),
-            len(already),
-            len(all_ids) - len(already),
-        )
+        to_seed_count = len(all_ids) - len(already)
+        if to_seed_count == 0:
+            logger.info("seed_simple(%s): %d total, all already versioned — skipping", label, len(all_ids))
+        else:
+            logger.info(
+                "seed_simple(%s): %d total, %d already have history → %d to seed",
+                label,
+                len(all_ids),
+                len(already),
+                to_seed_count,
+            )
 
         # Warn if any already-versioned objects belong to the current migration run —
         # this indicates stale reversion history from PK reuse after a wipe.
@@ -718,13 +722,16 @@ class MigratedHistorySeeder:
         already = self._already_versioned_ids(model_class, str_ids)
         to_seed_pks = [pk for pk, s in zip(all_ids, str_ids) if s not in already]
 
-        logger.info(
-            "seed_parent(%s): %d total, %d already have history → %d to seed",
-            label,
-            len(all_ids),
-            len(already),
-            len(to_seed_pks),
-        )
+        if not to_seed_pks:
+            logger.info("seed_parent(%s): %d total, all already versioned — skipping", label, len(all_ids))
+        else:
+            logger.info(
+                "seed_parent(%s): %d total, %d already have history → %d to seed",
+                label,
+                len(all_ids),
+                len(already),
+                len(to_seed_pks),
+            )
 
         # Warn if any already-versioned objects belong to the current migration run —
         # this indicates stale reversion history from PK reuse after a wipe.
