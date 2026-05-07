@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from collections import defaultdict
+from datetime import datetime
 from typing import Any
 
 import requests
@@ -1834,7 +1835,8 @@ class OccurrenceImporter(BaseSheetImporter):
                         "comments": mapped_site.get("OccurrenceSite__comments"),
                         "geometry": mapped_site.get("OccurrenceSite__geometry")
                         or tec_site_geometry_transform(mapped_site, None),
-                        "updated_date": mapped_site.get("OccurrenceSite__updated_date"),
+                        "updated_date": mapped_site.get("OccurrenceSite__updated_date")
+                        or datetime(1900, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
                         "drawn_by": mapped_site.get("OccurrenceSite__drawn_by"),
                         "last_updated_by": mapped_site.get("OccurrenceSite__drawn_by"),
                     }
@@ -1844,8 +1846,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         for k, v in defaults.items():
                             if k != "updated_date":
                                 setattr(s, k, v)
-                        if defaults["updated_date"]:
-                            s.updated_date = defaults["updated_date"]
+                        s.updated_date = defaults["updated_date"]
                         site_update.append(s)
                     else:
                         s = OccurrenceSite(
@@ -1856,8 +1857,7 @@ class OccurrenceImporter(BaseSheetImporter):
                             drawn_by=defaults["drawn_by"],
                             last_updated_by=defaults["last_updated_by"],
                         )
-                        if defaults["updated_date"]:
-                            s.updated_date = defaults["updated_date"]
+                        s.updated_date = defaults["updated_date"]
                         site_create.append(s)
 
             if site_create:
