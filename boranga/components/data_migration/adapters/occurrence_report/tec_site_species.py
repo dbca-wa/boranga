@@ -37,8 +37,8 @@ class OccurrenceReportTecSiteSpeciesAdapter(SourceAdapter):
                 # Can't link to occurrence report without S_ID
                 continue
 
-            # Taxonomy lookup ID (SSP_NAME_ID in TEC CSV)
-            taxon_name_id = raw.get("SSP_NAME_ID")
+            # Taxonomy lookup ID (taxon_name_id column in SITE_SPECIES.csv)
+            taxon_name_id = raw.get("taxon_name_id")
 
             # Build comments from SSP_ fields
             comments = build_site_species_comments(raw)
