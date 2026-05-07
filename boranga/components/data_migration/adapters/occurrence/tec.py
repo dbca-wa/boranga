@@ -135,6 +135,8 @@ def tec_location_locality_transform(val, ctx):
 def tec_site_geometry_transform(val, ctx):
     """
     Construct a Point geometry from OccurrenceSite__latitude and OccurrenceSite__longitude.
+    Coordinates are in GDA94 (EPSG:4283) and are reprojected to the project default SRID
+    (GDA2020/EPSG:7844) using pyproj before being stored.
     Supports being called as a pipeline transform (ctx.row) or manually (val=row).
     """
     if ctx:
@@ -149,10 +151,12 @@ def tec_site_geometry_transform(val, ctx):
         try:
             lat = float(lat)
             lon = float(lon)
-            # Assuming WGS84 (SRID 4326) for lat/lon
             from django.contrib.gis.geos import Point
+            from pyproj import Transformer
 
-            return Point(lon, lat, srid=settings.DEFAULT_SRID)
+            transformer = Transformer.from_crs("EPSG:4283", f"EPSG:{settings.DEFAULT_SRID}", always_xy=True)
+            x, y = transformer.transform(lon, lat)
+            return Point(x, y, srid=settings.DEFAULT_SRID)
         except (ValueError, TypeError):
             pass
     return None
