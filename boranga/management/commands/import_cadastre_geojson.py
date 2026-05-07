@@ -497,7 +497,7 @@ class Command(BaseCommand):
         if not (use_cached and os.path.exists(tmp_name)):
             self.stdout.write(f"Downloading {url} to temporary file {tmp_name} ...")
             start = time.perf_counter()
-            req_kwargs = {"stream": True, "timeout": 120}
+            req_kwargs = {"stream": True, "timeout": (30, 300)}
             if user and pwd:
                 req_kwargs["auth"] = HTTPBasicAuth(user, pwd)
                 self.stdout.write(self.style.NOTICE("Using HTTP Basic auth for download"))
