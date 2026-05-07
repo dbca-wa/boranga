@@ -1141,19 +1141,18 @@ class OccurrenceImporter(BaseSheetImporter):
                     }
                     if occ_content_type:
                         defaults["content_type"] = occ_content_type
-                    # Patch: Populate original_geometry_ewkb for TEC_BOUNDARIES
+                    # Populate original_geometry_ewkb for TEC_BOUNDARIES.
+                    # The pipeline has already converted the WKT string to a GEOSGeometry
+                    # and stored it in defaults["geometry"], so read .ewkb directly — no
+                    # re-parse needed.
                     if geo_src == Source.TEC_BOUNDARIES.value:
-                        from django.contrib.gis.geos import GEOSGeometry
-
-                        wkt = merged.get("OccurrenceGeometry__geometry")
-                        if wkt:
+                        geom = defaults.get("geometry")
+                        if geom:
                             try:
-                                geom = GEOSGeometry(wkt)
                                 defaults["original_geometry_ewkb"] = geom.ewkb
                             except Exception:
                                 logger.exception(
-                                    "Failed to parse WKT geometry for migrated_from_id=%s; "
-                                    "skipping original_geometry_ewkb",
+                                    "Failed to compute ewkb for migrated_from_id=%s; skipping original_geometry_ewkb",
                                     mig,
                                 )
                                 errors_details.append(
@@ -1161,7 +1160,7 @@ class OccurrenceImporter(BaseSheetImporter):
                                         "migrated_from_id": mig,
                                         "reason": "invalid_wkt_geometry",
                                         "level": "error",
-                                        "message": "Malformed WKT for OccurrenceGeometry; original_geometry_ewkb not set",
+                                        "message": "Failed to compute original_geometry_ewkb for OccurrenceGeometry",
                                         "row": merged,
                                     }
                                 )
