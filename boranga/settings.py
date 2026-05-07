@@ -341,7 +341,7 @@ RECENT_REFERRAL_COUNT = env("RECENT_REFERRAL_COUNT", 5)
 #  ------------- NOMOS JSON file url --------------
 NOMOS_BLOB_URL = env("NOMOS_BLOB_URL")
 
-GIS_SERVER_URL = env("GIS_SERVER_URL", "https://kaartdijin-boodja-geoserver.dbca.wa.gov.au/geoserver/ows")
+GIS_SERVER_URL = env("GIS_SERVER_URL", "https://kb.dbca.wa.gov.au/geoserver/ows")
 
 # Proxy prefix for basic authentication
 BASIC_AUTH_PROXY_PREFIX = env("BASIC_AUTH_PROXY_PREFIX", "kb-proxy/")
