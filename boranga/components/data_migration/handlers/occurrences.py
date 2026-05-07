@@ -7,6 +7,7 @@ import os
 from collections import defaultdict
 from typing import Any
 
+import requests
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Exists, OuterRef
@@ -63,6 +64,143 @@ from boranga.components.species_and_communities.models import District, Taxonomy
 from boranga.components.users.models import SubmitterInformation
 
 logger = logging.getLogger(__name__)
+
+# WFS layer used to resolve occurrence district by spatial intersection.
+_DISTRICT_WFS_LAYER = "kaartdijin-boodja-public:CPT_DBCA_DISTRICTS"
+_DISTRICT_NAME_CANDIDATES = [
+    "DDT_DISTRICT_NAME",
+    "DISTRICT_NAME",
+    "NAME",
+    "DISTRICTNAM",
+    "DIST_NAME",
+    "district_name",
+    "name",
+]
+
+
+def _pick_district_name(props, candidates):
+    """Return the first non-empty string from *candidates* found in *props*."""
+    for f in candidates:
+        v = props.get(f)
+        if v:
+            return str(v)
+    for k, v in props.items():
+        if v and isinstance(v, str) and ("name" in k.lower() or "district" in k.lower()):
+            return v
+    return None
+
+
+def _load_wfs_district_shapes(url, invert_xy=True, name_field=None):
+    """Download the CPT_DBCA_DISTRICTS WFS layer and return parsed shapes.
+
+    Returns a list of ``(district_name_str, shapely_geom)`` tuples.  Only
+    features with a valid geometry are included.  ``invert_xy=True`` (the
+    default) swaps x/y because the layer is served with lat/lon axes
+    inverted relative to the GeoJSON spec.
+    """
+    from shapely.affinity import affine_transform as shapely_affine_transform
+    from shapely.geometry import shape as shapely_shape_from_geojson
+
+    try:
+        resp = requests.get(url, timeout=120)
+        resp.raise_for_status()
+    except Exception as exc:
+        logger.error("GIS district WFS fetch failed: %s", exc)
+        return []
+
+    try:
+        fc = resp.json()
+    except Exception as exc:
+        logger.error("GIS district WFS response is not valid JSON: %s", exc)
+        return []
+
+    features = fc.get("features") or []
+    if not features:
+        logger.warning("GIS district WFS returned no features from %s", url)
+        return []
+
+    sample_props = (features[0].get("properties") or {}) if features else {}
+    logger.info(
+        "GIS district WFS: downloaded %d features; property keys: %s",
+        len(features),
+        list(sample_props.keys()),
+    )
+
+    results = []
+    for feat in features:
+        props = feat.get("properties") or {}
+        raw_geom = feat.get("geometry")
+        if not raw_geom:
+            continue
+        try:
+            shp = shapely_shape_from_geojson(raw_geom)
+            if invert_xy:
+                # Coordinates arrive as (lat, lon) — swap to (lon, lat).
+                shp = shapely_affine_transform(shp, [0, 1, 1, 0, 0, 0])
+            if not shp.is_valid:
+                shp = shp.buffer(0)
+        except Exception as exc:
+            logger.warning("Could not parse WFS district geometry: %s", exc)
+            continue
+
+        name = _pick_district_name(props, [name_field] if name_field else _DISTRICT_NAME_CANDIDATES)
+        results.append((name, shp))
+
+    logger.info("GIS district WFS: loaded %d valid district geometries", len(results))
+    return results
+
+
+def _build_district_geo_lookup(wfs_districts):
+    """Match WFS district names to DB ``District`` PKs.
+
+    Returns a list of ``(district_pk, region_pk, shapely_geom)`` tuples for
+    districts that could be matched by (case-insensitive) name.  Unmatched
+    WFS features are logged as warnings.
+    """
+    db_districts = {
+        d.name.strip().lower(): d for d in District.objects.select_related("region").only("pk", "name", "region_id")
+    }
+    results = []
+    for name, shp in wfs_districts:
+        if name is None:
+            logger.warning("WFS district feature has no recognisable name field — skipped")
+            continue
+        key = name.strip().lower()
+        db_dist = db_districts.get(key)
+        if db_dist is None:
+            # Try partial / substring match as a fallback
+            for db_key, db_obj in db_districts.items():
+                if key in db_key or db_key in key:
+                    db_dist = db_obj
+                    break
+        if db_dist is None:
+            logger.warning("WFS district '%s' could not be matched to a DB District — skipped", name)
+            continue
+        results.append((db_dist.pk, db_dist.region_id, shp))
+    logger.info("GIS district lookup: matched %d / %d WFS districts to DB records", len(results), len(wfs_districts))
+    return results
+
+
+def _find_primary_district(shp_geom, district_lookup):
+    """Return ``(district_pk, region_pk)`` for the district with the largest
+    intersection area.  Returns ``(None, None)`` when no district intersects.
+    """
+    best_pk = None
+    best_region_pk = None
+    best_area = 0.0
+    for dist_pk, region_pk, dist_shp in district_lookup:
+        try:
+            if not shp_geom.intersects(dist_shp):
+                continue
+            area = shp_geom.intersection(dist_shp).area
+            if area > best_area:
+                best_area = area
+                best_pk = dist_pk
+                best_region_pk = region_pk
+        except Exception:
+            pass
+    return best_pk, best_region_pk
+
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OccurrenceTpflAdapter(),
@@ -275,6 +413,52 @@ class OccurrenceImporter(BaseSheetImporter):
             )
         except argparse.ArgumentError:
             # Already added by management command
+            pass
+
+        # GIS district arguments
+        try:
+            parser.add_argument(
+                "--no-gis-district",
+                action="store_true",
+                default=False,
+                help=(
+                    "Skip the WFS-based GIS district assignment for TEC occurrences. "
+                    "By default the handler downloads CPT_DBCA_DISTRICTS once and uses "
+                    "spatial intersection to set OCCLocation.district / region."
+                ),
+            )
+            parser.add_argument(
+                "--districts-url",
+                default=None,
+                help=(
+                    "Override the WFS GetFeature URL used to download district boundaries. "
+                    "Defaults to GIS_SERVER_URL with the CPT_DBCA_DISTRICTS layer."
+                ),
+            )
+            parser.add_argument(
+                "--district-name-field",
+                default=None,
+                help=(
+                    "Property name in the WFS response that holds the district name. "
+                    "If not set, a list of common field names is tried."
+                ),
+            )
+            parser.add_argument(
+                "--invert-xy",
+                action="store_true",
+                default=True,
+                help=(
+                    "Swap x/y of downloaded district geometries (default: on because "
+                    "CPT_DBCA_DISTRICTS uses invert_xy=True in KB)."
+                ),
+            )
+            parser.add_argument(
+                "--no-invert-xy",
+                dest="invert_xy",
+                action="store_false",
+                help="Do not swap x/y of district geometries.",
+            )
+        except argparse.ArgumentError:
             pass
 
     def _parse_path_map(self, pairs):
@@ -790,6 +974,38 @@ class OccurrenceImporter(BaseSheetImporter):
         district_to_region_id: dict[int, int] = {
             d.pk: d.region_id for d in District.objects.filter(region_id__isnull=False).only("pk", "region_id")
         }
+
+        # GIS district lookup: download district boundaries ONCE from WFS and build an
+        # in-memory Shapely index.  Only enabled when TEC (or TEC_BOUNDARIES) is in the
+        # active source set and --no-gis-district has not been passed.
+        _tec_sources = {Source.TEC.value, Source.TEC_BOUNDARIES.value}
+        _run_gis_district = (
+            not options.get("no_gis_district") and any(s in _tec_sources for s in sources) and not ctx.dry_run
+        )
+        district_geo_lookup: list = []  # [(district_pk, region_pk, shapely_geom), ...]
+        if _run_gis_district:
+            _districts_url = options.get("districts_url")
+            if not _districts_url:
+                _gis_base = getattr(settings, "GIS_SERVER_URL", None)
+                if _gis_base:
+                    _gis_base = _gis_base.rstrip("/")
+                    _sep = "&" if "?" in _gis_base else "?"
+                    _districts_url = (
+                        f"{_gis_base}{_sep}service=WFS&version=2.0.0&request=GetFeature"
+                        f"&typeName={_DISTRICT_WFS_LAYER}&outputFormat=application%2Fjson"
+                        "&srsName=EPSG%3A4326"
+                    )
+            if _districts_url:
+                logger.info("GIS district WFS URL: %s", _districts_url)
+                _invert_xy = options.get("invert_xy", True)
+                _name_field = options.get("district_name_field")
+                _wfs_shapes = _load_wfs_district_shapes(_districts_url, invert_xy=_invert_xy, name_field=_name_field)
+                if _wfs_shapes:
+                    district_geo_lookup = _build_district_geo_lookup(_wfs_shapes)
+            else:
+                logger.warning(
+                    "GIS district lookup skipped: GIS_SERVER_URL not configured and --districts-url not provided"
+                )
 
         logger.info(
             "OccurrenceImporter: processing related objects in chunks (total %d ops)...",
@@ -1440,6 +1656,52 @@ class OccurrenceImporter(BaseSheetImporter):
                 OccurrenceGeometry.objects.bulk_update(
                     geo_update, ["geometry", "locked", "content_type", "original_geometry_ewkb"], batch_size=BATCH
                 )
+
+            # GIS district assignment: after geometries are persisted, intersect each
+            # touched geometry against the pre-loaded district polygons and bulk-update
+            # OCCLocation.district_id / region_id.  One bulk DB query fetches all
+            # affected locations; no individual per-occurrence queries needed.
+            if district_geo_lookup and (geo_create or geo_update):
+                from shapely.wkt import loads as shapely_wkt_loads
+
+                geo_touched = {g.occurrence_id: g for g in geo_create + geo_update}
+
+                # Compute district assignments in-memory first
+                gis_district_assignments: dict[int, tuple[int, int | None]] = {}
+                for occ_id, geo_obj in geo_touched.items():
+                    geom = getattr(geo_obj, "geometry", None)
+                    if not geom:
+                        continue
+                    try:
+                        shp = shapely_wkt_loads(geom.wkt)
+                        if not shp.is_valid:
+                            shp = shp.buffer(0)
+                    except Exception:
+                        continue
+                    dist_pk, region_pk = _find_primary_district(shp, district_geo_lookup)
+                    if dist_pk is not None:
+                        gis_district_assignments[occ_id] = (dist_pk, region_pk)
+
+                if gis_district_assignments:
+                    # Bulk-fetch all relevant OCCLocations in one query
+                    affected_ids = list(gis_district_assignments.keys())
+                    loc_by_occ = {
+                        loc.occurrence_id: loc for loc in OCCLocation.objects.filter(occurrence_id__in=affected_ids)
+                    }
+                    loc_to_update = []
+                    for occ_id, (dist_pk, region_pk) in gis_district_assignments.items():
+                        loc = loc_by_occ.get(occ_id)
+                        if loc is None:
+                            continue
+                        loc.district_id = dist_pk
+                        loc.region_id = region_pk
+                        loc_to_update.append(loc)
+                    if loc_to_update:
+                        OCCLocation.objects.bulk_update(loc_to_update, ["district_id", "region_id"], batch_size=BATCH)
+                        logger.info(
+                            "GIS district: updated district/region for %d OCCLocation(s) in this chunk",
+                            len(loc_to_update),
+                        )
 
             if ident_create:
                 OCCIdentification.objects.bulk_create(ident_create, batch_size=BATCH)
