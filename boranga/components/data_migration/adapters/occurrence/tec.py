@@ -13,7 +13,9 @@ from boranga.components.data_migration.adapters.base import (
 from boranga.components.data_migration.adapters.occurrence.schema import SCHEMA
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
+    _parse_datetime_iso,
     build_legacy_map_transform,
+    datetime_iso_factory,
     emailuser_by_legacy_username_factory,
     static_value_factory,
     t_smart_date_parse,
@@ -166,6 +168,23 @@ DOCUMENT_SUB_CATEGORY_TRANSFORM = build_legacy_map_transform(
 # Use static_value_factory for explicit None assignments
 STATIC_NONE = static_value_factory(None)
 
+# ISO datetime parser — TEC format: 2025-01-16T13:21:04+0000
+DATETIME_ISO_UTC = datetime_iso_factory("UTC")
+
+
+def tec_datetime_updated_transform(val, ctx):
+    """Return OCC_DATE_EDITED parsed as datetime, falling back to OCC_DATE_ENTERED."""
+    # val is already the OCC_DATE_EDITED value (may be None after blank_to_none)
+    if val is not None:
+        parsed = _parse_datetime_iso(val, default_tz="UTC")
+        if parsed.value is not None:
+            return parsed
+    # Fallback: use OCC_DATE_ENTERED (mapped to datetime_created in the raw row)
+    fallback = ctx.row.get("datetime_created")
+    if fallback is not None:
+        return _parse_datetime_iso(fallback, default_tz="UTC")
+    return None
+
 
 _tec_user_id_cache = None
 
@@ -268,8 +287,8 @@ PIPELINES = {
     "processing_status": [],
     "species_id": [STATIC_NONE],  # TEC is community-based, not species
     "wild_status_id": [],
-    "datetime_created": ["blank_to_none"],
-    "datetime_updated": ["blank_to_none"],
+    "datetime_created": ["strip", "blank_to_none", DATETIME_ISO_UTC, "required"],
+    "datetime_updated": ["strip", "blank_to_none", tec_datetime_updated_transform],
     "modified_by": [],
     "submitter": [],
     "pop_number": [],
