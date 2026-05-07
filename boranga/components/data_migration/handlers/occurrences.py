@@ -758,8 +758,12 @@ class OccurrenceImporter(BaseSheetImporter):
                             getattr(inst, "pk", None),
                         )
 
-        # Process related objects in chunks to avoid massive SQL queries
-        RELATED_BATCH_SIZE = 1000
+        # Process related objects in chunks to avoid massive SQL queries.
+        # For geometry-only sources (TEC_BOUNDARIES) a larger chunk amortises the
+        # fixed per-chunk DB overhead (prefetches, Occurrence fetch) over more rows.
+        _geometry_only_sources = {Source.TEC_BOUNDARIES.value}
+        _is_geometry_only_run = bool(sources) and all(s in _geometry_only_sources for s in sources)
+        RELATED_BATCH_SIZE = 5000 if _is_geometry_only_run else 1000
         total_ops = len(ops)
 
         # Load DocumentCategory "ORF Document" once
@@ -809,8 +813,9 @@ class OccurrenceImporter(BaseSheetImporter):
                 return chunk_occ_map.get(mig_id)
 
             # --- OCCContactDetail ---
+            # Skip for geometry-only sources (TEC_BOUNDARIES) — no contact data in source.
             existing_contacts = set()
-            if not getattr(ctx, "wipe_targets", False):
+            if not _is_geometry_only_run and not getattr(ctx, "wipe_targets", False):
                 existing_contacts = set(
                     OCCContactDetail.objects.filter(occurrence_id__in=chunk_occ_ids).values_list(
                         "occurrence_id", flat=True
@@ -855,8 +860,9 @@ class OccurrenceImporter(BaseSheetImporter):
                             logger.exception("Failed to create OCCContactDetail")
 
             # --- OccurrenceUserAction ---
+            # Skip for geometry-only sources (TEC_BOUNDARIES) — no action data in source.
             existing_actions = set()
-            if not getattr(ctx, "wipe_targets", False):
+            if not _is_geometry_only_run and not getattr(ctx, "wipe_targets", False):
                 existing_actions = set(
                     OccurrenceUserAction.objects.filter(occurrence_id__in=chunk_occ_ids).values_list(
                         "occurrence_id", flat=True
@@ -924,39 +930,46 @@ class OccurrenceImporter(BaseSheetImporter):
             existing_plant = {}
 
             if not getattr(ctx, "wipe_targets", False):
-                existing_locs = {
-                    loc.occurrence_id: loc for loc in OCCLocation.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_obs = {
-                    o.occurrence_id: o for o in OCCObservationDetail.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_hab = {
-                    h.occurrence_id: h for h in OCCHabitatComposition.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_fire = {
-                    f.occurrence_id: f for f in OCCFireHistory.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_assoc = {
-                    a.occurrence_id: a for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_docs = {
-                    d.occurrence_id: d for d in OccurrenceDocument.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
+                # For geometry-only sources only fetch OccurrenceGeometry — the other
+                # 10 models carry no data for these rows and the queries would be wasted.
+                if not _is_geometry_only_run:
+                    existing_locs = {
+                        loc.occurrence_id: loc for loc in OCCLocation.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_obs = {
+                        o.occurrence_id: o for o in OCCObservationDetail.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_hab = {
+                        h.occurrence_id: h
+                        for h in OCCHabitatComposition.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_fire = {
+                        f.occurrence_id: f for f in OCCFireHistory.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_assoc = {
+                        a.occurrence_id: a for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_docs = {
+                        d.occurrence_id: d for d in OccurrenceDocument.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
                 existing_geo = {
                     g.occurrence_id: g for g in OccurrenceGeometry.objects.filter(occurrence_id__in=chunk_occ_ids)
                 }
-                existing_ident = {
-                    i.occurrence_id: i for i in OCCIdentification.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_veg = {
-                    v.occurrence_id: v for v in OCCVegetationStructure.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_hcond = {
-                    hc.occurrence_id: hc for hc in OCCHabitatCondition.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_plant = {
-                    p.occurrence_id: p for p in OCCPlantCount.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
+                if not _is_geometry_only_run:
+                    existing_ident = {
+                        i.occurrence_id: i for i in OCCIdentification.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_veg = {
+                        v.occurrence_id: v
+                        for v in OCCVegetationStructure.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_hcond = {
+                        hc.occurrence_id: hc
+                        for hc in OCCHabitatCondition.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_plant = {
+                        p.occurrence_id: p for p in OCCPlantCount.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
 
             for op in chunk_ops:
                 mig = op["migrated_from_id"]
@@ -1512,7 +1525,7 @@ class OccurrenceImporter(BaseSheetImporter):
             site_create = []
             site_update = []
             existing_sites = defaultdict(dict)
-            if not getattr(ctx, "wipe_targets", False):
+            if not _is_geometry_only_run and not getattr(ctx, "wipe_targets", False):
                 for s in OccurrenceSite.objects.filter(occurrence_id__in=chunk_occ_ids):
                     existing_sites[s.occurrence_id][s.site_name] = s
 
@@ -1612,7 +1625,7 @@ class OccurrenceImporter(BaseSheetImporter):
 
             # Pre-load existing documents to check for duplicates (avoid creating identical copies on re-runs)
             existing_docs_check = defaultdict(list)
-            if not getattr(ctx, "wipe_targets", False):
+            if not _is_geometry_only_run and not getattr(ctx, "wipe_targets", False):
                 for d in OccurrenceDocument.objects.filter(occurrence_id__in=chunk_occ_ids):
                     existing_docs_check[d.occurrence_id].append(d)
 
