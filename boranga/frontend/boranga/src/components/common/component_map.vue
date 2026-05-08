@@ -3774,12 +3774,12 @@ export default {
             this.layerSwitcher.on('layer:opacity', (e) => {
                 const layer = e.layer;
                 const opacity = layer.getProperties().opacity;
-                layer
-                    .getSource()
-                    .getFeatures()
-                    .forEach((feature) => {
+                const source = layer.getSource();
+                if (source && typeof source.getFeatures === 'function') {
+                    source.getFeatures().forEach((feature) => {
                         feature.set('opacity', opacity);
                     });
+                }
             });
 
             // Add a button to show/hide the layers
