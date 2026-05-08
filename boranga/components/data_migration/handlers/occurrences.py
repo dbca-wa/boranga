@@ -1729,6 +1729,19 @@ class OccurrenceImporter(BaseSheetImporter):
                     geo_update, ["geometry", "locked", "content_type", "original_geometry_ewkb"], batch_size=BATCH
                 )
 
+            # TEC_BOUNDARIES: mark matched occurrences as 'approved'. Any TEC occurrence
+            # whose OCC_UNIQUE appears in the boundaries CSV is considered active/approved;
+            # the remainder stay 'draft' (the model default set during the TEC run).
+            if _is_geometry_only_run and (geo_create or geo_update):
+                geo_occ_ids = [g.occurrence_id for g in geo_create + geo_update]
+                approved_count = Occurrence.objects.filter(id__in=geo_occ_ids).update(
+                    processing_status=Occurrence.PROCESSING_STATUS_ACTIVE
+                )
+                logger.info(
+                    "TEC_BOUNDARIES: set processing_status=approved on %d occurrence(s) in this chunk",
+                    approved_count,
+                )
+
             # GIS district assignment: after geometries are persisted, intersect each
             # touched geometry against the pre-loaded district polygons and bulk-update
             # OCCLocation.district_id / region_id.  One bulk DB query fetches all
