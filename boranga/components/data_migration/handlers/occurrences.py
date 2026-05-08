@@ -5,7 +5,8 @@ import json
 import logging
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 from typing import Any
 
 import requests
@@ -1924,14 +1925,16 @@ class OccurrenceImporter(BaseSheetImporter):
                         if has_name or has_coords or has_geo:
                             sites_to_process.append(merged)
 
+                _SITE_FALLBACK_DT = datetime(1900, 1, 1, 12, 0, 0, tzinfo=dt_timezone(timedelta(hours=8)))
+
                 for mapped_site in sites_to_process:
                     site_name = mapped_site.get("OccurrenceSite__site_name")
+                    raw_updated = mapped_site.get("OccurrenceSite__updated_date")
+                    use_fallback = not raw_updated
                     defaults = {
                         "comments": mapped_site.get("OccurrenceSite__comments"),
                         "geometry": mapped_site.get("OccurrenceSite__geometry")
                         or tec_site_geometry_transform(mapped_site, None),
-                        "updated_date": mapped_site.get("OccurrenceSite__updated_date")
-                        or datetime(1900, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
                         "drawn_by": mapped_site.get("OccurrenceSite__drawn_by"),
                         "last_updated_by": mapped_site.get("OccurrenceSite__drawn_by"),
                     }
@@ -1939,9 +1942,8 @@ class OccurrenceImporter(BaseSheetImporter):
                     if site_name in existing_sites[occ.pk]:
                         s = existing_sites[occ.pk][site_name]
                         for k, v in defaults.items():
-                            if k != "updated_date":
-                                setattr(s, k, v)
-                        s.updated_date = defaults["updated_date"]
+                            setattr(s, k, v)
+                        s._use_fallback_date = use_fallback
                         site_update.append(s)
                     else:
                         s = OccurrenceSite(
@@ -1952,7 +1954,7 @@ class OccurrenceImporter(BaseSheetImporter):
                             drawn_by=defaults["drawn_by"],
                             last_updated_by=defaults["last_updated_by"],
                         )
-                        s.updated_date = defaults["updated_date"]
+                        s._use_fallback_date = use_fallback
                         site_create.append(s)
 
             if site_create:
@@ -1964,18 +1966,27 @@ class OccurrenceImporter(BaseSheetImporter):
                     for s in to_number:
                         s.site_number = f"ST{s.pk}"
                     OccurrenceSite.objects.bulk_update(to_number, ["site_number"], batch_size=BATCH)
+                # auto_now=True on updated_date always overwrites to now(), even in bulk_create.
+                # Use a direct queryset update (which bypasses auto_now) for sites that had
+                # no S_DATE_EDITED value in the legacy sheet.
+                fallback_create_pks = [s.pk for s in created_sites if getattr(s, "_use_fallback_date", False)]
+                if fallback_create_pks:
+                    OccurrenceSite.objects.filter(pk__in=fallback_create_pks).update(updated_date=_SITE_FALLBACK_DT)
             if site_update:
                 OccurrenceSite.objects.bulk_update(
                     site_update,
                     [
                         "comments",
                         "geometry",
-                        "updated_date",
                         "drawn_by",
                         "last_updated_by",
                     ],
                     batch_size=BATCH,
                 )
+                # Same auto_now bypass for updated sites.
+                fallback_update_pks = [s.pk for s in site_update if getattr(s, "_use_fallback_date", False)]
+                if fallback_update_pks:
+                    OccurrenceSite.objects.filter(pk__in=fallback_update_pks).update(updated_date=_SITE_FALLBACK_DT)
 
             # --- Nested Documents (OccurrenceDocument) ---
             nested_doc_create = []
