@@ -232,8 +232,8 @@ SELECT
     species.fauna_group                            AS FA_GROUP,
     species.fauna_sub_group                        AS FA_SUB_GRP,
 
-    -- Buffer Geometry
-    buf.buffer_geometry                            AS GEOMETRY,
+    -- Buffer Geometry (ST_Transform to SRID 7844 is a no-op — Boranga is already GDA2020 throughout)
+    ST_Transform(buf.buffer_geometry, 7844)        AS GEOMETRY,
     buf.buffer_radius                              AS BUFF_VALUE,
     TO_CHAR(buf.updated_date, 'YYYY-MM-DD HH24:MI:SS') AS GEO_MODIFY,
     buf.occ_geom_id                                AS GEOM_ID,
