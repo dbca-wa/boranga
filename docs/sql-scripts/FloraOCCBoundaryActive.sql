@@ -168,10 +168,10 @@ geom AS (
         g.geometry,
         g.updated_date,
         ROUND(
-            (ST_Area(ST_Transform(g.geometry, 4326)::geography) / 1000000.0)::numeric, 6
+            (ST_Area(ST_Transform(g.geometry, 7844)::geography) / 1000000.0)::numeric, 6
         ) AS area_sq_km,
         ROUND(
-            ST_Area(ST_Transform(g.geometry, 4326)::geography)::numeric
+            ST_Area(ST_Transform(g.geometry, 7844)::geography)::numeric
         ) AS area_sq_m
     FROM boranga_occurrencegeometry g
     WHERE ST_GeometryType(g.geometry) IN ('ST_Polygon', 'ST_MultiPolygon')
