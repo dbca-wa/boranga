@@ -3165,7 +3165,7 @@ def t_community_id_from_legacy(value, ctx):
     if pk is None:
         return _result(
             None,
-            TransformIssue("warning", f"Community with migrated_from_id '{val_str}' not found"),
+            TransformIssue("error", f"Community with migrated_from_id '{val_str}' not found"),
         )
 
     return _result(pk)
