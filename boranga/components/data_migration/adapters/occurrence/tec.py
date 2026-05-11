@@ -172,21 +172,21 @@ DOCUMENT_SUB_CATEGORY_TRANSFORM = build_legacy_map_transform(
 # Use static_value_factory for explicit None assignments
 STATIC_NONE = static_value_factory(None)
 
-# ISO datetime parser — TEC format: 2025-01-16T13:21:04+0000
-DATETIME_ISO_UTC = datetime_iso_factory("UTC")
+# ISO datetime parser — TEC dates carry +0000 but are Perth local time
+DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 
 
 def tec_datetime_updated_transform(val, ctx):
     """Return OCC_DATE_EDITED parsed as datetime, falling back to OCC_DATE_ENTERED."""
     # val is already the OCC_DATE_EDITED value (may be None after blank_to_none)
     if val is not None:
-        parsed = _parse_datetime_iso(val, default_tz="UTC")
+        parsed = _parse_datetime_iso(val, default_tz="Australia/Perth")
         if parsed.value is not None:
             return parsed
     # Fallback: use OCC_DATE_ENTERED (mapped to datetime_created in the raw row)
     fallback = ctx.row.get("datetime_created")
     if fallback is not None:
-        return _parse_datetime_iso(fallback, default_tz="UTC")
+        return _parse_datetime_iso(fallback, default_tz="Australia/Perth")
     return None
 
 
@@ -291,7 +291,7 @@ PIPELINES = {
     "processing_status": [],
     "species_id": [STATIC_NONE],  # TEC is community-based, not species
     "wild_status_id": [],
-    "datetime_created": ["strip", "blank_to_none", DATETIME_ISO_UTC, "required"],
+    "datetime_created": ["strip", "blank_to_none", DATETIME_ISO_PERTH, "required"],
     "datetime_updated": ["strip", "blank_to_none", tec_datetime_updated_transform],
     "modified_by": [],
     "submitter": [],
