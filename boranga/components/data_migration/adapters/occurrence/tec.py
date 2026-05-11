@@ -279,7 +279,7 @@ PIPELINES = {
     "OccurrenceSite__latitude": [],
     "OccurrenceSite__longitude": [],
     "OccurrenceSite__site_name": [],
-    "OccurrenceSite__updated_date": ["blank_to_none"],
+    "OccurrenceSite__updated_date": ["blank_to_none", DATETIME_ISO_PERTH],
     "OccurrenceSite__drawn_by": [
         "strip",
         "blank_to_none",

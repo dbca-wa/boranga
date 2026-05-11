@@ -1930,7 +1930,6 @@ class OccurrenceImporter(BaseSheetImporter):
                 for mapped_site in sites_to_process:
                     site_name = mapped_site.get("OccurrenceSite__site_name")
                     raw_updated = mapped_site.get("OccurrenceSite__updated_date")
-                    use_fallback = not raw_updated
                     defaults = {
                         "comments": mapped_site.get("OccurrenceSite__comments"),
                         "geometry": mapped_site.get("OccurrenceSite__geometry")
@@ -1943,7 +1942,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         s = existing_sites[occ.pk][site_name]
                         for k, v in defaults.items():
                             setattr(s, k, v)
-                        s._use_fallback_date = use_fallback
+                        s._legacy_updated_date = raw_updated
                         site_update.append(s)
                     else:
                         s = OccurrenceSite(
@@ -1954,7 +1953,7 @@ class OccurrenceImporter(BaseSheetImporter):
                             drawn_by=defaults["drawn_by"],
                             last_updated_by=defaults["last_updated_by"],
                         )
-                        s._use_fallback_date = use_fallback
+                        s._legacy_updated_date = raw_updated
                         site_create.append(s)
 
             if site_create:
@@ -1967,12 +1966,14 @@ class OccurrenceImporter(BaseSheetImporter):
                         s.site_number = f"ST{s.pk}"
                     OccurrenceSite.objects.bulk_update(to_number, ["site_number"], batch_size=BATCH)
                 # auto_now=True on updated_date always overwrites to now(), even in bulk_create.
-                # Use a direct queryset update (which bypasses auto_now) for sites that had
-                # no S_DATE_EDITED value in the legacy sheet.
-                fallback_create_pks = [s.pk for s in created_sites if getattr(s, "_use_fallback_date", False)]
-                if fallback_create_pks:
-                    OccurrenceSite.objects.filter(pk__in=fallback_create_pks).update(updated_date=_SITE_FALLBACK_DT)
+                # bulk_update bypasses pre_save() (and therefore auto_now), so we can write
+                # the legacy S_DATE_EDITED value (or the sentinel fallback) directly.
+                for s in created_sites:
+                    s.updated_date = getattr(s, "_legacy_updated_date", None) or _SITE_FALLBACK_DT
+                OccurrenceSite.objects.bulk_update(created_sites, ["updated_date"], batch_size=BATCH)
             if site_update:
+                for s in site_update:
+                    s.updated_date = getattr(s, "_legacy_updated_date", None) or _SITE_FALLBACK_DT
                 OccurrenceSite.objects.bulk_update(
                     site_update,
                     [
@@ -1980,13 +1981,10 @@ class OccurrenceImporter(BaseSheetImporter):
                         "geometry",
                         "drawn_by",
                         "last_updated_by",
+                        "updated_date",
                     ],
                     batch_size=BATCH,
                 )
-                # Same auto_now bypass for updated sites.
-                fallback_update_pks = [s.pk for s in site_update if getattr(s, "_use_fallback_date", False)]
-                if fallback_update_pks:
-                    OccurrenceSite.objects.filter(pk__in=fallback_update_pks).update(updated_date=_SITE_FALLBACK_DT)
 
             # --- Nested Documents (OccurrenceDocument) ---
             nested_doc_create = []
