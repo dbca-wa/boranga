@@ -10,10 +10,15 @@ from boranga.components.data_migration.registry import (
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
 
-# Candidate filenames for the BOUNDARIES source file (case-insensitive fallback handled below).
-_BOUNDARIES_FILE_CANDIDATES = [
+# Candidate filenames for the main WKT geometry file.
+_WKT_FILE_CANDIDATES = [
     "TEC_PEC_Boundaries_Nov25.csv",
     "TEC_PEC_BOUNDARIES_NOV25.csv",
+]
+
+# Candidate filenames for the boundary-attribute table (BDY_ID, BDY_BUFFER).
+# This is a separate file from the WKT file and is the authoritative source for BDY_BUFFER.
+_BDY_ATTR_FILE_CANDIDATES = [
     "BOUNDARIES.csv",
     "boundaries.csv",
 ]
@@ -35,6 +40,24 @@ def _to_float_or_none(value):
         return f if f > 0 else None
     except (ValueError, TypeError):
         return None
+
+
+def _normalize_bdy_id(value) -> str:
+    """Normalise a BDY_ID value to a plain integer string for cross-file joining.
+
+    The main WKT file stores BDY_ID as e.g. ``'54.00000000000'`` while
+    OCCURRENCES.csv stores it as ``'54'``.  Converting via int(float(...))
+    makes the keys comparable.
+    """
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s:
+        return ""
+    try:
+        return str(int(float(s)))
+    except (ValueError, TypeError):
+        return s
 
 
 class OccurrenceTecBoundariesAdapter(SourceAdapter):
@@ -61,49 +84,71 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
 
     def extract(self, path: str, **options) -> ExtractionResult:
         """
-        Extract boundary data from TEC_PEC_Boundaries.csv (or BOUNDARIES.csv).
+        Extract boundary data from TEC_PEC_Boundaries_Nov25.csv (WKT geometry file).
+
+        Three CSV files are involved:
+
+        1. WKT file (``TEC_PEC_Boundaries_Nov25.csv``): geometry rows.
+           Columns of interest: ``WKT``, ``OCC_UNIQUE``, ``BDY_ID``.
+        2. ``BOUNDARIES.csv``: boundary-attribute table.
+           Columns: ``BDY_ID``, ``BDY_BUFFER``.  Joined via normalised BDY_ID.
+        3. ``OCCURRENCES.csv``: occurrence table.
+           Columns: ``BDY_ID``, ``OCC_UNIQUE_ID``, ``OCC_BUFFER_RADIUS``.
 
         buffer_radius priority logic
         ----------------------------
-        Priority 1 – BDY_BUFFER from BOUNDARIES (this file):
-            If BDY_BUFFER > 0, use it (string → float conversion).
-        Priority 2 – OCC_BUFFER_RADIUS from OCCURRENCES.csv:
-            If BDY_BUFFER is null/0, look up OCC_BUFFER_RADIUS via the
-            BDY_ID → OCC_UNIQUE_ID join with OCCURRENCES.csv.
+        Priority 1 – BDY_BUFFER from BOUNDARIES.csv (joined via BDY_ID):
+            If BDY_BUFFER > 0, use it.
+        Priority 2 – OCC_BUFFER_RADIUS from OCCURRENCES.csv (joined via BDY_ID):
+            If BDY_BUFFER is null/0, use OCC_BUFFER_RADIUS.
         Fallback – None:
             If both are null/0, buffer_radius is set to None.
-            These rows are reported as QA warnings for S&C review.
-
-        Cross-reference
-        ---------------
-        BOUNDARIES does not carry OCC_UNIQUE_ID directly; instead BDY_ID is
-        used as the join key between BOUNDARIES and OCCURRENCES.  The
-        OCC_UNIQUE / OCC_UNIQUE_ID column in the BOUNDARIES file is also
-        accepted when present for backward-compatibility.
+            These rows are emitted as QA warnings.
         """
         directory = path if os.path.isdir(path) else os.path.dirname(path)
 
-        # ── Locate the BOUNDARIES file ─────────────────────────────────────
+        # ── Locate the WKT geometry file ───────────────────────────────────
         if os.path.isdir(path):
-            boundaries_path = self._find_file(directory, _BOUNDARIES_FILE_CANDIDATES)
-            if not boundaries_path:
+            wkt_path = self._find_file(directory, _WKT_FILE_CANDIDATES)
+            if not wkt_path:
                 return ExtractionResult(
                     rows=[],
-                    warnings=[ExtractionWarning(f"TEC_BOUNDARIES: no boundaries file found in {path}")],
+                    warnings=[ExtractionWarning(f"TEC_BOUNDARIES: no WKT geometry file found in {path}")],
                 )
-            path = boundaries_path
+            path = wkt_path
 
-        # ── Locate and load OCCURRENCES.csv for the BDY_ID join ────────────
+        warnings: list[ExtractionWarning] = []
+
+        # ── Load BOUNDARIES.csv → bdy_id_to_bdy_buffer ────────────────────
+        # Priority-1 source: BDY_BUFFER from the boundary-attribute table.
+        bdy_attr_path = self._find_file(directory, _BDY_ATTR_FILE_CANDIDATES)
+        bdy_id_to_bdy_buffer: dict[str, float | None] = {}
+        if bdy_attr_path:
+            attr_rows, attr_warns = self.read_table(bdy_attr_path, limit=0)
+            warnings.extend(attr_warns)
+            for r in attr_rows:
+                bdy_id = _normalize_bdy_id(r.get("BDY_ID"))
+                if bdy_id:
+                    bdy_id_to_bdy_buffer[bdy_id] = _to_float_or_none(r.get("BDY_BUFFER"))
+        else:
+            warnings.append(
+                ExtractionWarning(
+                    f"TEC_BOUNDARIES: BOUNDARIES.csv not found in {directory}; "
+                    "BDY_BUFFER (priority-1 buffer source) will be unavailable."
+                )
+            )
+
+        # ── Load OCCURRENCES.csv → bdy_id_to_occ ─────────────────────────
+        # Priority-2 source: OCC_BUFFER_RADIUS; also provides OCC_UNIQUE_ID
+        # for rows that don't carry OCC_UNIQUE directly in the WKT file.
         occurrences_path = self._find_file(directory, _OCCURRENCES_FILE_CANDIDATES)
         # bdy_id → (occ_unique_id_str, occ_buffer_radius_float_or_none)
         bdy_id_to_occ: dict[str, tuple[str, float | None]] = {}
-        warnings: list[ExtractionWarning] = []
-
         if occurrences_path:
             occ_rows, occ_warns = self.read_table(occurrences_path, limit=0)
             warnings.extend(occ_warns)
             for r in occ_rows:
-                bdy_id = str(r.get("BDY_ID") or "").strip()
+                bdy_id = _normalize_bdy_id(r.get("BDY_ID"))
                 occ_uid = str(r.get("OCC_UNIQUE_ID") or r.get("OCC_UNIQUE") or "").strip()
                 if bdy_id and occ_uid:
                     buf = _to_float_or_none(r.get("OCC_BUFFER_RADIUS"))
@@ -112,13 +157,13 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
             warnings.append(
                 ExtractionWarning(
                     f"TEC_BOUNDARIES: OCCURRENCES.csv not found in {directory}; "
-                    "BDY_ID -> OCC_UNIQUE_ID join and OCC_BUFFER_RADIUS fallback will be skipped."
+                    "OCC_BUFFER_RADIUS fallback and OCC_UNIQUE_ID join will be skipped."
                 )
             )
 
-        # ── Read BOUNDARIES file ────────────────────────────────────────────
-        raw_rows, bdy_warns = self.read_table(path)
-        warnings.extend(bdy_warns)
+        # ── Read WKT geometry file ─────────────────────────────────────────
+        raw_rows, wkt_warns = self.read_table(path)
+        warnings.extend(wkt_warns)
 
         rows = []
         null_buffer_migrated_ids: list[str] = []
@@ -127,13 +172,14 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
             row_num = raw.get("_row_num", "?")
 
             # ── Resolve OCC_UNIQUE_ID / migrated_from_id ───────────────────
-            # Accept OCC_UNIQUE / OCC_UNIQUE_ID directly in the BOUNDARIES file
-            # (backward compat), otherwise join via BDY_ID from OCCURRENCES.
+            # OCC_UNIQUE is present directly in the WKT file.  If absent (older
+            # file formats), fall back to BDY_ID join with OCCURRENCES.
             occ_unique = str(raw.get("OCC_UNIQUE") or raw.get("OCC_UNIQUE_ID") or "").strip()
             occ_buf_fallback: float | None = None
 
+            bdy_id = _normalize_bdy_id(raw.get("BDY_ID"))
+
             if not occ_unique:
-                bdy_id = str(raw.get("BDY_ID") or "").strip()
                 if bdy_id and bdy_id in bdy_id_to_occ:
                     occ_unique, occ_buf_fallback = bdy_id_to_occ[bdy_id]
                 else:
@@ -157,18 +203,14 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
                 continue
 
             # ── buffer_radius priority logic ───────────────────────────────
-            # Priority 1: BDY_BUFFER from this BOUNDARIES row
-            bdy_buffer = _to_float_or_none(raw.get("BDY_BUFFER"))
+            # Priority 1: BDY_BUFFER from BOUNDARIES.csv (joined via BDY_ID).
+            bdy_buffer = bdy_id_to_bdy_buffer.get(bdy_id) if bdy_id else None
             if bdy_buffer is not None:
                 buffer_radius = bdy_buffer
             else:
-                # Priority 2: OCC_BUFFER_RADIUS from OCCURRENCES join
-                if occ_buf_fallback is None:
-                    # If we got occ_uid directly from the row (backward compat path),
-                    # look up OCC_BUFFER_RADIUS by BDY_ID from the join table.
-                    bdy_id_lookup = str(raw.get("BDY_ID") or "").strip()
-                    if bdy_id_lookup and bdy_id_lookup in bdy_id_to_occ:
-                        occ_buf_fallback = bdy_id_to_occ[bdy_id_lookup][1]
+                # Priority 2: OCC_BUFFER_RADIUS from OCCURRENCES.csv (joined via BDY_ID).
+                if occ_buf_fallback is None and bdy_id and bdy_id in bdy_id_to_occ:
+                    occ_buf_fallback = bdy_id_to_occ[bdy_id][1]
                 buffer_radius = occ_buf_fallback  # may still be None
 
             if buffer_radius is None:
