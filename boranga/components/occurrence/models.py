@@ -6694,6 +6694,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     for field, value in model_data.items():
                         setattr(current_model_instance, field, value)
 
+                # Bulk-imported OCRs are always internal applications.
+                current_model_instance.internal_application = True
+
                 # Auto-derive customer_status from processing_status when not
                 # explicitly provided in the import data.
                 if "customer_status" not in model_data and current_model_instance.processing_status:
