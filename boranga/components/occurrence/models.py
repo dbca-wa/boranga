@@ -102,6 +102,7 @@ from boranga.components.species_and_communities.models import (
     ThreatCategory,
 )
 from boranga.components.users.models import (
+    SubmitterCategory,
     SubmitterInformation,
     SubmitterInformationModelMixin,
 )
@@ -7010,6 +7011,30 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     _obs_date_pks_by_class.setdefault(type(_child_instance), []).append(_child_instance.pk)
             for _model_class, _pks in _obs_date_pks_by_class.items():
                 _model_class.objects.filter(pk__in=_pks).update(obs_date=ocr_instance.observation_date)
+
+        # Post-processing: auto-fill SubmitterInformation for bulk imports.
+        # The record is auto-created (name + contact_details from Ledger) when the OCR is
+        # saved; here we additionally assign the "DBCA S&C" submitter category.
+        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
+        if ocr_instance and ocr_instance.submitter_information_id:
+            try:
+                _dbca_sc_category = SubmitterCategory.objects.get(name="DBCA S&C")
+                _sub_info = ocr_instance.submitter_information
+                _sub_info.submitter_category = _dbca_sc_category
+                _sub_info.save()
+            except SubmitterCategory.DoesNotExist:
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "missing_submitter_category",
+                        "data": {},
+                        "error_message": (
+                            "SubmitterCategory 'DBCA S&C' does not exist in the database. "
+                            "Please create it before running a bulk import."
+                        ),
+                    }
+                )
+                return
 
         # Post-processing: auto-link OccurrenceReport.occurrence for approved OCRs
         # from OccurrenceReportApprovalDetails when it hasn't already been set
