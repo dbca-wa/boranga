@@ -8738,7 +8738,12 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors_added += 1
                 return cell_value, errors_added
 
-            # If the model field has a default value, use it for blank cells.
+            # If the model field allows null, always prefer None for empty cells
+            # so that explicit blank input is stored as NULL rather than the model default.
+            if getattr(field, "null", False):
+                return None, errors_added
+
+            # Field does not allow null but has a default — use it for blank cells.
             if has_default:
                 default_value = field_default
                 try:
