@@ -529,6 +529,7 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     def occurrence_report_internal(self, request, *args, **kwargs):
         qs = self.get_queryset()
         qs = self.filter_queryset(qs)
+        qs = qs.prefetch_related("ocr_geometry")
 
         result_page = self.paginator.paginate_queryset(qs, request)
         serializer = ListInternalOccurrenceReportSerializer(result_page, context={"request": request}, many=True)
