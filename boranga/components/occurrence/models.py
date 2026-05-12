@@ -7012,6 +7012,41 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             for _model_class, _pks in _obs_date_pks_by_class.items():
                 _model_class.objects.filter(pk__in=_pks).update(obs_date=ocr_instance.observation_date)
 
+        # Post-processing: auto-derive OCRAnimalObservation.count_status from the
+        # imported count fields, following the same priority rules used during data migration:
+        #   1. any detailed count field has data  → "detailed_count"
+        #   2. simple_alive or simple_dead has data → "simple_count"
+        #   3. neither                             → "not_counted"
+        _animal_obs = model_instances.get(OCRAnimalObservation._meta.model_name)
+        if _animal_obs is not None:
+            _detailed_count_fields = [
+                "alive_adult_male",
+                "dead_adult_male",
+                "alive_adult_female",
+                "dead_adult_female",
+                "alive_adult_unknown",
+                "dead_adult_unknown",
+                "alive_juvenile_male",
+                "dead_juvenile_male",
+                "alive_juvenile_female",
+                "dead_juvenile_female",
+                "alive_juvenile_unknown",
+                "dead_juvenile_unknown",
+                "alive_unsure_male",
+                "dead_unsure_male",
+                "alive_unsure_female",
+                "dead_unsure_female",
+                "alive_unsure_unknown",
+                "dead_unsure_unknown",
+            ]
+            if any(getattr(_animal_obs, f, None) is not None for f in _detailed_count_fields):
+                _derived_count_status = settings.COUNT_STATUS_COUNTED
+            elif _animal_obs.simple_alive is not None or _animal_obs.simple_dead is not None:
+                _derived_count_status = settings.COUNT_STATUS_SIMPLE_COUNT
+            else:
+                _derived_count_status = settings.COUNT_STATUS_NOT_COUNTED
+            OCRAnimalObservation.objects.filter(pk=_animal_obs.pk).update(count_status=_derived_count_status)
+
         # Post-processing: auto-fill SubmitterInformation for bulk imports.
         # The record is auto-created (name + contact_details from Ledger) when the OCR is
         # saved; here we additionally assign the "DBCA S&C" submitter category.

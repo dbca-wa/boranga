@@ -275,7 +275,8 @@ class ContentTypeSerializer(BaseModelSerializer):
         # obs_date is always auto-populated from the parent OCR's observation_date
         # during bulk import — it must never appear as a schema column.
         # internal_application is always hard-coded to True during bulk import.
-        ALWAYS_EXCLUDE = {"obs_date", "internal_application"}
+        # count_status is always auto-derived from the count fields during bulk import.
+        ALWAYS_EXCLUDE = {"obs_date", "internal_application", "count_status"}
 
         def filter_fields(field):
             if include_fields is not None and field.name not in include_fields:
