@@ -68,11 +68,9 @@ class ContentTypeViewSet(viewsets.ReadOnlyModelViewSet):
                 app_label="boranga",
             )
             .filter(
-                Q(model__startswith="occurrencereport")
-                | Q(model__startswith="ocr")
-                | Q(model__iexact="occurrence")
-                | Q(model__iexact="submitterinformation")
+                Q(model__startswith="occurrencereport") | Q(model__startswith="ocr") | Q(model__iexact="occurrence")
             )
+            .exclude(model__iexact="submitterinformation")
             .exclude(
                 model__in=[
                     "occurrencereportproposalrequest",
