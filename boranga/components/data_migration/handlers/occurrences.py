@@ -1468,14 +1468,17 @@ class OccurrenceImporter(BaseSheetImporter):
                                 )
                                 errors += 1
                     apply_model_defaults(OccurrenceGeometry, defaults)
+                    # For TEC_BOUNDARIES, buffer_radius=None is explicit (both sources absent).
+                    # apply_model_defaults would replace None with the field default of 0,
+                    # but we want to preserve NULL in the DB for QA visibility.
+                    if (
+                        geo_src == Source.TEC_BOUNDARIES.value
+                        and merged.get("OccurrenceGeometry__buffer_radius") is None
+                    ):
+                        defaults["buffer_radius"] = None
                     if occ.pk in existing_geo:
                         obj = existing_geo[occ.pk]
-                        # For updates, only set fields that are actually provided (non-None after defaults applied)
-                        # This preserves existing values for fields not in the source (e.g., buffer_radius from TEC when updating via TEC_BOUNDARIES)
                         for k, v in defaults.items():
-                            # Skip buffer_radius if TEC_BOUNDARIES didn't provide it (preserve existing value)
-                            if k == "buffer_radius" and v in (None, 0) and geo_src == Source.TEC_BOUNDARIES.value:
-                                continue
                             setattr(obj, k, v)
                         geo_update.append(obj)
                     else:
@@ -1727,8 +1730,72 @@ class OccurrenceImporter(BaseSheetImporter):
                 OccurrenceGeometry.objects.bulk_create(geo_create, batch_size=BATCH)
             if geo_update:
                 OccurrenceGeometry.objects.bulk_update(
-                    geo_update, ["geometry", "locked", "content_type", "original_geometry_ewkb"], batch_size=BATCH
+                    geo_update,
+                    ["geometry", "locked", "content_type", "original_geometry_ewkb", "buffer_radius"],
+                    batch_size=BATCH,
                 )
+
+            # ── BufferGeometry: create/update in bulk for all geo objects with buffer_radius > 0 ──
+            # Must run after bulk_create/bulk_update so PKs are assigned.
+            if geo_create or geo_update:
+                from django.contrib.contenttypes.models import ContentType
+
+                from boranga.components.occurrence.models import BufferGeometry
+                from boranga.components.spatial.utils import buffer_geos_geometry
+
+                geo_ct = ContentType.objects.get_for_model(OccurrenceGeometry)
+                all_geo_touched = geo_create + geo_update
+                existing_buf = {
+                    bg.buffered_from_geometry_id: bg
+                    for bg in BufferGeometry.objects.filter(
+                        buffered_from_geometry_id__in=[g.pk for g in all_geo_touched if g.pk]
+                    )
+                }
+                buf_create = []
+                buf_update = []
+                buf_delete_ids = []
+
+                for geo_obj in all_geo_touched:
+                    if not geo_obj.pk:
+                        continue
+                    br = geo_obj.buffer_radius
+                    br_val = float(br) if br is not None else None
+                    if br_val is None or br_val <= 0:
+                        # No buffer needed; remove stale BufferGeometry if present
+                        if geo_obj.pk in existing_buf:
+                            buf_delete_ids.append(existing_buf[geo_obj.pk].pk)
+                        continue
+                    try:
+                        buffered_geom = buffer_geos_geometry(geo_obj.geometry, br_val)
+                    except Exception:
+                        logger.exception(
+                            "TEC_BOUNDARIES: failed to compute BufferGeometry for OccurrenceGeometry pk=%s",
+                            geo_obj.pk,
+                        )
+                        continue
+                    if geo_obj.pk in existing_buf:
+                        bg = existing_buf[geo_obj.pk]
+                        bg.geometry = buffered_geom
+                        buf_update.append(bg)
+                    else:
+                        buf_create.append(
+                            BufferGeometry(
+                                buffered_from_geometry=geo_obj,
+                                geometry=buffered_geom,
+                                object_id=geo_obj.pk,
+                                content_type=geo_ct,
+                            )
+                        )
+
+                if buf_delete_ids:
+                    BufferGeometry.objects.filter(pk__in=buf_delete_ids).delete()
+                    logger.info("TEC_BOUNDARIES: deleted %d stale BufferGeometry record(s)", len(buf_delete_ids))
+                if buf_create:
+                    BufferGeometry.objects.bulk_create(buf_create, batch_size=BATCH)
+                    logger.info("TEC_BOUNDARIES: bulk-created %d BufferGeometry record(s)", len(buf_create))
+                if buf_update:
+                    BufferGeometry.objects.bulk_update(buf_update, ["geometry"], batch_size=BATCH)
+                    logger.info("TEC_BOUNDARIES: bulk-updated %d BufferGeometry record(s)", len(buf_update))
 
             # TEC_BOUNDARIES: mark matched occurrences as 'approved'. Any TEC occurrence
             # whose OCC_UNIQUE appears in the boundaries CSV is considered active/approved;
