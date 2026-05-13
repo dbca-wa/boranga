@@ -7294,12 +7294,14 @@ class OccurrenceReportBulkImportSchema(BaseModel):
             model_field = model_class._meta.get_field(column.django_import_field_name)
 
             # Determine whether blanks should be allowed for this column.
-            # Allow blank if the model field allows null, if the schema column
-            # explicitly allows blank, or if the model field has a default value.
+            # Allow blank only if the schema column explicitly allows it or if
+            # the model field has a default the import can fall back to.
+            # Model field null=True does NOT make the column optional on its own —
+            # that would silently ignore an explicit allow_blank=False on the column.
             field_default = getattr(model_field, "default", NOT_PROVIDED)
             has_default = field_default is not NOT_PROVIDED
 
-            allow_blank = getattr(model_field, "null", False) or column.xlsx_data_validation_allow_blank or has_default
+            allow_blank = column.xlsx_data_validation_allow_blank or has_default
 
             dv = None
             if column.default_value is not None:
@@ -8754,11 +8756,14 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
             return cell_value, errors_added
 
-        # Treat blank cells as allowed if the schema column allows blanks,
-        # the underlying model field allows nulls, or the model field has a default.
+        # A blank cell is allowed only if the schema column explicitly allows it
+        # OR the model field has a fallback default the import can use.
+        # Importantly, model field null=True does NOT by itself make a column optional —
+        # that would silently ignore an explicit allow_blank=False set by the schema author.
+        # Null-ability is used later only to decide *what value* to store (None vs default).
         field_default = getattr(field, "default", NOT_PROVIDED)
         has_default = field_default is not NOT_PROVIDED
-        allow_blank = self.xlsx_data_validation_allow_blank or getattr(field, "null", False) or has_default
+        allow_blank = self.xlsx_data_validation_allow_blank or has_default
 
         if cell_value is None or cell_value == "":
             if not allow_blank:
