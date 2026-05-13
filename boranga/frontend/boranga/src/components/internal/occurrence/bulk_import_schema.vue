@@ -358,11 +358,11 @@
                                                 >{{
                                                     column
                                                         .xlsx_column_header_name
-                                                        .length < 34
+                                                        .length < 28
                                                         ? column.xlsx_column_header_name
                                                         : column.xlsx_column_header_name.substr(
                                                               0,
-                                                              31
+                                                              25
                                                           ) + '...'
                                                 }}</span
                                             >
