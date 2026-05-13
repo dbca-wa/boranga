@@ -984,10 +984,8 @@
                                                         >
                                                             <button
                                                                 v-if="
-                                                                    selectedField.choices &&
-                                                                    selectedField
-                                                                        .choices
-                                                                        .length >
+                                                                    previewChoices &&
+                                                                    previewChoices.length >
                                                                         0
                                                                 "
                                                                 type="button"
@@ -1368,6 +1366,37 @@
                                         </fieldset>
                                     </div>
                                 </div>
+                                <div
+                                    v-if="
+                                        selectedContentType &&
+                                        selectedContentType.model ===
+                                            'occurrencereportapprovaldetails' &&
+                                        selectedColumn.django_import_field_name ===
+                                            'occurrence'
+                                    "
+                                    class="row mb-2"
+                                >
+                                    <div class="col-sm-8 offset-sm-4">
+                                        <div
+                                            class="alert alert-info py-1 px-2 mb-0"
+                                            style="font-size: 0.85em"
+                                        >
+                                            <i
+                                                class="bi bi-info-circle-fill me-1"
+                                            ></i>
+                                            <strong>Fallback lookup:</strong>
+                                            If no Occurrence is found by
+                                            <code>occurrence_number</code>, the
+                                            importer will also try matching the
+                                            cell value against
+                                            <code>migrated_from_id</code> (with
+                                            the task prefix applied). This
+                                            allows this column to reference an
+                                            OCC created earlier in the same
+                                            import run.
+                                        </div>
+                                    </div>
+                                </div>
                             </fieldset>
 
                             <div
@@ -1518,8 +1547,8 @@
             v-if="
                 selectedField &&
                 selectedField.xlsx_validation_type == 'list' &&
-                selectedField.choices &&
-                selectedField.choices.length > 0
+                previewChoices &&
+                previewChoices.length > 0
             "
         >
             <div
@@ -1551,7 +1580,7 @@
                                 >
                                     <tbody>
                                         <tr
-                                            v-for="choice in selectedField.choices"
+                                            v-for="choice in previewChoices"
                                             :key="choice[0]"
                                         >
                                             <td>
@@ -1639,6 +1668,19 @@ export default {
                     this.selectedField.type
                 )
             );
+        },
+        previewChoices() {
+            // selectedField.choices comes from the generic content-type metadata and
+            // does not apply schema-level filters (e.g. group_type). For FK/M2M fields
+            // the column serializer exposes a filtered `choices` that respects those
+            // filters, so prefer it. Fall back to selectedField.choices for plain list
+            // fields (CharField with choices, BooleanField, etc.).
+            if (!this.selectedField || !this.selectedColumn) return null;
+            const colChoices = this.selectedColumn.choices;
+            if (colChoices && colChoices.length > 0) return colChoices;
+            const fieldChoices = this.selectedField.choices;
+            if (fieldChoices && fieldChoices.length > 0) return fieldChoices;
+            return null;
         },
         allowBlankDisabled() {
             // If selectedField is not set, keep control disabled
