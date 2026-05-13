@@ -6592,9 +6592,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             return
 
         # Gate status-dependent models based on processing_status of the OCR row.
-        # OccurrenceReportApprovalDetails: only import when status is with_approver or approved.
-        # Occurrence: allowed for any OCR processing_status via the bulk importer since
-        # migrated_from_id-based linking is used for legacy data regardless of OCR workflow state.
+        # Both OccurrenceReportApprovalDetails and Occurrence are only relevant once the
+        # OCR has reached the approver stage — the decision to create or link an OCC is
+        # made during assessment/approval, not while the report is still with an assessor.
         ocr_model_data = dict(
             zip(
                 models.get(OccurrenceReport._meta.model_name, {}).get("field_names", []),
@@ -6607,6 +6607,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             OccurrenceReport.PROCESSING_STATUS_APPROVED,
         ):
             models.pop(OccurrenceReportApprovalDetails._meta.model_name, None)
+            models.pop(Occurrence._meta.model_name, None)
 
         # Validate that approved OCRs have enough data to link or create an Occurrence.
         if row_processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED:
