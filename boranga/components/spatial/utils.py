@@ -1182,7 +1182,15 @@ def process_proxy(request, remoteurl, queryString, auth_user, auth_password):
                 auth_details = None
             else:
                 auth_details = {"user": auth_user, "password": auth_password}
-            proxy_response = proxy_view(request, remoteurl, basic_auth=auth_details, requests_args={"timeout": 60})
+            try:
+                proxy_response = proxy_view(request, remoteurl, basic_auth=auth_details, requests_args={"timeout": 60})
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                logger.warning("Proxy request to %s timed out or failed: %s", remoteurl, e)
+                return HttpResponse(
+                    "Upstream service unavailable",
+                    content_type="text/plain",
+                    status=504,
+                )
 
             proxy_response_content_encoded = base64.b64encode(proxy_response.content)
             base64_json = {
