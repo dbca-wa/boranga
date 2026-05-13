@@ -8243,6 +8243,24 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if not self.field:
             return None
 
+        # For FK/M2M fields, derive choices from the column's own related_model_qs
+        # (which already applies group_type and ArchivableModel filters). This keeps
+        # `choices` consistent with `foreign_key_count` / `requires_lookup_field` so
+        # the preview modal is shown whenever the lookup section is not needed.
+        if isinstance(self.field, models.ForeignKey | models.ManyToManyField):
+            qs = self.related_model_qs
+            if qs is None:
+                return None
+            count = qs.count()
+            if (
+                count == 0
+                or self.django_import_field_name in ["species", "community"]
+                or count > settings.OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT
+            ):
+                return None
+            display_field = self.display_field
+            return list(qs.values_list("id", display_field))
+
         model_class = self.django_import_content_type.model_class()
 
         return get_choices_for_field(model_class, self.field)
