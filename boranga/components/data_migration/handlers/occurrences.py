@@ -1735,67 +1735,68 @@ class OccurrenceImporter(BaseSheetImporter):
                     batch_size=BATCH,
                 )
 
-            # ── BufferGeometry: create/update in bulk for all geo objects with buffer_radius > 0 ──
-            # Must run after bulk_create/bulk_update so PKs are assigned.
+            # ── BufferGeometry: upsert via PostGIS in a single query per chunk ──
+            # Replaces the per-geometry Python/Shapely approach (~1 s/geometry) with
+            # a single ST_Buffer(geometry::geography, radius) INSERT...ON CONFLICT.
+            # geometry::geography casts the GDA2020 lat/lon geometry to the geodetic
+            # geography type so PostGIS buffers in metres natively; we then cast back
+            # and restore the original SRID.
             if geo_create or geo_update:
                 from django.contrib.contenttypes.models import ContentType
+                from django.db import connection
 
                 from boranga.components.occurrence.models import BufferGeometry
-                from boranga.components.spatial.utils import buffer_geos_geometry
 
                 geo_ct = ContentType.objects.get_for_model(OccurrenceGeometry)
                 all_geo_touched = geo_create + geo_update
-                existing_buf = {
-                    bg.buffered_from_geometry_id: bg
-                    for bg in BufferGeometry.objects.filter(
-                        buffered_from_geometry_id__in=[g.pk for g in all_geo_touched if g.pk]
+
+                buf_geo_ids = [
+                    g.pk for g in all_geo_touched if g.pk and g.buffer_radius is not None and float(g.buffer_radius) > 0
+                ]
+                stale_geo_ids = [
+                    g.pk for g in all_geo_touched if g.pk and (g.buffer_radius is None or float(g.buffer_radius) <= 0)
+                ]
+
+                if buf_geo_ids:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            """
+                            INSERT INTO boranga_buffergeometry
+                                (buffered_from_geometry_id, geometry, object_id,
+                                 content_type_id, color, stroke, opacity,
+                                 created_date, updated_date)
+                            SELECT
+                                og.id,
+                                ST_SetSRID(
+                                    ST_Buffer(og.geometry::geography, og.buffer_radius::float)::geometry,
+                                    %s
+                                ),
+                                og.id,
+                                %s,
+                                '#FFFF00',
+                                '#FF9900',
+                                0.5,
+                                NOW(),
+                                NOW()
+                            FROM boranga_occurrencegeometry og
+                            WHERE og.id = ANY(%s)
+                              AND og.buffer_radius IS NOT NULL
+                              AND og.buffer_radius > 0
+                            ON CONFLICT (buffered_from_geometry_id) DO UPDATE SET
+                                geometry     = EXCLUDED.geometry,
+                                updated_date = NOW()
+                            """,
+                            [settings.DEFAULT_SRID, geo_ct.id, buf_geo_ids],
+                        )
+                    logger.info(
+                        "TEC_BOUNDARIES: upserted BufferGeometry for %d geometry record(s) via PostGIS",
+                        len(buf_geo_ids),
                     )
-                }
-                buf_create = []
-                buf_update = []
-                buf_delete_ids = []
 
-                for geo_obj in all_geo_touched:
-                    if not geo_obj.pk:
-                        continue
-                    br = geo_obj.buffer_radius
-                    br_val = float(br) if br is not None else None
-                    if br_val is None or br_val <= 0:
-                        # No buffer needed; remove stale BufferGeometry if present
-                        if geo_obj.pk in existing_buf:
-                            buf_delete_ids.append(existing_buf[geo_obj.pk].pk)
-                        continue
-                    try:
-                        buffered_geom = buffer_geos_geometry(geo_obj.geometry, br_val)
-                    except Exception:
-                        logger.exception(
-                            "TEC_BOUNDARIES: failed to compute BufferGeometry for OccurrenceGeometry pk=%s",
-                            geo_obj.pk,
-                        )
-                        continue
-                    if geo_obj.pk in existing_buf:
-                        bg = existing_buf[geo_obj.pk]
-                        bg.geometry = buffered_geom
-                        buf_update.append(bg)
-                    else:
-                        buf_create.append(
-                            BufferGeometry(
-                                buffered_from_geometry=geo_obj,
-                                geometry=buffered_geom,
-                                object_id=geo_obj.pk,
-                                content_type=geo_ct,
-                            )
-                        )
-
-                if buf_delete_ids:
-                    BufferGeometry.objects.filter(pk__in=buf_delete_ids).delete()
-                    logger.info("TEC_BOUNDARIES: deleted %d stale BufferGeometry record(s)", len(buf_delete_ids))
-                if buf_create:
-                    BufferGeometry.objects.bulk_create(buf_create, batch_size=BATCH)
-                    logger.info("TEC_BOUNDARIES: bulk-created %d BufferGeometry record(s)", len(buf_create))
-                if buf_update:
-                    BufferGeometry.objects.bulk_update(buf_update, ["geometry"], batch_size=BATCH)
-                    logger.info("TEC_BOUNDARIES: bulk-updated %d BufferGeometry record(s)", len(buf_update))
+                if stale_geo_ids:
+                    deleted, _ = BufferGeometry.objects.filter(buffered_from_geometry_id__in=stale_geo_ids).delete()
+                    if deleted:
+                        logger.info("TEC_BOUNDARIES: deleted %d stale BufferGeometry record(s)", deleted)
 
             # TEC_BOUNDARIES: mark matched occurrences as 'approved'. Any TEC occurrence
             # whose OCC_UNIQUE appears in the boundaries CSV is considered active/approved;
