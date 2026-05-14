@@ -335,6 +335,7 @@ class QueueReportView(views.APIView):
         from boranga.components.main.export_utils import GROUP_TYPES, REPORT_CATEGORIES
         from boranga.components.occurrence.models import Occurrence, OccurrenceReport
         from boranga.components.species_and_communities.models import (
+            ClassificationSystem,
             District,
             FaunaGroup,
             FaunaSubGroup,
@@ -375,6 +376,9 @@ class QueueReportView(views.APIView):
                     ConservationChangeCode.objects.active().order_by("code").values("id", "code", "label")
                 ),
                 "submitter_categories": list(SubmitterCategory.objects.active().order_by("name").values("id", "name")),
+                "informal_groups": list(
+                    ClassificationSystem.objects.all().order_by("class_desc").values("id", "class_desc")
+                ),
             }
         )
 

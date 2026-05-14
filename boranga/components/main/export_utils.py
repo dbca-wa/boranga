@@ -118,6 +118,18 @@ def _id_list(val):
     return [x.strip() for x in str(val).split(",") if x.strip()]
 
 
+def _user_id_from_email(email):
+    """Return the EmailUser.id matching *email* (case-insensitive). Returns None if not found."""
+    if not email or not email.strip():
+        return None
+    try:
+        from ledger_api_client.ledger_models import EmailUserRO
+
+        return EmailUserRO.objects.get(email__iexact=email.strip()).id
+    except Exception:
+        return None
+
+
 def _approved_cs_field(cs, field_path):
     """Safely traverse dotted *field_path* on a conservation status."""
     if cs is None:
@@ -235,6 +247,15 @@ def get_species_export(filters, limit):
     fsg = filters.get("filter_fauna_sub_group")
     if fsg and fsg not in ("all", ""):
         qs = qs.filter(fauna_sub_group_id=fsg)
+    if filters.get("filter_common_name"):
+        qs = qs.filter(taxonomy__vernaculars__vernacular_name__icontains=filters["filter_common_name"]).distinct()
+    if filters.get("filter_family"):
+        qs = qs.filter(taxonomy__family_name__icontains=filters["filter_family"])
+    if filters.get("filter_genus"):
+        qs = qs.filter(taxonomy__genera_name__icontains=filters["filter_genus"])
+    ig = filters.get("filter_informal_group")
+    if ig and ig not in ("all", ""):
+        qs = qs.filter(taxonomy__informal_groups__classification_system_fk_id=ig).distinct()
     return list(qs[:limit])
 
 
@@ -367,6 +388,8 @@ def get_community_export(filters, limit):
             conservation_status__processing_status="approved",
             conservation_status__conservation_criteria__icontains=cc,
         ).distinct()
+    if filters.get("filter_community_common_id"):
+        qs = qs.filter(taxonomy__community_common_id__icontains=filters["filter_community_common_id"])
     return list(qs[:limit])
 
 
@@ -546,6 +569,21 @@ def get_species_and_communities_export(filters, limit):
     fsg = filters.get("filter_fauna_sub_group")
     if fsg and fsg not in ("all", ""):
         species_qs = species_qs.filter(fauna_sub_group_id=fsg)
+    if filters.get("filter_common_name"):
+        species_qs = species_qs.filter(
+            taxonomy__vernaculars__vernacular_name__icontains=filters["filter_common_name"]
+        ).distinct()
+    if filters.get("filter_family"):
+        species_qs = species_qs.filter(taxonomy__family_name__icontains=filters["filter_family"])
+    if filters.get("filter_genus"):
+        species_qs = species_qs.filter(taxonomy__genera_name__icontains=filters["filter_genus"])
+    ig = filters.get("filter_informal_group")
+    if ig and ig not in ("all", ""):
+        species_qs = species_qs.filter(taxonomy__informal_groups__classification_system_fk_id=ig).distinct()
+    if filters.get("filter_community_common_id"):
+        community_qs = community_qs.filter(
+            taxonomy__community_common_id__icontains=filters["filter_community_common_id"]
+        )
     return list(species_qs[:species_limit]) + list(community_qs[:community_limit])
 
 
@@ -732,6 +770,20 @@ def get_conservation_status_species_export(filters, limit):
     lock = filters.get("filter_locked")
     if lock and lock not in ("all", ""):
         qs = qs.filter(locked=(lock.lower() == "true"))
+    if filters.get("filter_common_name"):
+        qs = qs.filter(
+            species__taxonomy__vernaculars__vernacular_name__icontains=filters["filter_common_name"]
+        ).distinct()
+    if filters.get("filter_family"):
+        qs = qs.filter(species__taxonomy__family_name__icontains=filters["filter_family"])
+    if filters.get("filter_genus"):
+        qs = qs.filter(species__taxonomy__genera_name__icontains=filters["filter_genus"])
+    uid = _user_id_from_email(filters.get("filter_assessor"))
+    if uid:
+        qs = qs.filter(assigned_officer=uid)
+    uid = _user_id_from_email(filters.get("filter_submitter"))
+    if uid:
+        qs = qs.filter(submitter=uid)
     return list(qs[:limit])
 
 
@@ -882,6 +934,14 @@ def get_conservation_status_community_export(filters, limit):
     lock = filters.get("filter_locked")
     if lock and lock not in ("all", ""):
         qs = qs.filter(locked=(lock.lower() == "true"))
+    if filters.get("filter_community_common_id"):
+        qs = qs.filter(community__taxonomy__community_common_id__icontains=filters["filter_community_common_id"])
+    uid = _user_id_from_email(filters.get("filter_assessor"))
+    if uid:
+        qs = qs.filter(assigned_officer=uid)
+    uid = _user_id_from_email(filters.get("filter_submitter"))
+    if uid:
+        qs = qs.filter(submitter=uid)
     return list(qs[:limit])
 
 
@@ -1018,6 +1078,13 @@ def get_occurrence_export(filters, limit):
     d = _parse_date(filters.get("filter_last_modified_to_date"))
     if d:
         qs = qs.filter(datetime_updated__date__lte=d)
+    if filters.get("filter_common_name"):
+        qs = qs.filter(
+            species__taxonomy__vernaculars__vernacular_name__icontains=filters["filter_common_name"]
+        ).distinct()
+    uid = _user_id_from_email(filters.get("filter_last_modified_by"))
+    if uid:
+        qs = qs.filter(last_modified_by=uid)
     return list(qs[:limit])
 
 
@@ -1159,6 +1226,19 @@ def get_occurrence_report_export(filters, limit):
     d = _parse_date(filters.get("filter_last_modified_to_date"))
     if d:
         qs = qs.filter(datetime_updated__date__lte=d)
+    if filters.get("filter_common_name"):
+        qs = qs.filter(
+            species__taxonomy__vernaculars__vernacular_name__icontains=filters["filter_common_name"]
+        ).distinct()
+    uid = _user_id_from_email(filters.get("filter_assessor"))
+    if uid:
+        qs = qs.filter(assigned_officer=uid)
+    uid = _user_id_from_email(filters.get("filter_submitter"))
+    if uid:
+        qs = qs.filter(submitter=uid)
+    uid = _user_id_from_email(filters.get("filter_last_modified_by"))
+    if uid:
+        qs = qs.filter(last_modified_by=uid)
     return list(qs[:limit])
 
 
