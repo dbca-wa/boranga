@@ -6905,19 +6905,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                                 current_model_instance.species = ocr_instance.species
                             else:
                                 current_model_instance.community = ocr_instance.community
-                            # Apply new_occurrence_name from ORFAPP data when creating a new OCC
-                            # via the OCC columns path (ensures the OCC always gets a proper name).
-                            _orfapp_data_for_name = dict(
-                                zip(
-                                    models.get(OccurrenceReportApprovalDetails._meta.model_name, {}).get(
-                                        "field_names", []
-                                    ),
-                                    models.get(OccurrenceReportApprovalDetails._meta.model_name, {}).get("values", []),
-                                )
-                            )
-                            _new_name = _orfapp_data_for_name.get("new_occurrence_name")
-                            if _new_name:
-                                current_model_instance.occurrence_name = _new_name
                         if not current_model_instance.group_type == self.schema.group_type:
                             error_message = (
                                 "The group type of the occurrence does not match the group type of the schema"
@@ -6972,6 +6959,19 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         if occ_is_new:
                             for field, value in model_data.items():
                                 setattr(current_model_instance, field, value)
+                            # Apply new_occurrence_name from ORFAPP data after model_data
+                            # fields so it always wins over an empty 'Occurrence Name' column.
+                            _orfapp_data_for_name = dict(
+                                zip(
+                                    models.get(OccurrenceReportApprovalDetails._meta.model_name, {}).get(
+                                        "field_names", []
+                                    ),
+                                    models.get(OccurrenceReportApprovalDetails._meta.model_name, {}).get("values", []),
+                                )
+                            )
+                            _new_name = _orfapp_data_for_name.get("new_occurrence_name")
+                            if _new_name:
+                                current_model_instance.occurrence_name = _new_name
 
             elif current_model_name == SubmitterInformation._meta.model_name:
                 # Submitter information is created automatically when an OccurrenceReport is created
@@ -7014,6 +7014,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 related_to_parent = False
                 # Look through all the model instances that have already been saved
                 for potential_parent_model_key in [m for m in model_instances]:
+                    # OccurrenceReportApprovalDetails.occurrence is managed explicitly via
+                    # column data and the ORFAPP fallback lookup — skip auto-wiring it to
+                    # the Occurrence instance so that we never end up with both `occurrence`
+                    # and `new_occurrence_name` set on the ORFAPP instance.
+                    if (
+                        current_model_name == OccurrenceReportApprovalDetails._meta.model_name
+                        and potential_parent_model_key == Occurrence._meta.model_name
+                    ):
+                        continue
+
                     # Check if this model has a relationship with the current model
                     potential_parent_instance = model_instances[potential_parent_model_key]
 
