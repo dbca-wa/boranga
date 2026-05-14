@@ -1362,8 +1362,9 @@
                     <template v-if="overlayFeatureInfo">
                         <div class="toast-header">
                             <strong class="me-auto">{{
-                                overlayFeatureInfo.CAD_PIN ||
-                                overlayFeatureInfo.featureId
+                                overlayFeatureInfo.CAD_PIN
+                                    ? 'CAD PIN: ' + overlayFeatureInfo.CAD_PIN
+                                    : overlayFeatureInfo.featureId
                             }}</strong>
                             <button
                                 type="button"
@@ -3773,12 +3774,12 @@ export default {
             this.layerSwitcher.on('layer:opacity', (e) => {
                 const layer = e.layer;
                 const opacity = layer.getProperties().opacity;
-                layer
-                    .getSource()
-                    .getFeatures()
-                    .forEach((feature) => {
+                const source = layer.getSource();
+                if (source && typeof source.getFeatures === 'function') {
+                    source.getFeatures().forEach((feature) => {
                         feature.set('opacity', opacity);
                     });
+                }
             });
 
             // Add a button to show/hide the layers

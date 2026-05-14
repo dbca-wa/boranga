@@ -341,7 +341,7 @@ RECENT_REFERRAL_COUNT = env("RECENT_REFERRAL_COUNT", 5)
 #  ------------- NOMOS JSON file url --------------
 NOMOS_BLOB_URL = env("NOMOS_BLOB_URL")
 
-GIS_SERVER_URL = env("GIS_SERVER_URL", "https://kaartdijin-boodja-geoserver.dbca.wa.gov.au/geoserver/ows")
+GIS_SERVER_URL = env("GIS_SERVER_URL", "https://kb.dbca.wa.gov.au/geoserver/ows")
 
 # Proxy prefix for basic authentication
 BASIC_AUTH_PROXY_PREFIX = env("BASIC_AUTH_PROXY_PREFIX", "kb-proxy/")
@@ -555,6 +555,7 @@ OCR_BULK_IMPORT_M2M_DELIMITER = env("OCR_BULK_IMPORT_M2M_DELIMITER", "||")
 # The full prefix written to the DB is: {PREFIX}-{zero-padded task ID}-
 # e.g. with defaults: "bulk-0001-"  (10 chars overhead)
 OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX = env("OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX", "bulk")
+OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX = env("OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX", "bulk")
 OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH = env("OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH", 4)
 
 COUNT_STATUS_NOT_COUNTED = "not_counted"

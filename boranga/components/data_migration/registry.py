@@ -1882,6 +1882,15 @@ def emailuser_object_by_legacy_username_factory(legacy_system: str) -> str:
             cache[cache_key] = result
             return result
         except LegacyUsernameEmailuserMapping.MultipleObjectsReturned:
+            # Multiple rows exist (e.g. case variants like tecadmin/TECADMIN/TecAdmin).
+            # If they all resolve to the same emailuser_id it is safe to use any of them.
+            emailuser_ids = set(qs.values_list("emailuser_id", flat=True))
+            if len(emailuser_ids) == 1:
+                mapping = qs.first()
+                email_user = EmailUserRO.objects.get(id=mapping.emailuser_id)
+                result = _result(email_user)
+                cache[cache_key] = result
+                return result
             result = _result(
                 value,
                 TransformIssue(
@@ -3165,7 +3174,7 @@ def t_community_id_from_legacy(value, ctx):
     if pk is None:
         return _result(
             None,
-            TransformIssue("warning", f"Community with migrated_from_id '{val_str}' not found"),
+            TransformIssue("error", f"Community with migrated_from_id '{val_str}' not found"),
         )
 
     return _result(pk)

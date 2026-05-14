@@ -8,6 +8,7 @@ to generate email-attached reports for internal users.
 import csv
 import logging
 import os
+from datetime import datetime
 from io import BytesIO
 
 from django.conf import settings
@@ -100,6 +101,23 @@ def _approved_cs(obj):
         return None
 
 
+def _parse_date(val):
+    """Parse a YYYY-MM-DD string to a ``date`` object, or None on failure."""
+    if not val:
+        return None
+    try:
+        return datetime.strptime(str(val), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _id_list(val):
+    """Convert a comma-separated ID string to a list of non-empty stripped strings."""
+    if not val:
+        return []
+    return [x.strip() for x in str(val).split(",") if x.strip()]
+
+
 def _approved_cs_field(cs, field_path):
     """Safely traverse dotted *field_path* on a conservation status."""
     if cs is None:
@@ -160,8 +178,63 @@ def get_species_export(filters, limit):
     )
     if filters.get("group_type") and filters["group_type"] != "all":
         qs = qs.filter(group_type__name__iexact=filters["group_type"])
-    if filters.get("processing_status") and filters["processing_status"] != "all":
-        qs = qs.filter(processing_status=filters["processing_status"])
+    ps = filters.get("filter_status") or filters.get("processing_status")
+    if ps and ps not in ("all", ""):
+        qs = qs.filter(processing_status=ps)
+    if filters.get("filter_scientific_name"):
+        qs = qs.filter(taxonomy__scientific_name__icontains=filters["filter_scientific_name"])
+    region_ids = _id_list(filters.get("filter_region"))
+    if region_ids:
+        qs = qs.filter(regions__id__in=region_ids).distinct()
+    district_ids = _id_list(filters.get("filter_district"))
+    if district_ids:
+        qs = qs.filter(districts__id__in=district_ids).distinct()
+    val = filters.get("filter_wa_legislative_list")
+    if val and val not in ("all", ""):
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_legislative_list_id=val,
+        ).distinct()
+    val = filters.get("filter_wa_legislative_category")
+    if val and val not in ("all", ""):
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_legislative_category_id=val,
+        ).distinct()
+    val = filters.get("filter_wa_priority_category")
+    if val and val not in ("all", ""):
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_priority_category_id=val,
+        ).distinct()
+    ns = filters.get("filter_name_status")
+    if ns and ns not in ("all", ""):
+        qs = qs.filter(taxonomy__is_current=(ns.lower() == "true"))
+    pub = filters.get("filter_publication_status")
+    if pub and pub not in ("all", ""):
+        qs = qs.filter(species_publishing_status__species_public=(pub.lower() == "true"))
+    if filters.get("filter_commonwealth_relevance") == "true":
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__commonwealth_conservation_category__isnull=False,
+        ).distinct()
+    if filters.get("filter_international_relevance") == "true":
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__other_conservation_assessment__isnull=False,
+        ).distinct()
+    cc = filters.get("filter_conservation_criteria")
+    if cc:
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__conservation_criteria__icontains=cc,
+        ).distinct()
+    fg = filters.get("filter_fauna_group")
+    if fg and fg not in ("all", ""):
+        qs = qs.filter(fauna_group_id=fg)
+    fsg = filters.get("filter_fauna_sub_group")
+    if fsg and fsg not in ("all", ""):
+        qs = qs.filter(fauna_sub_group_id=fsg)
     return list(qs[:limit])
 
 
@@ -183,7 +256,7 @@ def get_species_export_fields(data, include_group_type=False):
         cs = _approved_cs(obj)
         pub = ""
         try:
-            pub = obj.species_publishing_status.species_public
+            pub = "Public" if obj.species_publishing_status.species_public else "Private"
         except Exception:
             pass
         row = [
@@ -246,8 +319,54 @@ def get_community_export(filters, limit):
         "districts",
         "conservation_status",
     )
-    if filters.get("processing_status") and filters["processing_status"] != "all":
-        qs = qs.filter(processing_status=filters["processing_status"])
+    ps = filters.get("filter_status") or filters.get("processing_status")
+    if ps and ps not in ("all", ""):
+        qs = qs.filter(processing_status=ps)
+    if filters.get("filter_community_name"):
+        qs = qs.filter(taxonomy__community_name__icontains=filters["filter_community_name"])
+    region_ids = _id_list(filters.get("filter_region"))
+    if region_ids:
+        qs = qs.filter(regions__id__in=region_ids).distinct()
+    district_ids = _id_list(filters.get("filter_district"))
+    if district_ids:
+        qs = qs.filter(districts__id__in=district_ids).distinct()
+    val = filters.get("filter_wa_legislative_list")
+    if val and val not in ("all", ""):
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_legislative_list_id=val,
+        ).distinct()
+    val = filters.get("filter_wa_legislative_category")
+    if val and val not in ("all", ""):
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_legislative_category_id=val,
+        ).distinct()
+    val = filters.get("filter_wa_priority_category")
+    if val and val not in ("all", ""):
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_priority_category_id=val,
+        ).distinct()
+    pub = filters.get("filter_publication_status")
+    if pub and pub not in ("all", ""):
+        qs = qs.filter(community_publishing_status__community_public=(pub.lower() == "true"))
+    if filters.get("filter_commonwealth_relevance") == "true":
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__commonwealth_conservation_category__isnull=False,
+        ).distinct()
+    if filters.get("filter_international_relevance") == "true":
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__other_conservation_assessment__isnull=False,
+        ).distinct()
+    cc = filters.get("filter_conservation_criteria")
+    if cc:
+        qs = qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__conservation_criteria__icontains=cc,
+        ).distinct()
     return list(qs[:limit])
 
 
@@ -263,7 +382,7 @@ def get_community_export_fields(data, include_group_type=False):
         cs = _approved_cs(obj)
         pub = ""
         try:
-            pub = obj.community_publishing_status.community_public
+            pub = "Public" if obj.community_publishing_status.community_public else "Private"
         except Exception:
             pass
         rows.append(
@@ -340,10 +459,93 @@ def get_species_and_communities_export(filters, limit):
         "districts",
         "conservation_status",
     )
-    if filters.get("processing_status") and filters["processing_status"] != "all":
-        ps = filters["processing_status"]
+    ps = filters.get("filter_status") or filters.get("processing_status")
+    if ps and ps not in ("all", ""):
         species_qs = species_qs.filter(processing_status=ps)
         community_qs = community_qs.filter(processing_status=ps)
+    if filters.get("filter_scientific_name"):
+        species_qs = species_qs.filter(taxonomy__scientific_name__icontains=filters["filter_scientific_name"])
+    if filters.get("filter_community_name"):
+        community_qs = community_qs.filter(taxonomy__community_name__icontains=filters["filter_community_name"])
+    region_ids = _id_list(filters.get("filter_region"))
+    if region_ids:
+        species_qs = species_qs.filter(regions__id__in=region_ids).distinct()
+        community_qs = community_qs.filter(regions__id__in=region_ids).distinct()
+    district_ids = _id_list(filters.get("filter_district"))
+    if district_ids:
+        species_qs = species_qs.filter(districts__id__in=district_ids).distinct()
+        community_qs = community_qs.filter(districts__id__in=district_ids).distinct()
+    val = filters.get("filter_wa_legislative_list")
+    if val and val not in ("all", ""):
+        species_qs = species_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_legislative_list_id=val,
+        ).distinct()
+        community_qs = community_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_legislative_list_id=val,
+        ).distinct()
+    val = filters.get("filter_wa_legislative_category")
+    if val and val not in ("all", ""):
+        species_qs = species_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_legislative_category_id=val,
+        ).distinct()
+        community_qs = community_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_legislative_category_id=val,
+        ).distinct()
+    val = filters.get("filter_wa_priority_category")
+    if val and val not in ("all", ""):
+        species_qs = species_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_priority_category_id=val,
+        ).distinct()
+        community_qs = community_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__wa_priority_category_id=val,
+        ).distinct()
+    ns = filters.get("filter_name_status")
+    if ns and ns not in ("all", ""):
+        species_qs = species_qs.filter(taxonomy__is_current=(ns.lower() == "true"))
+    pub = filters.get("filter_publication_status")
+    if pub and pub not in ("all", ""):
+        species_qs = species_qs.filter(species_publishing_status__species_public=(pub.lower() == "true"))
+        community_qs = community_qs.filter(community_publishing_status__community_public=(pub.lower() == "true"))
+    if filters.get("filter_commonwealth_relevance") == "true":
+        species_qs = species_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__commonwealth_conservation_category__isnull=False,
+        ).distinct()
+        community_qs = community_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__commonwealth_conservation_category__isnull=False,
+        ).distinct()
+    if filters.get("filter_international_relevance") == "true":
+        species_qs = species_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__other_conservation_assessment__isnull=False,
+        ).distinct()
+        community_qs = community_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__other_conservation_assessment__isnull=False,
+        ).distinct()
+    cc = filters.get("filter_conservation_criteria")
+    if cc:
+        species_qs = species_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__conservation_criteria__icontains=cc,
+        ).distinct()
+        community_qs = community_qs.filter(
+            conservation_status__processing_status="approved",
+            conservation_status__conservation_criteria__icontains=cc,
+        ).distinct()
+    fg = filters.get("filter_fauna_group")
+    if fg and fg not in ("all", ""):
+        species_qs = species_qs.filter(fauna_group_id=fg)
+    fsg = filters.get("filter_fauna_sub_group")
+    if fsg and fsg not in ("all", ""):
+        species_qs = species_qs.filter(fauna_sub_group_id=fsg)
     return list(species_qs[:species_limit]) + list(community_qs[:community_limit])
 
 
@@ -371,7 +573,7 @@ def get_species_and_communities_export_fields(data, include_group_type=False):
             fauna_subgroup = ""
             pub = ""
             try:
-                pub = obj.community_publishing_status.community_public
+                pub = "Public" if obj.community_publishing_status.community_public else "Private"
             except Exception:
                 pass
             number = _safe(obj.community_number)
@@ -392,7 +594,7 @@ def get_species_and_communities_export_fields(data, include_group_type=False):
             fauna_subgroup = _safe(obj.fauna_sub_group.name if obj.fauna_sub_group else "")
             pub = ""
             try:
-                pub = obj.species_publishing_status.species_public
+                pub = "Public" if obj.species_publishing_status.species_public else "Private"
             except Exception:
                 pass
             number = _safe(obj.species_number)
@@ -477,10 +679,59 @@ def get_conservation_status_species_export(filters, limit):
         "species__taxonomy__vernaculars",
         "species__taxonomy__informal_groups__classification_system_fk",
     )
-    if filters.get("processing_status") and filters["processing_status"] != "all":
-        qs = qs.filter(processing_status=filters["processing_status"])
+    ps = filters.get("filter_status") or filters.get("processing_status")
+    if ps and ps not in ("all", ""):
+        qs = qs.filter(processing_status=ps)
     if filters.get("group_type") and filters["group_type"] != "all":
         qs = qs.filter(species__group_type__name__iexact=filters["group_type"])
+    if filters.get("filter_scientific_name"):
+        qs = qs.filter(species__taxonomy__scientific_name__icontains=filters["filter_scientific_name"])
+    val = filters.get("filter_wa_legislative_list")
+    if val and val not in ("all", ""):
+        qs = qs.filter(wa_legislative_list=val)
+    val = filters.get("filter_wa_legislative_category")
+    if val and val not in ("all", ""):
+        qs = qs.filter(wa_legislative_category=val)
+    val = filters.get("filter_wa_priority_category")
+    if val and val not in ("all", ""):
+        qs = qs.filter(wa_priority_category=val)
+    d = _parse_date(filters.get("filter_from_effective_from_date"))
+    if d:
+        qs = qs.filter(effective_from__gte=d)
+    d = _parse_date(filters.get("filter_to_effective_from_date"))
+    if d:
+        qs = qs.filter(effective_from__lte=d)
+    d = _parse_date(filters.get("filter_from_effective_to_date"))
+    if d:
+        qs = qs.filter(effective_to__gte=d)
+    d = _parse_date(filters.get("filter_to_effective_to_date"))
+    if d:
+        qs = qs.filter(effective_to__lte=d)
+    d = _parse_date(filters.get("filter_from_review_due_date"))
+    if d:
+        qs = qs.filter(review_due_date__gte=d)
+    d = _parse_date(filters.get("filter_to_review_due_date"))
+    if d:
+        qs = qs.filter(review_due_date__lte=d)
+    if filters.get("filter_commonwealth_relevance") == "true":
+        qs = qs.exclude(commonwealth_conservation_category__isnull=True)
+    if filters.get("filter_international_relevance") == "true":
+        qs = qs.exclude(other_conservation_assessment__isnull=True)
+    cc = filters.get("filter_conservation_criteria")
+    if cc:
+        qs = qs.filter(conservation_criteria__icontains=cc)
+    fg = filters.get("filter_fauna_group")
+    if fg and fg not in ("all", ""):
+        qs = qs.filter(species__fauna_group_id=fg)
+    ccode = filters.get("filter_change_code")
+    if ccode and ccode not in ("all", ""):
+        qs = qs.filter(change_code_id=ccode)
+    sc = filters.get("filter_submitter_category")
+    if sc and sc not in ("all", ""):
+        qs = qs.filter(submitter_information__submitter_category_id=sc)
+    lock = filters.get("filter_locked")
+    if lock and lock not in ("all", ""):
+        qs = qs.filter(locked=(lock.lower() == "true"))
     return list(qs[:limit])
 
 
@@ -583,8 +834,54 @@ def get_conservation_status_community_export(filters, limit):
         "community__regions",
         "community__districts",
     )
-    if filters.get("processing_status") and filters["processing_status"] != "all":
-        qs = qs.filter(processing_status=filters["processing_status"])
+    ps = filters.get("filter_status") or filters.get("processing_status")
+    if ps and ps not in ("all", ""):
+        qs = qs.filter(processing_status=ps)
+    if filters.get("filter_community_name"):
+        qs = qs.filter(community__taxonomy__community_name__icontains=filters["filter_community_name"])
+    val = filters.get("filter_wa_legislative_list")
+    if val and val not in ("all", ""):
+        qs = qs.filter(wa_legislative_list=val)
+    val = filters.get("filter_wa_legislative_category")
+    if val and val not in ("all", ""):
+        qs = qs.filter(wa_legislative_category=val)
+    val = filters.get("filter_wa_priority_category")
+    if val and val not in ("all", ""):
+        qs = qs.filter(wa_priority_category=val)
+    d = _parse_date(filters.get("filter_from_effective_from_date"))
+    if d:
+        qs = qs.filter(effective_from__gte=d)
+    d = _parse_date(filters.get("filter_to_effective_from_date"))
+    if d:
+        qs = qs.filter(effective_from__lte=d)
+    d = _parse_date(filters.get("filter_from_effective_to_date"))
+    if d:
+        qs = qs.filter(effective_to__gte=d)
+    d = _parse_date(filters.get("filter_to_effective_to_date"))
+    if d:
+        qs = qs.filter(effective_to__lte=d)
+    d = _parse_date(filters.get("filter_from_review_due_date"))
+    if d:
+        qs = qs.filter(review_due_date__gte=d)
+    d = _parse_date(filters.get("filter_to_review_due_date"))
+    if d:
+        qs = qs.filter(review_due_date__lte=d)
+    if filters.get("filter_commonwealth_relevance") == "true":
+        qs = qs.exclude(commonwealth_conservation_category__isnull=True)
+    if filters.get("filter_international_relevance") == "true":
+        qs = qs.exclude(other_conservation_assessment__isnull=True)
+    cc = filters.get("filter_conservation_criteria")
+    if cc:
+        qs = qs.filter(conservation_criteria__icontains=cc)
+    ccode = filters.get("filter_change_code")
+    if ccode and ccode not in ("all", ""):
+        qs = qs.filter(change_code_id=ccode)
+    sc = filters.get("filter_submitter_category")
+    if sc and sc not in ("all", ""):
+        qs = qs.filter(submitter_information__submitter_category_id=sc)
+    lock = filters.get("filter_locked")
+    if lock and lock not in ("all", ""):
+        qs = qs.filter(locked=(lock.lower() == "true"))
     return list(qs[:limit])
 
 
@@ -682,8 +979,45 @@ def get_occurrence_export(filters, limit):
     )
     if filters.get("group_type") and filters["group_type"] != "all":
         qs = qs.filter(group_type__name__iexact=filters["group_type"])
-    if filters.get("processing_status") and filters["processing_status"] != "all":
-        qs = qs.filter(processing_status=filters["processing_status"])
+    ps = filters.get("filter_status") or filters.get("processing_status")
+    if ps and ps not in ("all", ""):
+        qs = qs.filter(processing_status=ps)
+    if filters.get("filter_scientific_name"):
+        qs = qs.filter(species__taxonomy__scientific_name__icontains=filters["filter_scientific_name"])
+    if filters.get("filter_community_name"):
+        qs = qs.filter(community__taxonomy__community_name__icontains=filters["filter_community_name"])
+    if filters.get("filter_occurrence_name"):
+        qs = qs.filter(occurrence_name__icontains=filters["filter_occurrence_name"])
+    region_ids = _id_list(filters.get("filter_region"))
+    if region_ids:
+        qs = qs.filter(location__region__id__in=region_ids)
+    district_ids = _id_list(filters.get("filter_district"))
+    if district_ids:
+        qs = qs.filter(location__district__id__in=district_ids)
+    d = _parse_date(filters.get("filter_from_due_date"))
+    if d:
+        qs = qs.filter(review_due_date__gte=d)
+    d = _parse_date(filters.get("filter_to_due_date"))
+    if d:
+        qs = qs.filter(review_due_date__lte=d)
+    d = _parse_date(filters.get("filter_created_from_date"))
+    if d:
+        qs = qs.filter(datetime_created__date__gte=d)
+    d = _parse_date(filters.get("filter_created_to_date"))
+    if d:
+        qs = qs.filter(datetime_created__date__lte=d)
+    d = _parse_date(filters.get("filter_activated_from_date"))
+    if d:
+        qs = qs.filter(lodgement_date__date__gte=d)
+    d = _parse_date(filters.get("filter_activated_to_date"))
+    if d:
+        qs = qs.filter(lodgement_date__date__lte=d)
+    d = _parse_date(filters.get("filter_last_modified_from_date"))
+    if d:
+        qs = qs.filter(datetime_updated__date__gte=d)
+    d = _parse_date(filters.get("filter_last_modified_to_date"))
+    if d:
+        qs = qs.filter(datetime_updated__date__lte=d)
     return list(qs[:limit])
 
 
@@ -784,8 +1118,47 @@ def get_occurrence_report_export(filters, limit):
     )
     if filters.get("group_type") and filters["group_type"] != "all":
         qs = qs.filter(group_type__name__iexact=filters["group_type"])
-    if filters.get("processing_status") and filters["processing_status"] != "all":
-        qs = qs.filter(processing_status=filters["processing_status"])
+    ps = filters.get("filter_status") or filters.get("processing_status")
+    if ps and ps not in ("all", ""):
+        qs = qs.filter(processing_status=ps)
+    if filters.get("filter_scientific_name"):
+        qs = qs.filter(species__taxonomy__scientific_name__icontains=filters["filter_scientific_name"])
+    if filters.get("filter_community_name"):
+        qs = qs.filter(community__taxonomy__community_name__icontains=filters["filter_community_name"])
+    if filters.get("filter_occurrence_name"):
+        qs = qs.filter(occurrence__occurrence_name__icontains=filters["filter_occurrence_name"])
+    if filters.get("filter_occurrence") and filters["filter_occurrence"] not in ("all", ""):
+        qs = qs.filter(occurrence__occurrence_number__icontains=filters["filter_occurrence"])
+    region_ids = _id_list(filters.get("filter_region"))
+    if region_ids:
+        qs = qs.filter(location__region__id__in=region_ids)
+    district_ids = _id_list(filters.get("filter_district"))
+    if district_ids:
+        qs = qs.filter(location__district__id__in=district_ids)
+    d = _parse_date(filters.get("filter_observation_from_date"))
+    if d:
+        qs = qs.filter(observation_date__gte=d)
+    d = _parse_date(filters.get("filter_observation_to_date"))
+    if d:
+        qs = qs.filter(observation_date__lte=d)
+    d = _parse_date(filters.get("filter_submitted_from_date"))
+    if d:
+        qs = qs.filter(lodgement_date__gte=d)
+    d = _parse_date(filters.get("filter_submitted_to_date"))
+    if d:
+        qs = qs.filter(lodgement_date__date__lte=d)
+    d = _parse_date(filters.get("filter_approved_from_date"))
+    if d:
+        qs = qs.filter(datetime_approved__date__gte=d)
+    d = _parse_date(filters.get("filter_approved_to_date"))
+    if d:
+        qs = qs.filter(datetime_approved__date__lte=d)
+    d = _parse_date(filters.get("filter_last_modified_from_date"))
+    if d:
+        qs = qs.filter(datetime_updated__date__gte=d)
+    d = _parse_date(filters.get("filter_last_modified_to_date"))
+    if d:
+        qs = qs.filter(datetime_updated__date__lte=d)
     return list(qs[:limit])
 
 

@@ -5,8 +5,11 @@ import json
 import logging
 import os
 from collections import defaultdict
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 from typing import Any
 
+import requests
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Exists, OuterRef
@@ -63,6 +66,179 @@ from boranga.components.species_and_communities.models import District, Taxonomy
 from boranga.components.users.models import SubmitterInformation
 
 logger = logging.getLogger(__name__)
+
+# WFS layer used to resolve occurrence district by spatial intersection.
+_DISTRICT_WFS_LAYER = "kaartdijin-boodja-public:CPT_DBCA_DISTRICTS"
+_DISTRICT_NAME_CANDIDATES = [
+    "DDT_DISTRICT_NAME",
+    "DISTRICT_NAME",
+    "NAME",
+    "DISTRICTNAM",
+    "DIST_NAME",
+    "district_name",
+    "name",
+]
+
+
+def _pick_district_name(props, candidates):
+    """Return the first non-empty string from *candidates* found in *props*."""
+    for f in candidates:
+        v = props.get(f)
+        if v:
+            return str(v)
+    for k, v in props.items():
+        if v and isinstance(v, str) and ("name" in k.lower() or "district" in k.lower()):
+            return v
+    return None
+
+
+def _parse_geojson_features(fc, invert_xy, name_field, source_label):
+    """Parse a GeoJSON FeatureCollection dict into ``(name, fallback_name, shapely_geom)`` tuples."""
+    from shapely.affinity import affine_transform as shapely_affine_transform
+    from shapely.geometry import shape as shapely_shape_from_geojson
+
+    features = fc.get("features") or []
+    if not features:
+        logger.warning("GIS district: no features in %s", source_label)
+        return []
+
+    sample_props = features[0].get("properties") or {}
+    logger.info(
+        "GIS district: %d features from %s; property keys: %s",
+        len(features),
+        source_label,
+        list(sample_props.keys()),
+    )
+
+    results = []
+    for feat in features:
+        props = feat.get("properties") or {}
+        raw_geom = feat.get("geometry")
+        if not raw_geom:
+            continue
+        try:
+            shp = shapely_shape_from_geojson(raw_geom)
+            if invert_xy:
+                shp = shapely_affine_transform(shp, [0, 1, 1, 0, 0, 0])
+            if not shp.is_valid:
+                shp = shp.buffer(0)
+        except Exception as exc:
+            logger.warning("Could not parse district geometry from %s: %s", source_label, exc)
+            continue
+        name = _pick_district_name(props, [name_field] if name_field else _DISTRICT_NAME_CANDIDATES)
+        # ADMIN_ZONE is a secondary field used as a fallback when the primary name doesn't match
+        fallback_name = props.get("ADMIN_ZONE") or None
+        results.append((name, fallback_name, shp))
+
+    logger.info("GIS district: loaded %d valid geometries from %s", len(results), source_label)
+    return results
+
+
+def _load_district_shapes_from_file(file_path, invert_xy=True, name_field=None):
+    """Load district shapes from a local GeoJSON file."""
+    import json
+
+    try:
+        with open(file_path, encoding="utf-8") as fh:
+            fc = json.load(fh)
+    except Exception as exc:
+        logger.error("GIS district: could not read local file %s: %s", file_path, exc)
+        return []
+    return _parse_geojson_features(fc, invert_xy, name_field, file_path)
+
+
+def _load_district_shapes_from_wfs(url, invert_xy=True, name_field=None):
+    """Download the CPT_DBCA_DISTRICTS WFS layer and return parsed shapes.
+
+    Returns a list of ``(district_name_str, shapely_geom)`` tuples.  Only
+    features with a valid geometry are included.  ``invert_xy=True`` (the
+    default) swaps x/y because the layer is served with lat/lon axes
+    inverted relative to the GeoJSON spec.
+    """
+    try:
+        resp = requests.get(url, timeout=120)
+        resp.raise_for_status()
+    except Exception as exc:
+        logger.error("GIS district WFS fetch failed (%s): %s", url, exc)
+        return []
+
+    try:
+        fc = resp.json()
+    except Exception as exc:
+        logger.error("GIS district WFS response is not valid JSON: %s", exc)
+        return []
+
+    return _parse_geojson_features(fc, invert_xy, name_field, url)
+
+
+def _build_district_geo_lookup(wfs_districts):
+    """Match WFS district names to DB ``District`` PKs.
+
+    Returns a list of ``(district_pk, region_pk, shapely_geom)`` tuples for
+    districts that could be matched by (case-insensitive) name.  Unmatched
+    WFS features are logged as warnings.
+    """
+    db_districts = {
+        d.name.strip().lower(): d for d in District.objects.select_related("region").only("pk", "name", "region_id")
+    }
+    results = []
+    for entry in wfs_districts:
+        # Support both old (name, shp) and new (name, fallback_name, shp) tuples
+        if len(entry) == 3:
+            name, fallback_name, shp = entry
+        else:
+            name, shp = entry
+            fallback_name = None
+
+        if name is None and fallback_name is None:
+            logger.warning("WFS district feature has no recognisable name field — skipped")
+            continue
+
+        db_dist = None
+        for candidate in filter(None, [name, fallback_name]):
+            key = candidate.strip().lower()
+            db_dist = db_districts.get(key)
+            if db_dist is None:
+                # Try partial / substring match as a fallback
+                for db_key, db_obj in db_districts.items():
+                    if key in db_key or db_key in key:
+                        db_dist = db_obj
+                        break
+            if db_dist is not None:
+                break
+
+        if db_dist is None:
+            logger.warning(
+                "WFS district '%s' (ADMIN_ZONE: '%s') could not be matched to a DB District — skipped",
+                name,
+                fallback_name,
+            )
+            continue
+        results.append((db_dist.pk, db_dist.region_id, shp))
+    logger.info("GIS district lookup: matched %d / %d WFS districts to DB records", len(results), len(wfs_districts))
+    return results
+
+
+def _find_primary_district(shp_geom, district_lookup):
+    """Return ``(district_pk, region_pk)`` for the district with the largest
+    intersection area.  Returns ``(None, None)`` when no district intersects.
+    """
+    best_pk = None
+    best_region_pk = None
+    best_area = 0.0
+    for dist_pk, region_pk, dist_shp in district_lookup:
+        try:
+            if not shp_geom.intersects(dist_shp):
+                continue
+            area = shp_geom.intersection(dist_shp).area
+            if area > best_area:
+                best_area = area
+                best_pk = dist_pk
+                best_region_pk = region_pk
+        except Exception:
+            pass
+    return best_pk, best_region_pk
+
 
 SOURCE_ADAPTERS = {
     Source.TPFL.value: OccurrenceTpflAdapter(),
@@ -275,6 +451,62 @@ class OccurrenceImporter(BaseSheetImporter):
             )
         except argparse.ArgumentError:
             # Already added by management command
+            pass
+
+        # GIS district arguments
+        try:
+            parser.add_argument(
+                "--no-gis-district",
+                action="store_true",
+                default=False,
+                help=(
+                    "Skip GIS district assignment entirely. "
+                    "By default the handler uses --districts-file (if provided) or "
+                    "the WFS endpoint to set OCCLocation.district / region."
+                ),
+            )
+            parser.add_argument(
+                "--districts-file",
+                default=None,
+                help=(
+                    "Path to a local GeoJSON file containing district boundaries. "
+                    "Use this instead of the WFS endpoint when the server is not "
+                    "reachable (e.g. dev environments)."
+                ),
+            )
+            parser.add_argument(
+                "--districts-url",
+                default=None,
+                help=(
+                    "Override the WFS GetFeature URL used to download district boundaries. "
+                    "Defaults to GIS_SERVER_URL with the CPT_DBCA_DISTRICTS layer. "
+                    "Ignored when --districts-file is provided."
+                ),
+            )
+            parser.add_argument(
+                "--district-name-field",
+                default=None,
+                help=(
+                    "Property name in the GeoJSON/WFS response that holds the district name. "
+                    "If not set, a list of common field names is tried."
+                ),
+            )
+            parser.add_argument(
+                "--invert-xy",
+                action="store_true",
+                default=False,
+                help=(
+                    "Swap x/y of district geometries from WFS. Off by default because "
+                    "GeoJSON outputFormat already returns coordinates in lon/lat order."
+                ),
+            )
+            parser.add_argument(
+                "--no-invert-xy",
+                dest="invert_xy",
+                action="store_false",
+                help="Do not swap x/y of district geometries from WFS.",
+            )
+        except argparse.ArgumentError:
             pass
 
     def _parse_path_map(self, pairs):
@@ -584,6 +816,11 @@ class OccurrenceImporter(BaseSheetImporter):
 
         # Note: do not exit early on dry-run here — continue so error CSV is generated
 
+        # Geometry-only sources (e.g. TEC_BOUNDARIES) only patch OccurrenceGeometry —
+        # there is no Occurrence-level data to create or update.
+        _geometry_only_sources = {Source.TEC_BOUNDARIES.value}
+        _is_geometry_only_run = bool(sources) and all(s in _geometry_only_sources for s in sources)
+
         # Determine existing occurrences and plan create vs update
         migrated_keys = [o["migrated_from_id"] for o in ops]
         existing_by_migrated = {
@@ -602,9 +839,12 @@ class OccurrenceImporter(BaseSheetImporter):
 
             obj = existing_by_migrated.get(migrated_from_id)
             if obj:
-                for k, v in defaults.items():
-                    apply_value_to_instance(obj, k, v)
-                to_update.append(obj)
+                # For geometry-only sources (TEC_BOUNDARIES) the Occurrence record
+                # itself needs no update — only OccurrenceGeometry is patched.
+                if not _is_geometry_only_run:
+                    for k, v in defaults.items():
+                        apply_value_to_instance(obj, k, v)
+                    to_update.append(obj)
                 continue
 
             # Check if we should skip creation for boundary-only sources
@@ -758,8 +998,10 @@ class OccurrenceImporter(BaseSheetImporter):
                             getattr(inst, "pk", None),
                         )
 
-        # Process related objects in chunks to avoid massive SQL queries
-        RELATED_BATCH_SIZE = 1000
+        # Process related objects in chunks to avoid massive SQL queries.
+        # For geometry-only sources (TEC_BOUNDARIES) a larger chunk amortises the
+        # fixed per-chunk DB overhead (prefetches, Occurrence fetch) over more rows.
+        RELATED_BATCH_SIZE = 5000 if _is_geometry_only_run else 1000
         total_ops = len(ops)
 
         # Load DocumentCategory "ORF Document" once
@@ -787,6 +1029,55 @@ class OccurrenceImporter(BaseSheetImporter):
             d.pk: d.region_id for d in District.objects.filter(region_id__isnull=False).only("pk", "region_id")
         }
 
+        # GIS district lookup: download district boundaries ONCE from WFS and build an
+        # in-memory Shapely index.  Only enabled when TEC (or TEC_BOUNDARIES) is in the
+        # active source set and --no-gis-district has not been passed.
+        _tec_sources = {Source.TEC.value, Source.TEC_BOUNDARIES.value}
+        _run_gis_district = (
+            not options.get("no_gis_district") and any(s in _tec_sources for s in sources) and not ctx.dry_run
+        )
+        district_geo_lookup: list = []  # [(district_pk, region_pk, shapely_geom), ...]
+        if _run_gis_district:
+            _name_field = options.get("district_name_field")
+            _invert_xy = options.get("invert_xy", False)
+            _districts_file = options.get("districts_file")
+            _raw_shapes = []
+
+            if _districts_file:
+                # Local file takes priority over WFS
+                logger.info("GIS district: using local file %s", _districts_file)
+                _raw_shapes = _load_district_shapes_from_file(_districts_file, invert_xy=False, name_field=_name_field)
+            else:
+                _districts_url = options.get("districts_url")
+                if not _districts_url:
+                    _gis_base = getattr(settings, "GIS_SERVER_URL", None)
+                    if _gis_base:
+                        _gis_base = _gis_base.rstrip("/")
+                        _sep = "&" if "?" in _gis_base else "?"
+                        _districts_url = (
+                            f"{_gis_base}{_sep}service=WFS&version=2.0.0&request=GetFeature"
+                            f"&typeName={_DISTRICT_WFS_LAYER}&outputFormat=application%2Fjson"
+                            "&srsName=EPSG%3A4326"
+                        )
+                if _districts_url:
+                    logger.info("GIS district WFS URL: %s", _districts_url)
+                    _raw_shapes = _load_district_shapes_from_wfs(
+                        _districts_url, invert_xy=_invert_xy, name_field=_name_field
+                    )
+                else:
+                    logger.warning(
+                        "GIS district: GIS_SERVER_URL not configured and neither "
+                        "--districts-file nor --districts-url was provided"
+                    )
+
+            if _raw_shapes:
+                district_geo_lookup = _build_district_geo_lookup(_raw_shapes)
+            else:
+                logger.warning(
+                    "GIS district: no district shapes loaded — district/region will NOT be set. "
+                    "Provide --districts-file <path/to/districts.geojson> or ensure the WFS endpoint is reachable."
+                )
+
         logger.info(
             "OccurrenceImporter: processing related objects in chunks (total %d ops)...",
             total_ops,
@@ -809,8 +1100,9 @@ class OccurrenceImporter(BaseSheetImporter):
                 return chunk_occ_map.get(mig_id)
 
             # --- OCCContactDetail ---
+            # Skip for geometry-only sources (TEC_BOUNDARIES) — no contact data in source.
             existing_contacts = set()
-            if not getattr(ctx, "wipe_targets", False):
+            if not _is_geometry_only_run and not getattr(ctx, "wipe_targets", False):
                 existing_contacts = set(
                     OCCContactDetail.objects.filter(occurrence_id__in=chunk_occ_ids).values_list(
                         "occurrence_id", flat=True
@@ -855,8 +1147,9 @@ class OccurrenceImporter(BaseSheetImporter):
                             logger.exception("Failed to create OCCContactDetail")
 
             # --- OccurrenceUserAction ---
+            # Skip for geometry-only sources (TEC_BOUNDARIES) — no action data in source.
             existing_actions = set()
-            if not getattr(ctx, "wipe_targets", False):
+            if not _is_geometry_only_run and not getattr(ctx, "wipe_targets", False):
                 existing_actions = set(
                     OccurrenceUserAction.objects.filter(occurrence_id__in=chunk_occ_ids).values_list(
                         "occurrence_id", flat=True
@@ -924,39 +1217,46 @@ class OccurrenceImporter(BaseSheetImporter):
             existing_plant = {}
 
             if not getattr(ctx, "wipe_targets", False):
-                existing_locs = {
-                    loc.occurrence_id: loc for loc in OCCLocation.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_obs = {
-                    o.occurrence_id: o for o in OCCObservationDetail.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_hab = {
-                    h.occurrence_id: h for h in OCCHabitatComposition.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_fire = {
-                    f.occurrence_id: f for f in OCCFireHistory.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_assoc = {
-                    a.occurrence_id: a for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_docs = {
-                    d.occurrence_id: d for d in OccurrenceDocument.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
+                # For geometry-only sources only fetch OccurrenceGeometry — the other
+                # 10 models carry no data for these rows and the queries would be wasted.
+                if not _is_geometry_only_run:
+                    existing_locs = {
+                        loc.occurrence_id: loc for loc in OCCLocation.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_obs = {
+                        o.occurrence_id: o for o in OCCObservationDetail.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_hab = {
+                        h.occurrence_id: h
+                        for h in OCCHabitatComposition.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_fire = {
+                        f.occurrence_id: f for f in OCCFireHistory.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_assoc = {
+                        a.occurrence_id: a for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_docs = {
+                        d.occurrence_id: d for d in OccurrenceDocument.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
                 existing_geo = {
                     g.occurrence_id: g for g in OccurrenceGeometry.objects.filter(occurrence_id__in=chunk_occ_ids)
                 }
-                existing_ident = {
-                    i.occurrence_id: i for i in OCCIdentification.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_veg = {
-                    v.occurrence_id: v for v in OCCVegetationStructure.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_hcond = {
-                    hc.occurrence_id: hc for hc in OCCHabitatCondition.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
-                existing_plant = {
-                    p.occurrence_id: p for p in OCCPlantCount.objects.filter(occurrence_id__in=chunk_occ_ids)
-                }
+                if not _is_geometry_only_run:
+                    existing_ident = {
+                        i.occurrence_id: i for i in OCCIdentification.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_veg = {
+                        v.occurrence_id: v
+                        for v in OCCVegetationStructure.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_hcond = {
+                        hc.occurrence_id: hc
+                        for hc in OCCHabitatCondition.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
+                    existing_plant = {
+                        p.occurrence_id: p for p in OCCPlantCount.objects.filter(occurrence_id__in=chunk_occ_ids)
+                    }
 
             for op in chunk_ops:
                 mig = op["migrated_from_id"]
@@ -966,7 +1266,7 @@ class OccurrenceImporter(BaseSheetImporter):
                     continue
 
                 # OCCLocation
-                if any(k.startswith("OCCLocation__") for k in merged):
+                if not _is_geometry_only_run and any(k.startswith("OCCLocation__") for k in merged):
                     # Concatenate location_description with LGA code if present
                     loc_desc = merged.get("OCCLocation__location_description")
                     lga_code = merged.get("OCCLocation__lga_code")
@@ -996,7 +1296,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         loc_create.append(OCCLocation(occurrence=occ, **defaults))
 
                 # OCCObservationDetail
-                if any(k.startswith("OCCObservationDetail__") for k in merged):
+                if not _is_geometry_only_run and any(k.startswith("OCCObservationDetail__") for k in merged):
                     defaults = {
                         "comments": merged.get("OCCObservationDetail__comments"),
                         "area_assessment_id": merged.get("OCCObservationDetail__area_assessment_id"),
@@ -1013,7 +1313,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         obs_create.append(OCCObservationDetail(occurrence=occ, **defaults))
 
                 # OCCHabitatComposition
-                if any(k.startswith("OCCHabitatComposition__") for k in merged):
+                if not _is_geometry_only_run and any(k.startswith("OCCHabitatComposition__") for k in merged):
                     # land_form and soil_type are MultiSelectField — wrap in list
                     _lf = merged.get("OCCHabitatComposition__land_form")
                     _st = merged.get("OCCHabitatComposition__soil_type")
@@ -1038,7 +1338,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         hab_create.append(OCCHabitatComposition(occurrence=occ, **defaults))
 
                 # OCCFireHistory
-                if any(k.startswith("OCCFireHistory__") for k in merged):
+                if not _is_geometry_only_run and any(k.startswith("OCCFireHistory__") for k in merged):
                     # Build comment from fire_season (transformed) + fire_year
                     fire_comment = merged.get("OCCFireHistory__comment")
                     if not fire_comment:
@@ -1060,7 +1360,9 @@ class OccurrenceImporter(BaseSheetImporter):
                         fire_create.append(OCCFireHistory(occurrence=occ, **defaults))
 
                 # OCCAssociatedSpecies
-                if any(k.startswith("OCCAssociatedSpecies__") for k in merged) or merged.get("_nested_species"):
+                if not _is_geometry_only_run and (
+                    any(k.startswith("OCCAssociatedSpecies__") for k in merged) or merged.get("_nested_species")
+                ):
                     defaults = {"comment": merged.get("OCCAssociatedSpecies__comment") or ""}
                     if occ.pk in existing_assoc:
                         obj = existing_assoc[occ.pk]
@@ -1141,19 +1443,18 @@ class OccurrenceImporter(BaseSheetImporter):
                     }
                     if occ_content_type:
                         defaults["content_type"] = occ_content_type
-                    # Patch: Populate original_geometry_ewkb for TEC_BOUNDARIES
+                    # Populate original_geometry_ewkb for TEC_BOUNDARIES.
+                    # The pipeline has already converted the WKT string to a GEOSGeometry
+                    # and stored it in defaults["geometry"], so read .ewkb directly — no
+                    # re-parse needed.
                     if geo_src == Source.TEC_BOUNDARIES.value:
-                        from django.contrib.gis.geos import GEOSGeometry
-
-                        wkt = merged.get("OccurrenceGeometry__geometry")
-                        if wkt:
+                        geom = defaults.get("geometry")
+                        if geom:
                             try:
-                                geom = GEOSGeometry(wkt)
                                 defaults["original_geometry_ewkb"] = geom.ewkb
                             except Exception:
                                 logger.exception(
-                                    "Failed to parse WKT geometry for migrated_from_id=%s; "
-                                    "skipping original_geometry_ewkb",
+                                    "Failed to compute ewkb for migrated_from_id=%s; skipping original_geometry_ewkb",
                                     mig,
                                 )
                                 errors_details.append(
@@ -1161,20 +1462,23 @@ class OccurrenceImporter(BaseSheetImporter):
                                         "migrated_from_id": mig,
                                         "reason": "invalid_wkt_geometry",
                                         "level": "error",
-                                        "message": "Malformed WKT for OccurrenceGeometry; original_geometry_ewkb not set",
+                                        "message": "Failed to compute original_geometry_ewkb for OccurrenceGeometry",
                                         "row": merged,
                                     }
                                 )
                                 errors += 1
                     apply_model_defaults(OccurrenceGeometry, defaults)
+                    # For TEC_BOUNDARIES, buffer_radius=None is explicit (both sources absent).
+                    # apply_model_defaults would replace None with the field default of 0,
+                    # but we want to preserve NULL in the DB for QA visibility.
+                    if (
+                        geo_src == Source.TEC_BOUNDARIES.value
+                        and merged.get("OccurrenceGeometry__buffer_radius") is None
+                    ):
+                        defaults["buffer_radius"] = None
                     if occ.pk in existing_geo:
                         obj = existing_geo[occ.pk]
-                        # For updates, only set fields that are actually provided (non-None after defaults applied)
-                        # This preserves existing values for fields not in the source (e.g., buffer_radius from TEC when updating via TEC_BOUNDARIES)
                         for k, v in defaults.items():
-                            # Skip buffer_radius if TEC_BOUNDARIES didn't provide it (preserve existing value)
-                            if k == "buffer_radius" and v in (None, 0) and geo_src == Source.TEC_BOUNDARIES.value:
-                                continue
                             setattr(obj, k, v)
                         geo_update.append(obj)
                     else:
@@ -1202,7 +1506,7 @@ class OccurrenceImporter(BaseSheetImporter):
                         doc_create.append(OccurrenceDocument(occurrence=occ, **defaults))
 
                 # OCCIdentification
-                if any(k.startswith("OCCIdentification__") for k in merged):
+                if not _is_geometry_only_run and any(k.startswith("OCCIdentification__") for k in merged):
                     # Build identification_comment from vchr_status_code + dupvouch_location
                     vchr = merged.get("OCCIdentification__vchr_status_code")
                     dupv = merged.get("OCCIdentification__dupvouch_location")
@@ -1264,7 +1568,7 @@ class OccurrenceImporter(BaseSheetImporter):
                             hcond_create.append(OCCHabitatCondition(occurrence=occ, **defaults))
 
                 # OCCPlantCount
-                if any(k.startswith("OCCPlantCount__") for k in merged):
+                if not _is_geometry_only_run and any(k.startswith("OCCPlantCount__") for k in merged):
                     # Build comment from multiple fields.
                     # POPULATION_NOTES goes first (no prefix), then a <LINE BREAK>,
                     # then the remaining structured fields joined with "; ".
@@ -1426,8 +1730,143 @@ class OccurrenceImporter(BaseSheetImporter):
                 OccurrenceGeometry.objects.bulk_create(geo_create, batch_size=BATCH)
             if geo_update:
                 OccurrenceGeometry.objects.bulk_update(
-                    geo_update, ["geometry", "locked", "content_type", "original_geometry_ewkb"], batch_size=BATCH
+                    geo_update,
+                    ["geometry", "locked", "content_type", "original_geometry_ewkb", "buffer_radius"],
+                    batch_size=BATCH,
                 )
+
+            # ── BufferGeometry: upsert via PostGIS in a single query per chunk ──
+            # Replaces the per-geometry Python/Shapely approach (~1 s/geometry) with
+            # a single ST_Buffer(geometry::geography, radius) INSERT...ON CONFLICT.
+            # geometry::geography casts the GDA2020 lat/lon geometry to the geodetic
+            # geography type so PostGIS buffers in metres natively; we then cast back
+            # and restore the original SRID.
+            if geo_create or geo_update:
+                from django.contrib.contenttypes.models import ContentType
+                from django.db import connection
+
+                from boranga.components.occurrence.models import BufferGeometry
+
+                geo_ct = ContentType.objects.get_for_model(OccurrenceGeometry)
+                all_geo_touched = geo_create + geo_update
+
+                buf_geo_ids = [
+                    g.pk for g in all_geo_touched if g.pk and g.buffer_radius is not None and float(g.buffer_radius) > 0
+                ]
+                stale_geo_ids = [
+                    g.pk for g in all_geo_touched if g.pk and (g.buffer_radius is None or float(g.buffer_radius) <= 0)
+                ]
+
+                if buf_geo_ids:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            """
+                            INSERT INTO boranga_buffergeometry
+                                (buffered_from_geometry_id, geometry, object_id,
+                                 content_type_id, color, stroke, opacity,
+                                 created_date, updated_date)
+                            SELECT
+                                og.id,
+                                ST_SetSRID(
+                                    ST_Buffer(og.geometry::geography, og.buffer_radius::float)::geometry,
+                                    %s
+                                ),
+                                og.id,
+                                %s,
+                                '#FFFF00',
+                                '#FF9900',
+                                0.5,
+                                NOW(),
+                                NOW()
+                            FROM boranga_occurrencegeometry og
+                            WHERE og.id = ANY(%s)
+                              AND og.buffer_radius IS NOT NULL
+                              AND og.buffer_radius > 0
+                            ON CONFLICT (buffered_from_geometry_id) DO UPDATE SET
+                                geometry     = EXCLUDED.geometry,
+                                updated_date = NOW()
+                            """,
+                            [settings.DEFAULT_SRID, geo_ct.id, buf_geo_ids],
+                        )
+                    logger.info(
+                        "TEC_BOUNDARIES: upserted BufferGeometry for %d geometry record(s) via PostGIS",
+                        len(buf_geo_ids),
+                    )
+
+                if stale_geo_ids:
+                    deleted, _ = BufferGeometry.objects.filter(buffered_from_geometry_id__in=stale_geo_ids).delete()
+                    if deleted:
+                        logger.info("TEC_BOUNDARIES: deleted %d stale BufferGeometry record(s)", deleted)
+
+            # TEC_BOUNDARIES: mark matched occurrences as 'approved'. Any TEC occurrence
+            # whose OCC_UNIQUE appears in the boundaries CSV is considered active/approved;
+            # the remainder stay 'draft' (the model default set during the TEC run).
+            if _is_geometry_only_run and (geo_create or geo_update):
+                geo_occ_ids = [g.occurrence_id for g in geo_create + geo_update]
+                approved_count = Occurrence.objects.filter(id__in=geo_occ_ids).update(
+                    processing_status=Occurrence.PROCESSING_STATUS_ACTIVE
+                )
+                logger.info(
+                    "TEC_BOUNDARIES: set processing_status=approved on %d occurrence(s) in this chunk",
+                    approved_count,
+                )
+
+            # GIS district assignment: after geometries are persisted, intersect each
+            # touched geometry against the pre-loaded district polygons and bulk-update
+            # OCCLocation.district_id / region_id.  One bulk DB query fetches all
+            # affected locations; no individual per-occurrence queries needed.
+            #
+            # For runs that produce no geometry (e.g. TEC-only, no TEC_BOUNDARIES),
+            # fall back to querying existing OccurrenceGeometry for occurrences that
+            # had their OCCLocation created/updated in this chunk.
+            if district_geo_lookup and (geo_create or geo_update or loc_create or loc_update):
+                from shapely.wkt import loads as shapely_wkt_loads
+
+                geo_touched = {g.occurrence_id: g for g in geo_create + geo_update}
+
+                # If this run didn't touch any geometries, query existing ones for
+                # occurrences whose OCCLocation was just created/updated.
+                if not geo_touched and (loc_create or loc_update):
+                    loc_occ_ids = [loc.occurrence_id for loc in loc_create + loc_update]
+                    for g in OccurrenceGeometry.objects.filter(occurrence_id__in=loc_occ_ids):
+                        geo_touched[g.occurrence_id] = g
+
+                # Compute district assignments in-memory first
+                gis_district_assignments: dict[int, tuple[int, int | None]] = {}
+                for occ_id, geo_obj in geo_touched.items():
+                    geom = getattr(geo_obj, "geometry", None)
+                    if not geom:
+                        continue
+                    try:
+                        shp = shapely_wkt_loads(geom.wkt)
+                        if not shp.is_valid:
+                            shp = shp.buffer(0)
+                    except Exception:
+                        continue
+                    dist_pk, region_pk = _find_primary_district(shp, district_geo_lookup)
+                    if dist_pk is not None:
+                        gis_district_assignments[occ_id] = (dist_pk, region_pk)
+
+                if gis_district_assignments:
+                    # Bulk-fetch all relevant OCCLocations in one query
+                    affected_ids = list(gis_district_assignments.keys())
+                    loc_by_occ = {
+                        loc.occurrence_id: loc for loc in OCCLocation.objects.filter(occurrence_id__in=affected_ids)
+                    }
+                    loc_to_update = []
+                    for occ_id, (dist_pk, region_pk) in gis_district_assignments.items():
+                        loc = loc_by_occ.get(occ_id)
+                        if loc is None:
+                            continue
+                        loc.district_id = dist_pk
+                        loc.region_id = region_pk
+                        loc_to_update.append(loc)
+                    if loc_to_update:
+                        OCCLocation.objects.bulk_update(loc_to_update, ["district_id", "region_id"], batch_size=BATCH)
+                        logger.info(
+                            "GIS district: updated district/region for %d OCCLocation(s) in this chunk",
+                            len(loc_to_update),
+                        )
 
             if ident_create:
                 OCCIdentification.objects.bulk_create(ident_create, batch_size=BATCH)
@@ -1513,7 +1952,7 @@ class OccurrenceImporter(BaseSheetImporter):
             site_create = []
             site_update = []
             existing_sites = defaultdict(dict)
-            if not getattr(ctx, "wipe_targets", False):
+            if not _is_geometry_only_run and not getattr(ctx, "wipe_targets", False):
                 for s in OccurrenceSite.objects.filter(occurrence_id__in=chunk_occ_ids):
                     existing_sites[s.occurrence_id][s.site_name] = s
 
@@ -1541,15 +1980,28 @@ class OccurrenceImporter(BaseSheetImporter):
                                     transformed_site[col] = res.value
                             sites_to_process.append(transformed_site)
                     elif any(k.startswith("OccurrenceSite__") for k in merged):
-                        sites_to_process.append(merged)
+                        # Only create a site from the main row when it carries
+                        # meaningful site-identifying data (name or coordinates).
+                        # Prevents phantom null-site creation when sources like
+                        # TEC_BOUNDARIES are run separately: they populate
+                        # OccurrenceSite__ pipeline keys but leave all values None.
+                        has_name = bool(merged.get("OccurrenceSite__site_name"))
+                        has_coords = bool(merged.get("OccurrenceSite__latitude")) and bool(
+                            merged.get("OccurrenceSite__longitude")
+                        )
+                        has_geo = bool(merged.get("OccurrenceSite__geometry"))
+                        if has_name or has_coords or has_geo:
+                            sites_to_process.append(merged)
+
+                _SITE_FALLBACK_DT = datetime(1900, 1, 1, 12, 0, 0, tzinfo=dt_timezone(timedelta(hours=8)))
 
                 for mapped_site in sites_to_process:
                     site_name = mapped_site.get("OccurrenceSite__site_name")
+                    raw_updated = mapped_site.get("OccurrenceSite__updated_date")
                     defaults = {
                         "comments": mapped_site.get("OccurrenceSite__comments"),
                         "geometry": mapped_site.get("OccurrenceSite__geometry")
                         or tec_site_geometry_transform(mapped_site, None),
-                        "updated_date": mapped_site.get("OccurrenceSite__updated_date"),
                         "drawn_by": mapped_site.get("OccurrenceSite__drawn_by"),
                         "last_updated_by": mapped_site.get("OccurrenceSite__drawn_by"),
                     }
@@ -1557,10 +2009,8 @@ class OccurrenceImporter(BaseSheetImporter):
                     if site_name in existing_sites[occ.pk]:
                         s = existing_sites[occ.pk][site_name]
                         for k, v in defaults.items():
-                            if k != "updated_date":
-                                setattr(s, k, v)
-                        if defaults["updated_date"]:
-                            s.updated_date = defaults["updated_date"]
+                            setattr(s, k, v)
+                        s._legacy_updated_date = raw_updated
                         site_update.append(s)
                     else:
                         s = OccurrenceSite(
@@ -1571,21 +2021,35 @@ class OccurrenceImporter(BaseSheetImporter):
                             drawn_by=defaults["drawn_by"],
                             last_updated_by=defaults["last_updated_by"],
                         )
-                        if defaults["updated_date"]:
-                            s.updated_date = defaults["updated_date"]
+                        s._legacy_updated_date = raw_updated
                         site_create.append(s)
 
             if site_create:
-                OccurrenceSite.objects.bulk_create(site_create, batch_size=BATCH)
+                created_sites = OccurrenceSite.objects.bulk_create(site_create, batch_size=BATCH)
+                # bulk_create bypasses save(), so site_number is never set.
+                # Assign it now using the same "ST{pk}" pattern as the model's save().
+                to_number = [s for s in created_sites if s.pk and not s.site_number]
+                if to_number:
+                    for s in to_number:
+                        s.site_number = f"ST{s.pk}"
+                    OccurrenceSite.objects.bulk_update(to_number, ["site_number"], batch_size=BATCH)
+                # auto_now=True on updated_date always overwrites to now(), even in bulk_create.
+                # bulk_update bypasses pre_save() (and therefore auto_now), so we can write
+                # the legacy S_DATE_EDITED value (or the sentinel fallback) directly.
+                for s in created_sites:
+                    s.updated_date = getattr(s, "_legacy_updated_date", None) or _SITE_FALLBACK_DT
+                OccurrenceSite.objects.bulk_update(created_sites, ["updated_date"], batch_size=BATCH)
             if site_update:
+                for s in site_update:
+                    s.updated_date = getattr(s, "_legacy_updated_date", None) or _SITE_FALLBACK_DT
                 OccurrenceSite.objects.bulk_update(
                     site_update,
                     [
                         "comments",
                         "geometry",
-                        "updated_date",
                         "drawn_by",
                         "last_updated_by",
+                        "updated_date",
                     ],
                     batch_size=BATCH,
                 )
@@ -1595,7 +2059,7 @@ class OccurrenceImporter(BaseSheetImporter):
 
             # Pre-load existing documents to check for duplicates (avoid creating identical copies on re-runs)
             existing_docs_check = defaultdict(list)
-            if not getattr(ctx, "wipe_targets", False):
+            if not _is_geometry_only_run and not getattr(ctx, "wipe_targets", False):
                 for d in OccurrenceDocument.objects.filter(occurrence_id__in=chunk_occ_ids):
                     existing_docs_check[d.occurrence_id].append(d)
 

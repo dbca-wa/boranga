@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from django.db.models import OuterRef, Subquery
 from django.utils import timezone
@@ -190,91 +192,121 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
         # Silence spatial utils logger to avoid chattiness during bulk intersections
         logging.getLogger("boranga.components.spatial.utils").setLevel(logging.WARNING)
 
-        processed = 0
+        processed = len(occ_list)
         created = 0
         updated = 0
         skipped = 0
         errors = 0
         errors_details = []
-        processed_geom_pks: set[int] = set()
 
+        # Pre-deduplicate by geom_pk and filter out invalid geometries before
+        # submitting to the thread pool.  Keeps worker logic simple and avoids
+        # a shared mutable set inside threads.
+        seen_geom_pks: set[int] = set()
+        work_items: list[tuple[str, int, int]] = []
         for mid, occ_pk, geom_pk in occ_list:
-            processed += 1
-            if processed % 500 == 0:
-                logger.info("TecOccurrenceTenureImporter: processed %d / %d", processed, len(occ_list))
-
-            if geom_pk in processed_geom_pks:
-                skipped += 1
-                continue
-
             geometry_instance = geometry_map.get(geom_pk)
-            if geometry_instance is None:
+            if geom_pk in seen_geom_pks or geometry_instance is None or not geometry_instance.geometry:
                 skipped += 1
                 continue
-
-            if not geometry_instance.geometry:
-                skipped += 1
-                continue
-
             if ctx.dry_run:
                 logger.info("Dry run: would process tenure for TEC Occurrence %s (pk=%s)", mid, occ_pk)
                 continue
+            seen_geom_pks.add(geom_pk)
+            work_items.append((mid, occ_pk, geom_pk))
 
-            processed_geom_pks.add(geom_pk)
+        if not ctx.dry_run:
 
-            try:
-                exists_before = not options.get("wipe_targets") and geometry_instance.id in geometry_has_tenure
+            def _process_one(item: tuple[str, int, int]) -> dict:
+                """Intersect and write OccurrenceTenure for one occurrence geometry.
 
-                intersect_data = intersect_geometry_with_layer(geometry_instance.geometry, intersect_layer)
-                features = intersect_data.get("features", [])
+                Runs in a worker thread — each thread gets its own DB connection
+                from Django's thread-local connection registry.
+                """
+                from django.db import close_old_connections
 
-                if not features:
-                    skipped += 1
-                    continue
+                close_old_connections()
 
-                tenure_count_before = tenure_count_map.get(geometry_instance.id, 0)
+                mid, occ_pk, geom_pk = item
+                geometry_instance = geometry_map[geom_pk]  # guaranteed valid by pre-filter
 
-                populate_occurrence_tenure_data(geometry_instance, features, request, skip_revision=True)
+                try:
+                    exists_before = not options.get("wipe_targets") and geometry_instance.id in geometry_has_tenure
 
-                tenures = list(OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).order_by("id"))
-                tenure_count_after = len(tenures)
+                    intersect_data = intersect_geometry_with_layer(geometry_instance.geometry, intersect_layer)
+                    features = intersect_data.get("features", [])
 
-                # Update stats
-                if not exists_before:
-                    created += tenure_count_after
-                else:
+                    if not features:
+                        return {"status": "skipped"}
+
+                    tenure_count_before = tenure_count_map.get(geometry_instance.id, 0)
+
+                    # skip_revision=True: reversion history is bulk-inserted by the
+                    # MigratedHistorySeeder after the run (--seed-history flag), which
+                    # is far faster than one versioned save() per tenure record.
+                    populate_occurrence_tenure_data(geometry_instance, features, request, skip_revision=True)
+
+                    tenure_count_after = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).count()
+
+                    if tenure_count_after == 0:
+                        return {"status": "skipped"}
+
+                    if not exists_before:
+                        return {"status": "ok", "created": tenure_count_after, "updated": 0}
                     num_new = max(0, tenure_count_after - tenure_count_before)
-                    created += num_new
-                    updated += tenure_count_before
+                    return {"status": "ok", "created": num_new, "updated": tenure_count_before}
 
-                if tenure_count_after == 0:
-                    skipped += 1
-                    continue
-
-                # Save each tenure — all default values, no purpose/vesting/significant assignment
-                for tenure in tenures:
-                    tenure.save(version_user=user)
-
-            except Exception as e:
-                logger.exception("Error processing tenure for TEC Occurrence %s: %s", mid, e)
-                errors += 1
-                errors_details.append(
-                    {
-                        "migrated_from_id": mid,
-                        "column": "general",
-                        "level": "error",
-                        "message": str(e),
-                        "raw_value": None,
-                        "reason": "Exception",
-                        "row_json": json.dumps({"migrated_from_id": mid}, default=str),
-                        "timestamp": timezone.now().isoformat(),
+                except Exception as e:
+                    logger.exception("Error processing tenure for TEC Occurrence %s: %s", mid, e)
+                    return {
+                        "status": "error",
+                        "error_detail": {
+                            "migrated_from_id": mid,
+                            "column": "general",
+                            "level": "error",
+                            "message": str(e),
+                            "raw_value": None,
+                            "reason": "Exception",
+                            "row_json": json.dumps({"migrated_from_id": mid}, default=str),
+                            "timestamp": timezone.now().isoformat(),
+                        },
                     }
-                )
+
+            # Number of parallel workers.  Each worker holds one DB connection.
+            # 8 is the empirically determined optimum — beyond this PostGIS becomes
+            # CPU-bound and throughput degrades.  Override via TEC_TENURE_WORKERS
+            # if the target DB has more/fewer cores available.
+            num_workers = int(os.environ.get("TEC_TENURE_WORKERS", "8"))
+            logger.info(
+                "TecOccurrenceTenureImporter: processing %d occurrences with %d worker thread(s)",
+                len(work_items),
+                num_workers,
+            )
+
+            completed_count = 0
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                future_to_mid = {executor.submit(_process_one, item): item[0] for item in work_items}
+                for future in as_completed(future_to_mid):
+                    completed_count += 1
+                    if completed_count % 500 == 0:
+                        logger.info(
+                            "TecOccurrenceTenureImporter: completed %d / %d",
+                            completed_count,
+                            len(work_items),
+                        )
+                    result = future.result()
+                    if result["status"] == "skipped":
+                        skipped += 1
+                    elif result["status"] == "error":
+                        errors += 1
+                        errors_details.append(result["error_detail"])
+                    else:
+                        created += result["created"]
+                        updated += result["updated"]
 
         # Write error CSV
         if errors_details:
             import csv
-            import os
 
             csv_path = options.get("error_csv")
             if csv_path:

@@ -59,7 +59,7 @@ class CommunityTecAdapter(SourceAdapter):
                 comment_parts.append(f"Occurrence Decline: {occ_decline}")
 
             if comment_parts:
-                canonical["comment"] = "; ".join(comment_parts)
+                canonical["comment"] = "\n".join(comment_parts)
 
             if not canonical.get("submitter") and tec_submitter_id:
                 canonical["submitter"] = tec_submitter_id

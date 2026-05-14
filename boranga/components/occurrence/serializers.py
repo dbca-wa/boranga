@@ -764,13 +764,21 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             return ""
 
     def get_copied_to_occurrence(self, obj):
-        occs_copied_to = [
-            [occ_geom.occurrence_id for occ_geom in dest if hasattr(occ_geom, "occurrence_id")]
-            for geom in obj.ocr_geometry.all()
-            for dest in geom.source_of_objects()
-        ]
+        from django.contrib.contenttypes.models import ContentType
 
-        return list({i for o in occs_copied_to for i in o})
+        ct = ContentType.objects.get_for_model(OccurrenceReportGeometry)
+        # Use list() so prefetch_related cache is used when available
+        ocr_geom_ids = [g.id for g in obj.ocr_geometry.all()]
+        if not ocr_geom_ids:
+            return []
+        return list(
+            OccurrenceGeometry.objects.filter(
+                content_type=ct,
+                object_id__in=ocr_geom_ids,
+            )
+            .values_list("occurrence_id", flat=True)
+            .distinct()
+        )
 
     def get_geometry_show_on_map(self, obj):
         return obj.ocr_geometry.filter(show_on_map=True).exists()

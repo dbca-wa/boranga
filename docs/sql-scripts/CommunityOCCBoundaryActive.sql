@@ -156,10 +156,10 @@ geom AS (
         g.geometry,
         g.updated_date,
         ROUND(
-            (ST_Area(ST_Transform(g.geometry, 4326)::geography) / 1000000.0)::numeric, 6
+            (ST_Area(ST_Transform(g.geometry, 7844)::geography) / 1000000.0)::numeric, 6
         ) AS area_sq_km,
         ROUND(
-            (ST_Area(ST_Transform(g.geometry, 4326)::geography) / 10000.0)::numeric, 4
+            (ST_Area(ST_Transform(g.geometry, 7844)::geography) / 10000.0)::numeric, 4
         ) AS area_ha
     FROM boranga_occurrencegeometry g
     WHERE ST_GeometryType(g.geometry) IN ('ST_Polygon', 'ST_MultiPolygon')
@@ -180,8 +180,8 @@ SELECT
     community.community_name                       AS COMMU_NAME,
     community.community_id                         AS COMMU_ID,
 
-    -- Geometry
-    geom.geometry                                  AS GEOMETRY,
+    -- Geometry (ST_Transform to SRID 7844 is a no-op — Boranga is already GDA2020 throughout)
+    ST_Transform(geom.geometry, 7844)              AS GEOMETRY,
     TO_CHAR(geom.updated_date, 'YYYY-MM-DD HH24:MI:SS') AS GEO_MODIFY,
     geom.geom_id                                   AS GEOM_ID,
     geom.area_sq_km                                AS G_AREA_SKM,

@@ -68,11 +68,9 @@ class ContentTypeViewSet(viewsets.ReadOnlyModelViewSet):
                 app_label="boranga",
             )
             .filter(
-                Q(model__startswith="occurrencereport")
-                | Q(model__startswith="ocr")
-                | Q(model__iexact="occurrence")
-                | Q(model__iexact="submitterinformation")
+                Q(model__startswith="occurrencereport") | Q(model__startswith="ocr") | Q(model__iexact="occurrence")
             )
+            .exclude(model__iexact="submitterinformation")
             .exclude(
                 model__in=[
                     "occurrencereportproposalrequest",
@@ -327,12 +325,56 @@ class QueueReportView(views.APIView):
     permission_classes = [CanViewReports]
 
     def get(self, request, *args, **kwargs):
+        from boranga.components.conservation_status.models import (
+            ConservationChangeCode,
+            ConservationStatus,
+            WALegislativeCategory,
+            WALegislativeList,
+            WAPriorityCategory,
+        )
         from boranga.components.main.export_utils import GROUP_TYPES, REPORT_CATEGORIES
+        from boranga.components.occurrence.models import Occurrence, OccurrenceReport
+        from boranga.components.species_and_communities.models import (
+            District,
+            FaunaGroup,
+            FaunaSubGroup,
+            Region,
+            Species,
+        )
+        from boranga.components.users.models import SubmitterCategory
+
+        def choices_to_list(choices):
+            return [{"value": value, "name": name} for value, name in choices]
 
         return Response(
             {
                 "report_categories": REPORT_CATEGORIES,
                 "group_types": GROUP_TYPES,
+                "processing_statuses_by_category": {
+                    "species": choices_to_list(Species.PROCESSING_STATUS_CHOICES),
+                    "conservation_status": choices_to_list(ConservationStatus.PROCESSING_STATUS_CHOICES),
+                    "occurrence": choices_to_list(Occurrence.PROCESSING_STATUS_CHOICES),
+                    "occurrence_report": choices_to_list(OccurrenceReport.PROCESSING_STATUS_CHOICES),
+                },
+                "region_list": list(Region.objects.all().order_by("name").values("id", "name")),
+                "district_list": list(District.objects.all().order_by("name").values("id", "name", "region_id")),
+                "wa_legislative_lists": list(
+                    WALegislativeList.objects.all().order_by("code").values("id", "code", "label")
+                ),
+                "wa_legislative_categories": list(
+                    WALegislativeCategory.objects.all().order_by("code").values("id", "code", "label")
+                ),
+                "wa_priority_categories": list(
+                    WAPriorityCategory.objects.all().order_by("code").values("id", "code", "label")
+                ),
+                "fauna_groups": list(FaunaGroup.objects.active().order_by("name").values("id", "name")),
+                "fauna_sub_groups": list(
+                    FaunaSubGroup.objects.active().order_by("name").values("id", "name", "fauna_group_id")
+                ),
+                "change_codes": list(
+                    ConservationChangeCode.objects.active().order_by("code").values("id", "code", "label")
+                ),
+                "submitter_categories": list(SubmitterCategory.objects.active().order_by("name").values("id", "name")),
             }
         )
 
@@ -341,6 +383,7 @@ class QueueReportView(views.APIView):
         group_type = request.data.get("group_type", "all")
         fmt = request.data.get("format", "csv")
         num_records = request.data.get("num_records", 100000)
+        user_filters = request.data.get("filters") or {}
 
         from boranga.components.main.export_utils import (
             EXPORT_MODELS,
@@ -361,9 +404,12 @@ class QueueReportView(views.APIView):
         except (TypeError, ValueError):
             num_records = 100000
 
+        # Merge structural filters (group_type etc.) with user-supplied dashboard filters
+        merged_filters = {**resolved_filters, **user_filters}
+
         parameters = {
             "model": export_model,
-            "filters": resolved_filters,
+            "filters": merged_filters,
             "format": fmt,
             "num_records": num_records,
             "category": category,

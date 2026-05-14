@@ -9,9 +9,6 @@ def meta_dir():
     private_media = getattr(settings, "PRIVATE_MEDIA_STORAGE_LOCATION", None)
     if private_media:
         d = os.path.join(private_media, "kb_layer_cache")
-    else:
-        base = getattr(settings, "BASE_DIR", None) or os.getcwd()
-        d = os.path.join(base, ".kb_layer_cache")
     try:
         os.makedirs(d, exist_ok=True)
     except Exception:

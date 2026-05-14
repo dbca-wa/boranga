@@ -130,8 +130,8 @@ SELECT
     community.community_name                       AS COMMU_NAME,
     community.community_id                         AS COMMU_ID,
 
-    -- Site Geometry
-    site.geometry                                  AS GEOMETRY,
+    -- Site Geometry (ST_Transform to SRID 7844 is a no-op — Boranga is already GDA2020 throughout)
+    ST_Transform(site.geometry, 7844)              AS GEOMETRY,
     site.site_id                                   AS GEOM_ID,
 
     -- Conservation Status

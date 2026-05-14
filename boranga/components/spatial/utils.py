@@ -38,11 +38,20 @@ from boranga.helpers import is_internal, is_occurrence_assessor
 
 logger = logging.getLogger(__name__)
 
-# Albers Equal Area projection string for Western Australia
-aea_wa_string = (
-    "+proj=aea +lat_1=-17.5 +lat_2=-31.5 +lat_0=0 +lon_0=121 +x_0=0 +y_0=0 "
-    "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-)
+# Cache for local cadastre table availability (exists, has_row).
+# Keyed by db_table string.  Once confirmed present, the table won't disappear
+# during a migration run, so caching process-wide is safe and avoids 2 SQL
+# round-trips per occurrence during bulk operations.
+_cadastre_local_check_cache: dict[str, tuple[bool, bool]] = {}
+
+# Albers Equal Area projection string for Western Australia.
+# No +towgs84 here: GDA2020 (EPSG:7844) already uses the GRS80 ellipsoid, so
+# PROJ can do a direct ellipsoidal transformation without a datum-grid lookup.
+# Including +towgs84=0,0,0,0,0,0,0 forces PROJ to route through WGS84, which
+# triggers binary grid-file log messages that cause a UnicodeDecodeError in
+# pyproj's UTF-8 log callback, ultimately producing NaN coordinates and
+# GEOS "Shell empty after removing invalid points" errors.
+aea_wa_string = "+proj=aea +lat_1=-17.5 +lat_2=-31.5 +lat_0=0 +lon_0=121 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs"
 
 
 def invert_xy_coordinates(geometries):
@@ -121,17 +130,46 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
                 sch = "public"
                 tbl = parts[-1]
 
-            logger.info(
-                "intersect_geometry_with_layer: attempting local cadastre lookup for table %s",
-                db_table,
-            )
-            # Check table exists
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=%s AND table_name=%s)",
-                    [sch, tbl],
+            if db_table in _cadastre_local_check_cache:
+                exists, has_row = _cadastre_local_check_cache[db_table]
+                logger.debug(
+                    "intersect_geometry_with_layer: using cached local cadastre check for %s (exists=%s, has_row=%s)",
+                    db_table,
+                    exists,
+                    has_row,
                 )
-                exists = bool(cursor.fetchone()[0])
+            else:
+                logger.info(
+                    "intersect_geometry_with_layer: attempting local cadastre lookup for table %s",
+                    db_table,
+                )
+
+                # Validate identifiers before using them in raw SQL
+                if not re.match(r"^[A-Za-z0-9_]+$", sch) or not re.match(r"^[A-Za-z0-9_]+$", tbl):
+                    logger.error(
+                        "Local cadastre table name appears complex (%s.%s); skipping local check and falling back.",
+                        sch,
+                        tbl,
+                    )
+                    raise Exception("local-cadastre-complex-name")
+
+                # Check table exists
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=%s AND table_name=%s)",
+                        [sch, tbl],
+                    )
+                    exists = bool(cursor.fetchone()[0])
+
+                # Check table has at least one row
+                has_row = False
+                if exists:
+                    with connection.cursor() as cursor:
+                        cursor.execute(f"SELECT EXISTS (SELECT 1 FROM {sch}.{tbl} LIMIT 1)")
+                        # Note: identifiers validated above; safe for common schema/table names
+                        has_row = bool(cursor.fetchone()[0])
+
+                _cadastre_local_check_cache[db_table] = (exists, has_row)
 
             if not exists:
                 logger.error(
@@ -140,37 +178,6 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
                     tbl,
                 )
                 raise Exception("local-cadastre-missing")
-
-            # Check table has at least one row. Validate identifiers before using them
-            if not re.match(r"^[A-Za-z0-9_]+$", sch) or not re.match(r"^[A-Za-z0-9_]+$", tbl):
-                # Unexpected/complex table name; don't attempt raw SQL, fall back
-                logger.error(
-                    "Local cadastre table name appears complex (%s.%s); skipping local check and falling back.",
-                    sch,
-                    tbl,
-                )
-                raise Exception("local-cadastre-complex-name")
-
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema=%s AND table_name=%s)",
-                    [sch, tbl],
-                )
-                exists = bool(cursor.fetchone()[0])
-
-            if not exists:
-                logger.error(
-                    "Local cadastre table %s.%s not found; falling back to remote WFS",
-                    sch,
-                    tbl,
-                )
-                raise Exception("local-cadastre-missing")
-
-            with connection.cursor() as cursor:
-                cursor.execute(f"SELECT EXISTS (SELECT 1 FROM {sch}.{tbl} LIMIT 1)")
-                # Note: The above uses simple interpolation only after validation;
-                # it is safe for common schema/table names
-                has_row = bool(cursor.fetchone()[0])
 
             if not has_row:
                 logger.error(
@@ -1175,7 +1182,15 @@ def process_proxy(request, remoteurl, queryString, auth_user, auth_password):
                 auth_details = None
             else:
                 auth_details = {"user": auth_user, "password": auth_password}
-            proxy_response = proxy_view(request, remoteurl, basic_auth=auth_details, requests_args={"timeout": 60})
+            try:
+                proxy_response = proxy_view(request, remoteurl, basic_auth=auth_details, requests_args={"timeout": 60})
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                logger.warning("Proxy request to %s timed out or failed: %s", remoteurl, e)
+                return HttpResponse(
+                    "Upstream service unavailable",
+                    content_type="text/plain",
+                    status=504,
+                )
 
             proxy_response_content_encoded = base64.b64encode(proxy_response.content)
             base64_json = {

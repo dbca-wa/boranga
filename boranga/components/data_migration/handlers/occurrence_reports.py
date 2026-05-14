@@ -327,6 +327,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     # Extract fields
                     taxon_id = row.get("taxon_name_id", "").strip()
+                    if not taxon_id:
+                        continue
                     # Build comments from SSP_ fields using shared function
                     comments = build_site_species_comments(row)
 
@@ -3069,6 +3071,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # identification: identification_data for updates will be looked up from `ops` by migrated_from_id
             hd = habitat_data or {}
             hc = habitat_condition or {}
+            # Propagate observation_date -> OCRHabitatCondition.obs_date when not already supplied by the adapter.
+            if not hc.get("obs_date") and inst.observation_date:
+                hc = dict(hc)
+                hc["obs_date"] = inst.observation_date
             # OCRHabitatComposition: update existing or schedule create (use inst/hid)
             if hid in existing_habs:
                 h = existing_habs[hid]
@@ -3439,6 +3445,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
             # logger.debug(f"Continuing with mig={mig}, ocr.pk={ocr.pk}")
             hd = habitat_data or {}
             hc = habitat_condition or {}
+            # Propagate observation_date -> OCRHabitatCondition.obs_date when not already supplied by the adapter.
+            if not hc.get("obs_date") and ocr.observation_date:
+                hc = dict(hc)
+                hc["obs_date"] = ocr.observation_date
             # also pull identification_data from create_meta mapping (create_meta entries are tuples of
             # (migrated_from_id, habitat_data, habitat_condition, identification_data) )
             # but create_meta was appended as (migrated_from_id, habitat_data, habitat_condition) earlier;

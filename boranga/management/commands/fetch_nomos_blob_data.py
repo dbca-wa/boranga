@@ -271,12 +271,13 @@ class Command(BaseCommand):
 
                                     if class_system_fk:
                                         try:
-                                            igs = InformalGroup.objects.filter(
-                                                taxonomy=taxon_obj,
-                                                classification_system_fk=class_system_fk,
+                                            ig_ids = list(
+                                                InformalGroup.objects.filter(
+                                                    taxonomy=taxon_obj,
+                                                    classification_system_fk=class_system_fk,
+                                                ).values_list("id", flat=True)
                                             )
-                                            count_igs = igs.count()
-                                            if count_igs == 0:
+                                            if not ig_ids:
                                                 InformalGroup.objects.create(
                                                     taxonomy=taxon_obj,
                                                     classification_system_fk=class_system_fk,
@@ -285,15 +286,14 @@ class Command(BaseCommand):
                                                 )
                                             else:
                                                 # Keep the first record; delete any duplicates
-                                                if count_igs > 1:
-                                                    duplicate_ids = list(igs.values_list("id", flat=True)[1:])
-                                                    InformalGroup.objects.filter(id__in=duplicate_ids).delete()
+                                                if len(ig_ids) > 1:
+                                                    InformalGroup.objects.filter(id__in=ig_ids[1:]).delete()
                                                     logger.warning(
-                                                        f"Deleted {len(duplicate_ids)} duplicate InformalGroup "
+                                                        f"Deleted {len(ig_ids) - 1} duplicate InformalGroup "
                                                         f"record(s) for taxonomy={taxon_obj.taxon_name_id}, "
                                                         f"classification_system_id={class_system_fk.classification_system_id}"
                                                     )
-                                                igs.filter(id=igs.values_list("id", flat=True).first()).update(
+                                                InformalGroup.objects.filter(id=ig_ids[0]).update(
                                                     classification_system_id=class_system_fk.classification_system_id,  # noqa
                                                     taxon_name_id=taxon_obj.taxon_name_id,
                                                 )

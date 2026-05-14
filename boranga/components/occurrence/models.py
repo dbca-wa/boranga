@@ -102,6 +102,7 @@ from boranga.components.species_and_communities.models import (
     ThreatCategory,
 )
 from boranga.components.users.models import (
+    SubmitterCategory,
     SubmitterInformation,
     SubmitterInformationModelMixin,
 )
@@ -3791,7 +3792,7 @@ class OccurrenceManager(models.Manager):
 
 class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
     BULK_IMPORT_ABBREVIATION = "occ"
-    BULK_IMPORT_INCLUDE_FIELDS = ["wild_status", "comment"]
+    BULK_IMPORT_INCLUDE_FIELDS = ["wild_status", "comment", "migrated_from_id", "processing_status"]
 
     REVIEW_STATUS_CHOICES = (
         ("not_reviewed", "Not Reviewed"),
@@ -6435,6 +6436,19 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             self.processing_status = self.PROCESSING_STATUS_COMPLETED
             self.datetime_completed = timezone.now()
             self.save()
+
+            # Seed initial reversion history for all records created by this task.
+            try:
+                from boranga.components.data_migration.history_seeding.reversion_seeder import (
+                    MigratedHistorySeeder,
+                )
+
+                seeder = MigratedHistorySeeder(batch_size=500)
+                count = seeder.seed_bulk_import_occurrence_reports(self.pk)
+                logger.info(f"Bulk import task {self.pk}: seeded {count} reversion version(s)")
+            except Exception:
+                logger.exception(f"Bulk import task {self.pk}: history seeding failed (non-fatal)")
+
             return []
 
     def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
@@ -6507,6 +6521,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         row = [i for j, i in enumerate(row) if j not in indexes_to_remove]
         headers = [i for j, i in enumerate(headers) if j not in indexes_to_remove]
 
+        # Pre-resolve 'bulk_import_submitter' default values so that any validation
+        # code reading directly from the raw row (e.g. the processing_status cross-column
+        # checks) sees the actual email address rather than the sentinel string.
+        for _submitter_col in self.schema.columns.filter(
+            django_import_content_type__in=required_content_types,
+            default_value=OccurrenceReportBulkImportSchemaColumn.DEFAULT_VALUE_BULK_IMPORT_SUBMITTER,
+        ):
+            if _submitter_col.xlsx_column_header_name in headers:
+                row[headers.index(_submitter_col.xlsx_column_header_name)] = self.email_user
+
         # Validate each cell
         for column_index, column in enumerate(
             self.schema.columns.filter(django_import_content_type__in=required_content_types)
@@ -6568,8 +6592,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             return
 
         # Gate status-dependent models based on processing_status of the OCR row.
-        # OccurrenceReportApprovalDetails: only import when status is with_approver or approved.
-        # Occurrence: only import when status is approved.
+        # Both OccurrenceReportApprovalDetails and Occurrence are only relevant once the
+        # OCR has reached the approver stage — the decision to create or link an OCC is
+        # made during assessment/approval, not while the report is still with an assessor.
         ocr_model_data = dict(
             zip(
                 models.get(OccurrenceReport._meta.model_name, {}).get("field_names", []),
@@ -6582,7 +6607,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             OccurrenceReport.PROCESSING_STATUS_APPROVED,
         ):
             models.pop(OccurrenceReportApprovalDetails._meta.model_name, None)
-        if row_processing_status != OccurrenceReport.PROCESSING_STATUS_APPROVED:
             models.pop(Occurrence._meta.model_name, None)
 
         # Validate that approved OCRs have enough data to link or create an Occurrence.
@@ -6596,25 +6620,31 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             )
             has_occurrence = bool(approval_data.get("occurrence"))
             has_new_occurrence_name = bool(approval_data.get("new_occurrence_name"))
-            has_occurrence_number = bool(
-                dict(
-                    zip(
-                        models.get(Occurrence._meta.model_name, {}).get("field_names", []),
-                        models.get(Occurrence._meta.model_name, {}).get("values", []),
-                    )
-                ).get("occurrence_number")
+            _occ_model_dict = dict(
+                zip(
+                    models.get(Occurrence._meta.model_name, {}).get("field_names", []),
+                    models.get(Occurrence._meta.model_name, {}).get("values", []),
+                )
             )
-            if not has_occurrence and not has_new_occurrence_name and not has_occurrence_number:
+            has_occurrence_number = bool(_occ_model_dict.get("occurrence_number"))
+            has_occ_migrated_from_id = bool(_occ_model_dict.get("migrated_from_id"))
 
-                def _col_header(model_name, field_name):
-                    """Return the xlsx column header for a given model/field, falling back to 'model.field'."""
-                    col = self.schema.columns.filter(
-                        django_import_content_type__model=model_name,
-                        django_import_field_name=field_name,
-                    ).first()
-                    return col.xlsx_column_header_name if col else f"{model_name}.{field_name}"
+            def _col_header(model_name, field_name):
+                """Return the xlsx column header for a given model/field, falling back to 'model.field'."""
+                col = self.schema.columns.filter(
+                    django_import_content_type__model=model_name,
+                    django_import_field_name=field_name,
+                ).first()
+                return col.xlsx_column_header_name if col else f"{model_name}.{field_name}"
 
-                orfapp = OccurrenceReportApprovalDetails._meta.model_name
+            orfapp = OccurrenceReportApprovalDetails._meta.model_name
+
+            if (
+                not has_occurrence
+                and not has_new_occurrence_name
+                and not has_occurrence_number
+                and not has_occ_migrated_from_id
+            ):
                 errors.append(
                     {
                         "row_index": row_index,
@@ -6622,8 +6652,106 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         "data": row,
                         "error_message": (
                             "Approved occurrence reports must have either an existing occurrence "
-                            f"('{_col_header(orfapp, 'occurrence')}' or a new occurrence name "
-                            f"('{_col_header(orfapp, 'new_occurrence_name')}')."
+                            f"('{_col_header(orfapp, 'occurrence')}'), a new occurrence name "
+                            f"('{_col_header(orfapp, 'new_occurrence_name')}'), "
+                            "an OCC occurrence number, or an OCC migrated_from_id."
+                        ),
+                    }
+                )
+                return
+
+            # officer is always mandatory for approved OCRs.
+            if not approval_data.get("officer"):
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": row,
+                        "error_message": (
+                            f"'{_col_header(orfapp, 'officer')}' is required for approved occurrence reports."
+                        ),
+                    }
+                )
+                return
+
+            # Detect double ORFAPP path: both occurrence FK and new_occurrence_name provided.
+            if has_occurrence and has_new_occurrence_name:
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "ambiguous_occurrence_identifier",
+                        "data": row,
+                        "error_message": (
+                            f"Ambiguous occurrence linking: both '{_col_header(orfapp, 'occurrence')}' "
+                            f"and '{_col_header(orfapp, 'new_occurrence_name')}' are populated. "
+                            "Provide either an existing occurrence or a new occurrence name, not both."
+                        ),
+                    }
+                )
+                return
+
+            # new_occurrence_name combined with occurrence_number is contradictory: you cannot
+            # create a new OCC while also referencing an existing OCC by number.
+            if has_new_occurrence_name and has_occurrence_number:
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "ambiguous_occurrence_identifier",
+                        "data": row,
+                        "error_message": (
+                            f"Ambiguous occurrence linking: '{_col_header(orfapp, 'new_occurrence_name')}' "
+                            f"and '{_col_header(Occurrence._meta.model_name, 'occurrence_number')}' "
+                            "cannot both be populated — provide a new occurrence name OR an existing "
+                            "occurrence number, not both."
+                        ),
+                    }
+                )
+                return
+
+            # Determine whether we are creating a new OCC or linking an existing one so we
+            # can enforce which ORFAPP fields are mandatory.
+            # For OCC path via migrated_from_id: check the DB (rows earlier in this task will
+            # already have committed the OCC within the same outer transaction).
+            _occ_mid_is_new = False
+            if has_occ_migrated_from_id:
+                _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                _task_pk = self.pk if self.pk is not None else 0
+                _prefixed_occ_mid_check = f"{_occ_prefix}-{_task_pk:0{_pad}d}-{_occ_model_dict['migrated_from_id']}"
+                _occ_mid_is_new = not Occurrence.objects.filter(migrated_from_id=_prefixed_occ_mid_check).exists()
+
+            _is_creating_new_occ = has_new_occurrence_name or _occ_mid_is_new
+            _is_linking_existing_occ = (
+                has_occurrence or has_occurrence_number or (has_occ_migrated_from_id and not _occ_mid_is_new)
+            )
+
+            # When creating a new OCC, new_occurrence_name is mandatory so the OCC gets a name.
+            if _is_creating_new_occ and not has_new_occurrence_name:
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": row,
+                        "error_message": (
+                            f"'{_col_header(orfapp, 'new_occurrence_name')}' is required when creating "
+                            "a new occurrence — provide a name for the occurrence being created."
+                        ),
+                    }
+                )
+                return
+
+            # When linking an existing OCC, the ORFAPP occurrence FK is mandatory so the link
+            # is explicitly declared (even when the OCC is also identified via OCC columns).
+            if _is_linking_existing_occ and not has_occurrence:
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": row,
+                        "error_message": (
+                            f"'{_col_header(orfapp, 'occurrence')}' is required when linking to an "
+                            "existing occurrence — populate the ORFAPP Occurrence column with the "
+                            "occurrence number of the occurrence being linked."
                         ),
                     }
                 )
@@ -6671,6 +6799,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     for field, value in model_data.items():
                         setattr(current_model_instance, field, value)
 
+                # Bulk-imported OCRs are always internal applications.
+                current_model_instance.internal_application = True
+
                 # Auto-derive customer_status from processing_status when not
                 # explicitly provided in the import data.
                 if "customer_status" not in model_data and current_model_instance.processing_status:
@@ -6690,6 +6821,14 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             elif current_model_name == Occurrence._meta.model_name:
                 occ_migrated_from_id = model_data.pop("migrated_from_id", None)
                 occurrence_number = model_data.pop("occurrence_number", None)
+
+                # Prefix the occ_migrated_from_id to avoid clashes with existing records,
+                # using the same approach as OccurrenceReport.migrated_from_id prefixing.
+                if occ_migrated_from_id:
+                    _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _task_pk = self.pk if self.pk is not None else 0
+                    occ_migrated_from_id = f"{_occ_prefix}-{_task_pk:0{_pad}d}-{occ_migrated_from_id}"
 
                 if occ_migrated_from_id and occurrence_number:
                     error_message = (
@@ -6820,6 +6959,19 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         if occ_is_new:
                             for field, value in model_data.items():
                                 setattr(current_model_instance, field, value)
+                            # Apply new_occurrence_name from ORFAPP data after model_data
+                            # fields so it always wins over an empty 'Occurrence Name' column.
+                            _orfapp_data_for_name = dict(
+                                zip(
+                                    models.get(OccurrenceReportApprovalDetails._meta.model_name, {}).get(
+                                        "field_names", []
+                                    ),
+                                    models.get(OccurrenceReportApprovalDetails._meta.model_name, {}).get("values", []),
+                                )
+                            )
+                            _new_name = _orfapp_data_for_name.get("new_occurrence_name")
+                            if _new_name:
+                                current_model_instance.occurrence_name = _new_name
 
             elif current_model_name == SubmitterInformation._meta.model_name:
                 # Submitter information is created automatically when an OccurrenceReport is created
@@ -6828,6 +6980,24 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 for field, value in model_data.items():
                     setattr(current_model_instance, field, value)
             else:
+                # For OccurrenceReportApprovalDetails.occurrence: if validate() returned a raw
+                # string (occurrence_number lookup failed before the fallback could fire, or the
+                # column is not configured with a lookup field), try matching the cell value
+                # against migrated_from_id (with task prefix) so that rows can reference an OCC
+                # created earlier in the same import run (via OCC columns or ORFAPP columns).
+                if (
+                    current_model_name == OccurrenceReportApprovalDetails._meta.model_name
+                    and model_data.get("occurrence")
+                    and not isinstance(model_data.get("occurrence"), Occurrence)
+                ):
+                    _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _task_pk = self.pk if self.pk is not None else 0
+                    _fallback_mid = f"{_occ_prefix}-{_task_pk:0{_pad}d}-{model_data['occurrence']}"
+                    try:
+                        model_data["occurrence"] = Occurrence.objects.get(migrated_from_id=_fallback_mid)
+                    except Occurrence.DoesNotExist:
+                        pass
                 current_model_instance = model_class(**model_data)
 
             # If we are at the top level model (OccurrenceReport) we don't need to relate it to anything
@@ -6844,6 +7014,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 related_to_parent = False
                 # Look through all the model instances that have already been saved
                 for potential_parent_model_key in [m for m in model_instances]:
+                    # OccurrenceReportApprovalDetails.occurrence is managed explicitly via
+                    # column data and the ORFAPP fallback lookup — skip auto-wiring it to
+                    # the Occurrence instance so that we never end up with both `occurrence`
+                    # and `new_occurrence_name` set on the ORFAPP instance.
+                    if (
+                        current_model_name == OccurrenceReportApprovalDetails._meta.model_name
+                        and potential_parent_model_key == Occurrence._meta.model_name
+                    ):
+                        continue
+
                     # Check if this model has a relationship with the current model
                     potential_parent_instance = model_instances[potential_parent_model_key]
 
@@ -6909,7 +7089,17 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
                 # Deal with special case of relating Occurrence to OccurrenceReport
                 if current_model_instance._meta.model_name == Occurrence._meta.model_name:
-                    current_model_instance.occurrence_reports.add(model_instances[OccurrenceReport._meta.model_name])
+                    _ocr_inst = model_instances[OccurrenceReport._meta.model_name]
+                    current_model_instance.occurrence_reports.add(_ocr_inst)
+                    # For approved OCRs linked via Occurrence.migrated_from_id (i.e. without
+                    # going through OccurrenceReportApprovalDetails), also set the direct FK
+                    # on the OCR so it is fully linked.
+                    if (
+                        _ocr_inst.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED
+                        and not _ocr_inst.occurrence_id
+                    ):
+                        _ocr_inst.occurrence = current_model_instance
+                        _ocr_inst.save()
 
                 # Deal with special case of creating mutliple geometries based on the
                 # geojson text from the column
@@ -6966,6 +7156,84 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     }
                 )
 
+        # Post-processing: propagate OccurrenceReport.observation_date -> obs_date on
+        # any child model instance that has an obs_date field and was not given an
+        # explicit value via the import schema (i.e. obs_date is still None).
+        # Group by class so we issue one UPDATE per model rather than one per instance.
+        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
+        if ocr_instance and ocr_instance.observation_date:
+            _obs_date_pks_by_class: dict[type, list] = {}
+            for _child_instance in model_instances.values():
+                if _child_instance is ocr_instance:
+                    continue
+                try:
+                    _child_instance._meta.get_field("obs_date")
+                except Exception:
+                    continue
+                if _child_instance.obs_date is None:
+                    _obs_date_pks_by_class.setdefault(type(_child_instance), []).append(_child_instance.pk)
+            for _model_class, _pks in _obs_date_pks_by_class.items():
+                _model_class.objects.filter(pk__in=_pks).update(obs_date=ocr_instance.observation_date)
+
+        # Post-processing: auto-derive OCRAnimalObservation.count_status from the
+        # imported count fields, following the same priority rules used during data migration:
+        #   1. any detailed count field has data  → "detailed_count"
+        #   2. simple_alive or simple_dead has data → "simple_count"
+        #   3. neither                             → "not_counted"
+        _animal_obs = model_instances.get(OCRAnimalObservation._meta.model_name)
+        if _animal_obs is not None:
+            _detailed_count_fields = [
+                "alive_adult_male",
+                "dead_adult_male",
+                "alive_adult_female",
+                "dead_adult_female",
+                "alive_adult_unknown",
+                "dead_adult_unknown",
+                "alive_juvenile_male",
+                "dead_juvenile_male",
+                "alive_juvenile_female",
+                "dead_juvenile_female",
+                "alive_juvenile_unknown",
+                "dead_juvenile_unknown",
+                "alive_unsure_male",
+                "dead_unsure_male",
+                "alive_unsure_female",
+                "dead_unsure_female",
+                "alive_unsure_unknown",
+                "dead_unsure_unknown",
+            ]
+            if any(getattr(_animal_obs, f, None) is not None for f in _detailed_count_fields):
+                _derived_count_status = settings.COUNT_STATUS_COUNTED
+            elif _animal_obs.simple_alive is not None or _animal_obs.simple_dead is not None:
+                _derived_count_status = settings.COUNT_STATUS_SIMPLE_COUNT
+            else:
+                _derived_count_status = settings.COUNT_STATUS_NOT_COUNTED
+            OCRAnimalObservation.objects.filter(pk=_animal_obs.pk).update(count_status=_derived_count_status)
+
+        # Post-processing: auto-fill SubmitterInformation for bulk imports.
+        # The record is auto-created (name + contact_details from Ledger) when the OCR is
+        # saved; here we additionally assign the "DBCA S&C" submitter category.
+        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
+        if ocr_instance and ocr_instance.submitter_information_id:
+            try:
+                _dbca_sc_category = SubmitterCategory.objects.get(name="DBCA S&C")
+                _sub_info = ocr_instance.submitter_information
+                _sub_info.submitter_category = _dbca_sc_category
+                _sub_info.save()
+            except SubmitterCategory.DoesNotExist:
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "missing_submitter_category",
+                        "data": {},
+                        "error_message": (
+                            "SubmitterCategory 'DBCA S&C' does not exist in the database. "
+                            "Please create it before running a bulk import."
+                        ),
+                    }
+                )
+                return
+
         # Post-processing: auto-link OccurrenceReport.occurrence for approved OCRs
         # from OccurrenceReportApprovalDetails when it hasn't already been set
         # (e.g. by an Occurrence model row linking via occurrence_reports.add()).
@@ -6978,23 +7246,32 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             and not ocr_instance.occurrence_id
         ):
             if approval_instance.occurrence_id:
-                # Case 1: existing OCC assigned via the "ORFAPP Occurrence" column
+                # Case 1: existing OCC assigned via the "ORFAPP Occurrence" column.
+                # If OCC columns also populated additional fields on this OCC, those are
+                # already applied via the OCC model loop; just set the FK on the OCR.
                 ocr_instance.occurrence = approval_instance.occurrence
                 ocr_instance.save()
             elif approval_instance.new_occurrence_name:
-                # Case 2: create a new Occurrence from the new_occurrence_name
-                new_occ = Occurrence(
-                    occurrence_name=approval_instance.new_occurrence_name,
-                    group_type=ocr_instance.group_type,
-                    occurrence_source=Occurrence.OCCURRENCE_CHOICE_OCR,
-                )
-                if ocr_instance.species_id:
-                    new_occ.species_id = ocr_instance.species_id
-                elif ocr_instance.community_id:
-                    new_occ.community_id = ocr_instance.community_id
-                new_occ.save()
-                ocr_instance.occurrence = new_occ
-                ocr_instance.save()
+                existing_occ_from_occ_columns = model_instances.get(Occurrence._meta.model_name)
+                if existing_occ_from_occ_columns:
+                    # Case 2a: OCC was created via OCC columns (migrated_from_id path).
+                    # The occurrence_name was already applied in the model loop; just link it.
+                    ocr_instance.occurrence = existing_occ_from_occ_columns
+                    ocr_instance.save()
+                else:
+                    # Case 2b: pure ORFAPP path — create a new Occurrence from new_occurrence_name.
+                    new_occ = Occurrence(
+                        occurrence_name=approval_instance.new_occurrence_name,
+                        group_type=ocr_instance.group_type,
+                        occurrence_source=Occurrence.OCCURRENCE_CHOICE_OCR,
+                    )
+                    if ocr_instance.species_id:
+                        new_occ.species_id = ocr_instance.species_id
+                    elif ocr_instance.community_id:
+                        new_occ.community_id = ocr_instance.community_id
+                    new_occ.save()
+                    ocr_instance.occurrence = new_occ
+                    ocr_instance.save()
 
         return
 
@@ -7189,12 +7466,14 @@ class OccurrenceReportBulkImportSchema(BaseModel):
             model_field = model_class._meta.get_field(column.django_import_field_name)
 
             # Determine whether blanks should be allowed for this column.
-            # Allow blank if the model field allows null, if the schema column
-            # explicitly allows blank, or if the model field has a default value.
+            # Allow blank only if the schema column explicitly allows it or if
+            # the model field has a default the import can fall back to.
+            # Model field null=True does NOT make the column optional on its own —
+            # that would silently ignore an explicit allow_blank=False on the column.
             field_default = getattr(model_field, "default", NOT_PROVIDED)
             has_default = field_default is not NOT_PROVIDED
 
-            allow_blank = getattr(model_field, "null", False) or column.xlsx_data_validation_allow_blank or has_default
+            allow_blank = column.xlsx_data_validation_allow_blank or has_default
 
             dv = None
             if column.default_value is not None:
@@ -7265,6 +7544,10 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
                     # overhead = "{prefix}-" + zero-padded id + "-"
                     _text_max_length -= len(_prefix) + 1 + _pad + 1
+                elif model_field.name == "migrated_from_id" and model_class is Occurrence:
+                    _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _text_max_length -= len(_occ_prefix) + 1 + _pad + 1
                 dv = DataValidation(
                     type=dv_types["textLength"],
                     allow_blank=allow_blank,
@@ -7970,6 +8253,24 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if not self.field:
             return None
 
+        # For FK/M2M fields, derive choices from the column's own related_model_qs
+        # (which already applies group_type and ArchivableModel filters). This keeps
+        # `choices` consistent with `foreign_key_count` / `requires_lookup_field` so
+        # the preview modal is shown whenever the lookup section is not needed.
+        if isinstance(self.field, models.ForeignKey | models.ManyToManyField):
+            qs = self.related_model_qs
+            if qs is None:
+                return None
+            count = qs.count()
+            if (
+                count == 0
+                or self.django_import_field_name in ["species", "community"]
+                or count > settings.OCR_BULK_IMPORT_LOOKUP_TABLE_RECORD_LIMIT
+            ):
+                return None
+            display_field = self.display_field
+            return list(qs.values_list("id", display_field))
+
         model_class = self.django_import_content_type.model_class()
 
         return get_choices_for_field(model_class, self.field)
@@ -8313,6 +8614,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return random_datetime.strftime("%d/%m/%Y %H:%M:%S")
 
         if isinstance(field, models.CharField | models.TextField):
+            # For fields with a defined set of choices, return a random valid choice.
+            if field.choices:
+                return random.choice([c[0] for c in field.choices])
+
             if (
                 self.django_import_content_type.model_class() == Occurrence
                 and self.django_import_field_name == "occurrence_number"
@@ -8349,6 +8654,13 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
                     _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
                     _max -= len(_prefix) + 1 + _pad + 1
+                elif (
+                    self.django_import_field_name == "migrated_from_id"
+                    and self.django_import_content_type.model == Occurrence._meta.model_name
+                ):
+                    _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _max -= len(_occ_prefix) + 1 + _pad + 1
                 random_length = random.randint(1, max(1, _max))
             else:
                 random_length = random.randint(1, 1000)
@@ -8543,7 +8855,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 except EmailUser.DoesNotExist:
                     try:
                         assigned_officer_id = EmailUser.objects.get(id=int(assigned_officer_email)).id
-                    except (ValueError, EmailUser.DoesNotExist):
+                    except (TypeError, ValueError, EmailUser.DoesNotExist):
                         error_message = (
                             "No ledger user found for assigned_officer with "
                             f"email address or ID: {assigned_officer_email}"
@@ -8649,11 +8961,14 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
             return cell_value, errors_added
 
-        # Treat blank cells as allowed if the schema column allows blanks,
-        # the underlying model field allows nulls, or the model field has a default.
+        # A blank cell is allowed only if the schema column explicitly allows it
+        # OR the model field has a fallback default the import can use.
+        # Importantly, model field null=True does NOT by itself make a column optional —
+        # that would silently ignore an explicit allow_blank=False set by the schema author.
+        # Null-ability is used later only to decide *what value* to store (None vs default).
         field_default = getattr(field, "default", NOT_PROVIDED)
         has_default = field_default is not NOT_PROVIDED
-        allow_blank = self.xlsx_data_validation_allow_blank or getattr(field, "null", False) or has_default
+        allow_blank = self.xlsx_data_validation_allow_blank or has_default
 
         if cell_value is None or cell_value == "":
             if not allow_blank:
@@ -8668,7 +8983,12 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors_added += 1
                 return cell_value, errors_added
 
-            # If the model field has a default value, use it for blank cells.
+            # If the model field allows null, always prefer None for empty cells
+            # so that explicit blank input is stored as NULL rather than the model default.
+            if getattr(field, "null", False):
+                return None, errors_added
+
+            # Field does not allow null but has a default — use it for blank cells.
             if has_default:
                 default_value = field_default
                 try:
@@ -8863,6 +9183,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
                 return cell_value, errors_added
 
+            errors_before = len(errors)
             cell_value = get_geometry_array_from_geojson(
                 geom_json,
                 cell_value,
@@ -8871,6 +9192,9 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors,
                 errors_added,
             )
+            # get_geometry_array_from_geojson appends to the errors list in-place but
+            # takes errors_added as a value, so we must compute the delta here.
+            errors_added += len(errors) - errors_before
 
             return cell_value, errors_added
 
@@ -8884,6 +9208,13 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
                 # overhead = "{prefix}-" + zero-padded id + "-"
                 _effective_max -= len(_prefix) + 1 + _pad + 1
+            elif (
+                self.django_import_field_name == "migrated_from_id"
+                and self.django_import_content_type.model == Occurrence._meta.model_name
+            ):
+                _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                _effective_max -= len(_occ_prefix) + 1 + _pad + 1
             if len(str(cell_value)) > _effective_max:
                 error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} has too many characters"
                 errors.append(
@@ -9002,6 +9333,28 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 errors_added += 1
                 return cell_value, errors_added
             except related_model.DoesNotExist:
+                # Special fallback for OccurrenceReportApprovalDetails.occurrence:
+                # if the primary lookup (occurrence_number) found nothing, also try
+                # migrated_from_id with the task prefix so that users can reference
+                # an OCC created earlier in the same import run from the ORFAPP column.
+                if (
+                    related_model is Occurrence
+                    and self.django_import_content_type.model == OccurrenceReportApprovalDetails._meta.model_name
+                    and self.django_import_field_name == "occurrence"
+                ):
+                    _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _task_pk = task.pk if task is not None else 0
+                    fallback_mid = f"{_occ_prefix}-{_task_pk:0{_pad}d}-{cell_value}"
+                    try:
+                        related_model_instance = self._get_related_instance(
+                            related_model_qs, "migrated_from_id", fallback_mid
+                        )
+                        cell_value = related_model_instance
+                        return cell_value, errors_added
+                    except (related_model.DoesNotExist, FieldError):
+                        pass  # fall through to the normal not-found error below
+
                 display_value = repr(cell_value) if cell_value is not None else "(blank)"
                 error_message = (
                     f"Can't find {self.django_import_field_name} record by looking up "

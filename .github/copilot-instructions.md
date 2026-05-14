@@ -82,6 +82,69 @@ That folder contains a README.md with specific instructions on how to use the da
 
 When working in that area, YOU MUST read `boranga/components/data_migration/README.md` first. It serves as the definitive guide for data migration architecture, including how to define adapters/schemas, which source files to use for each handler, and how to verify changes.
 
+BULK IMPORT TESTING
+
+When testing or developing the `OccurrenceReportBulkImportTask` feature, use the pre-built test scripts in `scripts/`:
+
+| Script                                           | Schema name                     | Description                                                                                                                                                                                                              |
+| ------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scripts/generate_flora_schema_test_xlsx.py`     | Flora Master Schema Whole       | 9 rows covering all field groups: ORFCON, ORFSUB, ORFLOC, ORFGEO, ORFHAB, ORFHQ, ORFVEG, ORFFH, ORFOBS, ORFNUM, ORFID, ORFDOC, ORFTHR. Also exercises all OCC/ORFAPP linking paths and update-mode sub-record appending. |
+| `scripts/generate_community_schema_test_xlsx.py` | Communities Master Schema Whole | Same as flora but for communities. Covers ORFSPE (associated species) instead of ORFNUM plant count.                                                                                                                     |
+
+**Important: Schema IDs are environment-specific.** The `SCHEMA_ID` constants at the top of each script (e.g. `132`, `128`) reflect the original developer's local database and will differ in other environments. Before running a script, look up the correct ID:
+
+```bash
+./manage.py shell -c "
+from boranga.components.occurrence.models import OccurrenceReportBulkImportSchema
+for s in OccurrenceReportBulkImportSchema.objects.all():
+    print(s.id, s.name, s.group_type)
+"
+```
+
+If no suitable schema exists yet, create one via the admin UI or the bulk-import schema management page, ensuring it covers all the field groups listed above (ORFCON, ORFLOC, ORFHAB, etc.), then update `SCHEMA_ID` in the script accordingly.
+
+**Workflow:**
+
+```bash
+# 1. Update SCHEMA_ID at the top of the script to match your environment, then:
+./manage.py shell < scripts/generate_flora_schema_test_xlsx.py
+# Output: flora_schema_test.xlsx in project root
+
+# 2. Run the import task (substitute the correct schema id and user email)
+./manage.py shell -c "
+from django.core.files.base import ContentFile
+from boranga.components.occurrence.models import OccurrenceReportBulkImportTask, OccurrenceReportBulkImportSchema
+from ledger_api_client.ledger_models import EmailUserRO
+schema = OccurrenceReportBulkImportSchema.objects.get(id=<YOUR_SCHEMA_ID>)
+user = EmailUserRO.objects.get(email='<YOUR_ASSESSOR_EMAIL>')
+with open('flora_schema_test.xlsx', 'rb') as f:
+    data = f.read()
+task = OccurrenceReportBulkImportTask.objects.create(schema=schema, email_user=user.id)
+task._file.save('flora_schema_test.xlsx', ContentFile(data))
+task.process()
+task.refresh_from_db()
+print(task.processing_status, task.error_message)
+"
+```
+
+Key value format rules for xlsx test data:
+
+- **FK fields**: pass the display name (looked up via the model's `name` field).
+- **MultiSelectField** (`land_form`, `soil_type`): comma-separated display names.
+- **CharField with choices** (`count_status`, OCC `processing_status`): pass the **key**, not the display string (e.g. `"simple_count"`, `"active"`).
+- **BooleanField**: Python `True`/`False`.
+- **DateField**: `"DD/MM/YYYY"` string.
+- **ORFSPE Related Species**: pass `Taxonomy.scientific_name` (not an AssociatedSpeciesTaxonomy PK).
+
+Expected test results (all 9 rows in each script):
+
+- Rows 2–5 (approved): `occ` populated, all field sub-models created.
+- Row 6 (approved, existing OCC FK): linked to pre-existing OCC via `occurrence_number`.
+- Rows 7–8 (`with_assessor`): `occ=None`, OCC/ORFAPP columns silently ignored.
+- Row 9 (UPDATE MODE — ORFDOC only): second document appended to ORF 001 (`docs=2`).
+- Row 10 (UPDATE MODE — ORFTHR only): second threat appended to ORF 001 (`threats=2`).
+- `mega-{flora,comm}-occ-ignored` OCC: must NOT be created.
+
 FRONTEND CODE FORMATTING (MANDATORY)
 
 After editing **any** file under `boranga/frontend/`, you MUST run Prettier on every file you modified before considering the task complete:

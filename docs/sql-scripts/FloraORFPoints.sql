@@ -204,8 +204,8 @@ SELECT
     species.scientific_name                        AS SPECIES,
     species.vernacular_names                       AS COMMON_NAM,
 
-    -- Geometry
-    geom.geometry                                  AS GEOMETRY,
+    -- Geometry (ST_Transform to SRID 7844 is a no-op — Boranga is already GDA2020 throughout)
+    ST_Transform(geom.geometry, 7844)              AS GEOMETRY,
     TO_CHAR(geom.updated_date, 'YYYY-MM-DD HH24:MI:SS') AS GEO_MODIFY,
     geom.geom_id                                   AS GEOM_ID,
     -- No area fields for Points
