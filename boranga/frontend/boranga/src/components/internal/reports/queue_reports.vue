@@ -124,6 +124,21 @@
                         </div>
                     </div>
 
+                    <!-- Common Name (flora/fauna, not community) -->
+                    <div v-if="showCommonNameFilter" class="row mb-3">
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Common Name</label
+                        >
+                        <div class="col-sm-6">
+                            <input
+                                v-model="filterCommonName"
+                                type="text"
+                                class="form-control"
+                                placeholder="Contains…"
+                            />
+                        </div>
+                    </div>
+
                     <!-- Community Name (community / all-species) -->
                     <div v-if="showCommunityNameFilter" class="row mb-3">
                         <label class="col-sm-3 col-form-label fw-bold"
@@ -132,6 +147,21 @@
                         <div class="col-sm-6">
                             <input
                                 v-model="filterCommunityName"
+                                type="text"
+                                class="form-control"
+                                placeholder="Contains…"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Community Common ID (community group type) -->
+                    <div v-if="showCommunityCommonIdFilter" class="row mb-3">
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Community ID</label
+                        >
+                        <div class="col-sm-6">
+                            <input
+                                v-model="filterCommunityCommonId"
                                 type="text"
                                 class="form-control"
                                 placeholder="Contains…"
@@ -379,6 +409,58 @@
                         </div>
                     </div>
 
+                    <!-- Family (species / CS, not community) -->
+                    <div v-if="showFamilyGenusFilter" class="row mb-3">
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Family</label
+                        >
+                        <div class="col-sm-6">
+                            <input
+                                v-model="filterFamily"
+                                type="text"
+                                class="form-control"
+                                placeholder="Contains…"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Genus (species / CS, not community) -->
+                    <div v-if="showFamilyGenusFilter" class="row mb-3">
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Genus</label
+                        >
+                        <div class="col-sm-6">
+                            <input
+                                v-model="filterGenus"
+                                type="text"
+                                class="form-control"
+                                placeholder="Contains…"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Informal Group (species / CS, flora or all) -->
+                    <div v-if="showInformalGroupFilter" class="row mb-3">
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Informal Group</label
+                        >
+                        <div class="col-sm-6">
+                            <select
+                                v-model="filterInformalGroup"
+                                class="form-select"
+                            >
+                                <option value="all">All</option>
+                                <option
+                                    v-for="ig in informalGroups"
+                                    :key="ig.id"
+                                    :value="ig.id"
+                                >
+                                    {{ ig.class_desc }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
                     <!-- Fauna Group (fauna species / fauna CS) -->
                     <div v-if="showFaunaGroupFilter" class="row mb-3">
                         <label class="col-sm-3 col-form-label fw-bold"
@@ -490,6 +572,51 @@
                                 <option value="true">Yes</option>
                                 <option value="false">No</option>
                             </select>
+                        </div>
+                    </div>
+
+                    <!-- Assessor (CS / OCR) -->
+                    <div v-if="showAssessorSubmitterFilter" class="row mb-3">
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Assessor (email)</label
+                        >
+                        <div class="col-sm-6">
+                            <input
+                                v-model="filterAssessor"
+                                type="email"
+                                class="form-control"
+                                placeholder="Exact email address"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Submitter (CS / OCR) -->
+                    <div v-if="showAssessorSubmitterFilter" class="row mb-3">
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Submitter (email)</label
+                        >
+                        <div class="col-sm-6">
+                            <input
+                                v-model="filterSubmitter"
+                                type="email"
+                                class="form-control"
+                                placeholder="Exact email address"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Last Modified By (OCC / OCR) -->
+                    <div v-if="showLastModifiedByFilter" class="row mb-3">
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Last Modified By (email)</label
+                        >
+                        <div class="col-sm-6">
+                            <input
+                                v-model="filterLastModifiedBy"
+                                type="email"
+                                class="form-control"
+                                placeholder="Exact email address"
+                            />
                         </div>
                     </div>
 
@@ -943,6 +1070,7 @@ export default {
             faunaSubGroups: [],
             changeCodes: [],
             submitterCategories: [],
+            informalGroups: [],
             selectedCategory: '',
             selectedGroupType: 'all',
             format: 'csv',
@@ -993,6 +1121,14 @@ export default {
             filterChangeCode: 'all',
             filterSubmitterCategory: 'all',
             filterLocked: 'all',
+            filterCommonName: '',
+            filterFamily: '',
+            filterGenus: '',
+            filterInformalGroup: 'all',
+            filterCommunityCommonId: '',
+            filterAssessor: '',
+            filterSubmitter: '',
+            filterLastModifiedBy: '',
         };
     },
     computed: {
@@ -1045,6 +1181,39 @@ export default {
                     this.selectedGroupType === 'all')
             );
         },
+        showCommonNameFilter() {
+            return this.selectedGroupType !== 'community';
+        },
+        showFamilyGenusFilter() {
+            return (
+                (this.selectedCategory === 'species' ||
+                    this.selectedCategory === 'conservation_status') &&
+                this.selectedGroupType !== 'community'
+            );
+        },
+        showInformalGroupFilter() {
+            return (
+                (this.selectedCategory === 'species' ||
+                    this.selectedCategory === 'conservation_status') &&
+                this.selectedGroupType !== 'fauna' &&
+                this.selectedGroupType !== 'community'
+            );
+        },
+        showCommunityCommonIdFilter() {
+            return this.selectedGroupType === 'community';
+        },
+        showAssessorSubmitterFilter() {
+            return (
+                this.selectedCategory === 'conservation_status' ||
+                this.selectedCategory === 'occurrence_report'
+            );
+        },
+        showLastModifiedByFilter() {
+            return (
+                this.selectedCategory === 'occurrence' ||
+                this.selectedCategory === 'occurrence_report'
+            );
+        },
         hasActiveFilters() {
             return (
                 this.filterStatus !== 'all' ||
@@ -1086,7 +1255,15 @@ export default {
                 this.filterFaunaSubGroup !== 'all' ||
                 this.filterChangeCode !== 'all' ||
                 this.filterSubmitterCategory !== 'all' ||
-                this.filterLocked !== 'all'
+                this.filterLocked !== 'all' ||
+                this.filterCommonName !== '' ||
+                this.filterFamily !== '' ||
+                this.filterGenus !== '' ||
+                this.filterInformalGroup !== 'all' ||
+                this.filterCommunityCommonId !== '' ||
+                this.filterAssessor !== '' ||
+                this.filterSubmitter !== '' ||
+                this.filterLastModifiedBy !== ''
             );
         },
     },
@@ -1145,6 +1322,7 @@ export default {
                     this.faunaSubGroups = data.fauna_sub_groups || [];
                     this.changeCodes = data.change_codes || [];
                     this.submitterCategories = data.submitter_categories || [];
+                    this.informalGroups = data.informal_groups || [];
                 })
                 .catch(() => {
                     this.errorMessage = 'Failed to load report types.';
@@ -1191,6 +1369,14 @@ export default {
             this.filterChangeCode = 'all';
             this.filterSubmitterCategory = 'all';
             this.filterLocked = 'all';
+            this.filterCommonName = '';
+            this.filterFamily = '';
+            this.filterGenus = '';
+            this.filterInformalGroup = 'all';
+            this.filterCommunityCommonId = '';
+            this.filterAssessor = '';
+            this.filterSubmitter = '';
+            this.filterLastModifiedBy = '';
         },
         buildFiltersPayload() {
             const f = {};
@@ -1337,6 +1523,33 @@ export default {
             }
             if (this.filterLocked && this.filterLocked !== 'all') {
                 f.filter_locked = this.filterLocked;
+            }
+            if (this.filterCommonName) {
+                f.filter_common_name = this.filterCommonName;
+            }
+            if (this.filterFamily) {
+                f.filter_family = this.filterFamily;
+            }
+            if (this.filterGenus) {
+                f.filter_genus = this.filterGenus;
+            }
+            if (
+                this.filterInformalGroup &&
+                this.filterInformalGroup !== 'all'
+            ) {
+                f.filter_informal_group = this.filterInformalGroup;
+            }
+            if (this.filterCommunityCommonId) {
+                f.filter_community_common_id = this.filterCommunityCommonId;
+            }
+            if (this.filterAssessor) {
+                f.filter_assessor = this.filterAssessor;
+            }
+            if (this.filterSubmitter) {
+                f.filter_submitter = this.filterSubmitter;
+            }
+            if (this.filterLastModifiedBy) {
+                f.filter_last_modified_by = this.filterLastModifiedBy;
             }
             return f;
         },
