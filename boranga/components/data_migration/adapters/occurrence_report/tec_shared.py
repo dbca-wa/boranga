@@ -161,13 +161,17 @@ def build_site_species_comments(row: dict) -> str:
     Returns:
         Concatenated comments string
     """
-    parts = []
-    if row.get("SSP_NOTES"):
-        parts.append(row["SSP_NOTES"])
+    detail_parts = []
     if row.get("SSP_HEIGHT"):
-        parts.append(f"Height: {row['SSP_HEIGHT']}")
+        detail_parts.append(f"Height: {row['SSP_HEIGHT']}")
     if row.get("SSP_COLLECTOR_CODE"):
-        parts.append(f"Collector Code: {row['SSP_COLLECTOR_CODE']}")
+        detail_parts.append(f"Collector Code: {row['SSP_COLLECTOR_CODE']}")
     if row.get("SSP_COLLECTION_NUMBER"):
-        parts.append(f"Collector Number: {row['SSP_COLLECTION_NUMBER']}")
-    return "; ".join(parts)
+        detail_parts.append(f"Collector Number: {row['SSP_COLLECTION_NUMBER']}")
+
+    sections = []
+    if row.get("SSP_NOTES"):
+        sections.append(row["SSP_NOTES"])
+    if detail_parts:
+        sections.append("; ".join(detail_parts))
+    return "\n".join(sections)

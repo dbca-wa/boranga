@@ -1185,7 +1185,11 @@ def process_proxy(request, remoteurl, queryString, auth_user, auth_password):
             try:
                 proxy_response = proxy_view(request, remoteurl, basic_auth=auth_details, requests_args={"timeout": 60})
             except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
-                logger.warning("Proxy request to %s timed out or failed: %s", remoteurl, e)
+                _parsed = urllib.parse.urlparse(remoteurl)
+                _safe_url = _parsed._replace(
+                    netloc=_parsed.hostname if not _parsed.port else f"{_parsed.hostname}:{_parsed.port}"
+                ).geturl()
+                logger.warning("Proxy request to %s timed out or failed: %s", _safe_url, e)
                 return HttpResponse(
                     "Upstream service unavailable",
                     content_type="text/plain",
