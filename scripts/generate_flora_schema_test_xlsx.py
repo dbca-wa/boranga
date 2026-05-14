@@ -22,17 +22,18 @@ Test rows
 import json
 import os
 import sys
+from datetime import datetime
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "boranga.settings")
 
-import openpyxl
-from django.conf import settings
-from django.contrib.contenttypes.models import ContentType
-from ledger_api_client.ledger_models import EmailUserRO
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
+import openpyxl  # noqa: E402
+from django.conf import settings  # noqa: E402
+from django.contrib.contenttypes.models import ContentType  # noqa: E402
+from ledger_api_client.ledger_models import EmailUserRO  # noqa: E402
+from openpyxl.styles import Font  # noqa: E402
+from openpyxl.utils import get_column_letter  # noqa: E402
 
-from boranga.components.occurrence.models import (
+from boranga.components.occurrence.models import (  # noqa: E402
     Occurrence,
     OccurrenceReportApprovalDetails,
     OccurrenceReportBulkImportSchema,
@@ -40,8 +41,12 @@ from boranga.components.occurrence.models import (
     ThreatAgent,
     ThreatCategory,
 )
-from boranga.components.species_and_communities.models import Species as _SpeciesModel
-from boranga.components.users.models import SystemGroup
+from boranga.components.species_and_communities.models import Species as _SpeciesModel  # noqa: E402
+from boranga.components.users.models import SystemGroup  # noqa: E402
+
+# Unique string included in row data so each test run produces distinct row hashes
+# and is not rejected by the duplicate-detection check.
+RUN_TS = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 SCHEMA_ID = 132
 
@@ -215,7 +220,7 @@ RICH_FIELDS = {
     "ORFHAB Soil Condition": "Dry",
     "ORFHAB Drainage": "Well drained",
     "ORFHAB Water Quality": "Brackish",  # free-text CharField
-    "ORFHAB Habitat Notes": "Open Wandoo woodland with sparse Acacia understorey.",
+    "ORFHAB Habitat Notes": f"Open Wandoo woodland with sparse Acacia understorey. [{RUN_TS}]",
     # Habitat condition -- DecimalField percentages
     "ORFHQ Pristine": 10.0,
     "ORFHQ Excellent": 20.0,
@@ -316,7 +321,7 @@ ws.append(
             "ORF Species": flora_species_lookup,
             "ORF Processing Status": "approved",
             "ORF Observation Date": "01/05/2027",
-            "ORF Assessor Data": "Assessor notes for row 2",
+            "ORF Assessor Data": f"Assessor notes for row 2 [{RUN_TS}]",
             "ORF Site": "Test Site Alpha",
             "OCC Migrated From Id": "mega-flora-occ-001",
             "OCC Processing Status": "active",
@@ -413,7 +418,7 @@ ws.append(
             "ORFCON Observer Name": "C. Observer",
             "ORFCON Role": "Ecologist",
             "ORFCON Organisation": "DBCA",
-            "ORFLOC Location Description": "Location for with_assessor row",
+            "ORFLOC Location Description": f"Location for with_assessor row [{RUN_TS}]",
             "ORFLOC Region": "South West",
             "ORFOBS Observation Method": "Survey (specify type in comments)",
         }
@@ -431,7 +436,7 @@ ws.append(
             "ORF Assigned Officer": assessor_email,
             "ORFCON Observer Name": "D. Observer",
             "ORFCON Role": "Conservation officer",
-            "ORFLOC Location Description": "Minimal row location",
+            "ORFLOC Location Description": f"Minimal row location [{RUN_TS}]",
         }
     )
 )
