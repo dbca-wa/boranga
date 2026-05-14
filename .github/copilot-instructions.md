@@ -86,10 +86,10 @@ BULK IMPORT TESTING
 
 When testing or developing the `OccurrenceReportBulkImportTask` feature, use the pre-built test scripts in `scripts/`:
 
-| Script | Schema name | Description |
-|---|---|---|
-| `scripts/generate_flora_schema_test_xlsx.py` | Flora Master Schema Whole | 7 rows covering all field groups: ORFCON, ORFSUB, ORFLOC, ORFGEO, ORFHAB, ORFHQ, ORFVEG, ORFFH, ORFOBS, ORFNUM, ORFID, ORFDOC, ORFTHR. Also exercises all OCC/ORFAPP linking paths. |
-| `scripts/generate_community_schema_test_xlsx.py` | Communities Master Schema Whole | Same as flora but for communities. Covers ORFSPE (associated species) instead of ORFNUM plant count. |
+| Script                                           | Schema name                     | Description                                                                                                                                                                                                              |
+| ------------------------------------------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scripts/generate_flora_schema_test_xlsx.py`     | Flora Master Schema Whole       | 9 rows covering all field groups: ORFCON, ORFSUB, ORFLOC, ORFGEO, ORFHAB, ORFHQ, ORFVEG, ORFFH, ORFOBS, ORFNUM, ORFID, ORFDOC, ORFTHR. Also exercises all OCC/ORFAPP linking paths and update-mode sub-record appending. |
+| `scripts/generate_community_schema_test_xlsx.py` | Communities Master Schema Whole | Same as flora but for communities. Covers ORFSPE (associated species) instead of ORFNUM plant count.                                                                                                                     |
 
 **Important: Schema IDs are environment-specific.** The `SCHEMA_ID` constants at the top of each script (e.g. `132`, `128`) reflect the original developer's local database and will differ in other environments. Before running a script, look up the correct ID:
 
@@ -128,6 +128,7 @@ print(task.processing_status, task.error_message)
 ```
 
 Key value format rules for xlsx test data:
+
 - **FK fields**: pass the display name (looked up via the model's `name` field).
 - **MultiSelectField** (`land_form`, `soil_type`): comma-separated display names.
 - **CharField with choices** (`count_status`, OCC `processing_status`): pass the **key**, not the display string (e.g. `"simple_count"`, `"active"`).
@@ -135,10 +136,13 @@ Key value format rules for xlsx test data:
 - **DateField**: `"DD/MM/YYYY"` string.
 - **ORFSPE Related Species**: pass `Taxonomy.scientific_name` (not an AssociatedSpeciesTaxonomy PK).
 
-Expected test results (all 7 rows in each script):
+Expected test results (all 9 rows in each script):
+
 - Rows 2–5 (approved): `occ` populated, all field sub-models created.
 - Row 6 (approved, existing OCC FK): linked to pre-existing OCC via `occurrence_number`.
 - Rows 7–8 (`with_assessor`): `occ=None`, OCC/ORFAPP columns silently ignored.
+- Row 9 (UPDATE MODE — ORFDOC only): second document appended to ORF 001 (`docs=2`).
+- Row 10 (UPDATE MODE — ORFTHR only): second threat appended to ORF 001 (`threats=2`).
 - `mega-{flora,comm}-occ-ignored` OCC: must NOT be created.
 
 FRONTEND CODE FORMATTING (MANDATORY)

@@ -17,6 +17,8 @@ Test rows
   Row 6  -- ORFAPP path: link approved ORF to existing OCC via ORFAPP Occurrence FK.
   Row 7  -- with_assessor ORF: OCC columns present but silently ignored (occ=None).
   Row 8  -- No OCC columns: ORF created with no OCC link.
+  Row 9  -- UPDATE MODE: add a second document to ORF 001 (only ORFDOC columns + migrated_from_id).
+  Row 10 -- UPDATE MODE: add a second threat to ORF 001 (only ORFTHR columns + migrated_from_id).
 """
 
 import json
@@ -417,6 +419,39 @@ ws.append(
             "ORFCON Observer Name": "D. Observer",
             "ORFCON Role": "Conservation officer",
             "ORFLOC Location Description": f"Minimal row location [{RUN_TS}]",
+        }
+    )
+)
+
+# -- Row 9: UPDATE MODE -- add a second document to ORF 001 --
+# Only ORF Migrated From ID and ORFDOC columns populated; all others blank.
+# The importer detects the same prefixed migrated_from_id as row 2 and switches
+# to update mode, creating a new OccurrenceReportDocument on the existing ORF.
+ws.append(
+    make_row(
+        **{
+            "ORF Migrated From ID": "mega-comm-orf-001",
+            "ORFDOC Name": f"Additional Document [{RUN_TS}]",
+            "ORFDOC Description": "Second document added via update-mode sub-record row.",
+            "ORFDOC Can Submitter Access": True,
+            "ORFDOC Document Category": "ORF Document",
+            "ORFDOC Document Sub Category": "Survey Report",
+        }
+    )
+)
+
+# -- Row 10: UPDATE MODE -- add a second threat to ORF 001 --
+# Same ORF Migrated From ID, only ORFTHR columns populated.
+ws.append(
+    make_row(
+        **{
+            "ORF Migrated From ID": "mega-comm-orf-001",
+            "ORFTHR Threat Category": threat_cat_name,
+            "ORFTHR Threat Agent": threat_agent_name,
+            "ORFTHR Current Impact": "Medium",
+            "ORFTHR Potential Impact": "High",
+            "ORFTHR Potential Threat Onset": "Short Term (under 1 yr)",
+            "ORFTHR Date Observed": "01/05/2027",
         }
     )
 )
