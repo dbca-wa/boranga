@@ -724,9 +724,13 @@ class CommunityImporter(BaseSheetImporter):
             # 4e. Update Regions and Districts (Many-to-Many)
             logger.info("Updating Community Regions and Districts...")
 
-            # Load legacy mappings
-            region_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="Region")
-            district_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="District")
+            # Build name -> PK maps directly from the DB models.
+            # The Combined TEC_PEC List.csv uses the exact model names (e.g. "Midwest",
+            # "Murchison"), so a legacy-numeric-ID map is not appropriate here.
+            from boranga.components.species_and_communities.models import District, Region
+
+            region_name_map = {r.name: r.pk for r in Region.objects.all()}
+            district_name_map = {d.name: d.pk for d in District.objects.all()}
 
             def parse_keys(raw, mapping, label, mig_id):
                 if not raw:
@@ -746,7 +750,7 @@ class CommunityImporter(BaseSheetImporter):
                     if pk:
                         ids.append(pk)
                     else:
-                        logger.warning(f"{label}: '{item}' not found in legacy map for community {mig_id}")
+                        logger.warning(f"{label}: '{item}' not found in name map for community {mig_id}")
                 return ids
 
             for canonical in valid_rows:
@@ -757,13 +761,13 @@ class CommunityImporter(BaseSheetImporter):
 
                 # Regions
                 regions_raw = canonical.get("regions")
-                region_ids = parse_keys(regions_raw, region_map, "Region", migrated_id)
+                region_ids = parse_keys(regions_raw, region_name_map, "Region", migrated_id)
                 if region_ids:
                     community.regions.set(region_ids)
 
                 # Districts
                 districts_raw = canonical.get("districts")
-                district_ids = parse_keys(districts_raw, district_map, "District", migrated_id)
+                district_ids = parse_keys(districts_raw, district_name_map, "District", migrated_id)
                 if district_ids:
                     community.districts.set(district_ids)
 
