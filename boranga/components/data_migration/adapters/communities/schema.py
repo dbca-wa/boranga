@@ -14,13 +14,12 @@ COLUMN_MAP = {
     "COM_NAME": "community_name",
     "COM_ORIG_AREA": "community_original_area",
     "COM_AREA_ACC": "community_original_area_accuracy",
-    "Distribution": "distribution",
-    "DBCA regions": "regions",
-    "DBCA districts": "districts",
     "Active CS": "active_cs",
     # Note: Publication and threat data are in separate CSV files
     # (COMMUNITY_PUBLICATIONS.csv, PUBLICATIONS.csv, COMMUNITY_THREATS.csv)
     # and are loaded separately by the importer, not from COMMUNITIES.csv
+    # Note: distribution, regions, and districts come from "Combined TEC_PEC List.csv"
+    # and are injected into canonical rows by the handler, not mapped from COMMUNITIES.csv
 }
 
 REQUIRED_COLUMNS = [

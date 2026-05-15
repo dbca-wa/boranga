@@ -119,6 +119,40 @@ def _load_community_threats(path: str) -> dict:
     return threats
 
 
+def _load_tec_pec_list(path: str) -> dict:
+    """
+    Load "Combined TEC_PEC List.csv" and return a dict:
+        COM_NO (str) -> {"distribution": str|None, "regions": str|None, "districts": str|None}
+    The file sits in the same directory as COMMUNITIES.csv.
+    Uses utf-8-sig encoding to automatically strip the BOM character.
+    """
+    tec_pec = {}
+    tec_pec_path = Path(path).parent / "Combined TEC_PEC List.csv"
+
+    if not tec_pec_path.exists():
+        logger.warning(f"Combined TEC_PEC List.csv not found at {tec_pec_path}")
+        return tec_pec
+
+    try:
+        with open(tec_pec_path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                com_no = row.get("COM_NO", "").strip()
+                if not com_no:
+                    continue
+                tec_pec[com_no] = {
+                    # Header has a trailing space: "Distribution "
+                    "distribution": (row.get("Distribution ", "") or row.get("Distribution", "") or "").strip() or None,
+                    "regions": (row.get("DBCA_Regions", "") or "").strip() or None,
+                    "districts": (row.get("DBCA_Districts", "") or "").strip() or None,
+                }
+    except Exception as e:
+        logger.error(f"Error loading Combined TEC_PEC List.csv: {e}")
+
+    logger.debug(f"Loaded TEC/PEC distribution data for {len(tec_pec)} communities")
+    return tec_pec
+
+
 @register
 class CommunityImporter(BaseSheetImporter):
     slug = "communities_legacy"
@@ -309,16 +343,18 @@ class CommunityImporter(BaseSheetImporter):
                 r["_source"] = src
             all_rows.extend(result.rows)
 
-        # 1b. Load related data (publications, threats) from separate CSV files
-        logger.info("Loading related publication and threat data...")
+        # 1b. Load related data (publications, threats, TEC/PEC list) from separate CSV files
+        logger.info("Loading related publication, threat, and distribution data...")
         base_path = path_map.get("TEC", path)  # Use TEC path as base
         publications_data = _load_publications_data(base_path)
         community_pub_map = _load_community_publications_map(base_path)
         community_threats_map = _load_community_threats(base_path)
+        tec_pec_map = _load_tec_pec_list(base_path)
         logger.info(
             f"Loaded: {len(publications_data)} publications, "
             f"{len(community_pub_map)} communities with pubs, "
-            f"{len(community_threats_map)} communities with threats"
+            f"{len(community_threats_map)} communities with threats, "
+            f"{len(tec_pec_map)} communities with TEC/PEC distribution data"
         )
 
         # Apply limit
@@ -449,6 +485,16 @@ class CommunityImporter(BaseSheetImporter):
                     )
                     continue
                 seen_names.add(name_lower)
+
+            # Enrich canonical row with distribution/regions/districts from Combined TEC_PEC List.csv
+            raw_com_no = canonical.get("migrated_from_id", "")
+            # Strip source prefix (e.g. "tec-331" -> "331")
+            if "-" in raw_com_no:
+                raw_com_no = raw_com_no.split("-", 1)[1]
+            tec_pec_entry = tec_pec_map.get(raw_com_no, {})
+            canonical["distribution"] = tec_pec_entry.get("distribution")
+            canonical["regions"] = tec_pec_entry.get("regions")
+            canonical["districts"] = tec_pec_entry.get("districts")
 
             valid_rows.append(canonical)
 
