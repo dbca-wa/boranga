@@ -339,6 +339,7 @@ class QueueReportView(views.APIView):
             District,
             FaunaGroup,
             FaunaSubGroup,
+            GroupType,
             Region,
             Species,
         )
@@ -379,6 +380,7 @@ class QueueReportView(views.APIView):
                 "informal_groups": list(
                     ClassificationSystem.objects.all().order_by("class_desc").values("id", "class_desc")
                 ),
+                "group_type_db_ids": {gt.name: gt.id for gt in GroupType.objects.all()},
             }
         )
 
