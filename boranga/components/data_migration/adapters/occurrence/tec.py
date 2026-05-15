@@ -527,12 +527,28 @@ class OccurrenceTecAdapter(SourceAdapter):
             additional_by_occ[row["OCC_UNIQUE_ID"]].append(row)
 
         species_by_occ = defaultdict(list)
+        seen_species_keys = set()
         for row in species_rows:
             # Map taxon_name_id (Nomos ID) to SPEC_TAXON_ID for handler compatibility
             # OCCURRENCE_SPECIES_COMBINE.csv has taxon_name_id which is the Nomos ID
             if "taxon_name_id" in row and row["taxon_name_id"]:
                 row["SPEC_TAXON_ID"] = row["taxon_name_id"]
-            species_by_occ[row["OCC_UNIQUE_ID"]].append(row)
+            occ_id = row.get("OCC_UNIQUE_ID")
+            taxon_name_id = row.get("taxon_name_id")
+            if occ_id and taxon_name_id:
+                # Deduplicate by (OCC_UNIQUE_ID, taxon_name_id): keep the first record in
+                # file order (data has been sorted so that the most complete record comes first).
+                key = (str(occ_id), str(taxon_name_id))
+                if key in seen_species_keys:
+                    warnings.append(
+                        ExtractionWarning(
+                            f"Duplicate associated species skipped (kept first): "
+                            f"OCC_UNIQUE_ID={occ_id}, taxon_name_id={taxon_name_id}"
+                        )
+                    )
+                    continue
+                seen_species_keys.add(key)
+            species_by_occ[occ_id].append(row)
 
         # Join
         joined_rows = []
