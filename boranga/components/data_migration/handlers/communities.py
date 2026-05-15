@@ -119,6 +119,40 @@ def _load_community_threats(path: str) -> dict:
     return threats
 
 
+def _load_tec_pec_list(path: str) -> dict:
+    """
+    Load "Combined TEC_PEC List.csv" and return a dict:
+        COM_NO (str) -> {"distribution": str|None, "regions": str|None, "districts": str|None}
+    The file sits in the same directory as COMMUNITIES.csv.
+    Uses utf-8-sig encoding to automatically strip the BOM character.
+    """
+    tec_pec = {}
+    tec_pec_path = Path(path).parent / "Combined TEC_PEC List.csv"
+
+    if not tec_pec_path.exists():
+        logger.warning(f"Combined TEC_PEC List.csv not found at {tec_pec_path}")
+        return tec_pec
+
+    try:
+        with open(tec_pec_path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                com_no = row.get("COM_NO", "").strip()
+                if not com_no:
+                    continue
+                tec_pec[com_no] = {
+                    # Header has a trailing space: "Distribution "
+                    "distribution": (row.get("Distribution ", "") or row.get("Distribution", "") or "").strip() or None,
+                    "regions": (row.get("DBCA_Regions", "") or "").strip() or None,
+                    "districts": (row.get("DBCA_Districts", "") or "").strip() or None,
+                }
+    except Exception as e:
+        logger.error(f"Error loading Combined TEC_PEC List.csv: {e}")
+
+    logger.debug(f"Loaded TEC/PEC distribution data for {len(tec_pec)} communities")
+    return tec_pec
+
+
 @register
 class CommunityImporter(BaseSheetImporter):
     slug = "communities_legacy"
@@ -309,16 +343,18 @@ class CommunityImporter(BaseSheetImporter):
                 r["_source"] = src
             all_rows.extend(result.rows)
 
-        # 1b. Load related data (publications, threats) from separate CSV files
-        logger.info("Loading related publication and threat data...")
+        # 1b. Load related data (publications, threats, TEC/PEC list) from separate CSV files
+        logger.info("Loading related publication, threat, and distribution data...")
         base_path = path_map.get("TEC", path)  # Use TEC path as base
         publications_data = _load_publications_data(base_path)
         community_pub_map = _load_community_publications_map(base_path)
         community_threats_map = _load_community_threats(base_path)
+        tec_pec_map = _load_tec_pec_list(base_path)
         logger.info(
             f"Loaded: {len(publications_data)} publications, "
             f"{len(community_pub_map)} communities with pubs, "
-            f"{len(community_threats_map)} communities with threats"
+            f"{len(community_threats_map)} communities with threats, "
+            f"{len(tec_pec_map)} communities with TEC/PEC distribution data"
         )
 
         # Apply limit
@@ -449,6 +485,16 @@ class CommunityImporter(BaseSheetImporter):
                     )
                     continue
                 seen_names.add(name_lower)
+
+            # Enrich canonical row with distribution/regions/districts from Combined TEC_PEC List.csv
+            raw_com_no = canonical.get("migrated_from_id", "")
+            # Strip source prefix (e.g. "tec-331" -> "331")
+            if "-" in raw_com_no:
+                raw_com_no = raw_com_no.split("-", 1)[1]
+            tec_pec_entry = tec_pec_map.get(raw_com_no, {})
+            canonical["distribution"] = tec_pec_entry.get("distribution")
+            canonical["regions"] = tec_pec_entry.get("regions")
+            canonical["districts"] = tec_pec_entry.get("districts")
 
             valid_rows.append(canonical)
 
@@ -678,9 +724,13 @@ class CommunityImporter(BaseSheetImporter):
             # 4e. Update Regions and Districts (Many-to-Many)
             logger.info("Updating Community Regions and Districts...")
 
-            # Load legacy mappings
-            region_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="Region")
-            district_map = load_legacy_to_pk_map(legacy_system="TEC", model_name="District")
+            # Build name -> PK maps directly from the DB models.
+            # The Combined TEC_PEC List.csv uses the exact model names (e.g. "Midwest",
+            # "Murchison"), so a legacy-numeric-ID map is not appropriate here.
+            from boranga.components.species_and_communities.models import District, Region
+
+            region_name_map = {r.name: r.pk for r in Region.objects.all()}
+            district_name_map = {d.name: d.pk for d in District.objects.all()}
 
             def parse_keys(raw, mapping, label, mig_id):
                 if not raw:
@@ -700,7 +750,7 @@ class CommunityImporter(BaseSheetImporter):
                     if pk:
                         ids.append(pk)
                     else:
-                        logger.warning(f"{label}: '{item}' not found in legacy map for community {mig_id}")
+                        logger.warning(f"{label}: '{item}' not found in name map for community {mig_id}")
                 return ids
 
             for canonical in valid_rows:
@@ -711,13 +761,13 @@ class CommunityImporter(BaseSheetImporter):
 
                 # Regions
                 regions_raw = canonical.get("regions")
-                region_ids = parse_keys(regions_raw, region_map, "Region", migrated_id)
+                region_ids = parse_keys(regions_raw, region_name_map, "Region", migrated_id)
                 if region_ids:
                     community.regions.set(region_ids)
 
                 # Districts
                 districts_raw = canonical.get("districts")
-                district_ids = parse_keys(districts_raw, district_map, "District", migrated_id)
+                district_ids = parse_keys(districts_raw, district_name_map, "District", migrated_id)
                 if district_ids:
                     community.districts.set(district_ids)
 

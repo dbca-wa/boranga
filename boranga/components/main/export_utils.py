@@ -119,13 +119,19 @@ def _id_list(val):
 
 
 def _user_id_from_email(email):
-    """Return the EmailUser.id matching *email* (case-insensitive). Returns None if not found."""
-    if not email or not email.strip():
+    """Return a user ID from either a numeric ID or an email address. Returns None if not found."""
+    if not email and email != 0:
         return None
+    val = str(email).strip()
+    if not val:
+        return None
+    # If the value is numeric, use it directly as the user ID
+    if val.isdigit():
+        return int(val)
     try:
         from ledger_api_client.ledger_models import EmailUserRO
 
-        return EmailUserRO.objects.get(email__iexact=email.strip()).id
+        return EmailUserRO.objects.get(email__iexact=val).id
     except Exception:
         return None
 
@@ -213,11 +219,11 @@ def get_species_export(filters, limit):
             conservation_status__processing_status="approved",
             conservation_status__wa_legislative_category_id=val,
         ).distinct()
-    val = filters.get("filter_wa_priority_category")
-    if val and val not in ("all", ""):
+    ids = _id_list(filters.get("filter_wa_priority_category"))
+    if ids:
         qs = qs.filter(
             conservation_status__processing_status="approved",
-            conservation_status__wa_priority_category_id=val,
+            conservation_status__wa_priority_category_id__in=ids,
         ).distinct()
     ns = filters.get("filter_name_status")
     if ns and ns not in ("all", ""):
@@ -363,11 +369,11 @@ def get_community_export(filters, limit):
             conservation_status__processing_status="approved",
             conservation_status__wa_legislative_category_id=val,
         ).distinct()
-    val = filters.get("filter_wa_priority_category")
-    if val and val not in ("all", ""):
+    ids = _id_list(filters.get("filter_wa_priority_category"))
+    if ids:
         qs = qs.filter(
             conservation_status__processing_status="approved",
-            conservation_status__wa_priority_category_id=val,
+            conservation_status__wa_priority_category_id__in=ids,
         ).distinct()
     pub = filters.get("filter_publication_status")
     if pub and pub not in ("all", ""):
@@ -518,15 +524,15 @@ def get_species_and_communities_export(filters, limit):
             conservation_status__processing_status="approved",
             conservation_status__wa_legislative_category_id=val,
         ).distinct()
-    val = filters.get("filter_wa_priority_category")
-    if val and val not in ("all", ""):
+    ids = _id_list(filters.get("filter_wa_priority_category"))
+    if ids:
         species_qs = species_qs.filter(
             conservation_status__processing_status="approved",
-            conservation_status__wa_priority_category_id=val,
+            conservation_status__wa_priority_category_id__in=ids,
         ).distinct()
         community_qs = community_qs.filter(
             conservation_status__processing_status="approved",
-            conservation_status__wa_priority_category_id=val,
+            conservation_status__wa_priority_category_id__in=ids,
         ).distinct()
     ns = filters.get("filter_name_status")
     if ns and ns not in ("all", ""):
@@ -730,9 +736,9 @@ def get_conservation_status_species_export(filters, limit):
     val = filters.get("filter_wa_legislative_category")
     if val and val not in ("all", ""):
         qs = qs.filter(wa_legislative_category=val)
-    val = filters.get("filter_wa_priority_category")
-    if val and val not in ("all", ""):
-        qs = qs.filter(wa_priority_category=val)
+    ids = _id_list(filters.get("filter_wa_priority_category"))
+    if ids:
+        qs = qs.filter(wa_priority_category__in=ids)
     d = _parse_date(filters.get("filter_from_effective_from_date"))
     if d:
         qs = qs.filter(effective_from__gte=d)
@@ -897,9 +903,9 @@ def get_conservation_status_community_export(filters, limit):
     val = filters.get("filter_wa_legislative_category")
     if val and val not in ("all", ""):
         qs = qs.filter(wa_legislative_category=val)
-    val = filters.get("filter_wa_priority_category")
-    if val and val not in ("all", ""):
-        qs = qs.filter(wa_priority_category=val)
+    ids = _id_list(filters.get("filter_wa_priority_category"))
+    if ids:
+        qs = qs.filter(wa_priority_category__in=ids)
     d = _parse_date(filters.get("filter_from_effective_from_date"))
     if d:
         qs = qs.filter(effective_from__gte=d)

@@ -13,9 +13,6 @@ PIPELINES = {
     "community_name": ["strip", "blank_to_none"],
     "community_original_area": ["strip", "blank_to_none", "to_decimal"],
     "community_original_area_accuracy": ["strip", "blank_to_none", "to_decimal"],
-    "distribution": ["strip", "blank_to_none"],
-    "regions": ["strip", "blank_to_none"],
-    "districts": ["strip", "blank_to_none"],
     "active_cs": ["strip", "y_to_true_else_false"],
     # Note: Publication and threat data are loaded from separate CSV files
     # by the importer, not from the main COMMUNITIES.csv file

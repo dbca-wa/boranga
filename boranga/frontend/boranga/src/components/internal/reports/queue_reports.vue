@@ -115,12 +115,10 @@
                             >Scientific Name</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterScientificName"
-                                type="text"
-                                class="form-control"
-                                placeholder="Contains…"
-                            />
+                            <select
+                                ref="scientific_name_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
@@ -130,12 +128,10 @@
                             >Common Name</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterCommonName"
-                                type="text"
-                                class="form-control"
-                                placeholder="Contains…"
-                            />
+                            <select
+                                ref="common_name_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
@@ -145,12 +141,10 @@
                             >Community Name</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterCommunityName"
-                                type="text"
-                                class="form-control"
-                                placeholder="Contains…"
-                            />
+                            <select
+                                ref="community_name_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
@@ -160,12 +154,10 @@
                             >Community ID</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterCommunityCommonId"
-                                type="text"
-                                class="form-control"
-                                placeholder="Contains…"
-                            />
+                            <select
+                                ref="community_id_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
@@ -276,19 +268,22 @@
                             >WA Priority Category</label
                         >
                         <div class="col-sm-6">
-                            <select
-                                v-model="filterWaPriorityCategory"
-                                class="form-select"
-                            >
-                                <option value="all">All</option>
-                                <option
-                                    v-for="item in waPriorityCategories"
-                                    :key="item.id"
-                                    :value="item.id"
-                                >
-                                    {{ item.code }} – {{ item.label }}
-                                </option>
-                            </select>
+                            <SelectFilter
+                                id="wa-priority-category-filter"
+                                title=""
+                                :show-title="false"
+                                :options="waPriorityCategoryOptions"
+                                :multiple="true"
+                                :pre-selected-filter-item="
+                                    filterWaPriorityCategory
+                                "
+                                placeholder="Select WA Priority Categories"
+                                @input="
+                                    (val) => {
+                                        filterWaPriorityCategory = val || [];
+                                    }
+                                "
+                            />
                         </div>
                     </div>
 
@@ -415,12 +410,10 @@
                             >Family</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterFamily"
-                                type="text"
-                                class="form-control"
-                                placeholder="Contains…"
-                            />
+                            <select
+                                ref="family_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
@@ -430,12 +423,10 @@
                             >Genus</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterGenus"
-                                type="text"
-                                class="form-control"
-                                placeholder="Contains…"
-                            />
+                            <select
+                                ref="genera_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
@@ -578,45 +569,39 @@
                     <!-- Assessor (CS / OCR) -->
                     <div v-if="showAssessorSubmitterFilter" class="row mb-3">
                         <label class="col-sm-3 col-form-label fw-bold"
-                            >Assessor (email)</label
+                            >Assessor</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterAssessor"
-                                type="email"
-                                class="form-control"
-                                placeholder="Exact email address"
-                            />
+                            <select
+                                ref="assessor_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
                     <!-- Submitter (CS / OCR) -->
                     <div v-if="showAssessorSubmitterFilter" class="row mb-3">
                         <label class="col-sm-3 col-form-label fw-bold"
-                            >Submitter (email)</label
+                            >Submitter</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterSubmitter"
-                                type="email"
-                                class="form-control"
-                                placeholder="Exact email address"
-                            />
+                            <select
+                                ref="submitter_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
                     <!-- Last Modified By (OCC / OCR) -->
                     <div v-if="showLastModifiedByFilter" class="row mb-3">
                         <label class="col-sm-3 col-form-label fw-bold"
-                            >Last Modified By (email)</label
+                            >Last Modified By</label
                         >
                         <div class="col-sm-6">
-                            <input
-                                v-model="filterLastModifiedBy"
-                                type="email"
-                                class="form-control"
-                                placeholder="Exact email address"
-                            />
+                            <select
+                                ref="last_modified_by_lookup"
+                                class="form-select"
+                            ></select>
                         </div>
                     </div>
 
@@ -633,23 +618,16 @@
                             >Region(s)</label
                         >
                         <div class="col-sm-6">
-                            <select
-                                v-model="filterRegions"
-                                class="form-select"
-                                multiple
-                                size="4"
-                            >
-                                <option
-                                    v-for="r in regionList"
-                                    :key="r.id"
-                                    :value="r.id"
-                                >
-                                    {{ r.name }}
-                                </option>
-                            </select>
-                            <small class="text-muted"
-                                >Hold Ctrl / ⌘ to select multiple</small
-                            >
+                            <SelectFilter
+                                id="region-filter"
+                                title=""
+                                :show-title="false"
+                                :options="regionList"
+                                :multiple="true"
+                                :pre-selected-filter-item="filterRegions"
+                                placeholder="Select Regions"
+                                @input="onRegionFilterChange"
+                            />
                         </div>
                     </div>
 
@@ -666,23 +644,20 @@
                             >District(s)</label
                         >
                         <div class="col-sm-6">
-                            <select
-                                v-model="filterDistricts"
-                                class="form-select"
-                                multiple
-                                size="4"
-                            >
-                                <option
-                                    v-for="d in filteredDistricts"
-                                    :key="d.id"
-                                    :value="d.id"
-                                >
-                                    {{ d.name }}
-                                </option>
-                            </select>
-                            <small class="text-muted"
-                                >Hold Ctrl / ⌘ to select multiple</small
-                            >
+                            <SelectFilter
+                                id="district-filter"
+                                title=""
+                                :show-title="false"
+                                :options="filteredDistricts"
+                                :multiple="true"
+                                :pre-selected-filter-item="filterDistricts"
+                                placeholder="Select Districts"
+                                @input="
+                                    (val) => {
+                                        filterDistricts = val || [];
+                                    }
+                                "
+                            />
                         </div>
                     </div>
 
@@ -1053,13 +1028,17 @@
 
 <script>
 import swal from 'sweetalert2';
+import SelectFilter from '@/components/common/SelectFilter.vue';
+import { api_endpoints } from '@/utils/hooks';
 
 export default {
     name: 'QueueReports',
+    components: { SelectFilter },
     data() {
         return {
             reportCategories: [],
             groupTypes: [],
+            groupTypeDbIds: {},
             processingStatusesByCategory: {},
             regionList: [],
             districtList: [],
@@ -1090,7 +1069,7 @@ export default {
             filterDistricts: [],
             filterWaLegislativeList: 'all',
             filterWaLegislativeCategory: 'all',
-            filterWaPriorityCategory: 'all',
+            filterWaPriorityCategory: [],
             filterObservationFromDate: '',
             filterObservationToDate: '',
             filterSubmittedFromDate: '',
@@ -1132,6 +1111,20 @@ export default {
         };
     },
     computed: {
+        waPriorityCategoryOptions() {
+            return this.waPriorityCategories.map((item) => ({
+                id: item.id,
+                name: item.code + (item.label ? ' \u2013 ' + item.label : ''),
+            }));
+        },
+        currentGroupTypeDbId() {
+            // Returns the numeric GroupType DB id for the currently selected
+            // group type key, or '' for 'all' (no filtering).
+            if (!this.selectedGroupType || this.selectedGroupType === 'all') {
+                return '';
+            }
+            return this.groupTypeDbIds[this.selectedGroupType] || '';
+        },
         currentProcessingStatuses() {
             return (
                 this.processingStatusesByCategory[this.selectedCategory] || []
@@ -1225,7 +1218,7 @@ export default {
                 this.filterDistricts.length > 0 ||
                 this.filterWaLegislativeList !== 'all' ||
                 this.filterWaLegislativeCategory !== 'all' ||
-                this.filterWaPriorityCategory !== 'all' ||
+                this.filterWaPriorityCategory.length > 0 ||
                 this.filterObservationFromDate !== '' ||
                 this.filterObservationToDate !== '' ||
                 this.filterSubmittedFromDate !== '' ||
@@ -1271,12 +1264,25 @@ export default {
         filterFaunaGroup() {
             this.filterFaunaSubGroup = 'all';
         },
+        selectedCategory() {
+            this.$nextTick(() => {
+                this.initialiseAllLookups();
+            });
+        },
+        selectedGroupType() {
+            this.$nextTick(() => {
+                this.initialiseAllLookups();
+            });
+        },
     },
     mounted() {
         this.fetchReportConfig();
         this.fetchQueueHistory();
         this.startPolling();
         document.addEventListener('visibilitychange', this.onVisibilityChange);
+        this.$nextTick(() => {
+            this.initialiseAllLookups();
+        });
     },
     beforeUnmount() {
         clearInterval(this.pollTimer);
@@ -1290,6 +1296,372 @@ export default {
         this.initPopovers();
     },
     methods: {
+        onRegionFilterChange(val) {
+            this.filterRegions = val || [];
+            // Clear districts that no longer belong to selected regions
+            if (
+                this.filterRegions.length > 0 &&
+                this.filterDistricts.length > 0
+            ) {
+                const validDistrictIds = new Set(
+                    this.filteredDistricts.map((d) => String(d.id))
+                );
+                this.filterDistricts = this.filterDistricts.filter((id) =>
+                    validDistrictIds.has(String(id))
+                );
+            }
+        },
+        initialiseAllLookups() {
+            this.initialiseScientificNameLookup();
+            this.initialiseCommonNameLookup();
+            this.initialiseCommunityNameLookup();
+            this.initialiseCommunityIdLookup();
+            this.initialiseFamilyLookup();
+            this.initialiseGeneraLookup();
+            this.initialiseAssessorLookup();
+            this.initialiseSubmitterLookup();
+            this.initialiseLastModifiedByLookup();
+        },
+        _initialiseLookup(refName, url, placeholder, extraData) {
+            let vm = this;
+            const el = vm.$refs[refName];
+            if (!el) return;
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: placeholder,
+                    ajax: {
+                        url: url,
+                        dataType: 'json',
+                        data: function (params) {
+                            const q = { term: params.term };
+                            if (extraData) Object.assign(q, extraData());
+                            return q;
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm['filter' + vm._capitalize(refName)] = e.params.data.id;
+                })
+                .on('select2:unselect', function () {
+                    vm['filter' + vm._capitalize(refName)] = '';
+                })
+                .on('select2:open', function () {
+                    const searchField = $(
+                        `[aria-controls="select2-${el.id || refName}-results"]`
+                    );
+                    if (searchField.length) searchField[0].focus();
+                });
+        },
+        _capitalize(str) {
+            // Convert ref names like 'scientific_name_lookup' to 'ScientificNameLookup'
+            return str
+                .split('_')
+                .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+                .join('');
+        },
+        initialiseScientificNameLookup() {
+            let vm = this;
+            const el = vm.$refs.scientific_name_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Scientific Name',
+                    ajax: {
+                        url: api_endpoints.scientific_name_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            return {
+                                term: params.term,
+                                group_type_id: vm.currentGroupTypeDbId,
+                            };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterScientificName = e.params.data.text;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterScientificName = '';
+                });
+        },
+        initialiseCommonNameLookup() {
+            let vm = this;
+            const el = vm.$refs.common_name_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Common Name',
+                    ajax: {
+                        url: api_endpoints.common_name_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            return {
+                                term: params.term,
+                                group_type_id: vm.currentGroupTypeDbId,
+                            };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterCommonName = e.params.data.text;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterCommonName = '';
+                });
+        },
+        initialiseCommunityNameLookup() {
+            let vm = this;
+            const el = vm.$refs.community_name_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Community Name',
+                    ajax: {
+                        url: api_endpoints.community_name_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            return { term: params.term };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterCommunityName = e.params.data.text;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterCommunityName = '';
+                });
+        },
+        initialiseCommunityIdLookup() {
+            let vm = this;
+            const el = vm.$refs.community_id_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Community ID',
+                    ajax: {
+                        url: api_endpoints.community_id_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            return { term: params.term };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterCommunityCommonId = e.params.data.text;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterCommunityCommonId = '';
+                });
+        },
+        initialiseFamilyLookup() {
+            let vm = this;
+            const el = vm.$refs.family_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Family',
+                    ajax: {
+                        url: api_endpoints.family_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            return {
+                                term: params.term,
+                                group_type_id: vm.currentGroupTypeDbId,
+                            };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterFamily = e.params.data.text;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterFamily = '';
+                });
+        },
+        initialiseGeneraLookup() {
+            let vm = this;
+            const el = vm.$refs.genera_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    language: {
+                        inputTooShort: function () {
+                            return 'Use % for wildcard search';
+                        },
+                    },
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Genus',
+                    ajax: {
+                        url: api_endpoints.genera_lookup,
+                        dataType: 'json',
+                        data: function (params) {
+                            return {
+                                term: params.term,
+                                group_type_id: vm.currentGroupTypeDbId,
+                            };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterGenus = e.params.data.text;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterGenus = '';
+                });
+        },
+        initialiseAssessorLookup() {
+            let vm = this;
+            const el = vm.$refs.assessor_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Assessor',
+                    ajax: {
+                        url:
+                            api_endpoints.users_api +
+                            '/get_department_users_ledger_id/',
+                        dataType: 'json',
+                        data: function (params) {
+                            return { term: params.term };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterAssessor = e.params.data.id;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterAssessor = '';
+                });
+        },
+        initialiseSubmitterLookup() {
+            let vm = this;
+            const el = vm.$refs.submitter_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Submitter',
+                    ajax: {
+                        url: api_endpoints.users_api + '/get_users_ledger_id/',
+                        dataType: 'json',
+                        data: function (params) {
+                            return { term: params.term };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterSubmitter = e.params.data.id;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterSubmitter = '';
+                });
+        },
+        initialiseLastModifiedByLookup() {
+            let vm = this;
+            const el = vm.$refs.last_modified_by_lookup;
+            if (!el) return;
+            if ($(el).data('select2')) {
+                $(el).select2('destroy').off('select2:select select2:unselect');
+            }
+            $(el)
+                .select2({
+                    minimumInputLength: 2,
+                    theme: 'bootstrap-5',
+                    allowClear: true,
+                    placeholder: 'Search for Last Modified By',
+                    ajax: {
+                        url: api_endpoints.users_api + '/get_users_ledger_id/',
+                        dataType: 'json',
+                        data: function (params) {
+                            return { term: params.term };
+                        },
+                    },
+                })
+                .on('select2:select', function (e) {
+                    vm.filterLastModifiedBy = e.params.data.id;
+                })
+                .on('select2:unselect', function () {
+                    vm.filterLastModifiedBy = '';
+                });
+        },
+        _clearSelect2(refName) {
+            const el = this.$refs[refName];
+            if (!el) return;
+            try {
+                $(el).val(null).trigger('change');
+            } catch (e) {
+                // ignore if not initialised
+            }
+        },
         startPolling() {
             this.pollTimer = setInterval(() => {
                 this.fetchQueueHistory();
@@ -1323,6 +1695,7 @@ export default {
                     this.changeCodes = data.change_codes || [];
                     this.submitterCategories = data.submitter_categories || [];
                     this.informalGroups = data.informal_groups || [];
+                    this.groupTypeDbIds = data.group_type_db_ids || {};
                 })
                 .catch(() => {
                     this.errorMessage = 'Failed to load report types.';
@@ -1338,7 +1711,7 @@ export default {
             this.filterDistricts = [];
             this.filterWaLegislativeList = 'all';
             this.filterWaLegislativeCategory = 'all';
-            this.filterWaPriorityCategory = 'all';
+            this.filterWaPriorityCategory = [];
             this.filterObservationFromDate = '';
             this.filterObservationToDate = '';
             this.filterSubmittedFromDate = '';
@@ -1377,6 +1750,20 @@ export default {
             this.filterAssessor = '';
             this.filterSubmitter = '';
             this.filterLastModifiedBy = '';
+            // Clear Select2 controls
+            this.$nextTick(() => {
+                [
+                    'scientific_name_lookup',
+                    'common_name_lookup',
+                    'community_name_lookup',
+                    'community_id_lookup',
+                    'family_lookup',
+                    'genera_lookup',
+                    'assessor_lookup',
+                    'submitter_lookup',
+                    'last_modified_by_lookup',
+                ].forEach((ref) => this._clearSelect2(ref));
+            });
         },
         buildFiltersPayload() {
             const f = {};
@@ -1414,11 +1801,9 @@ export default {
                 f.filter_wa_legislative_category =
                     this.filterWaLegislativeCategory;
             }
-            if (
-                this.filterWaPriorityCategory &&
-                this.filterWaPriorityCategory !== 'all'
-            ) {
-                f.filter_wa_priority_category = this.filterWaPriorityCategory;
+            if (this.filterWaPriorityCategory.length > 0) {
+                f.filter_wa_priority_category =
+                    this.filterWaPriorityCategory.join(',');
             }
             if (this.filterObservationFromDate) {
                 f.filter_observation_from_date = this.filterObservationFromDate;
@@ -1636,3 +2021,11 @@ export default {
     },
 };
 </script>
+
+<style>
+#internal-reports .form-select,
+#internal-reports .form-control,
+#internal-reports .form-check-label {
+    color: #6c757d;
+}
+</style>
