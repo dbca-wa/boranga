@@ -115,7 +115,7 @@ The command will output a list of migration runs to process each of the chunks a
 
 # Don't wipe targets for the boundaries run as the Occurrence Geometry records are created in the previous run and contain important data (wipe targets is disabled in the handler anyway as a precaution)
 
-./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES --seed-history
+./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/tec_pec_boundaries_May_26_all_boundaries.csv --sources TEC_BOUNDARIES --seed-history
 
 # Generate OccurrenceTenure records for all TEC occurrences via cadastre spatial intersection (DB-driven, no CSV required — pass any existing path)
 
