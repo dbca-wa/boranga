@@ -107,7 +107,7 @@ The command will output a list of migration runs to process each of the chunks a
 
 ## Conservation Status
 
-./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TEC/community-cs-migration-template-full-draft.csv --sources TEC --wipe-targets --seed-history
+./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TEC/community-cs-migration-template.csv --sources TEC --wipe-targets --seed-history
 
 ## Occurrences
 
