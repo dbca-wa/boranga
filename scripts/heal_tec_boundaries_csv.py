@@ -10,7 +10,7 @@ produces ~14 700 spurious comma-separated empty columns per row, inflating a
 
 This script reads the raw CSV, drops every column whose header AND every data
 value are empty, and writes the result to the canonical filename the migration
-adapter expects (TEC_PEC_Boundaries_Nov25.csv).
+adapter expects (tec_pec_boundaries_May_26_all_boundaries.csv).
 
 Usage
 -----
@@ -18,7 +18,8 @@ Usage
         private-media/legacy_data/TEC/tec_pec_boundaries_May_26_all_boundaries.csv
 
 The cleaned file is written alongside the source file as
-    private-media/legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv
+    private-media/legacy_data/TEC/tec_pec_boundaries_May_26_all_boundaries.csv
+(overwriting the source in-place after stripping the phantom columns)
 
 Pass --dry-run to report what would be done without writing anything.
 """
@@ -31,7 +32,7 @@ import os
 import sys
 
 # The filename the migration adapter looks for (see adapters/occurrence/tec_boundaries.py).
-OUTPUT_FILENAME = "TEC_PEC_Boundaries_Nov25.csv"
+OUTPUT_FILENAME = "tec_pec_boundaries_May_26_all_boundaries.csv"
 
 
 def heal(source_path: str, dry_run: bool = False) -> None:
