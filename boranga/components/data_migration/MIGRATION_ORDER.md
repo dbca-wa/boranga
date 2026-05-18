@@ -99,7 +99,7 @@ The command will output a list of migration runs to process each of the chunks a
 ## Populate required mappings
 
 ./manage.py populate_legacy_username_map private-media/legacy_data/TEC/legacy-username-emailuser-map-TEC.csv --legacy-system TEC --update
-./manage.py populate_legacy_value_map private-media/legacy_data/TEC/legacy-data-map-TEC.csv --legacy-system TEC --update
+./manage.py populate_legacy_value_map private-media/legacy_data/TEC/legacy-data-map-TEC.csv --legacy-system TEC --update --create-missing-targets
 
 ## Communities
 
