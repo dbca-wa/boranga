@@ -3900,7 +3900,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=["occurrence_name", "species"],
+                fields=["occurrence_name", "group_type", "species"],
                 condition=models.Q(community__isnull=True),
                 name="unique_occurrence_name_per_species",
             ),
