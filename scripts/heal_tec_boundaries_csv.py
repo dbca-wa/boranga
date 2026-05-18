@@ -30,6 +30,7 @@ import argparse
 import csv
 import os
 import sys
+import tempfile
 
 # The filename the migration adapter looks for (see adapters/occurrence/tec_boundaries.py).
 OUTPUT_FILENAME = "tec_pec_boundaries_May_26_all_boundaries.csv"
@@ -78,23 +79,32 @@ def heal(source_path: str, dry_run: bool = False) -> None:
         print(f"Output file already exists and will be overwritten: {output_path}")
 
     # ── Pass 2: rewrite with only the kept columns ─────────────────────────
+    # Write to a temp file first so that in-place rewrites (source == output)
+    # don't truncate the source before it has been fully read.
     print("Pass 2/2: writing cleaned file …")
     rows_written = 0
-    with (
-        open(source_path, newline="", encoding="utf-8-sig") as fin,
-        open(output_path, "w", newline="", encoding="utf-8") as fout,
-    ):
-        reader = csv.reader(fin)
-        writer = csv.writer(fout)
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(output_path), suffix=".csv.tmp")
+    try:
+        with (
+            open(source_path, newline="", encoding="utf-8-sig") as fin,
+            open(tmp_fd, "w", newline="", encoding="utf-8") as fout,
+        ):
+            reader = csv.reader(fin)
+            writer = csv.writer(fout)
 
-        header_row = next(reader)
-        writer.writerow([header_row[i] for i in keep_indices])
+            header_row = next(reader)
+            writer.writerow([header_row[i] for i in keep_indices])
 
-        for row in reader:
-            writer.writerow([row[i] if i < len(row) else "" for i in keep_indices])
-            rows_written += 1
-            if rows_written % 10_000 == 0:
-                print(f"  … {rows_written:,} rows written", end="\r")
+            for row in reader:
+                writer.writerow([row[i] if i < len(row) else "" for i in keep_indices])
+                rows_written += 1
+                if rows_written % 10_000 == 0:
+                    print(f"  … {rows_written:,} rows written", end="\r")
+
+        os.replace(tmp_path, output_path)
+    except Exception:
+        os.unlink(tmp_path)
+        raise
 
     print(f"\nDone. {rows_written:,} data rows written to:\n  {output_path}")
 
