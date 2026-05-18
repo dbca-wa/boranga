@@ -73,6 +73,7 @@ COLUMN_MAP = {
     "SPEC_SP_ROLE_CODE": "AssociatedSpeciesTaxonomy__species_role_id",
     # OCCIdentification
     "OCC_STATUS_CODE": "OCCIdentification__identification_certainty_id",
+    "identification_comment": "OCCIdentification__identification_comment",
     # OCCVegetationStructure
     "OCC_COM_STRUCTURE": "OCCVegetationStructure__vegetation_structure_layer_one",
     # OCCLocation district/region - see TODO in tec.py for data source details
@@ -276,6 +277,7 @@ class OccurrenceRow:
     OCCIdentification__sample_destination_id: int | None = None
     OCCIdentification__vchr_status_code: str | None = None
     OCCIdentification__dupvouch_location: str | None = None
+    OCCIdentification__identification_comment: str | None = None
 
     OCCVegetationStructure__vegetation_structure_layer_one: str | None = None
 
@@ -421,6 +423,9 @@ class OccurrenceRow:
             ),
             OCCIdentification__vchr_status_code=utils.safe_strip(d.get("OCCIdentification__vchr_status_code")),
             OCCIdentification__dupvouch_location=utils.safe_strip(d.get("OCCIdentification__dupvouch_location")),
+            OCCIdentification__identification_comment=utils.safe_strip(
+                d.get("OCCIdentification__identification_comment")
+            ),
             # --- OCCVegetationStructure ---
             OCCVegetationStructure__vegetation_structure_layer_one=utils.safe_strip(
                 d.get("OCCVegetationStructure__vegetation_structure_layer_one")

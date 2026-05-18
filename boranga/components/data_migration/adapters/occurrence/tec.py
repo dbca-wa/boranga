@@ -267,6 +267,7 @@ PIPELINES = {
         "blank_to_none",
         IDENTIFICATION_CERTAINTY_TRANSFORM,
     ],
+    "OCCIdentification__identification_comment": ["strip", "blank_to_none"],
     # OCCVegetationStructure
     "OCCVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none"],
     # OCCLocation district/region - resolved via DISTRICTS.csv lookup

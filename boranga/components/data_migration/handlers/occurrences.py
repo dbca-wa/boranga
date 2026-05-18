@@ -1507,15 +1507,19 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 # OCCIdentification
                 if not _is_geometry_only_run and any(k.startswith("OCCIdentification__") for k in merged):
-                    # Build identification_comment from vchr_status_code + dupvouch_location
-                    vchr = merged.get("OCCIdentification__vchr_status_code")
-                    dupv = merged.get("OCCIdentification__dupvouch_location")
-                    id_comment_parts: list[str] = []
-                    if vchr:
-                        id_comment_parts.append(f"Specimen Status: {vchr}")
-                    if dupv:
-                        id_comment_parts.append(f"Duplicate Voucher Location: {dupv}")
-                    id_comment = "; ".join(id_comment_parts) if id_comment_parts else None
+                    # If identification_comment is mapped directly (TEC path), use it as-is.
+                    # Otherwise compose it from vchr_status_code + dupvouch_location (TPFL path).
+                    if "OCCIdentification__identification_comment" in merged:
+                        id_comment = merged.get("OCCIdentification__identification_comment")
+                    else:
+                        vchr = merged.get("OCCIdentification__vchr_status_code")
+                        dupv = merged.get("OCCIdentification__dupvouch_location")
+                        id_comment_parts: list[str] = []
+                        if vchr:
+                            id_comment_parts.append(f"Specimen Status: {vchr}")
+                        if dupv:
+                            id_comment_parts.append(f"Duplicate Voucher Location: {dupv}")
+                        id_comment = "; ".join(id_comment_parts) if id_comment_parts else None
                     defaults = {
                         "identification_certainty_id": merged.get("OCCIdentification__identification_certainty_id"),
                         "barcode_number": merged.get("OCCIdentification__barcode_number"),
