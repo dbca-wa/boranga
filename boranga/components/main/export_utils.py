@@ -732,6 +732,9 @@ def get_conservation_status_species_export(filters, limit):
     ps = filters.get("filter_status") or filters.get("processing_status")
     if ps and ps not in ("all", ""):
         qs = qs.filter(processing_status=ps)
+    else:
+        # Match dashboard behaviour: "All" status excludes discarded records
+        qs = qs.exclude(processing_status="discarded")
     if filters.get("filter_scientific_name"):
         qs = qs.filter(species__taxonomy__scientific_name__icontains=filters["filter_scientific_name"])
     val = filters.get("filter_wa_legislative_list")
@@ -901,6 +904,9 @@ def get_conservation_status_community_export(filters, limit):
     ps = filters.get("filter_status") or filters.get("processing_status")
     if ps and ps not in ("all", ""):
         qs = qs.filter(processing_status=ps)
+    else:
+        # Match dashboard behaviour: "All" status excludes discarded records
+        qs = qs.exclude(processing_status="discarded")
     if filters.get("filter_community_name"):
         qs = qs.filter(community__taxonomy__community_name__icontains=filters["filter_community_name"])
     val = filters.get("filter_wa_legislative_list")
