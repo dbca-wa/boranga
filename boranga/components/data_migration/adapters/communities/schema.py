@@ -12,7 +12,7 @@ COLUMN_MAP = {
     "COM_DESC": "community_description",
     "COM_NO": "migrated_from_id",
     # COM_NAME is intentionally omitted: community_name is sourced from
-    # "Combined TEC_PEC List.csv" (Community_Name column) and injected
+    # "COMBINED_TEC_PEC_LIST.csv" (Community_Name column) and injected
     # by the handler, not read from COMMUNITIES.csv.
     "COM_ORIG_AREA": "community_original_area",
     "COM_AREA_ACC": "community_original_area_accuracy",

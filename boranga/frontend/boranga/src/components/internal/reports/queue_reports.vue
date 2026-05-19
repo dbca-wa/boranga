@@ -84,7 +84,13 @@
                                     :key="gt.key"
                                     :value="gt.key"
                                 >
-                                    {{ gt.label }}
+                                    {{
+                                        selectedCategory ===
+                                            'conservation_status' &&
+                                        gt.key === 'all'
+                                            ? 'Species'
+                                            : gt.label
+                                    }}
                                 </option>
                             </select>
                         </div>
