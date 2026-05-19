@@ -711,6 +711,7 @@ def get_conservation_status_species_export(filters, limit):
         "species__group_type",
         "species__fauna_group",
         "species__fauna_sub_group",
+        "application_type",
         "wa_legislative_list",
         "wa_legislative_category",
         "wa_priority_list",
@@ -723,13 +724,14 @@ def get_conservation_status_species_export(filters, limit):
         "species__taxonomy__vernaculars",
         "species__taxonomy__informal_groups__classification_system_fk",
     )
-    # Ensure only species-type CS records are included (community CS have species=None)
-    qs = qs.filter(species__isnull=False)
+    # Filter by application_type (same field the dashboard uses) to exclude community CS
+    if filters.get("group_type") and filters["group_type"] != "all":
+        qs = qs.filter(application_type__name__iexact=filters["group_type"])
+    else:
+        qs = qs.filter(application_type__name__in=["flora", "fauna"])
     ps = filters.get("filter_status") or filters.get("processing_status")
     if ps and ps not in ("all", ""):
         qs = qs.filter(processing_status=ps)
-    if filters.get("group_type") and filters["group_type"] != "all":
-        qs = qs.filter(species__group_type__name__iexact=filters["group_type"])
     if filters.get("filter_scientific_name"):
         qs = qs.filter(species__taxonomy__scientific_name__icontains=filters["filter_scientific_name"])
     val = filters.get("filter_wa_legislative_list")
