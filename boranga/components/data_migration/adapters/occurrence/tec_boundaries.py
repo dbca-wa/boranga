@@ -12,6 +12,7 @@ from ..sources import Source
 
 # Candidate filenames for the main WKT geometry file.
 _WKT_FILE_CANDIDATES = [
+    "tec_pec_boundaries_May_26_all_boundaries.csv",
     "TEC_PEC_Boundaries_Nov25.csv",
     "TEC_PEC_BOUNDARIES_NOV25.csv",
 ]
@@ -84,11 +85,11 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
 
     def extract(self, path: str, **options) -> ExtractionResult:
         """
-        Extract boundary data from TEC_PEC_Boundaries_Nov25.csv (WKT geometry file).
+        Extract boundary data from tec_pec_boundaries_May_26_all_boundaries.csv (WKT geometry file).
 
         Three CSV files are involved:
 
-        1. WKT file (``TEC_PEC_Boundaries_Nov25.csv``): geometry rows.
+        1. WKT file (``tec_pec_boundaries_May_26_all_boundaries.csv``): geometry rows.
            Columns of interest: ``WKT``, ``OCC_UNIQUE``, ``BDY_ID``.
         2. ``BOUNDARIES.csv``: boundary-attribute table.
            Columns: ``BDY_ID``, ``BDY_BUFFER``.  Joined via normalised BDY_ID.

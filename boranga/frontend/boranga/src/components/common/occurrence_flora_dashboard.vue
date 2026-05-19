@@ -31,11 +31,12 @@
                         <label for="occurrence_name_lookup"
                             >Occurrence Name:</label
                         >
-                        <select
+                        <input
                             id="occurrence_name_lookup"
-                            ref="occurrence_name_lookup"
-                            name="occurrence_name_lookup"
+                            v-model="filterOCCFloraOccurrenceName"
+                            type="text"
                             class="form-control"
+                            placeholder="Search Occurrence Name"
                         />
                     </div>
                 </div>
@@ -354,13 +355,12 @@ export default {
             datatable_id: 'occurrence-flora-datatable-' + uuid(),
 
             // selected values for filtering
-            filterOCCFloraOccurrenceName: sessionStorage.getItem(
-                this.filterOCCFloraOccurrenceName_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterOCCFloraOccurrenceName_cache
-                  )
-                : 'all',
+            filterOCCFloraOccurrenceName: (() => {
+                const v = sessionStorage.getItem(
+                    this.filterOCCFloraOccurrenceName_cache
+                );
+                return v && v !== 'all' ? v : '';
+            })(),
 
             filterOCCFloraScientificName: sessionStorage.getItem(
                 this.filterOCCFloraScientificName_cache
@@ -495,7 +495,7 @@ export default {
         },
         filterApplied: function () {
             if (
-                this.filterOCCFloraOccurrenceName === 'all' &&
+                this.filterOCCFloraOccurrenceName === '' &&
                 this.filterOCCFloraScientificName === 'all' &&
                 this.filterOCCFloraStatus === 'all' &&
                 this.filterOCCFloraRegion.length === 0 &&
@@ -1072,24 +1072,10 @@ export default {
             }, 100);
         });
         this.$nextTick(() => {
-            vm.initialiseOccurrenceNameLookup();
             vm.initialiseScientificNameLookup();
             vm.initialiseLastModifiedByLookup();
             vm.addEventListeners();
             var newOption;
-            if (
-                sessionStorage.getItem('filterOCCFloraOccurrenceName') !=
-                    'all' &&
-                sessionStorage.getItem('filterOCCFloraOccurrenceName') != null
-            ) {
-                newOption = new Option(
-                    sessionStorage.getItem('filterOCCFloraOccurrenceNameText'),
-                    vm.filterOCCFloraOccurrenceName,
-                    false,
-                    true
-                );
-                $('#occurrence_name_lookup').append(newOption);
-            }
             if (
                 sessionStorage.getItem('filterOCCFloraScientificName') !=
                     'all' &&
@@ -1125,51 +1111,6 @@ export default {
             this.$nextTick(() => {
                 this.$refs.occurrence_history.isModalOpen = true;
             });
-        },
-        initialiseOccurrenceNameLookup: function () {
-            let vm = this;
-            $(vm.$refs.occurrence_name_lookup)
-                .select2({
-                    minimumInputLength: 2,
-                    dropdownParent: $('#occurrence_name_lookup_form_group_id'),
-                    theme: 'bootstrap-5',
-                    allowClear: true,
-                    placeholder: 'Select Occurrence Name',
-                    ajax: {
-                        url: api_endpoints.occurrence_name_lookup,
-                        dataType: 'json',
-                        data: function (params) {
-                            var query = {
-                                term: params.term,
-                                type: 'public',
-                                group_type_id: vm.group_type_id,
-                                active_only: false,
-                            };
-                            return query;
-                        },
-                    },
-                })
-                .on('select2:select', function (e) {
-                    let data = e.params.data.id;
-                    vm.filterOCCFloraOccurrenceName = data;
-                    sessionStorage.setItem(
-                        'filterOCCFloraOccurrenceNameText',
-                        e.params.data.text
-                    );
-                })
-                .on('select2:unselect', function () {
-                    vm.filterOCCFloraOccurrenceName = 'all';
-                    sessionStorage.setItem(
-                        'filterOCCFloraOccurrenceNameText',
-                        ''
-                    );
-                })
-                .on('select2:open', function () {
-                    const searchField = $(
-                        '[aria-controls="select2-occurrence_name_lookup-results"]'
-                    );
-                    searchField[0].focus();
-                });
         },
         initialiseScientificNameLookup: function () {
             let vm = this;

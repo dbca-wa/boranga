@@ -36,11 +36,12 @@
                         <label for="ocr_occurrence_name_lookup"
                             >Occurrence Name:</label
                         >
-                        <select
+                        <input
                             id="ocr_occurrence_name_lookup"
-                            ref="ocr_occurrence_name_lookup"
-                            name="ocr_occurrence_name_lookup"
+                            v-model="filterOCRCommunityOccurrenceName"
+                            type="text"
                             class="form-control"
+                            placeholder="Search Occurrence Name"
                         />
                     </div>
                 </div>
@@ -518,13 +519,12 @@ export default {
                 ? sessionStorage.getItem(this.filterOCRCommunitySubmitter_cache)
                 : 'all',
 
-            filterOCRCommunityOccurrenceName: sessionStorage.getItem(
-                this.filterOCRCommunityOccurrenceName_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterOCRCommunityOccurrenceName_cache
-                  )
-                : 'all',
+            filterOCRCommunityOccurrenceName: (() => {
+                const v = sessionStorage.getItem(
+                    this.filterOCRCommunityOccurrenceName_cache
+                );
+                return v && v !== 'all' ? v : '';
+            })(),
 
             filterOCRCommunityRegion: (() => {
                 const raw = sessionStorage.getItem(
@@ -628,7 +628,7 @@ export default {
                 this.filterOCRToCommunityDueDate === '' &&
                 this.filterOCRCommunityAssessor === 'all' &&
                 this.filterOCRCommunitySubmitter === 'all' &&
-                this.filterOCRCommunityOccurrenceName === 'all' &&
+                this.filterOCRCommunityOccurrenceName === '' &&
                 this.filterOCRCommunityRegion.length === 0 &&
                 this.filterOCRCommunityDistrict.length === 0 &&
                 this.filterOCRCommunityLastModifiedBy === 'all' &&
@@ -1298,7 +1298,6 @@ export default {
             vm.initialiseOccurrenceLookup();
             vm.initialiseCommunityNameLookup();
             vm.initialiseCommunityIdLookup();
-            vm.initialiseOccurrenceNameLookup();
             vm.initialiseAssessorLookup();
             vm.initialiseSubmitterLookup();
             vm.initialiseLastModifiedByLookup();
@@ -1342,22 +1341,6 @@ export default {
                     true
                 );
                 $('#community_id_lookup').append(newOption);
-            }
-            if (
-                sessionStorage.getItem('filterOCRCommunityOccurrenceName') !=
-                    'all' &&
-                sessionStorage.getItem('filterOCRCommunityOccurrenceName') !=
-                    null
-            ) {
-                newOption = new Option(
-                    sessionStorage.getItem(
-                        'filterOCRCommunityOccurrenceNameText'
-                    ),
-                    vm.filterOCRCommunityOccurrenceName,
-                    false,
-                    true
-                );
-                $('#ocr_occurrence_name_lookup').append(newOption);
             }
             if (
                 sessionStorage.getItem('filterOCRCommunityAssessor') != 'all' &&
@@ -1683,51 +1666,6 @@ export default {
         onRegionFilterChange: function (val) {
             this.filterOCRCommunityRegion = val;
             this.filterDistrict();
-        },
-        initialiseOccurrenceNameLookup: function () {
-            let vm = this;
-            $(vm.$refs.ocr_occurrence_name_lookup)
-                .select2({
-                    minimumInputLength: 2,
-                    dropdownParent: $('#select_occurrence_name'),
-                    theme: 'bootstrap-5',
-                    allowClear: true,
-                    placeholder: 'Select Occurrence Name',
-                    ajax: {
-                        url: api_endpoints.occurrence_name_lookup,
-                        dataType: 'json',
-                        data: function (params) {
-                            var query = {
-                                term: params.term,
-                                type: 'public',
-                                group_type_id: vm.group_type_id,
-                                active_only: false,
-                            };
-                            return query;
-                        },
-                    },
-                })
-                .on('select2:select', function (e) {
-                    let data = e.params.data.id;
-                    vm.filterOCRCommunityOccurrenceName = data;
-                    sessionStorage.setItem(
-                        'filterOCRCommunityOccurrenceNameText',
-                        e.params.data.text
-                    );
-                })
-                .on('select2:unselect', function () {
-                    vm.filterOCRCommunityOccurrenceName = 'all';
-                    sessionStorage.setItem(
-                        'filterOCRCommunityOccurrenceNameText',
-                        ''
-                    );
-                })
-                .on('select2:open', function () {
-                    const searchField = $(
-                        '[aria-controls="select2-ocr_occurrence_name_lookup-results"]'
-                    );
-                    searchField[0].focus();
-                });
         },
         initialiseLastModifiedByLookup: function () {
             let vm = this;

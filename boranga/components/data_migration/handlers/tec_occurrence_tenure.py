@@ -198,6 +198,7 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
         skipped = 0
         errors = 0
         errors_details = []
+        warnings_details = []
 
         # Pre-deduplicate by geom_pk and filter out invalid geometries before
         # submitting to the thread pool.  Keeps worker logic simple and avoids
@@ -208,6 +209,26 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
             geometry_instance = geometry_map.get(geom_pk)
             if geom_pk in seen_geom_pks or geometry_instance is None or not geometry_instance.geometry:
                 skipped += 1
+                if geom_pk in seen_geom_pks:
+                    reason = "Duplicate geometry PK"
+                elif geometry_instance is None:
+                    reason = "Geometry instance not found in preload map"
+                else:
+                    reason = "Null geometry field"
+                warnings_details.append(
+                    {
+                        "migrated_from_id": mid,
+                        "column": "geometry",
+                        "level": "warning",
+                        "message": f"Skipped (pre-filter): {reason}",
+                        "raw_value": str(geom_pk),
+                        "reason": reason,
+                        "row_json": json.dumps(
+                            {"migrated_from_id": mid, "occ_pk": occ_pk, "geom_pk": geom_pk}, default=str
+                        ),
+                        "timestamp": timezone.now().isoformat(),
+                    }
+                )
                 continue
             if ctx.dry_run:
                 logger.info("Dry run: would process tenure for TEC Occurrence %s (pk=%s)", mid, occ_pk)
@@ -237,7 +258,7 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
                     features = intersect_data.get("features", [])
 
                     if not features:
-                        return {"status": "skipped"}
+                        return {"status": "skipped", "reason": "No intersection features returned from tenure layer"}
 
                     tenure_count_before = tenure_count_map.get(geometry_instance.id, 0)
 
@@ -249,7 +270,7 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
                     tenure_count_after = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance).count()
 
                     if tenure_count_after == 0:
-                        return {"status": "skipped"}
+                        return {"status": "skipped", "reason": "No OccurrenceTenure records created after intersection"}
 
                     if not exists_before:
                         return {"status": "ok", "created": tenure_count_after, "updated": 0}
@@ -285,8 +306,8 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
 
             completed_count = 0
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                future_to_mid = {executor.submit(_process_one, item): item[0] for item in work_items}
-                for future in as_completed(future_to_mid):
+                future_to_item = {executor.submit(_process_one, item): item for item in work_items}
+                for future in as_completed(future_to_item):
                     completed_count += 1
                     if completed_count % 500 == 0:
                         logger.info(
@@ -297,6 +318,21 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
                     result = future.result()
                     if result["status"] == "skipped":
                         skipped += 1
+                        mid, occ_pk, geom_pk = future_to_item[future]
+                        warnings_details.append(
+                            {
+                                "migrated_from_id": mid,
+                                "column": "geometry",
+                                "level": "warning",
+                                "message": f"Skipped: {result.get('reason', 'Unknown')}",
+                                "raw_value": str(geom_pk),
+                                "reason": result.get("reason", "Unknown"),
+                                "row_json": json.dumps(
+                                    {"migrated_from_id": mid, "occ_pk": occ_pk, "geom_pk": geom_pk}, default=str
+                                ),
+                                "timestamp": timezone.now().isoformat(),
+                            }
+                        )
                     elif result["status"] == "error":
                         errors += 1
                         errors_details.append(result["error_detail"])
@@ -304,8 +340,8 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
                         created += result["created"]
                         updated += result["updated"]
 
-        # Write error CSV
-        if errors_details:
+        # Write error/warning CSV
+        if errors_details or warnings_details:
             import csv
 
             csv_path = options.get("error_csv")
@@ -333,7 +369,7 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
                     ]
                     writer = csv.DictWriter(fh, fieldnames=fieldnames)
                     writer.writeheader()
-                    for rec in errors_details:
+                    for rec in warnings_details + errors_details:
                         writer.writerow(
                             {
                                 "migrated_from_id": rec.get("migrated_from_id"),
@@ -346,7 +382,12 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
                                 "timestamp": rec.get("timestamp"),
                             }
                         )
-                logger.info("Wrote %d error details to %s", len(errors_details), csv_path)
+                logger.info(
+                    "Wrote %d warning(s) and %d error(s) to %s",
+                    len(warnings_details),
+                    len(errors_details),
+                    csv_path,
+                )
             except Exception as e:
                 logger.error("Failed to write error CSV to %s: %s", csv_path, e)
 
@@ -356,7 +397,7 @@ class TecOccurrenceTenureImporter(BaseSheetImporter):
             updated=updated,
             skipped=skipped,
             errors=errors,
-            warnings=0,
+            warnings=len(warnings_details),
         )
 
         elapsed = timezone.now() - start_time

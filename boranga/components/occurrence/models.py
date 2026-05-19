@@ -3898,7 +3898,18 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             models.Index(fields=["species"]),
             models.Index(fields=["community"]),
         ]
-        unique_together = (("occurrence_name", "species", "community"),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["occurrence_name", "group_type", "species"],
+                condition=models.Q(community__isnull=True),
+                name="unique_occurrence_name_per_species",
+            ),
+            models.UniqueConstraint(
+                fields=["occurrence_name", "community"],
+                condition=models.Q(species__isnull=True),
+                name="unique_occurrence_name_per_community",
+            ),
+        ]
 
         app_label = "boranga"
 

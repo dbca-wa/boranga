@@ -122,7 +122,7 @@ def _load_community_threats(path: str) -> dict:
 def _load_tec_pec_list(path: str) -> dict:
     """
     Load "Combined TEC_PEC List.csv" and return a dict:
-        COM_NO (str) -> {"distribution": str|None, "regions": str|None, "districts": str|None}
+        COM_NO (str) -> {"community_name": str|None, "distribution": str|None, "regions": str|None, "districts": str|None}
     The file sits in the same directory as COMMUNITIES.csv.
     Uses utf-8-sig encoding to automatically strip the BOM character.
     """
@@ -141,6 +141,7 @@ def _load_tec_pec_list(path: str) -> dict:
                 if not com_no:
                     continue
                 tec_pec[com_no] = {
+                    "community_name": (row.get("Community_Name", "") or "").strip() or None,
                     # Header has a trailing space: "Distribution "
                     "distribution": (row.get("Distribution ", "") or row.get("Distribution", "") or "").strip() or None,
                     "regions": (row.get("DBCA_Regions", "") or "").strip() or None,
@@ -486,12 +487,13 @@ class CommunityImporter(BaseSheetImporter):
                     continue
                 seen_names.add(name_lower)
 
-            # Enrich canonical row with distribution/regions/districts from Combined TEC_PEC List.csv
+            # Enrich canonical row with community_name/distribution/regions/districts from Combined TEC_PEC List.csv
             raw_com_no = canonical.get("migrated_from_id", "")
             # Strip source prefix (e.g. "tec-331" -> "331")
             if "-" in raw_com_no:
                 raw_com_no = raw_com_no.split("-", 1)[1]
             tec_pec_entry = tec_pec_map.get(raw_com_no, {})
+            canonical["community_name"] = tec_pec_entry.get("community_name")
             canonical["distribution"] = tec_pec_entry.get("distribution")
             canonical["regions"] = tec_pec_entry.get("regions")
             canonical["districts"] = tec_pec_entry.get("districts")

@@ -42,11 +42,12 @@
                         <label for="occurrence_name_lookup"
                             >Occurrence Name:</label
                         >
-                        <select
+                        <input
                             id="occurrence_name_lookup"
-                            ref="occurrence_name_lookup"
-                            name="occurrence_name_lookup"
+                            v-model="filterOCCFaunaOccurrenceName"
+                            type="text"
                             class="form-control"
+                            placeholder="Search Occurrence Name"
                         />
                     </div>
                 </div>
@@ -370,13 +371,12 @@ export default {
             datatable_id: 'occurrence-fauna-datatable-' + uuid(),
 
             // selected values for filtering
-            filterOCCFaunaOccurrenceName: sessionStorage.getItem(
-                this.filterOCCFaunaOccurrenceName_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterOCCFaunaOccurrenceName_cache
-                  )
-                : 'all',
+            filterOCCFaunaOccurrenceName: (() => {
+                const v = sessionStorage.getItem(
+                    this.filterOCCFaunaOccurrenceName_cache
+                );
+                return v && v !== 'all' ? v : '';
+            })(),
 
             filterOCCFaunaScientificName: sessionStorage.getItem(
                 this.filterOCCFaunaScientificName_cache
@@ -520,7 +520,7 @@ export default {
         },
         filterApplied: function () {
             if (
-                this.filterOCCFaunaOccurrenceName === 'all' &&
+                this.filterOCCFaunaOccurrenceName === '' &&
                 this.filterOCCFaunaScientificName === 'all' &&
                 this.filterOCCFaunaCommonName === 'all' &&
                 this.filterOCCFaunaStatus === 'all' &&
@@ -1136,25 +1136,11 @@ export default {
             }, 100);
         });
         this.$nextTick(() => {
-            vm.initialiseOccurrenceNameLookup();
             vm.initialiseScientificNameLookup();
             vm.initialiseCommonNameLookup();
             vm.initialiseLastModifiedByLookup();
             vm.addEventListeners();
             var newOption;
-            if (
-                sessionStorage.getItem('filterOCCFaunaOccurrenceName') !=
-                    'all' &&
-                sessionStorage.getItem('filterOCCFaunaOccurrenceName') != null
-            ) {
-                newOption = new Option(
-                    sessionStorage.getItem('filterOCCFaunaOccurrenceNameText'),
-                    vm.filterOCCFaunaOccurrenceName,
-                    false,
-                    true
-                );
-                $('#occurrence_name_lookup').append(newOption);
-            }
             if (
                 sessionStorage.getItem('filterOCCFaunaScientificName') !=
                     'all' &&
@@ -1202,51 +1188,6 @@ export default {
             this.$nextTick(() => {
                 this.$refs.occurrence_history.isModalOpen = true;
             });
-        },
-        initialiseOccurrenceNameLookup: function () {
-            let vm = this;
-            $(vm.$refs.occurrence_name_lookup)
-                .select2({
-                    minimumInputLength: 2,
-                    dropdownParent: $('#occurrence_name_lookup_form_group_id'),
-                    theme: 'bootstrap-5',
-                    allowClear: true,
-                    placeholder: 'Select Occurrence Name',
-                    ajax: {
-                        url: api_endpoints.occurrence_name_lookup,
-                        dataType: 'json',
-                        data: function (params) {
-                            var query = {
-                                term: params.term,
-                                type: 'public',
-                                group_type_id: vm.group_type_id,
-                                active_only: false,
-                            };
-                            return query;
-                        },
-                    },
-                })
-                .on('select2:select', function (e) {
-                    let data = e.params.data.id;
-                    vm.filterOCCFaunaOccurrenceName = data;
-                    sessionStorage.setItem(
-                        'filterOCCFaunaOccurrenceNameText',
-                        e.params.data.text
-                    );
-                })
-                .on('select2:unselect', function () {
-                    vm.filterOCCFaunaOccurrenceName = 'all';
-                    sessionStorage.setItem(
-                        'filterOCCFaunaOccurrenceNameText',
-                        ''
-                    );
-                })
-                .on('select2:open', function () {
-                    const searchField = $(
-                        '[aria-controls="select2-occurrence_name_lookup-results"]'
-                    );
-                    searchField[0].focus();
-                });
         },
         initialiseScientificNameLookup: function () {
             let vm = this;

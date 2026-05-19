@@ -789,17 +789,6 @@ class OccurrenceImporter(BaseSheetImporter):
             # Apply model defaults (handles None -> "" for non-nullable text fields, etc.)
             apply_model_defaults(Occurrence, defaults)
 
-            # If dry-run, log planned defaults and skip adding to ops so no DB work
-            if ctx.dry_run:
-                pretty = json.dumps(defaults, default=str, indent=2, sort_keys=True)
-                logger.debug(
-                    "OccurrenceImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
-                    self.slug,
-                    migrated_from_id,
-                    pretty,
-                )
-                continue
-
             ops.append(
                 {
                     "migrated_from_id": migrated_from_id,
@@ -814,8 +803,6 @@ class OccurrenceImporter(BaseSheetImporter):
         del all_rows
         del groups
 
-        # Note: do not exit early on dry-run here — continue so error CSV is generated
-
         # Geometry-only sources (e.g. TEC_BOUNDARIES) only patch OccurrenceGeometry —
         # there is no Occurrence-level data to create or update.
         _geometry_only_sources = {Source.TEC_BOUNDARIES.value}
@@ -827,12 +814,55 @@ class OccurrenceImporter(BaseSheetImporter):
             s.migrated_from_id: s for s in Occurrence.objects.filter(migrated_from_id__in=migrated_keys)
         }
 
+        # De-duplicate occurrence_name within community occurrences.
+        # When multiple ops share the same (occurrence_name, community_id), every
+        # member of that group gets an '_N' suffix (1-based, sorted by
+        # migrated_from_id for deterministic ordering across re-runs).  Rows
+        # with a unique name are left unchanged.  This is applied to ALL ops
+        # (creates and updates alike) so that re-runs produce the same name.
+        _community_name_groups: dict[tuple, list] = defaultdict(list)
+        for _op in ops:
+            _name = _op["defaults"].get("occurrence_name")
+            _comm = _op["defaults"].get("community_id")
+            if _name and _comm:
+                _community_name_groups[(_name, _comm)].append(_op)
+        for (_name, _comm), _group_ops in _community_name_groups.items():
+            if len(_group_ops) <= 1:
+                continue
+            _group_ops_sorted = sorted(_group_ops, key=lambda o: o["migrated_from_id"])
+            for _i, _op in enumerate(_group_ops_sorted, start=1):
+                _op["defaults"]["occurrence_name"] = f"{_name}_{_i}"
+                logger.info(
+                    "OccurrenceImporter: renamed duplicate occurrence_name '%s' -> '%s_%d' "
+                    "(community_id=%s, migrated_from_id=%s)",
+                    _name,
+                    _name,
+                    _i,
+                    _comm,
+                    _op["migrated_from_id"],
+                )
+
+        # If dry-run, log planned defaults (with any suffix renames already applied)
+        # and skip all DB work.
+        if ctx.dry_run:
+            for op in ops:
+                pretty = json.dumps(op["defaults"], default=str, indent=2, sort_keys=True)
+                logger.debug(
+                    "OccurrenceImporter %s dry-run: would persist migrated_from_id=%s defaults:\n%s",
+                    self.slug,
+                    op["migrated_from_id"],
+                    pretty,
+                )
+            # Note: do not return here — continue so error CSV is generated
+
         to_create = []
         create_meta = []
         to_update = []
         BATCH = 1000
 
         for op in ops:
+            if ctx.dry_run:
+                continue
             migrated_from_id = op["migrated_from_id"]
             defaults = op["defaults"]
             merged = op.get("merged") or {}
@@ -1507,15 +1537,19 @@ class OccurrenceImporter(BaseSheetImporter):
 
                 # OCCIdentification
                 if not _is_geometry_only_run and any(k.startswith("OCCIdentification__") for k in merged):
-                    # Build identification_comment from vchr_status_code + dupvouch_location
-                    vchr = merged.get("OCCIdentification__vchr_status_code")
-                    dupv = merged.get("OCCIdentification__dupvouch_location")
-                    id_comment_parts: list[str] = []
-                    if vchr:
-                        id_comment_parts.append(f"Specimen Status: {vchr}")
-                    if dupv:
-                        id_comment_parts.append(f"Duplicate Voucher Location: {dupv}")
-                    id_comment = "; ".join(id_comment_parts) if id_comment_parts else None
+                    # If identification_comment is mapped directly (TEC path), use it as-is.
+                    # Otherwise compose it from vchr_status_code + dupvouch_location (TPFL path).
+                    if "OCCIdentification__identification_comment" in merged:
+                        id_comment = merged.get("OCCIdentification__identification_comment")
+                    else:
+                        vchr = merged.get("OCCIdentification__vchr_status_code")
+                        dupv = merged.get("OCCIdentification__dupvouch_location")
+                        id_comment_parts: list[str] = []
+                        if vchr:
+                            id_comment_parts.append(f"Specimen Status: {vchr}")
+                        if dupv:
+                            id_comment_parts.append(f"Duplicate Voucher Location: {dupv}")
+                        id_comment = "; ".join(id_comment_parts) if id_comment_parts else None
                     defaults = {
                         "identification_certainty_id": merged.get("OCCIdentification__identification_certainty_id"),
                         "barcode_number": merged.get("OCCIdentification__barcode_number"),

@@ -99,7 +99,7 @@ The command will output a list of migration runs to process each of the chunks a
 ## Populate required mappings
 
 ./manage.py populate_legacy_username_map private-media/legacy_data/TEC/legacy-username-emailuser-map-TEC.csv --legacy-system TEC --update
-./manage.py populate_legacy_value_map private-media/legacy_data/TEC/legacy-data-map-TEC.csv --legacy-system TEC --update
+./manage.py populate_legacy_value_map private-media/legacy_data/TEC/legacy-data-map-TEC.csv --legacy-system TEC --update --create-missing-targets
 
 ## Communities
 
@@ -107,7 +107,7 @@ The command will output a list of migration runs to process each of the chunks a
 
 ## Conservation Status
 
-./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TEC/community-cs-migration-template-full-draft.csv --sources TEC --wipe-targets --seed-history
+./manage.py migrate_data run conservation_status_legacy private-media/legacy_data/TEC/community-cs-migration-template.csv --sources TEC --wipe-targets --seed-history
 
 ## Occurrences
 
@@ -115,7 +115,7 @@ The command will output a list of migration runs to process each of the chunks a
 
 # Don't wipe targets for the boundaries run as the Occurrence Geometry records are created in the previous run and contain important data (wipe targets is disabled in the handler anyway as a precaution)
 
-./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/TEC_PEC_Boundaries_Nov25.csv --sources TEC_BOUNDARIES --seed-history
+./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/tec_pec_boundaries_May_26_all_boundaries.csv --sources TEC_BOUNDARIES --seed-history
 
 # Generate OccurrenceTenure records for all TEC occurrences via cadastre spatial intersection (DB-driven, no CSV required — pass any existing path)
 

@@ -41,11 +41,12 @@
                         <label for="occurrence_name_lookup"
                             >Occurrence Name:</label
                         >
-                        <select
+                        <input
                             id="occurrence_name_lookup"
-                            ref="occurrence_name_lookup"
-                            name="occurrence_name_lookup"
+                            v-model="filterOCCCommunityOccurrenceName"
+                            type="text"
                             class="form-control"
+                            placeholder="Search Occurrence Name"
                         />
                     </div>
                 </div>
@@ -373,13 +374,12 @@ export default {
                       this.filterOCCCommunityMigratedId_cache
                   )
                 : 'all',
-            filterOCCCommunityOccurrenceName: sessionStorage.getItem(
-                this.filterOCCCommunityOccurrenceName_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterOCCCommunityOccurrenceName_cache
-                  )
-                : 'all',
+            filterOCCCommunityOccurrenceName: (() => {
+                const v = sessionStorage.getItem(
+                    this.filterOCCCommunityOccurrenceName_cache
+                );
+                return v && v !== 'all' ? v : '';
+            })(),
 
             filterOCCCommunityName: sessionStorage.getItem(
                 this.filterOCCCommunityName_cache
@@ -520,7 +520,7 @@ export default {
         filterApplied: function () {
             if (
                 this.filterOCCCommunityMigratedId === 'all' &&
-                this.filterOCCCommunityOccurrenceName === 'all' &&
+                this.filterOCCCommunityOccurrenceName === '' &&
                 this.filterOCCCommunityName === 'all' &&
                 this.filterOCCCommunityStatus === 'all' &&
                 this.filterOCCCommunityRegion.length === 0 &&
@@ -1107,28 +1107,11 @@ export default {
             }, 100);
         });
         this.$nextTick(() => {
-            vm.initialiseOccurrenceNameLookup();
             vm.initialiseCommunityNameLookup();
             vm.initialiseCommunityIdLookup();
             vm.initialiseLastModifiedByLookup();
             vm.addEventListeners();
             var newOption;
-            if (
-                sessionStorage.getItem('filterOCCCommunityOccurrenceName') !=
-                    'all' &&
-                sessionStorage.getItem('filterOCCCommunityOccurrenceName') !=
-                    null
-            ) {
-                newOption = new Option(
-                    sessionStorage.getItem(
-                        'filterOCCCommunityOccurrenceNameText'
-                    ),
-                    vm.filterOCCCommunityOccurrenceName,
-                    false,
-                    true
-                );
-                $('#occurrence_name_lookup').append(newOption);
-            }
             if (
                 sessionStorage.getItem('filterOCCCommunityName') != 'all' &&
                 sessionStorage.getItem('filterOCCCommunityName') != null
@@ -1179,51 +1162,6 @@ export default {
             this.$nextTick(() => {
                 this.$refs.occurrence_history.isModalOpen = true;
             });
-        },
-        initialiseOccurrenceNameLookup: function () {
-            let vm = this;
-            $(vm.$refs.occurrence_name_lookup)
-                .select2({
-                    minimumInputLength: 2,
-                    dropdownParent: $('#occurrence_name_lookup_form_group_id'),
-                    theme: 'bootstrap-5',
-                    allowClear: true,
-                    placeholder: 'Select Occurrence Name',
-                    ajax: {
-                        url: api_endpoints.occurrence_name_lookup,
-                        dataType: 'json',
-                        data: function (params) {
-                            var query = {
-                                term: params.term,
-                                type: 'public',
-                                group_type_id: vm.group_type_id,
-                                active_only: false,
-                            };
-                            return query;
-                        },
-                    },
-                })
-                .on('select2:select', function (e) {
-                    let data = e.params.data.id;
-                    vm.filterOCCCommunityOccurrenceName = data;
-                    sessionStorage.setItem(
-                        'filterOCCCommunityOccurrenceNameText',
-                        e.params.data.text
-                    );
-                })
-                .on('select2:unselect', function () {
-                    vm.filterOCCCommunityOccurrenceName = 'all';
-                    sessionStorage.setItem(
-                        'filterOCCCommunityOccurrenceNameText',
-                        ''
-                    );
-                })
-                .on('select2:open', function () {
-                    const searchField = $(
-                        '[aria-controls="select2-occurrence_name_lookup-results"]'
-                    );
-                    searchField[0].focus();
-                });
         },
         initialiseCommunityNameLookup: function () {
             let vm = this;
