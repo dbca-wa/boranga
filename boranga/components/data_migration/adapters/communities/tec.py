@@ -10,7 +10,8 @@ PIPELINES = {
     "occ_decline": ["strip", "blank_to_none"],
     "community_common_id": ["strip", "blank_to_none"],
     "community_description": ["strip", "blank_to_none"],
-    "community_name": ["strip", "blank_to_none"],
+    # community_name is NOT read from COMMUNITIES.csv (COM_NAME);
+    # it is injected from "Combined TEC_PEC List.csv" by the handler.
     "community_original_area": ["strip", "blank_to_none", "to_decimal"],
     "community_original_area_accuracy": ["strip", "blank_to_none", "to_decimal"],
     "active_cs": ["strip", "y_to_true_else_false"],
