@@ -723,6 +723,8 @@ def get_conservation_status_species_export(filters, limit):
         "species__taxonomy__vernaculars",
         "species__taxonomy__informal_groups__classification_system_fk",
     )
+    # Ensure only species-type CS records are included (community CS have species=None)
+    qs = qs.filter(species__isnull=False)
     ps = filters.get("filter_status") or filters.get("processing_status")
     if ps and ps not in ("all", ""):
         qs = qs.filter(processing_status=ps)
@@ -892,6 +894,8 @@ def get_conservation_status_community_export(filters, limit):
         "community__regions",
         "community__districts",
     )
+    # Ensure only community-type CS records are included (species CS have community=None)
+    qs = qs.filter(community__isnull=False)
     ps = filters.get("filter_status") or filters.get("processing_status")
     if ps and ps not in ("all", ""):
         qs = qs.filter(processing_status=ps)
