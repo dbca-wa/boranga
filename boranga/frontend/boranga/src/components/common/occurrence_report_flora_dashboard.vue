@@ -28,11 +28,12 @@
                         <label for="ocr_occurrence_name_lookup"
                             >Occurrence Name:</label
                         >
-                        <select
+                        <input
                             id="ocr_occurrence_name_lookup"
-                            ref="ocr_occurrence_name_lookup"
-                            name="ocr_occurrence_name_lookup"
+                            v-model="filterOCRFloraOccurrenceName"
+                            type="text"
                             class="form-control"
+                            placeholder="Search Occurrence Name"
                         />
                     </div>
                 </div>
@@ -496,13 +497,12 @@ export default {
                 ? sessionStorage.getItem(this.filterOCRFloraSubmitter_cache)
                 : 'all',
 
-            filterOCRFloraOccurrenceName: sessionStorage.getItem(
-                this.filterOCRFloraOccurrenceName_cache
-            )
-                ? sessionStorage.getItem(
-                      this.filterOCRFloraOccurrenceName_cache
-                  )
-                : 'all',
+            filterOCRFloraOccurrenceName: (() => {
+                const v = sessionStorage.getItem(
+                    this.filterOCRFloraOccurrenceName_cache
+                );
+                return v && v !== 'all' ? v : '';
+            })(),
 
             filterOCRFloraRegion: (() => {
                 const raw = sessionStorage.getItem(
@@ -607,7 +607,7 @@ export default {
                 this.filterOCRToFloraDueDate === '' &&
                 this.filterOCRFloraAssessor === 'all' &&
                 this.filterOCRFloraSubmitter === 'all' &&
-                this.filterOCRFloraOccurrenceName === 'all' &&
+                this.filterOCRFloraOccurrenceName === '' &&
                 this.filterOCRFloraRegion.length === 0 &&
                 this.filterOCRFloraDistrict.length === 0 &&
                 this.filterOCRFloraLastModifiedBy === 'all' &&
@@ -1250,7 +1250,6 @@ export default {
         this.$nextTick(() => {
             vm.initialiseOccurrenceLookup();
             vm.initialiseScientificNameLookup();
-            vm.initialiseOccurrenceNameLookup();
             vm.initialiseAssessorLookup();
             vm.initialiseSubmitterLookup();
             vm.initialiseLastModifiedByLookup();
@@ -1280,19 +1279,6 @@ export default {
                     true
                 );
                 $('#ocr_scientific_name_lookup').append(newOption);
-            }
-            if (
-                sessionStorage.getItem('filterOCRFloraOccurrenceName') !=
-                    'all' &&
-                sessionStorage.getItem('filterOCRFloraOccurrenceName') != null
-            ) {
-                newOption = new Option(
-                    sessionStorage.getItem('filterOCRFloraOccurrenceNameText'),
-                    vm.filterOCRFloraOccurrenceName,
-                    false,
-                    true
-                );
-                $('#ocr_occurrence_name_lookup').append(newOption);
             }
             if (
                 sessionStorage.getItem('filterOCRFloraAssessor') != 'all' &&
@@ -1427,51 +1413,6 @@ export default {
                 .on('select2:open', function () {
                     const searchField = $(
                         '[aria-controls="select2-ocr_scientific_name_lookup_by_groupname-results"]'
-                    );
-                    searchField[0].focus();
-                });
-        },
-        initialiseOccurrenceNameLookup: function () {
-            let vm = this;
-            $(vm.$refs.ocr_occurrence_name_lookup)
-                .select2({
-                    minimumInputLength: 2,
-                    dropdownParent: $('#select_occurrence_name'),
-                    theme: 'bootstrap-5',
-                    allowClear: true,
-                    placeholder: 'Search Occurrence Name',
-                    ajax: {
-                        url: api_endpoints.occurrence_name_lookup,
-                        dataType: 'json',
-                        data: function (params) {
-                            var query = {
-                                term: params.term,
-                                type: 'public',
-                                group_type_id: vm.group_type_id,
-                                active_only: false,
-                            };
-                            return query;
-                        },
-                    },
-                })
-                .on('select2:select', function (e) {
-                    let data = e.params.data.id;
-                    vm.filterOCRFloraOccurrenceName = data;
-                    sessionStorage.setItem(
-                        'filterOCRFloraOccurrenceNameText',
-                        e.params.data.text
-                    );
-                })
-                .on('select2:unselect', function () {
-                    vm.filterOCRFloraOccurrenceName = 'all';
-                    sessionStorage.setItem(
-                        'filterOCRFloraOccurrenceNameText',
-                        ''
-                    );
-                })
-                .on('select2:open', function () {
-                    const searchField = $(
-                        '[aria-controls="select2-ocr_occurrence_name_lookup-results"]'
                     );
                     searchField[0].focus();
                 });
