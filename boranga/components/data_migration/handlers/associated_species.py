@@ -250,6 +250,10 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
             skip_reasons = defaultdict(int)
 
+            # Track (site_visit_id, taxon_name_id) pairs already migrated so that the
+            # first record in file order is kept and any later duplicates are skipped.
+            seen_site_taxon_keys = set()
+
             for vid, species_rows in grouped.items():
                 ocr = ocrs.get(vid)
                 if not ocr:
@@ -265,7 +269,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                                 "row": s_row,
                             }
                         )
-                    continue
+                continue
 
                 ocr_assoc = existing_ocr_assoc.get(ocr.id)
                 if not ocr_assoc:
@@ -315,6 +319,27 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                         )
                         continue
 
+                    # Deduplicate by (SITE_VISIT_ID, taxon_name_id): keep the first record in
+                    # file order (data has been sorted so the most complete record comes first).
+                    dedup_key = (str(vid), str(taxon_name_id))
+                    if dedup_key in seen_site_taxon_keys:
+                        skip_reasons["duplicate_skipped"] += 1
+                        errors_details.append(
+                            {
+                                "migrated_from_id": vid,
+                                "taxon_name_id": taxon_name_id,
+                                "level": "warning",
+                                "reason": "duplicate_skipped",
+                                "message": (
+                                    f"Duplicate species record skipped (kept first): "
+                                    f"SITE_VISIT_ID={vid}, taxon_name_id={taxon_name_id}"
+                                ),
+                                "row": s_row,
+                            }
+                        )
+                        continue
+                    seen_site_taxon_keys.add(dedup_key)
+
                     taxonomy = taxonomies.get(taxon_name_id)
                     if not taxonomy:
                         skip_reasons["taxonomy_not_resolved"] += 1
@@ -332,18 +357,6 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
 
                     ast = taxid_to_ast.get(taxonomy.pk)
                     if ast:
-                        if ast in m2m_by_ocr_assoc[ocr_assoc]:
-                            skip_reasons["duplicate_merged"] += 1
-                            errors_details.append(
-                                {
-                                    "migrated_from_id": vid,
-                                    "taxon_name_id": taxon_name_id,
-                                    "level": "warning",
-                                    "reason": "duplicate_merged",
-                                    "message": f"Duplicate species entry merged for taxonomy_id {taxonomy.pk}",
-                                    "row": s_row,
-                                }
-                            )
                         m2m_by_ocr_assoc[ocr_assoc].add(ast)
                     else:
                         skip_reasons["ast_not_found"] += 1
