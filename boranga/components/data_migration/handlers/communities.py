@@ -127,7 +127,7 @@ def _load_tec_pec_list(path: str) -> dict:
     Uses utf-8-sig encoding to automatically strip the BOM character.
     """
     tec_pec = {}
-    tec_pec_path = Path(path).parent / "Combined TEC_PEC List.csv"
+    tec_pec_path = Path(path).parent / "Combined_TEC_PEC_List.csv"
 
     if not tec_pec_path.exists():
         logger.warning(f"Combined TEC_PEC List.csv not found at {tec_pec_path}")
