@@ -118,6 +118,7 @@ def partition_data(
     heaviest_first: bool = False,
     heaviest_last: bool = False,
     report_path: str = None,
+    sample_skipped: int = 0,
 ):
     logger.info(f"Loading adapter: {adapter_path}")
     adapter_class = load_adapter_class(adapter_path)
@@ -159,6 +160,7 @@ def partition_data(
     # max_cardinality passed as argument
 
     final_columns = []
+    skipped_columns = []  # columns dropped for high cardinality
 
     for col in interesting_columns:
         unique_count = df[col].nunique()
@@ -166,6 +168,7 @@ def partition_data(
             logger.warning(
                 f"Skipping exhaustive coverage for '{col}': {unique_count} unique values (Limit: {max_cardinality})"
             )
+            skipped_columns.append(col)
         else:
             final_columns.append(col)
 
@@ -256,6 +259,23 @@ def partition_data(
 
     logger.info(f"Selected {len(selected_indices)} rows out of {len(df)}.")
 
+    # For each skipped high-cardinality column, add sample_skipped rows that have
+    # a non-empty value in that column and aren't already selected.
+    if sample_skipped > 0 and skipped_columns:
+        selected_set = set(selected_indices)
+        for col in skipped_columns:
+            added = 0
+            for idx, row in df.iterrows():
+                if added >= sample_skipped:
+                    break
+                if idx not in selected_set and str(row[col]).strip():
+                    selected_indices.append(idx)
+                    selected_rows_info.append((idx, {(col, row[col])}))
+                    selected_set.add(idx)
+                    added += 1
+            if added:
+                logger.info(f"Added {added} sample row(s) for skipped high-cardinality column '{col}'")
+
     if heaviest_last:
         selected_rows_info.reverse()
         selected_indices = [x[0] for x in selected_rows_info]
@@ -331,6 +351,17 @@ if __name__ == "__main__":
         "--report",
         help="Path to report CSV detailing features covered per row",
     )
+    parser.add_argument(
+        "--sample-skipped",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "For each column skipped due to high cardinality, add N rows with a "
+            "non-empty value in that column (useful for spot-checking date/free-text "
+            "fields without exhaustive coverage). Default: 0 (disabled)."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -345,4 +376,5 @@ if __name__ == "__main__":
         args.heaviest_first,
         args.heaviest_last,
         args.report,
+        args.sample_skipped,
     )

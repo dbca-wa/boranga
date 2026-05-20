@@ -16,7 +16,9 @@ COLUMN_MAP = {
     # by the handler, not read from COMMUNITIES.csv.
     "COM_ORIG_AREA": "community_original_area",
     "COM_AREA_ACC": "community_original_area_accuracy",
-    "Active CS": "active_cs",
+    # Active CS is intentionally omitted: active_cs is sourced from
+    # "COMBINED_TEC_PEC_LIST.csv" (Active_CS column) and injected
+    # by the handler, not read from COMMUNITIES.csv.
     # Note: Publication and threat data are in separate CSV files
     # (COMMUNITY_PUBLICATIONS.csv, PUBLICATIONS.csv, COMMUNITY_THREATS.csv)
     # and are loaded separately by the importer, not from COMMUNITIES.csv

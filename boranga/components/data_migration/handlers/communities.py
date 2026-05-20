@@ -146,6 +146,7 @@ def _load_tec_pec_list(path: str) -> dict:
                     "distribution": (row.get("Distribution ", "") or row.get("Distribution", "") or "").strip() or None,
                     "regions": (row.get("DBCA_Regions", "") or "").strip() or None,
                     "districts": (row.get("DBCA_Districts", "") or "").strip() or None,
+                    "active_cs": (row.get("Active_CS", "") or "").strip().upper() == "Y",
                 }
     except Exception as e:
         logger.error(f"Error loading Combined TEC_PEC List.csv: {e}")
@@ -475,6 +476,7 @@ class CommunityImporter(BaseSheetImporter):
             canonical["distribution"] = tec_pec_entry.get("distribution")
             canonical["regions"] = tec_pec_entry.get("regions")
             canonical["districts"] = tec_pec_entry.get("districts")
+            canonical["active_cs"] = tec_pec_entry.get("active_cs", False)
 
             # Check for duplicate community_name before creating community
             community_name = canonical.get("community_name")
