@@ -478,9 +478,11 @@ class CommunityImporter(BaseSheetImporter):
             canonical["districts"] = tec_pec_entry.get("districts")
             canonical["active_cs"] = tec_pec_entry.get("active_cs", False)
 
-            # Check for duplicate community_name before creating community
+            # Check for duplicate community_name before creating community.
+            # Only enforce for new communities — existing ones already own their name in the DB.
             community_name = canonical.get("community_name")
-            if community_name:
+            is_existing_community = migrated_id in communities_cache
+            if community_name and not is_existing_community:
                 name_lower = community_name.lower()
                 if name_lower in seen_names:
                     error_msg = f"Duplicate community_name '{community_name}'; skipping community creation"
