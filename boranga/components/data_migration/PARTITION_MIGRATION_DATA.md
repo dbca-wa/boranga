@@ -43,6 +43,22 @@ python3 scripts/partition_migration_data.py \
 
 # --- TEC
 
+## Conservation Status
+
+python3 scripts/partition_migration_data.py \
+ --adapter boranga.components.data_migration.adapters.conservation_status.tec.ConservationStatusTecAdapter \
+ --input private-media/legacy_data/TEC/community-cs-migration-template.csv \
+ --output private-media/legacy_data/TEC/community-cs-partitioned.csv \
+ --report private-media/legacy_data/TEC/community-cs-report.csv \
+ --max-cardinality 50 \
+ --sample-skipped 2 \
+ --heaviest-last
+
+Produces ~18 rows: set-cover over the 6 categorical FK lookup columns (iucn_version,
+wa_legislative/priority list+category, commonwealth) + 2 spot-check rows per date
+field (effective_from, effective_to, listing_date) to verify date parsing, without
+exhaustively covering every unique date value.
+
 ## TEC Occurrences
 
 TEC stores its data across several related CSVs (OCCURRENCES, SITES, FIRE_HISTORY,
