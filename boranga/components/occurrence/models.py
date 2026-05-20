@@ -7573,7 +7573,7 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 dv = DataValidation(
                     type=dv_types["date"],
                     operator=dv_operators["greaterThanOrEqual"],
-                    formula1="1900-01-01",
+                    formula1="DATE(1900,1,1)",
                     allow_blank=allow_blank,
                     error="Please enter a valid date",
                     errorTitle="Invalid date",
