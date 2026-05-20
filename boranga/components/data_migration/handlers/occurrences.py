@@ -33,6 +33,7 @@ from boranga.components.data_migration.handlers.helpers import (
     apply_model_defaults,
     apply_value_to_instance,
     normalize_create_kwargs,
+    try_repair_geometry,
 )
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
@@ -1498,6 +1499,42 @@ class OccurrenceImporter(BaseSheetImporter):
                                 )
                                 errors += 1
                     apply_model_defaults(OccurrenceGeometry, defaults)
+                    # Attempt to repair self-intersecting or otherwise invalid geometries
+                    # before bulk_create (which bypasses GeometryBase.save() validation).
+                    geom_check = defaults.get("geometry")
+                    if geom_check is not None and not geom_check.valid:
+                        repaired, was_repaired, original_reason = try_repair_geometry(geom_check)
+                        if was_repaired:
+                            defaults["geometry"] = repaired
+                            try:
+                                defaults["original_geometry_ewkb"] = repaired.ewkb
+                            except Exception:
+                                pass
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": mig,
+                                    "reason": "geometry_repaired",
+                                    "level": "warning",
+                                    "message": (
+                                        f"Self-intersecting geometry auto-repaired via shapely.make_valid(). "
+                                        f"Original reason: {original_reason}"
+                                    ),
+                                    "row": {"occurrence_number": merged.get("Occurrence__occurrence_number", mig)},
+                                }
+                            )
+                        else:
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": mig,
+                                    "reason": "invalid_geometry",
+                                    "level": "warning",
+                                    "message": (
+                                        f"Geometry is invalid and could not be repaired. "
+                                        f"Reason: {original_reason}. Will store as-is via bulk_create."
+                                    ),
+                                    "row": {"occurrence_number": merged.get("Occurrence__occurrence_number", mig)},
+                                }
+                            )
                     # For TEC_BOUNDARIES, buffer_radius=None is explicit (both sources absent).
                     # apply_model_defaults would replace None with the field default of 0,
                     # but we want to preserve NULL in the DB for QA visibility.

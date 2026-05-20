@@ -17,7 +17,7 @@ What it does
      - site_count         (SITES.csv — 1:many on OCC_UNIQUE_ID)
      - fire_count         (FIRE_HISTORY.csv)
      - additional_count   (ADDITIONAL_DATA.csv)
-     - species_count      (OCCURRENCE_SPECIES_COMBINE.csv)
+     - species_count      (OCCURRENCE_SPECIES_COMBINED.csv)
      - survey_count       (SURVEYS.csv)
      - threat_count       (SURVEY_THREATS.csv, counted per OCC_UNIQUE_ID)
      - site_visit_count   (SITE_VISITS.csv, resolved via SITES.S_ID)
@@ -265,9 +265,9 @@ def main() -> None:
         additional_by_occ[r.get("OCC_UNIQUE_ID", "")].append(r)
     logger.info("  %s additional data rows", f"{sum(len(v) for v in additional_by_occ.values()):,}")
 
-    logger.info("Loading OCCURRENCE_SPECIES_COMBINE.csv …")
+    logger.info("Loading OCCURRENCE_SPECIES_COMBINED.csv …")
     species_by_occ: dict[str, list[dict]] = defaultdict(list)
-    for r in read_csv(find_file(data_dir, "OCCURRENCE_SPECIES_COMBINE.csv", "occurrence_species_combine.csv")):
+    for r in read_csv(find_file(data_dir, "OCCURRENCE_SPECIES_COMBINED.csv")):
         species_by_occ[r.get("OCC_UNIQUE_ID", "")].append(r)
     logger.info("  %s associated species rows", f"{sum(len(v) for v in species_by_occ.values()):,}")
 

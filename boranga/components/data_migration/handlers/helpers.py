@@ -104,3 +104,35 @@ def apply_model_defaults(model_cls, data: dict) -> dict:
             data[k] = ""
             continue
     return data
+
+
+def try_repair_geometry(geom):
+    """Attempt to repair a topologically invalid GEOSGeometry using shapely.make_valid().
+
+    Returns a tuple ``(repaired_geom, was_repaired, original_reason)`` where:
+    - ``repaired_geom`` is the (possibly repaired) GEOSGeometry with the original SRID preserved.
+    - ``was_repaired`` is True if the geometry was invalid and was successfully repaired.
+    - ``original_reason`` is the GEOS validity reason string from before repair, or None.
+
+    If ``geom`` is None, already valid, or cannot be repaired, the original is returned
+    unchanged with ``was_repaired=False``.
+    """
+    if geom is None:
+        return geom, False, None
+
+    if geom.valid:
+        return geom, False, None
+
+    original_reason = geom.valid_reason
+    try:
+        import shapely
+        import shapely.wkt
+        from django.contrib.gis.geos import GEOSGeometry
+        from shapely.validation import make_valid
+
+        shapely_geom = shapely.wkt.loads(geom.wkt)
+        repaired_shapely = make_valid(shapely_geom)
+        repaired_geos = GEOSGeometry(repaired_shapely.wkt, srid=geom.srid)
+        return repaired_geos, True, original_reason
+    except Exception:
+        return geom, False, original_reason

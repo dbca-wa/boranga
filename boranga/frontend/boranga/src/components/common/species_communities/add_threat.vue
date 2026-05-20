@@ -513,7 +513,7 @@
                                             v-model="threatObj.date_observed"
                                             :disabled="isReadOnly"
                                             type="date"
-                                            min="1990-01-01"
+                                            min="1900-01-01"
                                             :max="
                                                 date_observed_maximum
                                                     ? date_observed_maximum
@@ -867,9 +867,9 @@ export default {
                     return;
                 }
             } else if (
-                new Date(this.threatObj.date_observed) < new Date('1990-01-01')
+                new Date(this.threatObj.date_observed) < new Date('1900-01-01')
             ) {
-                this.threatObj.date_observed = new Date('1990-01-01')
+                this.threatObj.date_observed = new Date('1900-01-01')
                     .toISOString()
                     .split('T')[0];
                 this.$nextTick(() => {
@@ -877,11 +877,7 @@ export default {
                 });
                 swal.fire({
                     title: 'Error',
-                    text:
-                        'Date observed cannot be before ' +
-                        new Date(this.date_observed_maximum).toLocaleDateString(
-                            'en-AU'
-                        ),
+                    text: 'Date observed cannot be before 01/01/1900',
                     icon: 'error',
                     customClass: {
                         confirmButton: 'btn btn-primary',

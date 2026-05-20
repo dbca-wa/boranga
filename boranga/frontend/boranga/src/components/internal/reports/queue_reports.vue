@@ -1664,7 +1664,7 @@ export default {
             if (!el) return;
             try {
                 $(el).val(null).trigger('change');
-            } catch (e) {
+            } catch {
                 // ignore if not initialised
             }
         },

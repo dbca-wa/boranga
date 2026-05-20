@@ -583,8 +583,8 @@ DEFAULT_SELECT2_RECORDS_LIMIT = config("DEFAULT_SELECT2_RECORDS_LIMIT", default=
 GIS_EXTENT = config(
     "GIS_EXTENT",
     # Expanded to include Cocos (Keeling) Islands (~96.8°E), Christmas Island (~105.6°E, -10.5°S),
-    # and Kimberley/NT border records (~-12°S)
-    default="95.0, -38.5, 129.1, -9.0",
+    # Kimberley/NT border records (~-12°S), and TEC boundaries near the SA border (~129.11°E)
+    default="95.0, -38.5, 129.2, -9.0",
     cast=Csv(float, post_process=tuple),
 )
 

@@ -365,8 +365,8 @@ class OccurrenceTecAdapter(SourceAdapter):
                     additional_path = p
                     break
 
-            # Find OCCURRENCE_SPECIES_COMBINE.csv (consolidates flora and fauna)
-            for name in ["OCCURRENCE_SPECIES_COMBINE.csv", "occurrence_species_combine.csv"]:
+            # Find OCCURRENCE_SPECIES_COMBINED.csv (consolidates flora and fauna)
+            for name in ["OCCURRENCE_SPECIES_COMBINED.csv"]:
                 p = os.path.join(path, name)
                 if os.path.exists(p):
                     species_path = p
@@ -413,7 +413,7 @@ class OccurrenceTecAdapter(SourceAdapter):
                     additional_path = p
                     break
 
-            for name in ["OCCURRENCE_SPECIES_COMBINE.csv", "occurrence_species_combine.csv"]:
+            for name in ["OCCURRENCE_SPECIES_COMBINED.csv"]:
                 p = os.path.join(dirname, name)
                 if os.path.exists(p):
                     species_path = p
@@ -477,10 +477,12 @@ class OccurrenceTecAdapter(SourceAdapter):
             warnings.extend(sp_warns)
         else:
             warnings.append(
-                ExtractionWarning(f"Missing OCCURRENCE_SPECIES_COMBINE.csv near {occ_path}, proceeding without species")
+                ExtractionWarning(
+                    f"Missing OCCURRENCE_SPECIES_COMBINED.csv near {occ_path}, proceeding without species"
+                )
             )
 
-        # Note: OCCURRENCE_SPECIES_COMBINE.csv replaces both OCCURRENCE_SPECIES.csv and OCCURRENCE_FAUNA.csv
+        # Note: OCCURRENCE_SPECIES_COMBINED.csv replaces both OCCURRENCE_SPECIES.csv and OCCURRENCE_FAUNA.csv
 
         # Read Lookups
         reliability_map = {}
@@ -531,7 +533,7 @@ class OccurrenceTecAdapter(SourceAdapter):
         seen_species_keys = set()
         for row in species_rows:
             # Map taxon_name_id (Nomos ID) to SPEC_TAXON_ID for handler compatibility
-            # OCCURRENCE_SPECIES_COMBINE.csv has taxon_name_id which is the Nomos ID
+            # OCCURRENCE_SPECIES_COMBINED.csv has taxon_name_id which is the Nomos ID
             if "taxon_name_id" in row and row["taxon_name_id"]:
                 row["SPEC_TAXON_ID"] = row["taxon_name_id"]
             occ_id = row.get("OCC_UNIQUE_ID")
