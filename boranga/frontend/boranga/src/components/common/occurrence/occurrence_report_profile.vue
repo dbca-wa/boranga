@@ -387,7 +387,7 @@
                             class="form-control"
                             name="start_date"
                             :max="new Date().toISOString().slice(0, 10)"
-                            min="1990-01-01"
+                            min="1900-01-01"
                             @change.stop
                             @blur="checkObservationDate"
                         />
@@ -1016,10 +1016,10 @@ export default {
             }
             if (
                 new Date(this.occurrence_report_obj.observation_date) <
-                new Date('1990-01-01')
+                new Date('1900-01-01')
             ) {
                 this.occurrence_report_obj.observation_date = new Date(
-                    '1990-01-01'
+                    '1900-01-01'
                 )
                     .toISOString()
                     .slice(0, 10);
@@ -1028,7 +1028,7 @@ export default {
                 });
                 swal.fire({
                     title: 'Error',
-                    text: 'Last data curation date cannot be before 01/01/1990',
+                    text: 'Observation date cannot be before 01/01/1900',
                     icon: 'error',
                     customClass: {
                         confirmButton: 'btn btn-primary',
