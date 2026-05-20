@@ -14,7 +14,8 @@ PIPELINES = {
     # it is injected from "COMBINED_TEC_PEC_LIST.csv" by the handler.
     "community_original_area": ["strip", "blank_to_none", "to_decimal"],
     "community_original_area_accuracy": ["strip", "blank_to_none", "to_decimal"],
-    "active_cs": ["strip", "y_to_true_else_false"],
+    # active_cs is NOT read from COMMUNITIES.csv (Active CS);
+    # it is injected from "COMBINED_TEC_PEC_LIST.csv" (Active_CS column) by the handler.
     # Note: Publication and threat data are loaded from separate CSV files
     # by the importer, not from the main COMMUNITIES.csv file
 }
