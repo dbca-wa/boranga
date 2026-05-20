@@ -24,6 +24,7 @@ from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.handlers.helpers import (
     apply_value_to_instance,
     normalize_create_kwargs,
+    try_repair_geometry,
 )
 from boranga.components.data_migration.mappings import (
     load_sheet_associated_species_names,
@@ -3362,6 +3363,34 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     except Exception:
                         pass
 
+                    # Attempt to repair invalid (e.g. self-intersecting) geometries before
+                    # the pre-validation check so that previously-stored invalid OCC geometries
+                    # don't prevent OCR geometry creation on re-runs.
+                    _geom_candidate = geom_create_kwargs.get("geometry")
+                    if _geom_candidate is not None and not _geom_candidate.valid:
+                        _repaired, _was_repaired, _orig_reason = try_repair_geometry(_geom_candidate)
+                        if _was_repaired:
+                            geom_create_kwargs["geometry"] = _repaired
+                            try:
+                                geom_create_kwargs["original_geometry_ewkb"] = _repaired.ewkb
+                            except Exception:
+                                pass
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": inst.migrated_from_id,
+                                    "column": "geometry",
+                                    "level": "warning",
+                                    "message": (
+                                        f"Self-intersecting geometry auto-repaired via shapely.make_valid(). "
+                                        f"Original reason: {_orig_reason}"
+                                    ),
+                                    "raw_value": str(_geom_candidate),
+                                    "reason": "geometry_repaired",
+                                    "row": {"pk": inst.pk},
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
+
                     # Pre-validate geometry extent (same check as model save())
                     geom_obj = geom_create_kwargs.get("geometry")
                     if geom_obj and geom_obj.valid and not geom_obj.empty and geom_obj.srid == settings.DEFAULT_SRID:
@@ -3729,6 +3758,34 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
                     except Exception:
                         pass
+
+                    # Attempt to repair invalid (e.g. self-intersecting) geometries before
+                    # the pre-validation check so that previously-stored invalid OCC geometries
+                    # don't prevent OCR geometry creation on re-runs.
+                    _geom_candidate = geom_create_kwargs.get("geometry")
+                    if _geom_candidate is not None and not _geom_candidate.valid:
+                        _repaired, _was_repaired, _orig_reason = try_repair_geometry(_geom_candidate)
+                        if _was_repaired:
+                            geom_create_kwargs["geometry"] = _repaired
+                            try:
+                                geom_create_kwargs["original_geometry_ewkb"] = _repaired.ewkb
+                            except Exception:
+                                pass
+                            errors_details.append(
+                                {
+                                    "migrated_from_id": mig,
+                                    "column": "geometry",
+                                    "level": "warning",
+                                    "message": (
+                                        f"Self-intersecting geometry auto-repaired via shapely.make_valid(). "
+                                        f"Original reason: {_orig_reason}"
+                                    ),
+                                    "raw_value": str(_geom_candidate),
+                                    "reason": "geometry_repaired",
+                                    "row": {"pk": ocr.pk},
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
 
                     # Pre-validate geometry extent (same check as model save())
                     geom_obj = geom_create_kwargs.get("geometry")
