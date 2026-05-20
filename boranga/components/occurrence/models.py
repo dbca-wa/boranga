@@ -50,9 +50,9 @@ from django.utils.functional import cached_property
 from ledger_api_client.ledger_models import EmailUserRO as EmailUser
 from ledger_api_client.managed_models import SystemGroup
 from multiselectfield import MultiSelectField
-from openpyxl.styles import NamedStyle
 from openpyxl.styles.fonts import Font
 from openpyxl.utils import get_column_letter
+from openpyxl.utils.datetime import from_excel
 from openpyxl.worksheet.datavalidation import DataValidation
 from ordered_model.models import OrderedModel, OrderedModelManager
 from rest_framework import serializers
@@ -7581,9 +7581,9 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     promptTitle="Date",
                 )
                 if isinstance(model_field, models.fields.DateTimeField):
-                    date_style = NamedStyle(name="datetime", number_format="DD/MM/YYYY HH:MM:MM")
-                    for cell in worksheet[column_letter]:
-                        cell.style = date_style
+                    worksheet.column_dimensions[column_letter].number_format = "DD/MM/YYYY HH:MM:SS"
+                else:
+                    worksheet.column_dimensions[column_letter].number_format = "DD/MM/YYYY"
             elif isinstance(model_field, models.fields.IntegerField) and column.is_emailuser_column is False:
                 dv = DataValidation(
                     type=dv_types["whole"],
@@ -9271,26 +9271,35 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             # converts cells formatted as dates to datetime objects automatically
             # but when validating the schema
             if not isinstance(cell_value, datetime):
-                try:
-                    if xlsx_data_validation_type == "date":
-                        cell_value = datetime.strptime(cell_value, "%d/%m/%Y")
-                    elif xlsx_data_validation_type == "time":
-                        cell_value = datetime.strptime(cell_value, "%d/%m/%Y %H:%M:%S")
-                except ValueError:
-                    error_message = (
-                        f"Value {cell_value} in column {self.xlsx_column_header_name} "
-                        "was not able to be converted to a datetime object"
-                    )
-                    errors.append(
-                        {
-                            "row_index": index,
-                            "error_type": "column",
-                            "data": cell_value,
-                            "error_message": error_message,
-                        }
-                    )
-                    errors_added += 1
-                    return cell_value, errors_added
+                # Excel stores dates as integer serial numbers when the cell is
+                # not formatted as a date; convert these to datetime objects.
+                if isinstance(cell_value, int | float):
+                    try:
+                        cell_value = from_excel(cell_value)
+                    except Exception:
+                        pass
+                if not isinstance(cell_value, datetime):
+                    try:
+                        if xlsx_data_validation_type == "date":
+                            cell_value = datetime.strptime(str(cell_value), "%d/%m/%Y")
+                        elif xlsx_data_validation_type == "time":
+                            cell_value = datetime.strptime(str(cell_value), "%d/%m/%Y %H:%M:%S")
+                    except (ValueError, TypeError):
+                        error_message = (
+                            f"Value {cell_value} in column {self.xlsx_column_header_name} "
+                            "was not able to be converted to a datetime object. "
+                            "Please ensure the value is a string in DD/MM/YYYY format."
+                        )
+                        errors.append(
+                            {
+                                "row_index": index,
+                                "error_type": "column",
+                                "data": cell_value,
+                                "error_message": error_message,
+                            }
+                        )
+                        errors_added += 1
+                        return cell_value, errors_added
 
             # Make the datetime object timezone aware
             cell_value = cell_value.replace(tzinfo=zoneinfo.ZoneInfo(settings.TIME_ZONE))
