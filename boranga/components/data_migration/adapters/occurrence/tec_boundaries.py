@@ -139,14 +139,18 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
                 )
             )
 
-        # ── Load OCCURRENCES.csv → bdy_id_to_occ ─────────────────────────
+        # ── Load OCCURRENCES.csv → bdy_id_to_occ / occ_uid_to_buf ─────────
         # Priority-2 source: OCC_BUFFER_RADIUS; also provides OCC_UNIQUE_ID
         # for rows that don't carry OCC_UNIQUE directly in the WKT file.
+        # NOTE: OCCURRENCES.csv is saved with a UTF-8 BOM; read with utf-8-sig
+        # so the first column (OCC_UNIQUE_ID) is not corrupted by the \ufeff prefix.
         occurrences_path = self._find_file(directory, _OCCURRENCES_FILE_CANDIDATES)
         # bdy_id → (occ_unique_id_str, occ_buffer_radius_float_or_none)
         bdy_id_to_occ: dict[str, tuple[str, float | None]] = {}
+        # occ_unique_id → occ_buffer_radius_float_or_none (direct lookup for BDY_ID=0 rows)
+        occ_uid_to_buf: dict[str, float | None] = {}
         if occurrences_path:
-            occ_rows, occ_warns = self.read_table(occurrences_path, limit=0)
+            occ_rows, occ_warns = self.read_table(occurrences_path, encoding="utf-8-sig", limit=0)
             warnings.extend(occ_warns)
             for r in occ_rows:
                 bdy_id = _normalize_bdy_id(r.get("BDY_ID"))
@@ -154,6 +158,8 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
                 if bdy_id and occ_uid:
                     buf = _to_float_or_none(r.get("OCC_BUFFER_RADIUS"))
                     bdy_id_to_occ[bdy_id] = (occ_uid, buf)
+                if occ_uid:
+                    occ_uid_to_buf[occ_uid] = _to_float_or_none(r.get("OCC_BUFFER_RADIUS"))
         else:
             warnings.append(
                 ExtractionWarning(
@@ -209,9 +215,15 @@ class OccurrenceTecBoundariesAdapter(SourceAdapter):
             if bdy_buffer is not None:
                 buffer_radius = bdy_buffer
             else:
-                # Priority 2: OCC_BUFFER_RADIUS from OCCURRENCES.csv (joined via BDY_ID).
+                # Priority 2: OCC_BUFFER_RADIUS from OCCURRENCES.csv.
+                # First try joining via BDY_ID (used when OCC_UNIQUE was resolved
+                # from OCCURRENCES via BDY_ID, i.e. older WKT file formats).
                 if occ_buf_fallback is None and bdy_id and bdy_id in bdy_id_to_occ:
                     occ_buf_fallback = bdy_id_to_occ[bdy_id][1]
+                # For rows where BDY_ID is 0/absent (BDY_ID not in BOUNDARIES.csv),
+                # fall back to a direct lookup by OCC_UNIQUE_ID in OCCURRENCES.csv.
+                if occ_buf_fallback is None and occ_unique:
+                    occ_buf_fallback = occ_uid_to_buf.get(occ_unique)
                 buffer_radius = occ_buf_fallback  # may still be None
 
             if buffer_radius is None:
