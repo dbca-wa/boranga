@@ -536,6 +536,16 @@ class OccurrenceTecAdapter(SourceAdapter):
             # OCCURRENCE_SPECIES_COMBINED.csv has taxon_name_id which is the Nomos ID
             if "taxon_name_id" in row and row["taxon_name_id"]:
                 row["SPEC_TAXON_ID"] = row["taxon_name_id"]
+            # Skip rows with no valid Nomos ID. #N/A in the taxon_name_id column is read
+            # by pandas as NaN and converted to "" by fillna(), leaving SPEC_TAXON_ID as
+            # the original negative legacy placeholder (e.g. -59). These rows have no
+            # match in Nomos and are annotated in the CSV as "skip species?".
+            raw_id = row.get("SPEC_TAXON_ID", "")
+            try:
+                if int(raw_id) <= 0:
+                    continue
+            except (ValueError, TypeError):
+                continue
             occ_id = row.get("OCC_UNIQUE_ID")
             taxon_name_id = row.get("taxon_name_id")
             if occ_id and taxon_name_id:
