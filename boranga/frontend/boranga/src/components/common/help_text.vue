@@ -22,7 +22,7 @@
                 </template>
             </template>
             <template v-else>
-                <alert type="primary"
+                <alert type="primary" :class="alert_class"
                     ><i
                         :id="helpTextEntry.section_id"
                         class="bi bi-info-circle-fill text-primary help-text-popover me-2"
@@ -57,6 +57,10 @@ export default {
         section_id: {
             type: String,
             required: true,
+        },
+        alert_class: {
+            type: String,
+            default: '',
         },
     },
     data: function () {

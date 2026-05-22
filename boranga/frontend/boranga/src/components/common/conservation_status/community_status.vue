@@ -58,7 +58,7 @@
                             class="col-sm-4 col-form-label fw-bold"
                             >Change Type:
                             <span class="text-danger">*</span>
-                            <HelpText section_id="CS_Change_Type"
+                            <HelpText section_id="cs_change_type" class="ps-1"
                         /></label>
                         <div class="col-sm-8">
                             <template v-if="!isReadOnly">
@@ -1430,7 +1430,12 @@
                     >
                         <div class="row pb-0 mb-0">
                             <div class="col rounded">
-                                <HelpText section_id="CS_Assessor_Comments" />
+                                <div class="pt-4 px-3 mb-0">
+                                    <HelpText
+                                        section_id="cs_assessor_comments"
+                                        alert_class="mb-0"
+                                    />
+                                </div>
                                 <div
                                     v-if="assessorCommentVisibility"
                                     class="row"

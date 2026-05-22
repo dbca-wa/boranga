@@ -736,7 +736,7 @@
     "pk": 65,
     "fields": {
       "archived": false,
-      "section_id": "CS_Assessor_Comments",
+      "section_id": "cs_assessor_comments",
       "text": "Assessor Comments are only visible to CS Assessors and CS Approvers. Use Comments field for useful shared information.",
       "icon_with_popover": false,
       "authenticated_users_only": true,
@@ -748,7 +748,7 @@
     "pk": 66,
     "fields": {
       "archived": false,
-      "section_id": "CS_Change_Type",
+      "section_id": "cs_change_type",
       "text": "Upgrade is when a Species/Community moves from the Priority List to the Threatened List. Downgrade is when a Species/Community moves from the Threatened List to the Priority List.",
       "icon_with_popover": true,
       "authenticated_users_only": true,
@@ -760,7 +760,7 @@
     "pk": 67,
     "fields": {
       "archived": false,
-      "section_id": "CS_document",
+      "section_id": "cs_document",
       "text": "Conservation Plans (RP/IRP/CA) are not stored in Boranga - please see the DBCA website. Only sustainable file formats are accepted. Convert files (e.g., .doc, .xls) to .docx or .xlsx before attaching",
       "icon_with_popover": false,
       "authenticated_users_only": true,

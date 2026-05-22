@@ -1,7 +1,7 @@
 <template lang="html">
     <div id="cs_documents">
         <FormSection :form-collapse="false" label="Documents" Index="documents">
-            <HelpText section_id="CS_document" />
+            <HelpText section_id="cs_document" />
             <form class="form-horizontal" action="index.html" method="post">
                 <div
                     v-if="
