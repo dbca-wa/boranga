@@ -9209,7 +9209,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
             return cell_value, errors_added
 
-        if xlsx_data_validation_type == "textLength" and field.max_length:
+        if isinstance(field, models.CharField) and field.max_length:
             _effective_max = field.max_length
             if (
                 self.django_import_field_name == "migrated_from_id"
@@ -9227,7 +9227,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
                 _effective_max -= len(_occ_prefix) + 1 + _pad + 1
             if len(str(cell_value)) > _effective_max:
-                error_message = f"Value {cell_value} in column {self.xlsx_column_header_name} has too many characters"
+                error_message = (
+                    f"Value in column '{self.xlsx_column_header_name}' is too long "
+                    f"(max {_effective_max} characters, got {len(str(cell_value))})"
+                )
                 errors.append(
                     {
                         "row_index": index,
