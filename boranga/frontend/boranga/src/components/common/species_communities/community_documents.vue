@@ -1,10 +1,7 @@
 <template lang="html">
     <div id="community_documents">
         <FormSection :form-collapse="false" label="Documents" Index="documents">
-            <alert type="warning"
-                ><i class="bi bi-ban fs-6 fw-bold me-2"></i>Do not upload
-                Management or Recovery Plans here</alert
-            >
+            <HelpText section_id="communities_profile_documents" />
             <form class="form-horizontal" action="index.html" method="post">
                 <div v-if="!species_community.readonly" class="col-sm-12">
                     <div class="text-end">
@@ -46,8 +43,8 @@
 </template>
 <script>
 import { v4 as uuid } from 'uuid';
-import alert from '@vue-utils/alert.vue';
 import datatable from '@vue-utils/datatable.vue';
+import HelpText from '@/components/common/help_text.vue';
 import DocumentDetail from '../add_document.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
 import CommunityDocumentHistory from '../../internal/species_communities/community_document_history.vue';
@@ -57,11 +54,11 @@ import { constants, api_endpoints, helpers } from '@/utils/hooks';
 export default {
     name: 'CommunityDocuments',
     components: {
-        alert,
         FormSection,
         datatable,
         DocumentDetail,
         CommunityDocumentHistory,
+        HelpText,
     },
     props: {
         species_community: {

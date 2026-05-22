@@ -1,10 +1,7 @@
 <template lang="html">
     <div id="cs_documents">
         <FormSection :form-collapse="false" label="Documents" Index="documents">
-            <alert type="warning"
-                ><i class="bi bi-ban fs-6 fw-bold me-2"></i>Do not upload
-                Management or Recovery Plans here</alert
-            >
+            <HelpText section_id="CS_document" />
             <form class="form-horizontal" action="index.html" method="post">
                 <div
                     v-if="
@@ -56,23 +53,23 @@
 </template>
 <script>
 import { v4 as uuid } from 'uuid';
-import alert from '@vue-utils/alert.vue';
 import datatable from '@vue-utils/datatable.vue';
 import ViewDocument from '@/components/common/view_document.vue';
 import DocumentDetail from '@/components/common/add_document.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
 import ConservationStatusDocumentHistory from '../../internal/conservation_status/cs_document_history.vue';
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
+import HelpText from '@/components/common/help_text.vue';
 
 export default {
     name: 'ConservationStatusDocuments',
     components: {
-        alert,
         FormSection,
         datatable,
         DocumentDetail,
         ConservationStatusDocumentHistory,
         ViewDocument,
+        HelpText,
     },
     props: {
         conservation_status_obj: {

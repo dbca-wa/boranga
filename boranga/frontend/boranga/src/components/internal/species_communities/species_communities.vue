@@ -12,7 +12,20 @@
             <div v-if="!comparing" class="col-md-3">
                 <div class="">
                     <div class="card card-default mb-3">
-                        <div class="card-header">Image</div>
+                        <div class="card-header">
+                            Image
+                            <HelpText
+                                v-if="
+                                    species_community.processing_status ===
+                                    'Draft'
+                                "
+                                :section_id="
+                                    species_community.group_type === 'community'
+                                        ? 'communities_profile_image'
+                                        : 'species_profile_image'
+                                "
+                            />
+                        </div>
                         <div class="card-body">
                             <div class="row mb-2 pb-2">
                                 <div
@@ -619,6 +632,7 @@ import CommunityRename from './community_rename.vue';
 import SpeciesRename from './species_rename.vue';
 import MakePublic from './make_public.vue';
 import ReinstateImage from '@common-utils/reinstate_image.vue';
+import HelpText from '@/components/common/help_text.vue';
 
 import { api_endpoints, helpers } from '@/utils/hooks';
 export default {
@@ -633,6 +647,7 @@ export default {
         CommunityRename,
         MakePublic,
         ReinstateImage,
+        HelpText,
     },
     filters: {
         formatDate: function (data) {

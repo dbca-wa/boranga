@@ -106,6 +106,7 @@
                     </div>
                 </div>
             </CollapsibleFilters>
+            <HelpText section_id="profile_threats" />
             <form class="form-horizontal" action="index.html" method="post">
                 <div
                     v-if="!species_community.readonly && is_internal"
@@ -168,6 +169,7 @@ import ConservationThreatHistory from '../../internal/species_communities/conser
 import CommunityOCCThreats from '@/components/common/species_communities/community_occ_threats.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
+import HelpText from '@/components/common/help_text.vue';
 
 export default {
     name: 'CommunityThreats',
@@ -178,6 +180,7 @@ export default {
         ConservationThreatHistory,
         CommunityOCCThreats,
         CollapsibleFilters,
+        HelpText,
     },
     props: {
         species_community: {

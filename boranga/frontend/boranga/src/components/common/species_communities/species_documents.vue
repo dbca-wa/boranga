@@ -5,10 +5,7 @@
             label="Documents"
             :Index="documentBody"
         >
-            <alert type="warning"
-                ><i class="bi bi-ban fs-6 fw-bold me-2"></i>Do not upload
-                Management or Recovery Plans here</alert
-            >
+            <HelpText section_id="species_profile_documents" />
             <form class="form-horizontal" action="index.html" method="post">
                 <div v-if="!is_readonly" class="col-sm-12">
                     <div class="text-end">
@@ -51,8 +48,8 @@
 </template>
 <script>
 import { v4 as uuid } from 'uuid';
-import alert from '@vue-utils/alert.vue';
 import datatable from '@vue-utils/datatable.vue';
+import HelpText from '@/components/common/help_text.vue';
 import DocumentDetail from '../add_document.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
 import SpeciesDocumentHistory from '../../internal/species_communities/species_document_history.vue';
@@ -61,11 +58,11 @@ import { constants, api_endpoints, helpers } from '@/utils/hooks';
 export default {
     name: 'SpeciesDocuments',
     components: {
-        alert,
         FormSection,
         datatable,
         DocumentDetail,
         SpeciesDocumentHistory,
+        HelpText,
     },
     props: {
         species_community: {
