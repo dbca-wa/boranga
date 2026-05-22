@@ -622,5 +622,149 @@
       "authenticated_users_only": true,
       "internal_users_only": false
     }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 56,
+    "fields": {
+      "archived": false,
+      "section_id": "species_profile_image",
+      "text": "Image can only be uploaded once Profile is Active",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 57,
+    "fields": {
+      "archived": false,
+      "section_id": "communities_profile_image",
+      "text": "Image can only be uploaded once Profile is Active",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 58,
+    "fields": {
+      "archived": false,
+      "section_id": "species_profile_number_of_occurrences",
+      "text": "auto - calculates value based on number of active Occurrences",
+      "icon_with_popover": true,
+      "authenticated_users_only": false,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 59,
+    "fields": {
+      "archived": false,
+      "section_id": "communities_profile_number_of_occurrences",
+      "text": "auto - calculates value based on number of active Occurrences",
+      "icon_with_popover": true,
+      "authenticated_users_only": false,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 60,
+    "fields": {
+      "archived": false,
+      "section_id": "species_profile_conservation_plan_exists",
+      "text": "Only select Yes if there is an approved IRP, RP or Conservation Advice document",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 61,
+    "fields": {
+      "archived": false,
+      "section_id": "communities_profile_conservation_plan_exists",
+      "text": "Only select Yes if there is an approved IRP, RP or Conservation Advice document",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 62,
+    "fields": {
+      "archived": false,
+      "section_id": "species_profile_documents",
+      "text": "Conservation Plans (RP/IRP/CA) are not stored in Boranga - please see the DBCA website. Only sustainable file formats are accepted. Convert files (e.g., .doc, .xls) to .docx or .xlsx before attaching",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 63,
+    "fields": {
+      "archived": false,
+      "section_id": "communities_profile_documents",
+      "text": "Conservation Plans (RP/IRP/CA) are not stored in Boranga - please see the DBCA website. Only sustainable file formats are accepted. Convert files (e.g., .doc, .xls) to .docx or .xlsx before attaching",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 64,
+    "fields": {
+      "archived": false,
+      "section_id": "profile_threats",
+      "text": "These threats relate to the species/communities as a whole",
+      "icon_with_popover": false,
+      "authenticated_users_only": false,
+      "internal_users_only": false
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 65,
+    "fields": {
+      "archived": false,
+      "section_id": "CS_Assessor_Comments",
+      "text": "Assessor Comments are only visible to CS Assessors and CS Approvers. Use Comments field for useful shared information.",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 66,
+    "fields": {
+      "archived": false,
+      "section_id": "CS_Change_Type",
+      "text": "Upgrade is when a Species/Community moves from the Priority List to the Threatened List. Downgrade is when a Species/Community moves from the Threatened List to the Priority List.",
+      "icon_with_popover": true,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 67,
+    "fields": {
+      "archived": false,
+      "section_id": "CS_document",
+      "text": "Conservation Plans (RP/IRP/CA) are not stored in Boranga - please see the DBCA website. Only sustainable file formats are accepted. Convert files (e.g., .doc, .xls) to .docx or .xlsx before attaching",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": true
+    }
   }
 ]
