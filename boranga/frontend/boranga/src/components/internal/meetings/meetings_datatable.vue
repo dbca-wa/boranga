@@ -73,6 +73,36 @@
                         </select>
                     </div>
                 </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="">Meeting Type:</label>
+                        <select v-model="filterMeetingType" class="form-select">
+                            <option value="all">All</option>
+                            <option
+                                v-for="mt in meeting_type_list"
+                                :value="mt.id"
+                                :key="mt.id"
+                            >
+                                {{ mt.display_name }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="">Committee:</label>
+                        <select v-model="filterCommittee" class="form-select">
+                            <option value="all">All</option>
+                            <option
+                                v-for="c in committee_list"
+                                :value="c.id"
+                                :key="c.id"
+                            >
+                                {{ c.name }}
+                            </option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </CollapsibleFilters>
         <div
@@ -148,6 +178,16 @@ export default {
             required: false,
             default: 'filterMeetingStatus',
         },
+        filterMeetingType_cache: {
+            type: String,
+            required: false,
+            default: 'filterMeetingType',
+        },
+        filterCommittee_cache: {
+            type: String,
+            required: false,
+            default: 'filterCommittee',
+        },
     },
     data: function () {
         return {
@@ -181,12 +221,25 @@ export default {
                 ? sessionStorage.getItem(this.filterMeetingStatus_cache)
                 : 'all',
 
+            filterMeetingType: sessionStorage.getItem(
+                this.filterMeetingType_cache
+            )
+                ? sessionStorage.getItem(this.filterMeetingType_cache)
+                : 'all',
+
+            filterCommittee: sessionStorage.getItem(this.filterCommittee_cache)
+                ? sessionStorage.getItem(this.filterCommittee_cache)
+                : 'all',
+
             processing_statuses: [
                 { value: 'draft', name: 'Draft' },
                 { value: 'discarded', name: 'Discarded' },
                 { value: 'scheduled', name: 'Scheduled' },
                 { value: 'completed', name: 'Completed' },
             ],
+
+            meeting_type_list: [],
+            committee_list: [],
 
             profile: null,
             constants: constants,
@@ -199,7 +252,9 @@ export default {
                 this.filterToMeetingStartDate === '' &&
                 this.filterFromMeetingEndDate === '' &&
                 this.filterToMeetingEndDate === '' &&
-                this.filterMeetingStatus === 'all'
+                this.filterMeetingStatus === 'all' &&
+                this.filterMeetingType === 'all' &&
+                this.filterCommittee === 'all'
             ) {
                 return false;
             } else {
@@ -213,6 +268,8 @@ export default {
                 'Location',
                 'Start Date',
                 'End date',
+                'Meeting Type',
+                'Committee',
                 'Status',
                 'Action',
             ];
@@ -280,6 +337,27 @@ export default {
                 name: 'end_date',
             };
         },
+        column_meeting_type: function () {
+            return {
+                data: 'meeting_type',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'meeting_type',
+            };
+        },
+        column_committee: function () {
+            return {
+                data: 'committee',
+                orderable: true,
+                searchable: false,
+                visible: true,
+                name: 'committee__name',
+                render: function (data) {
+                    return data || '';
+                },
+            };
+        },
         column_status: function () {
             return {
                 data: 'processing_status',
@@ -328,6 +406,8 @@ export default {
                 vm.column_location,
                 vm.column_start_date,
                 vm.column_end_date,
+                vm.column_meeting_type,
+                vm.column_committee,
                 vm.column_status,
                 vm.column_action,
             ];
@@ -389,6 +469,8 @@ export default {
                         d.filter_to_end_date = vm.filterToMeetingEndDate;
                         d.filter_from_end_date = vm.filterFromMeetingEndDate;
                         d.filter_meeting_status = vm.filterMeetingStatus;
+                        d.filter_meeting_type = vm.filterMeetingType;
+                        d.filter_committee = vm.filterCommittee;
                     },
                 },
                 dom:
@@ -463,15 +545,46 @@ export default {
                 vm.filterMeetingStatus
             );
         },
+        filterMeetingType: function () {
+            let vm = this;
+            vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterMeetingType_cache,
+                vm.filterMeetingType
+            );
+        },
+        filterCommittee: function () {
+            let vm = this;
+            vm.$refs.meetings_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterCommittee_cache,
+                vm.filterCommittee
+            );
+        },
     },
     created: function () {
         let vm = this;
         vm.fetchProfile();
+        vm.fetchMeetingDict();
         this.$nextTick(() => {
             vm.addEventListeners();
         });
     },
     methods: {
+        fetchMeetingDict: async function () {
+            const response = await fetch(api_endpoints.meeting_dict);
+            if (response.ok) {
+                const data = await response.json();
+                this.meeting_type_list = data.meeting_type_list || [];
+                this.committee_list = data.committee_list || [];
+            }
+        },
         constructMeetingsTable: function () {
             this.$refs.meetings_datatable.vmDataTable.clear().draw();
         },

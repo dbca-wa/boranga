@@ -72,6 +72,14 @@ class MeetingFilterBackend(DatatablesFilterBackend):
         if filter_meeting_status and not filter_meeting_status.lower() == "all":
             queryset = queryset.filter(processing_status=filter_meeting_status)
 
+        filter_meeting_type = request.GET.get("filter_meeting_type")
+        if filter_meeting_type and not filter_meeting_type.lower() == "all":
+            queryset = queryset.filter(meeting_type=filter_meeting_type)
+
+        filter_committee = request.GET.get("filter_committee")
+        if filter_committee and not filter_committee.lower() == "all":
+            queryset = queryset.filter(committee_id=filter_committee)
+
         fields = self.get_fields(request)
         ordering = self.get_ordering(request, view, fields)
         queryset = queryset.order_by(*ordering)
