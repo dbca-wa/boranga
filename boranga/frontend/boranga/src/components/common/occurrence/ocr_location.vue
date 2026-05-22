@@ -787,7 +787,20 @@ export default {
             ).then(
                 async (response) => {
                     vm.updatingLocationDetails = false;
-                    vm.occurrence_report_obj.location = await response.json();
+                    const data = await response.json();
+                    if (!response.ok) {
+                        swal.fire({
+                            title: 'Save Error',
+                            text: JSON.stringify(data),
+                            icon: 'error',
+                            customClass: {
+                                confirmButton: 'btn btn-primary',
+                            },
+                        });
+                        vm.$refs.component_map.setLoadingMap(false);
+                        return;
+                    }
+                    vm.occurrence_report_obj.location = data;
                     vm.originalLocation = JSON.stringify(
                         vm.occurrence_report_obj.location
                     );
