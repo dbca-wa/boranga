@@ -81,7 +81,10 @@ echo "--- occurrence_legacy ---"
 ./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/ --sources TEC --wipe-targets --seed-history
 
 echo "--- occurrence_legacy (TEC_BOUNDARIES, no wipe) ---"
-./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/tec_pec_boundaries_May_26_all_boundaries.csv --sources TEC_BOUNDARIES --seed-history
+# --no-gis-district: TEC_BOUNDARIES is geometry-only (no OCCLocation), so district assignment
+# was already done by the main TEC run. Skipping avoids the WFS fetch + Shapely STRtree build.
+# The 124K WKT geometry parsing alone requires ~6-8 GiB — raise pod memory before running.
+./manage.py migrate_data run occurrence_legacy private-media/legacy_data/TEC/tec_pec_boundaries_May_26_all_boundaries.csv --sources TEC_BOUNDARIES --seed-history --no-gis-district
 
 echo "--- occurrence_report_legacy (SITE_VISITS) ---"
 ./manage.py migrate_data run occurrence_report_legacy private-media/legacy_data/TEC/SITE_VISITS.csv --sources TEC_SITE_VISITS --wipe-targets --seed-history
