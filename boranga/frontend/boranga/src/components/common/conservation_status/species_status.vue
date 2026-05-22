@@ -118,8 +118,9 @@
                             for="change_code"
                             class="col-sm-4 col-form-label fw-bold"
                             >Change Type:
-                            <span class="text-danger">*</span></label
-                        >
+                            <span class="text-danger">*</span>
+                            <HelpText section_id="cs_change_type" class="ps-1"
+                        /></label>
                         <div class="col-sm-8">
                             <template v-if="!isReadOnly">
                                 <template
@@ -1491,6 +1492,12 @@
                         >
                             <div class="row mb-0 pb-0">
                                 <div class="col rounded">
+                                    <div class="pt-4 px-3 mb-0">
+                                        <HelpText
+                                            section_id="cs_assessor_comments"
+                                            alert_class="mb-0"
+                                        />
+                                    </div>
                                     <div
                                         v-if="assessorCommentVisibility"
                                         class="row"
@@ -1601,6 +1608,7 @@
 <script>
 import FormSection from '@/components/forms/section_toggle.vue';
 import CollapsibleComponent from '@/components/forms/collapsible_component.vue';
+import HelpText from '@/components/common/help_text.vue';
 import { api_endpoints, constants } from '@/utils/hooks';
 
 export default {
@@ -1608,6 +1616,7 @@ export default {
     components: {
         FormSection,
         CollapsibleComponent,
+        HelpText,
     },
     props: {
         conservation_status_obj: {

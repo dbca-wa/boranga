@@ -622,7 +622,7 @@ export default {
                     .rows()
                     .count() == 0
             ) {
-                blank_fields.push(' Please add at least one Minutes record');
+                blank_fields.push(' Please add at least one Meeting record');
             }
             if (vm.isFutureMeeting()) {
                 blank_fields.push(

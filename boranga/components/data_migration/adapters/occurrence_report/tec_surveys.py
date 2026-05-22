@@ -1,6 +1,7 @@
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
+    date_from_datetime_iso_local_factory,
     dependent_from_column_factory,
     emailuser_object_by_legacy_username_factory,
     fk_lookup_static,
@@ -12,6 +13,8 @@ from ..base import ExtractionResult, SourceAdapter
 from ..sources import Source
 from . import schema
 from .tec_shared import TEC_USER_LOOKUP
+
+DATE_FROM_DATETIME_ISO_PERTH = date_from_datetime_iso_local_factory("Australia/Perth")
 
 # Lookup submitter category by name (not hardcoded ID)
 SUBMITTER_CATEGORY_DBCA = fk_lookup_static(
@@ -322,6 +325,7 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
 
     PIPELINES = {
         "internal_application": [static_value_factory(True)],
+        "observation_date": ["strip", "blank_to_none", DATE_FROM_DATETIME_ISO_PERTH],
         "submitter": [TEC_USER_LOOKUP, "required"],
         # Copy submitter to other user fields
         "assigned_approver_id": [dependent_from_column_factory("submitter", mapping=TEC_USER_LOOKUP)],

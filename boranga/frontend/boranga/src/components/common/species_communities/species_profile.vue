@@ -482,8 +482,10 @@
                 <template v-if="show_calculated_distribution_fields">
                     <div class="row mb-3 pt-3">
                         <label for="" class="col-sm-4 col-form-label"
-                            >Number of Occurrences:</label
-                        >
+                            >Number of Occurrences:
+                            <HelpText
+                                section_id="species_profile_number_of_occurrences"
+                        /></label>
                         <div
                             v-if="
                                 is_internal ||
@@ -851,7 +853,12 @@
                 <div class="row mb-3">
                     <label class="col-sm-3 col-form-label"
                         >Conservation Plan Exists:
-                    </label>
+                        <HelpText
+                            v-if="
+                                species_community.processing_status === 'Draft'
+                            "
+                            section_id="species_profile_conservation_plan_exists"
+                    /></label>
                     <div class="col-sm-9">
                         <label
                             for="original_conservation_plan_exists_no"

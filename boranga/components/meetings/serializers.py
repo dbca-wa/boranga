@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 class ListMeetingSerializer(BaseModelSerializer):
     location = serializers.SerializerMethodField()
     processing_status = serializers.CharField(source="get_processing_status_display")
+    meeting_type = serializers.SerializerMethodField()
+    committee = serializers.CharField(source="committee.name", allow_null=True, read_only=True)
     can_user_edit = serializers.SerializerMethodField()
 
     class Meta:
@@ -44,6 +46,8 @@ class ListMeetingSerializer(BaseModelSerializer):
             "end_date",
             "location",
             "title",
+            "meeting_type",
+            "committee",
             "processing_status",
             "can_user_edit",
         )
@@ -54,6 +58,8 @@ class ListMeetingSerializer(BaseModelSerializer):
             "end_date",
             "location",
             "title",
+            "meeting_type",
+            "committee",
             "processing_status",
             "can_user_edit",
         )
@@ -62,6 +68,9 @@ class ListMeetingSerializer(BaseModelSerializer):
         if obj.location:
             return obj.location.room_name
         return ""
+
+    def get_meeting_type(self, obj):
+        return obj.get_meeting_type_display()
 
     def get_can_user_edit(self, obj):
         request = self.context["request"]

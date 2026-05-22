@@ -111,6 +111,7 @@
                     </div>
                 </div>
             </CollapsibleFilters>
+            <HelpText section_id="profile_threats" />
             <form class="form-horizontal" action="index.html" method="post">
                 <div v-if="is_internal && !is_readonly" class="col-sm-12">
                     <!--should we still show the add threat button if readonly, only disabled?-->
@@ -173,6 +174,7 @@ import ConservationThreatHistory from '../../internal/species_communities/conser
 import SpeciesOCCThreats from '@/components/common/species_communities/species_occ_threats.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
+import HelpText from '@/components/common/help_text.vue';
 
 export default {
     name: 'SpeciesThreats',
@@ -183,6 +185,7 @@ export default {
         ConservationThreatHistory,
         SpeciesOCCThreats,
         CollapsibleFilters,
+        HelpText,
     },
     props: {
         species_community: {
