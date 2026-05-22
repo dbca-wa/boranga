@@ -20,6 +20,8 @@ import math
 import os
 import sys
 
+csv.field_size_limit(10_000_000)
+
 
 def split_csv(input_path: str, output_dir: str, chunk_size: int) -> list[str]:
     """
