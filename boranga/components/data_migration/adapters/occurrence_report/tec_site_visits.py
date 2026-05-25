@@ -279,7 +279,13 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
                 canonical["migrated_from_id"] = f"tec-site-{visit_id}"
 
             # Linking to Parent Occurrence via SITES lookup
+            # S_ID is the unique site identifier that cross-references SITES.csv.
+            # It is also the OccurrenceSite.site_name set during the OCC migration
+            # run, so we preserve it as _s_id for the handler to link this ORF to
+            # the correct OccurrenceSite via related_occurrence_reports (M2M).
             s_id = raw.get("S_ID")
+            if s_id:
+                canonical["_s_id"] = s_id
             if s_id and s_id in sites_lookup:
                 site_row = sites_lookup[s_id]
 
