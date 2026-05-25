@@ -315,6 +315,7 @@ PIPELINES = {
         "strip",
         "blank_to_none",
         emailuser_by_legacy_username_factory("TEC"),
+        default_to_tec_user,
     ],
     "pop_number": [],
     "subpop_code": [],
@@ -331,15 +332,6 @@ class OccurrenceTecAdapter(SourceAdapter):
     PIPELINES = PIPELINES
 
     def extract(self, path: str, **options) -> ExtractionResult:
-        tec_submitter_id = None
-        try:
-            from ledger_api_client.ledger_models import EmailUserRO
-
-            tec_user = EmailUserRO.objects.get(email="boranga.tec@dbca.wa.gov.au")
-            tec_submitter_id = tec_user.id
-        except Exception:
-            pass
-
         occ_path = path
         site_path = None
         fire_path = None
@@ -626,8 +618,6 @@ class OccurrenceTecAdapter(SourceAdapter):
             # Set TEC-specific defaults on canonical row
             canonical_row["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_COMMUNITY)
             canonical_row["locked"] = True
-            if not canonical_row.get("submitter") and tec_submitter_id:
-                canonical_row["submitter"] = tec_submitter_id
 
             joined_rows.append(canonical_row)
 
