@@ -345,6 +345,8 @@ export default {
             return {
                 data: 'can_be_processed',
                 visible: false,
+                searchable: false,
+                orderable: false,
             };
         },
         datatable_options: function () {
