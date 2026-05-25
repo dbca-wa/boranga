@@ -831,7 +831,7 @@ def spatially_process_geometry(json_geom, operation, parameters=[], unit=None):
     except AttributeError:
         raise serializers.ValidationError(f"Spatial operation {operation} not supported")
     else:
-        res_json = spatial_operation(geoms, *parameters, unit)
+        res_json = spatial_operation(geoms, *parameters, unit=unit)
 
     return res_json
 
