@@ -37,19 +37,24 @@ def tec_comment_transform(val, ctx):
         parts.append(f"Occurrence Original Area: {row['_temp_occ_original_area']}")
     if row.get("_temp_occ_area_accuracy"):
         parts.append(f"Occurrence Original Area Accuracy: {row['_temp_occ_area_accuracy']}")
-    if row.get("_temp_occ_beard_map_code"):
-        parts.append(f"Beard Map: {row['_temp_occ_beard_map_code']}")
-    if row.get("_temp_occ_beard_desc"):
-        # Look up the raw beard description in LegacyValueMap (list OCC_BEARD_MAP_CODE)
-        # to return the canonical human-readable name; fall back to the raw value.
+    if row.get("_temp_occ_beard_map_code") or row.get("_temp_occ_beard_desc"):
+        # Look up both beard map code and description in LegacyValueMap to get canonical names.
         from boranga.components.data_migration import mappings as dm_mappings
 
-        beard_raw = row["_temp_occ_beard_desc"]
         dm_mappings.preload_map("TEC", "OCC_BEARD_MAP_CODE (BEARD_MAPS)")
         table = dm_mappings._CACHE.get(("TEC", "OCC_BEARD_MAP_CODE (BEARD_MAPS)"), {})
-        entry = table.get(dm_mappings._norm(beard_raw))
-        beard_desc = (entry.get("canonical") if entry else None) or beard_raw
-        parts.append(f"Beard Description: {beard_desc}")
+
+        if row.get("_temp_occ_beard_map_code"):
+            beard_code_raw = row["_temp_occ_beard_map_code"]
+            entry = table.get(dm_mappings._norm(beard_code_raw))
+            beard_code = (entry.get("canonical") if entry else None) or beard_code_raw
+            parts.append(f"Beard Map: {beard_code}")
+
+        if row.get("_temp_occ_beard_desc"):
+            beard_desc_raw = row["_temp_occ_beard_desc"]
+            entry = table.get(dm_mappings._norm(beard_desc_raw))
+            beard_desc = (entry.get("canonical") if entry else None) or beard_desc_raw
+            parts.append(f"Beard Description: {beard_desc}")
     if row.get("_temp_occ_bush_forever_site_no"):
         parts.append(f"Bush Forever Site Number: {row['_temp_occ_bush_forever_site_no']}")
 
