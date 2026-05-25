@@ -1533,7 +1533,7 @@ class OccurrenceReportApprovalDetails(BaseModel):
         "Occurrence", on_delete=models.PROTECT, null=True, blank=True
     )  # If being added to an existing occurrence
     new_occurrence_name = models.CharField(max_length=200, null=True, blank=True)
-    officer = models.IntegerField(null=True)  # EmailUserRO
+    officer = models.IntegerField()  # EmailUserRO
     copy_ocr_comments_to_occ_comments = models.BooleanField(default=True)
     details = models.TextField(blank=True, default="")
     cc_email = models.TextField(null=True)
