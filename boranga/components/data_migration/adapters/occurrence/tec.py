@@ -27,9 +27,10 @@ from boranga.components.species_and_communities.models import (
 
 def tec_comment_transform(val, ctx):
     row = ctx.row
+    # _temp_occ_other is separated from the rest by a double line break.
+    occ_other = row.get("_temp_occ_other")
+
     parts = []
-    if row.get("_temp_occ_other"):
-        parts.append(row["_temp_occ_other"])
     if row.get("_temp_occ_data"):
         parts.append(row["_temp_occ_data"])
     if row.get("_temp_occ_original_area"):
@@ -39,18 +40,29 @@ def tec_comment_transform(val, ctx):
     if row.get("_temp_occ_beard_map_code"):
         parts.append(f"Beard Map: {row['_temp_occ_beard_map_code']}")
     if row.get("_temp_occ_beard_desc"):
-        parts.append(f"Beard Description: {row['_temp_occ_beard_desc']}")
+        # Look up the raw beard description in LegacyValueMap (list OCC_BEARD_MAP_CODE)
+        # to return the canonical human-readable name; fall back to the raw value.
+        from boranga.components.data_migration import mappings as dm_mappings
+
+        beard_raw = row["_temp_occ_beard_desc"]
+        dm_mappings.preload_map("TEC", "OCC_BEARD_MAP_CODE")
+        table = dm_mappings._CACHE.get(("TEC", "OCC_BEARD_MAP_CODE"), {})
+        entry = table.get(dm_mappings._norm(beard_raw))
+        beard_desc = (entry.get("canonical") if entry else None) or beard_raw
+        parts.append(f"Beard Description: {beard_desc}")
     if row.get("_temp_occ_bush_forever_site_no"):
         parts.append(f"Bush Forever Site Number: {row['_temp_occ_bush_forever_site_no']}")
 
-    # Additional Data
-    additional_data = row.get("_nested_additional_data", [])
-    for item in additional_data:
-        desc = item.get("ADD_DESC")
-        if desc:
-            parts.append(f"Additional Data: {desc}")
+    # _nested_additional_data is intentionally not included here: ADD_DESC values are
+    # stored as structured OccurrenceDocument records by the occurrence handler and
+    # do not need to be duplicated in the free-text comment field.
 
-    return "; ".join(parts)
+    result_parts = []
+    if occ_other:
+        result_parts.append(occ_other)
+    if parts:
+        result_parts.append("; ".join(parts))
+    return "\n\n".join(result_parts)
 
 
 def tec_habitat_notes_transform(val, ctx):
