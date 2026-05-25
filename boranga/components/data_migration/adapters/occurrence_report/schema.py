@@ -247,6 +247,7 @@ class OccurrenceReportRow:
     assigned_approver_id: int | None = None
     assigned_officer_id: int | None = None
     internal_application: bool | None = None
+    site: str | None = None
     # Temp fields for user resolution
     assigned_approver_name: str | None = None
     assigned_officer_name: str | None = None
@@ -412,6 +413,7 @@ class OccurrenceReportRow:
             assigned_approver_id=utils.to_int_maybe(d.get("assigned_approver_id")),
             assigned_officer_id=utils.to_int_maybe(d.get("assigned_officer_id")),
             internal_application=d.get("internal_application"),
+            site=utils.safe_strip(d.get("site")),
             assigned_approver_name=utils.safe_strip(d.get("assigned_approver_name")),
             assigned_officer_name=utils.safe_strip(d.get("assigned_officer_name")),
             approved_by_name=utils.safe_strip(d.get("approved_by_name")),
@@ -611,6 +613,7 @@ class OccurrenceReportRow:
             "ocr_for_occ_number": self.ocr_for_occ_number or "",
             "ocr_for_occ_name": self.ocr_for_occ_name or "",
             "assessor_data": self.assessor_data or "",
+            "site": self.site or "",
             "datetime_created": self.datetime_created,
             "datetime_updated": self.datetime_updated,
             "lodgement_date": self.lodgement_date,
