@@ -81,7 +81,7 @@ def tec_habitat_notes_transform(val, ctx):
     if row.get("_temp_occ_classification"):
         parts.append(f"Classification System: {row['_temp_occ_classification']}")
 
-    return "; ".join(parts)
+    return "\n".join(parts)
 
 
 def parse_fire_history_sort_date(value):
