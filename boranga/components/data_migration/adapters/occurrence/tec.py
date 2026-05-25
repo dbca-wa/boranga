@@ -172,21 +172,25 @@ DOCUMENT_SUB_CATEGORY_TRANSFORM = build_legacy_map_transform(
 # Use static_value_factory for explicit None assignments
 STATIC_NONE = static_value_factory(None)
 
-# ISO datetime parser — TEC dates carry +0000 but are Perth local time
-DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
+# ISO datetime parser — TEC dates carry +0000 but are Perth local time (always
+# AWST = UTC+8). Use Etc/GMT-8 (fixed offset, no DST) rather than
+# Australia/Perth, which would incorrectly apply UTC+9 for the 2006-2009 WAST
+# DST trial period even though the TEC server clock never followed that trial.
+_TEC_TZ = "Etc/GMT-8"
+DATETIME_ISO_PERTH = datetime_iso_factory(_TEC_TZ)
 
 
 def tec_datetime_updated_transform(val, ctx):
     """Return OCC_DATE_EDITED parsed as datetime, falling back to OCC_DATE_ENTERED."""
     # val is already the OCC_DATE_EDITED value (may be None after blank_to_none)
     if val is not None:
-        parsed = _parse_datetime_iso(val, default_tz="Australia/Perth")
+        parsed = _parse_datetime_iso(val, default_tz=_TEC_TZ)
         if parsed.value is not None:
             return parsed
     # Fallback: use OCC_DATE_ENTERED (mapped to datetime_created in the raw row)
     fallback = ctx.row.get("datetime_created")
     if fallback is not None:
-        return _parse_datetime_iso(fallback, default_tz="Australia/Perth")
+        return _parse_datetime_iso(fallback, default_tz=_TEC_TZ)
     return None
 
 
