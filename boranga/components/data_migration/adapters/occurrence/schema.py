@@ -53,7 +53,7 @@ COLUMN_MAP = {
     "S_LONGITUDE_PREF": "OccurrenceSite__longitude",
     "S_ID": "OccurrenceSite__site_name",
     "S_DATE_EDITED": "OccurrenceSite__updated_date",
-    "USERNAME": "OccurrenceSite__drawn_by",
+    "USERNAME": "submitter",
     # OCCObservationDetail
     "OCC_BR_CODE": "OCCObservationDetail__comments",
     # OCCHabitatComposition
