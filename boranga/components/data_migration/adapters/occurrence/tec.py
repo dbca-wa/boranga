@@ -282,7 +282,7 @@ PIPELINES = {
     "OccurrenceSite__site_name": [],
     "OccurrenceSite__updated_date": ["blank_to_none", DATETIME_ISO_PERTH],
     "OccurrenceSite__drawn_by": [
-        "strip",
+        lambda val, ctx: ctx.row.get("submitter"),
         "blank_to_none",
         emailuser_by_legacy_username_factory("TEC"),
         default_to_tec_user,
@@ -295,7 +295,11 @@ PIPELINES = {
     "datetime_created": ["strip", "blank_to_none", DATETIME_ISO_PERTH, "required"],
     "datetime_updated": ["strip", "blank_to_none", tec_datetime_updated_transform],
     "modified_by": [],
-    "submitter": [],
+    "submitter": [
+        "strip",
+        "blank_to_none",
+        emailuser_by_legacy_username_factory("TEC"),
+    ],
     "pop_number": [],
     "subpop_code": [],
     "OCCAssociatedSpecies__comment": [],
