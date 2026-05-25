@@ -115,7 +115,7 @@ def tec_fire_history_comment_transform(val, ctx):
         if date:
             entry = f"Fire Date: {date}"
             if comment:
-                entry += f"\n{comment}"
+                entry += f", {comment}"
         elif comment:
             entry = f"{comment}"
         else:
@@ -125,7 +125,7 @@ def tec_fire_history_comment_transform(val, ctx):
     # Sort by date descending (most recent first)
     entries.sort(key=lambda x: x[0], reverse=True)
     formatted = [e[1] for e in entries]
-    return "; ".join(formatted)
+    return "\n".join(formatted)
 
 
 def tec_observation_detail_comments_transform(val, ctx):
