@@ -269,7 +269,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                                 "row": s_row,
                             }
                         )
-                continue
+                    continue
 
                 ocr_assoc = existing_ocr_assoc.get(ocr.id)
                 if not ocr_assoc:
