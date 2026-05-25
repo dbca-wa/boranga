@@ -5,6 +5,7 @@ from boranga.components.data_migration.registry import (
     _result,
     build_legacy_map_transform,
     dependent_from_column_factory,
+    emailuser_object_by_legacy_username_factory,
     fk_lookup_static,
     static_value_factory,
 )
@@ -134,6 +135,23 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
     source_key = Source.TEC_SITE_VISITS.value
     domain = "occurrence_report"
 
+    # Reusable transform: USERNAME -> EmailUser object -> full name
+    _EMAILUSER_OBJ = emailuser_object_by_legacy_username_factory("TEC")
+
+    @staticmethod
+    def _get_full_name_or_default(value, ctx):
+        """Call get_full_name() on EmailUserRO object, return 'DBCA' if None/error."""
+        if value is None:
+            return _result("DBCA")
+        try:
+            if hasattr(value, "get_full_name"):
+                full_name = value.get_full_name()
+                if full_name and full_name.strip():
+                    return _result(full_name.strip())
+        except Exception:
+            pass
+        return _result("DBCA")
+
     PIPELINES = {
         "internal_application": [static_value_factory(True)],
         "submitter": [TEC_USER_LOOKUP],  # TEC_USER_LOOKUP has built-in fallback
@@ -149,8 +167,11 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         "OCRObserverDetail__main_observer": [static_value_factory(True)],
         "OCRObserverDetail__visible": [static_value_factory(True)],
         # Task 12334: observer_name from SV_DESCRIBED_BY (mapped by schema, pass through)
-        # SubmitterInformation defaults (Task 12570: name default "DBCA" since SITE_VISITS has no USERNAME column)
-        "SubmitterInformation__name": [static_value_factory("DBCA")],
+        # Task 12570: SubmitterInformation name field - map USERNAME to EmailUser full name
+        "SubmitterInformation__name": [
+            dependent_from_column_factory("submitter", mapping=_EMAILUSER_OBJ),
+            _get_full_name_or_default,
+        ],
         "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
         "SubmitterInformation__organisation": [static_value_factory("DBCA")],
         # OCRLocation defaults from Parent Occurrence
