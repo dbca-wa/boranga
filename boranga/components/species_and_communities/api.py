@@ -400,12 +400,16 @@ class GetFamily(views.APIView):
         group_type_id = request.GET.get("group_type_id", "")
         search_term = request.GET.get("term", "")
         if search_term:
+            filters = {
+                "family_name__icontains": search_term,
+                "archived": False,
+            }
+            if group_type_id:
+                filters["kingdom_fk__grouptype"] = group_type_id
             data = (
                 Taxonomy.objects.filter(
                     ~Q(family_id=None),
-                    family_name__icontains=search_term,
-                    kingdom_fk__grouptype=group_type_id,
-                    archived=False,
+                    **filters,
                 )
                 .order_by("family_name")
                 .values("family_id", "family_name")
@@ -423,12 +427,16 @@ class GetGenera(views.APIView):
         group_type_id = request.GET.get("group_type_id", "")
         search_term = request.GET.get("term", "")
         if search_term:
+            filters = {
+                "genera_name__icontains": search_term,
+                "archived": False,
+            }
+            if group_type_id:
+                filters["kingdom_fk__grouptype"] = group_type_id
             data = (
                 Taxonomy.objects.filter(
                     ~Q(genera_id=None),
-                    genera_name__icontains=search_term,
-                    kingdom_fk__grouptype=group_type_id,
-                    archived=False,
+                    **filters,
                 )
                 .order_by("genera_name")
                 .values("genera_id", "genera_name")
@@ -447,10 +455,14 @@ class GetPhyloGroup(views.APIView):
         group_type_id = request.GET.get("group_type_id", "")
         search_term = request.GET.get("term", "")
         if search_term:
+            phygrp_filters = {
+                "classification_system_fk__class_desc__icontains": search_term,
+            }
+            if group_type_id:
+                phygrp_filters["taxonomy__kingdom_fk__grouptype"] = group_type_id
             data = (
                 InformalGroup.objects.filter(
-                    classification_system_fk__class_desc__icontains=search_term,
-                    taxonomy__kingdom_fk__grouptype=group_type_id,
+                    **phygrp_filters,
                 )
                 .distinct()
                 .values(
