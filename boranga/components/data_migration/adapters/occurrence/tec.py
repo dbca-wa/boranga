@@ -45,8 +45,8 @@ def tec_comment_transform(val, ctx):
         from boranga.components.data_migration import mappings as dm_mappings
 
         beard_raw = row["_temp_occ_beard_desc"]
-        dm_mappings.preload_map("TEC", "OCC_BEARD_MAP_CODE")
-        table = dm_mappings._CACHE.get(("TEC", "OCC_BEARD_MAP_CODE"), {})
+        dm_mappings.preload_map("TEC", "OCC_BEARD_MAP_CODE (BEARD_MAPS)")
+        table = dm_mappings._CACHE.get(("TEC", "OCC_BEARD_MAP_CODE (BEARD_MAPS)"), {})
         entry = table.get(dm_mappings._norm(beard_raw))
         beard_desc = (entry.get("canonical") if entry else None) or beard_raw
         parts.append(f"Beard Description: {beard_desc}")
