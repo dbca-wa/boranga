@@ -175,7 +175,8 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
             )
         ],
         # Geometry defaults
-        "OccurrenceReportGeometry__locked": [static_value_factory(True)],
+        # Lock geometry only when the OCR is approved; all other statuses get locked=False
+        "OccurrenceReportGeometry__locked": [static_value_factory(False)],
         "OccurrenceReportGeometry__show_on_map": [static_value_factory(True)],
         "OccurrenceReportGeometry__geometry": [
             lambda val, ctx: _result(make_geometry(ctx.row.get("GDA94LAT"), ctx.row.get("GDA94LONG")))
