@@ -380,7 +380,7 @@ class OccurrenceReportTecSurveysAdapter(SourceAdapter):
             )
         ],
         # Task 12599: SURVEYS geometry show_on_map = False (different from SITE_VISITS)
-        "OccurrenceReportGeometry__show_on_map": [static_value_factory(False)],
+        "OccurrenceReportGeometry__show_on_map": [static_value_factory(True)],
         # Lock geometry only when the OCR is approved; all other statuses get locked=False
         "OccurrenceReportGeometry__locked": [static_value_factory(False)],
         # Task 12623: habitat_notes from SURVEY_CONDITIONS concatenation
