@@ -115,7 +115,7 @@ def tec_fire_history_comment_transform(val, ctx):
         if date:
             entry = f"Fire Date: {date}"
             if comment:
-                entry += f", {comment}"
+                entry += f"\n{comment}"
         elif comment:
             entry = f"{comment}"
         else:
