@@ -52,6 +52,20 @@
             </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
+                    >Community ID:</label
+                >
+                <div class="col-sm-9">
+                    <input
+                        id="community_common_id"
+                        :value="occurrence_obj.community_common_id"
+                        disabled
+                        type="text"
+                        class="form-control"
+                    />
+                </div>
+            </div>
+            <div class="row mb-3">
+                <label for="" class="col-sm-3 control-label"
                     >Occurrence Source:</label
                 >
                 <div
@@ -255,11 +269,14 @@ export default {
                     let data = e.params.data.id;
                     vm.occurrence_obj.community = data;
                     vm.occurrence_obj.community_id = e.params.data.id;
+                    vm.occurrence_obj.community_common_id =
+                        e.params.data.community_common_id;
                     vm.community_display = e.params.data.text;
                     vm.taxon_previous_name = e.params.data.taxon_previous_name;
                 })
                 .on('select2:unselect', function () {
                     vm.occurrence_obj.community_id = null;
+                    vm.occurrence_obj.community_common_id = null;
                     vm.community_display = '';
                     vm.taxon_previous_name = '';
                 })
