@@ -36,20 +36,6 @@
                     />
                 </div>
             </div>
-            <div v-if="occurrence_obj.migrated_from_id" class="row mb-3">
-                <label for="migrated_from_id" class="col-sm-3 control-label"
-                    >Migrated From ID:</label
-                >
-                <div class="col-sm-9">
-                    <input
-                        id="migrated_from_id"
-                        :value="occurrence_obj.migrated_from_id"
-                        disabled
-                        type="text"
-                        class="form-control"
-                    />
-                </div>
-            </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label"
                     >Common Name<template v-if="common_names.length > 1"
@@ -74,6 +60,20 @@
                             <span class="visually-hidden">N/A</span>
                         </h5>
                     </template>
+                </div>
+            </div>
+            <div v-if="occurrence_obj.migrated_from_id" class="row mb-3">
+                <label for="migrated_from_id" class="col-sm-3 control-label"
+                    >Migrated From ID:</label
+                >
+                <div class="col-sm-9">
+                    <input
+                        id="migrated_from_id"
+                        :value="occurrence_obj.migrated_from_id"
+                        disabled
+                        type="text"
+                        class="form-control"
+                    />
                 </div>
             </div>
             <div class="row mb-3">

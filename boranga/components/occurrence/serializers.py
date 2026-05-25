@@ -1493,6 +1493,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     species_taxonomy_id = serializers.IntegerField(source="species.taxonomy.id", allow_null=True)
     species_number = serializers.CharField(source="species.species_number", read_only=True)
     community_number = serializers.CharField(source="community.community_number", read_only=True)
+    community_common_id = serializers.CharField(source="community.taxonomy.community_common_id", allow_null=True)
     allowed_assessors = EmailUserSerializer(many=True)
     location = serializers.SerializerMethodField()
     habitat_composition = serializers.SerializerMethodField()
@@ -1532,6 +1533,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
             "species_number",
             "community_number",
             "community_id",
+            "community_common_id",
             "occurrence_report_number",
             "datetime_created",
             "lodgement_date",

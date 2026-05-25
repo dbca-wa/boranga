@@ -194,6 +194,25 @@
                             </template>
                         </div>
                     </div>
+                    <div
+                        v-if="occurrence_report_obj.migrated_from_id"
+                        class="row mb-3"
+                    >
+                        <label
+                            for="migrated_from_id"
+                            class="col-sm-3 col-form-label"
+                            >Migrated From ID:</label
+                        >
+                        <div class="col-sm-9">
+                            <input
+                                id="migrated_from_id"
+                                :value="occurrence_report_obj.migrated_from_id"
+                                disabled
+                                type="text"
+                                class="form-control"
+                            />
+                        </div>
+                    </div>
                     <div class="row mb-3">
                         <label for="" class="col-sm-3 col-form-label"
                             >Previous Name:</label
@@ -280,24 +299,24 @@
                             </template>
                         </div>
                     </div>
-                </div>
-                <div
-                    v-if="occurrence_report_obj.migrated_from_id"
-                    class="row mb-3"
-                >
-                    <label
-                        for="migrated_from_id"
-                        class="col-sm-3 col-form-label"
-                        >Migrated From ID:</label
+                    <div
+                        v-if="occurrence_report_obj.migrated_from_id"
+                        class="row mb-3"
                     >
-                    <div class="col-sm-9">
-                        <input
-                            id="migrated_from_id"
-                            :value="occurrence_report_obj.migrated_from_id"
-                            disabled
-                            type="text"
-                            class="form-control"
-                        />
+                        <label
+                            for="migrated_from_id"
+                            class="col-sm-3 col-form-label"
+                            >Migrated From ID:</label
+                        >
+                        <div class="col-sm-9">
+                            <input
+                                id="migrated_from_id"
+                                :value="occurrence_report_obj.migrated_from_id"
+                                disabled
+                                type="text"
+                                class="form-control"
+                            />
+                        </div>
                     </div>
                 </div>
                 <div class="row mb-3">
