@@ -14,7 +14,7 @@ from boranga.components.users.models import SubmitterCategory
 from ..base import ExtractionResult, SourceAdapter
 from ..sources import Source
 from . import schema
-from .tec_shared import TEC_USER_LOOKUP
+from .tec_shared import DUMMY_TEC_USER, TEC_USER_LOOKUP
 
 # Lookup submitter category by name (not hardcoded ID)
 SUBMITTER_CATEGORY_DBCA = fk_lookup_static(
@@ -131,6 +131,30 @@ def get_occurrence_report_content_type_id():
     return _OCR_CONTENT_TYPE_ID
 
 
+# Cache for the dummy TEC user's full name to avoid repeated DB queries
+_DUMMY_TEC_FULL_NAME_CACHE = None
+
+
+def _get_dummy_tec_full_name() -> str:
+    """Return the full name of the dummy TEC user, falling back to 'DBCA'."""
+    global _DUMMY_TEC_FULL_NAME_CACHE
+    if _DUMMY_TEC_FULL_NAME_CACHE is not None:
+        return _DUMMY_TEC_FULL_NAME_CACHE
+    try:
+        from ledger_api_client.ledger_models import EmailUserRO
+
+        user = EmailUserRO.objects.filter(email__iexact=DUMMY_TEC_USER).first()
+        if user:
+            full_name = user.get_full_name()
+            if full_name and full_name.strip():
+                _DUMMY_TEC_FULL_NAME_CACHE = full_name.strip()
+                return _DUMMY_TEC_FULL_NAME_CACHE
+    except Exception:
+        pass
+    _DUMMY_TEC_FULL_NAME_CACHE = "DBCA"
+    return _DUMMY_TEC_FULL_NAME_CACHE
+
+
 class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
     source_key = Source.TEC_SITE_VISITS.value
     domain = "occurrence_report"
@@ -140,17 +164,16 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
 
     @staticmethod
     def _get_full_name_or_default(value, ctx):
-        """Call get_full_name() on EmailUserRO object, return 'DBCA' if None/error."""
-        if value is None:
-            return _result("DBCA")
-        try:
-            if hasattr(value, "get_full_name"):
-                full_name = value.get_full_name()
-                if full_name and full_name.strip():
-                    return _result(full_name.strip())
-        except Exception:
-            pass
-        return _result("DBCA")
+        """Call get_full_name() on EmailUserRO object, fall back to dummy TEC user's name."""
+        if value is not None:
+            try:
+                if hasattr(value, "get_full_name"):
+                    full_name = value.get_full_name()
+                    if full_name and full_name.strip():
+                        return _result(full_name.strip())
+            except Exception:
+                pass
+        return _result(_get_dummy_tec_full_name())
 
     PIPELINES = {
         "internal_application": [static_value_factory(True)],
