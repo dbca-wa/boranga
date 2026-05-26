@@ -502,6 +502,7 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
             "occurrence_name_text",
             "region",
             "district",
+            "site",
         )
         datatables_always_serialize = (
             "id",
