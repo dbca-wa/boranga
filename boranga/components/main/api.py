@@ -37,6 +37,7 @@ class HelpTextEntryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = HelpTextEntry.objects.active()
     serializer_class = HelpTextEntrySerializer
     lookup_field = "section_id"
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         qs = super().get_queryset()
