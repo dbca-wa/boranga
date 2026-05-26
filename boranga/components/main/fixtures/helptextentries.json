@@ -766,5 +766,17 @@
       "authenticated_users_only": true,
       "internal_users_only": true
     }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 68,
+    "fields": {
+      "archived": false,
+      "section_id": "pris_collection_notice",
+      "text": "<p class=\"mb-0\">The Department of Biodiversity, Conservation and Attractions (DBCA) collects this personal information to contact you in relation to your access to Boranga.</p><p class=\"mb-0\">We may share this information with other organisations/individuals, in order to advise of your validity of access to this database.</p><p class=\"mb-0\">If you choose not to provide contact details, we will be unable to grant access to this database.</p><p class=\"mb-0\">For further details on how DBCA manage your personal information, you can read our <a href=\"https://www.dbca.wa.gov.au/about-us/legislation/corporate-policies\" target=\"_blank\" rel=\"noopener noreferrer\">Privacy Policy</a>. If you have any questions about how your personal information will be handled, or if you would like to access your personal information, please contact DBCA at <a href=\"mailto:privacy@dbca.wa.gov.au\">privacy@dbca.wa.gov.au</a>.</p>",
+      "icon_with_popover": false,
+      "authenticated_users_only": true,
+      "internal_users_only": false
+    }
   }
 ]

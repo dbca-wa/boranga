@@ -78,6 +78,7 @@
                     {{ conservation_status_obj.conservation_status_number }}
                 </h4>
             </div>
+            <PrisCollectionNotice class="mb-3" />
             <ProposalConservationStatus
                 v-if="conservation_status_obj"
                 id="ConservationStatusStart"
@@ -248,12 +249,14 @@
 <script>
 import ProposalConservationStatus from '@/components/form_conservation_status.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
+import PrisCollectionNotice from '@/components/forms/pris_collection_notice.vue';
 import { api_endpoints, helpers } from '@/utils/hooks';
 export default {
     name: 'ExternalConservationStatusProposal',
     components: {
         ProposalConservationStatus,
         FormSection,
+        PrisCollectionNotice,
     },
     beforeRouteEnter: function (to, from, next) {
         if (to.params.conservation_status_id) {
