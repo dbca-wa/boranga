@@ -86,7 +86,15 @@ def save_document(request, instance, comms_instance, document_type, input_name=N
         _file = request.data.get("_file")
 
         if document_type == "shapefile_document":
-            document = instance.shapefile_documents.get_or_create(input_name=input_name, name=filename)[0]
+            existing = instance.shapefile_documents.filter(input_name=input_name, name=filename).order_by("id")
+            if existing.count() > 1:
+                # Duplicates exist (race condition artifact); keep the oldest, delete the rest
+                document = existing.first()
+                existing.exclude(pk=document.pk).delete()
+            elif existing.count() == 1:
+                document = existing.first()
+            else:
+                document = instance.shapefile_documents.create(input_name=input_name, name=filename)
         else:
             raise ValidationError(f"Invalid document type {document_type}")
 

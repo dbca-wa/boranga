@@ -323,6 +323,8 @@ export default {
             return {
                 data: 'can_be_processed',
                 visible: false,
+                searchable: false,
+                orderable: false,
             };
         },
         column_can_user_process: function () {

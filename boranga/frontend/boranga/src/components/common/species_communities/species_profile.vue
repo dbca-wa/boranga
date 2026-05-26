@@ -520,10 +520,7 @@
                                 placeholder=""
                             />
                         </div>
-                        <div
-                            v-if="!isReadOnly"
-                            class="col-sm-3 d-flex align-items-center"
-                        >
+                        <div class="col-sm-3 d-flex align-items-center">
                             <div class="form-check form-check-inline">
                                 <input
                                     id="noo_auto"
@@ -599,10 +596,7 @@
                                 >
                             </div>
                         </div>
-                        <div
-                            v-if="!isReadOnly"
-                            class="col-sm-3 d-flex align-items-center"
-                        >
+                        <div class="col-sm-3 d-flex align-items-center">
                             <div class="form-check form-check-inline">
                                 <input
                                     id="eoo_auto"
@@ -716,7 +710,7 @@
                             </div>
                         </div>
                         <div
-                            v-if="!isReadOnly && !isFauna"
+                            v-if="!isFauna"
                             class="col-sm-3 d-flex align-items-center"
                         >
                             <div class="form-check form-check-inline">

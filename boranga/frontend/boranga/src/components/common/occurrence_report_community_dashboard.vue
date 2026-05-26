@@ -117,13 +117,14 @@
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div id="select_submitter" class="form-group">
-                        <label for="ocr_submitter_lookup">Submitter:</label>
-                        <select
-                            id="ocr_submitter_lookup"
-                            ref="ocr_submitter_lookup"
-                            name="ocr_submitter_lookup"
+                    <div class="form-group">
+                        <label for="ocr_community_site_lookup">Site:</label>
+                        <input
+                            id="ocr_community_site_lookup"
+                            v-model="filterOCRCommunitySite"
+                            type="text"
                             class="form-control"
+                            placeholder="Search Site"
                         />
                     </div>
                 </div>
@@ -136,6 +137,17 @@
                             id="ocr_assessor_lookup"
                             ref="ocr_assessor_lookup"
                             name="ocr_assessor_lookup"
+                            class="form-control"
+                        />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div id="select_submitter" class="form-group">
+                        <label for="ocr_submitter_lookup">Submitter:</label>
+                        <select
+                            id="ocr_submitter_lookup"
+                            ref="ocr_submitter_lookup"
+                            name="ocr_submitter_lookup"
                             class="form-control"
                         />
                     </div>
@@ -426,6 +438,11 @@ export default {
             required: false,
             default: 'filterOCRCommunityLastModifiedToDate',
         },
+        filterOCRCommunitySite_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunitySite',
+        },
     },
     data() {
         return {
@@ -590,6 +607,13 @@ export default {
                   )
                 : '',
 
+            filterOCRCommunitySite: (() => {
+                const v = sessionStorage.getItem(
+                    this.filterOCRCommunitySite_cache
+                );
+                return v && v !== 'all' ? v : '';
+            })(),
+
             filterListsCommunity: {},
             filterRegionDistrict: {},
             occurrence_list: [],
@@ -632,6 +656,7 @@ export default {
                 this.filterOCRCommunityRegion.length === 0 &&
                 this.filterOCRCommunityDistrict.length === 0 &&
                 this.filterOCRCommunityLastModifiedBy === 'all' &&
+                this.filterOCRCommunitySite === '' &&
                 this.filterOCRCommunityApprovedFromDate === '' &&
                 this.filterOCRCommunityApprovedToDate === '' &&
                 this.filterOCRCommunityLastModifiedFromDate === '' &&
@@ -666,6 +691,7 @@ export default {
                 'Migrated From ID',
                 'Region',
                 'District',
+                'Site',
                 'Submitted on',
                 'Submitter',
                 'Approved Date',
@@ -915,6 +941,22 @@ export default {
                 },
             };
         },
+        column_site: function () {
+            return {
+                data: 'site',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                render: function (data, type, full) {
+                    if (full.site) {
+                        let value = full.site;
+                        let result = helpers.dtPopover(value, 30, 'hover');
+                        return type == 'export' ? value : result;
+                    }
+                    return '';
+                },
+            };
+        },
         datatable_options: function () {
             let vm = this;
             let columns;
@@ -955,6 +997,7 @@ export default {
                 vm.column_migrated_from_id,
                 vm.column_region,
                 vm.column_district,
+                vm.column_site,
                 vm.column_lodgement_date,
                 vm.column_submitter,
                 vm.column_approved_date,
@@ -1028,6 +1071,7 @@ export default {
                                 : 'all';
                         d.filter_last_modified_by =
                             vm.filterOCRCommunityLastModifiedBy;
+                        d.filter_site = vm.filterOCRCommunitySite;
                         d.filter_approved_from_date =
                             vm.filterOCRCommunityApprovedFromDate;
                         d.filter_approved_to_date =
@@ -1279,6 +1323,17 @@ export default {
             sessionStorage.setItem(
                 vm.filterOCRCommunityLastModifiedToDate_cache,
                 vm.filterOCRCommunityLastModifiedToDate
+            );
+        },
+        filterOCRCommunitySite: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunitySite_cache,
+                vm.filterOCRCommunitySite
             );
         },
     },

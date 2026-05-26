@@ -22,20 +22,6 @@
                     />
                 </div>
             </div>
-            <div v-if="occurrence_obj.migrated_from_id" class="row mb-3">
-                <label for="migrated_from_id" class="col-sm-3 control-label"
-                    >Migrated From ID:</label
-                >
-                <div class="col-sm-9">
-                    <input
-                        id="migrated_from_id"
-                        :value="occurrence_obj.migrated_from_id"
-                        disabled
-                        type="text"
-                        class="form-control"
-                    />
-                </div>
-            </div>
             <div class="row mb-3">
                 <label for="" class="col-sm-3 control-label fw-bold"
                     >Community Name: <span class="text-danger">*</span></label
@@ -47,6 +33,34 @@
                         :disabled="isReadOnly"
                         :name="community_name_lookup"
                         class="form-select"
+                    />
+                </div>
+            </div>
+            <div class="row mb-3">
+                <label for="" class="col-sm-3 control-label"
+                    >Community ID:</label
+                >
+                <div class="col-sm-9">
+                    <input
+                        id="community_common_id"
+                        :value="occurrence_obj.community_common_id"
+                        disabled
+                        type="text"
+                        class="form-control"
+                    />
+                </div>
+            </div>
+            <div v-if="occurrence_obj.migrated_from_id" class="row mb-3">
+                <label for="migrated_from_id" class="col-sm-3 control-label"
+                    >Migrated From ID:</label
+                >
+                <div class="col-sm-9">
+                    <input
+                        id="migrated_from_id"
+                        :value="occurrence_obj.migrated_from_id"
+                        disabled
+                        type="text"
+                        class="form-control"
                     />
                 </div>
             </div>
@@ -255,11 +269,14 @@ export default {
                     let data = e.params.data.id;
                     vm.occurrence_obj.community = data;
                     vm.occurrence_obj.community_id = e.params.data.id;
+                    vm.occurrence_obj.community_common_id =
+                        e.params.data.community_common_id;
                     vm.community_display = e.params.data.text;
                     vm.taxon_previous_name = e.params.data.taxon_previous_name;
                 })
                 .on('select2:unselect', function () {
                     vm.occurrence_obj.community_id = null;
+                    vm.occurrence_obj.community_common_id = null;
                     vm.community_display = '';
                     vm.taxon_previous_name = '';
                 })

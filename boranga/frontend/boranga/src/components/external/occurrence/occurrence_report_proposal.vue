@@ -80,6 +80,8 @@
                 </h3>
             </div>
 
+            <PrisCollectionNotice class="mb-3" />
+
             <ProposalOccurrenceReport
                 v-if="occurrence_report_obj"
                 id="OccurrenceReportStart"
@@ -235,12 +237,14 @@
 <script>
 import ProposalOccurrenceReport from '@/components/form_occurrence_report.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
+import PrisCollectionNotice from '@/components/forms/pris_collection_notice.vue';
 import { api_endpoints, helpers } from '@/utils/hooks';
 export default {
     name: 'ExternalOccurrenceReportProposal',
     components: {
         ProposalOccurrenceReport,
         FormSection,
+        PrisCollectionNotice,
     },
     beforeRouteEnter: function (to, from, next) {
         if (to.params.occurrence_report_id) {

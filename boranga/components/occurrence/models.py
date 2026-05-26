@@ -1533,7 +1533,7 @@ class OccurrenceReportApprovalDetails(BaseModel):
         "Occurrence", on_delete=models.PROTECT, null=True, blank=True
     )  # If being added to an existing occurrence
     new_occurrence_name = models.CharField(max_length=200, null=True, blank=True)
-    officer = models.IntegerField(null=True)  # EmailUserRO
+    officer = models.IntegerField()  # EmailUserRO
     copy_ocr_comments_to_occ_comments = models.BooleanField(default=True)
     details = models.TextField(blank=True, default="")
     cc_email = models.TextField(null=True)
@@ -6806,9 +6806,31 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     current_model_instance.submitter = self.email_user
                     current_model_instance.lodgement_date = timezone.now()
                 else:
-                    current_model_instance = OccurrenceReport.objects.get(migrated_from_id=prefixed_migrated_from_id)
-                    for field, value in model_data.items():
-                        setattr(current_model_instance, field, value)
+                    try:
+                        current_model_instance = OccurrenceReport.objects.get(
+                            migrated_from_id=prefixed_migrated_from_id
+                        )
+                    except OccurrenceReport.DoesNotExist:
+                        # A prior row with this ID was attempted but its savepoint was rolled
+                        # back due to an error. The ID is still tracked in ocr_migrated_from_ids
+                        # (in-memory, not rolled back). Report a clear error so the user knows
+                        # this row was skipped because its parent row failed.
+                        errors.append(
+                            {
+                                "row_index": row_index,
+                                "error_type": "missing_parent_row",
+                                "data": row,
+                                "error_message": (
+                                    f"Row {row_index} references migrated_from_id "
+                                    f"'{ocr_migrated_from_id}' but the earlier row with that "
+                                    "ID failed to import. Fix the earlier row's errors first."
+                                ),
+                            }
+                        )
+                        return
+                    else:
+                        for field, value in model_data.items():
+                            setattr(current_model_instance, field, value)
 
                 # Bulk-imported OCRs are always internal applications.
                 current_model_instance.internal_application = True

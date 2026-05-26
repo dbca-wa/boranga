@@ -54,6 +54,7 @@ from boranga.components.occurrence.models import (
     OccurrenceReportDocument,
     OccurrenceReportGeometry,
     OccurrenceReportUserAction,
+    OccurrenceSite,
     OCCVegetationStructure,
     OCRAnimalObservation,
     OCRAssociatedSpecies,
@@ -2374,6 +2375,70 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 except Exception:
                     logger.exception("Failed to bulk create TEC associated species")
 
+        # Link TEC site-visit ORFs to their corresponding OccurrenceSite via
+        # related_occurrence_reports (M2M). The adapter stores the raw S_ID from
+        # SITES.csv in canonical["_s_id"]. The OCC migration run sets
+        # OccurrenceSite.site_name = S_ID, so we match by (occurrence, site_name).
+        sv_site_link_data = []
+        for mid, op in op_map.items():
+            if not mid.startswith("tec-site-"):
+                continue
+            ocr = target_map.get(mid)
+            if not ocr or not ocr.pk:
+                continue
+            merged = op.get("merged") or {}
+            s_id = merged.get("_s_id")
+            occ_mig_id = merged.get("Occurrence__migrated_from_id")
+            if s_id and occ_mig_id:
+                sv_site_link_data.append((ocr.pk, s_id, occ_mig_id))
+
+        if sv_site_link_data:
+            logger.info(
+                "OccurrenceReportImporter: linking %d TEC site-visit ORFs to OccurrenceSites",
+                len(sv_site_link_data),
+            )
+            occ_mig_ids = list({occ_mig_id for _, _, occ_mig_id in sv_site_link_data})
+            sites_by_occ_and_name = {}
+            for site in OccurrenceSite.objects.filter(occurrence__migrated_from_id__in=occ_mig_ids).select_related(
+                "occurrence"
+            ):
+                key = (site.occurrence.migrated_from_id, site.site_name)
+                sites_by_occ_and_name[key] = site
+
+            SiteOcrThrough = OccurrenceSite.related_occurrence_reports.through
+            existing_site_links = set(
+                SiteOcrThrough.objects.filter(
+                    occurrencereport_id__in=[ocr_pk for ocr_pk, _, _ in sv_site_link_data]
+                ).values_list("occurrencesite_id", "occurrencereport_id")
+            )
+            site_through_to_create = []
+            for ocr_pk, s_id, occ_mig_id in sv_site_link_data:
+                site = sites_by_occ_and_name.get((occ_mig_id, s_id))
+                if site and (site.pk, ocr_pk) not in existing_site_links:
+                    site_through_to_create.append(SiteOcrThrough(occurrencesite_id=site.pk, occurrencereport_id=ocr_pk))
+
+            if site_through_to_create:
+                try:
+                    SiteOcrThrough.objects.bulk_create(site_through_to_create, batch_size=BATCH, ignore_conflicts=True)
+                    logger.info(
+                        "OccurrenceReportImporter: created %d OccurrenceSite<->ORF links",
+                        len(site_through_to_create),
+                    )
+                except Exception:
+                    logger.exception("Failed to bulk_create OccurrenceSite links; falling back to individual adds")
+                    for link in site_through_to_create:
+                        try:
+                            SiteOcrThrough.objects.get_or_create(
+                                occurrencesite_id=link.occurrencesite_id,
+                                occurrencereport_id=link.occurrencereport_id,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to link OCR pk=%s to OccurrenceSite pk=%s",
+                                link.occurrencereport_id,
+                                link.occurrencesite_id,
+                            )
+
         # Slim op_map down to only the fields still needed from here onward.
         # Kept fields (used after this point):
         #   - identification_data: create_meta loop (~line 3240)
@@ -2745,7 +2810,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 "Bulk-creating %d OccurrenceReportDocument records (RSS=%.0fMB)", len(docs_to_create), _rss_mb()
             )
             try:
-                OccurrenceReportDocument.objects.bulk_create(docs_to_create, batch_size=BATCH)
+                created_docs = OccurrenceReportDocument.objects.bulk_create(docs_to_create, batch_size=BATCH)
+                # Set document_number for bulk-created records (model save() is bypassed by bulk_create).
+                for doc in created_docs:
+                    doc.document_number = f"D{doc.pk}"
+                if created_docs:
+                    OccurrenceReportDocument.objects.bulk_update(created_docs, ["document_number"], batch_size=BATCH)
                 # Fix uploaded_date via batched SQL UPDATE (auto_now_add prevents direct assignment).
                 # Group by date to minimise round-trips instead of one query per doc.
                 if docs_need_uploaded_date:

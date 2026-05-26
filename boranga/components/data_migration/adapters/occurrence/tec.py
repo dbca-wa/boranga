@@ -27,9 +27,10 @@ from boranga.components.species_and_communities.models import (
 
 def tec_comment_transform(val, ctx):
     row = ctx.row
+    # _temp_occ_other is separated from the rest by a double line break.
+    occ_other = row.get("_temp_occ_other")
+
     parts = []
-    if row.get("_temp_occ_other"):
-        parts.append(row["_temp_occ_other"])
     if row.get("_temp_occ_data"):
         parts.append(row["_temp_occ_data"])
     if row.get("_temp_occ_original_area"):
@@ -37,20 +38,29 @@ def tec_comment_transform(val, ctx):
     if row.get("_temp_occ_area_accuracy"):
         parts.append(f"Occurrence Original Area Accuracy: {row['_temp_occ_area_accuracy']}")
     if row.get("_temp_occ_beard_map_code"):
-        parts.append(f"Beard Map: {row['_temp_occ_beard_map_code']}")
+        from boranga.components.data_migration import mappings as dm_mappings
+
+        beard_code_raw = row["_temp_occ_beard_map_code"]
+        dm_mappings.preload_map("TEC", "OCC_BEARD_MAP_CODE (BEARD_MAPS)")
+        table = dm_mappings._CACHE.get(("TEC", "OCC_BEARD_MAP_CODE (BEARD_MAPS)"), {})
+        entry = table.get(dm_mappings._norm(beard_code_raw))
+        beard_code = (entry.get("canonical") if entry else None) or beard_code_raw
+        parts.append(f"Beard Map: {beard_code}")
     if row.get("_temp_occ_beard_desc"):
         parts.append(f"Beard Description: {row['_temp_occ_beard_desc']}")
     if row.get("_temp_occ_bush_forever_site_no"):
         parts.append(f"Bush Forever Site Number: {row['_temp_occ_bush_forever_site_no']}")
 
-    # Additional Data
-    additional_data = row.get("_nested_additional_data", [])
-    for item in additional_data:
-        desc = item.get("ADD_DESC")
-        if desc:
-            parts.append(f"Additional Data: {desc}")
+    # _nested_additional_data is intentionally not included here: ADD_DESC values are
+    # stored as structured OccurrenceDocument records by the occurrence handler and
+    # do not need to be duplicated in the free-text comment field.
 
-    return "; ".join(parts)
+    result_parts = []
+    if occ_other:
+        result_parts.append(occ_other)
+    if parts:
+        result_parts.append("; ".join(parts))
+    return "\n\n".join(result_parts)
 
 
 def tec_habitat_notes_transform(val, ctx):
@@ -69,7 +79,7 @@ def tec_habitat_notes_transform(val, ctx):
     if row.get("_temp_occ_classification"):
         parts.append(f"Classification System: {row['_temp_occ_classification']}")
 
-    return "; ".join(parts)
+    return "\n".join(parts)
 
 
 def parse_fire_history_sort_date(value):
@@ -113,7 +123,7 @@ def tec_fire_history_comment_transform(val, ctx):
     # Sort by date descending (most recent first)
     entries.sort(key=lambda x: x[0], reverse=True)
     formatted = [e[1] for e in entries]
-    return "; ".join(formatted)
+    return "\n".join(formatted)
 
 
 def tec_observation_detail_comments_transform(val, ctx):
@@ -172,21 +182,25 @@ DOCUMENT_SUB_CATEGORY_TRANSFORM = build_legacy_map_transform(
 # Use static_value_factory for explicit None assignments
 STATIC_NONE = static_value_factory(None)
 
-# ISO datetime parser — TEC dates carry +0000 but are Perth local time
-DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
+# ISO datetime parser — TEC dates carry +0000 but are Perth local time (always
+# AWST = UTC+8). Use Etc/GMT-8 (fixed offset, no DST) rather than
+# Australia/Perth, which would incorrectly apply UTC+9 for the 2006-2009 WAST
+# DST trial period even though the TEC server clock never followed that trial.
+_TEC_TZ = "Etc/GMT-8"
+DATETIME_ISO_PERTH = datetime_iso_factory(_TEC_TZ)
 
 
 def tec_datetime_updated_transform(val, ctx):
     """Return OCC_DATE_EDITED parsed as datetime, falling back to OCC_DATE_ENTERED."""
     # val is already the OCC_DATE_EDITED value (may be None after blank_to_none)
     if val is not None:
-        parsed = _parse_datetime_iso(val, default_tz="Australia/Perth")
+        parsed = _parse_datetime_iso(val, default_tz=_TEC_TZ)
         if parsed.value is not None:
             return parsed
     # Fallback: use OCC_DATE_ENTERED (mapped to datetime_created in the raw row)
     fallback = ctx.row.get("datetime_created")
     if fallback is not None:
-        return _parse_datetime_iso(fallback, default_tz="Australia/Perth")
+        return _parse_datetime_iso(fallback, default_tz=_TEC_TZ)
     return None
 
 
@@ -282,7 +296,7 @@ PIPELINES = {
     "OccurrenceSite__site_name": [],
     "OccurrenceSite__updated_date": ["blank_to_none", DATETIME_ISO_PERTH],
     "OccurrenceSite__drawn_by": [
-        "strip",
+        lambda val, ctx: ctx.row.get("submitter"),
         "blank_to_none",
         emailuser_by_legacy_username_factory("TEC"),
         default_to_tec_user,
@@ -295,7 +309,12 @@ PIPELINES = {
     "datetime_created": ["strip", "blank_to_none", DATETIME_ISO_PERTH, "required"],
     "datetime_updated": ["strip", "blank_to_none", tec_datetime_updated_transform],
     "modified_by": [],
-    "submitter": [],
+    "submitter": [
+        "strip",
+        "blank_to_none",
+        emailuser_by_legacy_username_factory("TEC"),
+        default_to_tec_user,
+    ],
     "pop_number": [],
     "subpop_code": [],
     "OCCAssociatedSpecies__comment": [],
@@ -311,15 +330,6 @@ class OccurrenceTecAdapter(SourceAdapter):
     PIPELINES = PIPELINES
 
     def extract(self, path: str, **options) -> ExtractionResult:
-        tec_submitter_id = None
-        try:
-            from ledger_api_client.ledger_models import EmailUserRO
-
-            tec_user = EmailUserRO.objects.get(email="boranga.tec@dbca.wa.gov.au")
-            tec_submitter_id = tec_user.id
-        except Exception:
-            pass
-
         occ_path = path
         site_path = None
         fire_path = None
@@ -606,8 +616,6 @@ class OccurrenceTecAdapter(SourceAdapter):
             # Set TEC-specific defaults on canonical row
             canonical_row["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_COMMUNITY)
             canonical_row["locked"] = True
-            if not canonical_row.get("submitter") and tec_submitter_id:
-                canonical_row["submitter"] = tec_submitter_id
 
             joined_rows.append(canonical_row)
 

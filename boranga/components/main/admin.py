@@ -93,6 +93,7 @@ class HelpTextEntryAdmin(CsvExportMixin, ArchivableModelAdminMixin, DeleteProtec
         "authenticated_users_only",
         "internal_users_only",
     ]
+    search_fields = ["section_id", "text"]
 
     def get_readonly_fields(self, request: HttpRequest, obj: Any | None = ...) -> list[str] | tuple[Any, ...]:
         fields = super().get_readonly_fields(request, obj)

@@ -6735,6 +6735,11 @@ export default {
 #featureToast {
     position: absolute;
 }
+#featureToast .table,
+#featureToast .table > :not(caption) > * > * {
+    --bs-table-bg: transparent;
+    --bs-table-accent-bg: transparent;
+}
 .positionToLeft {
     left: 60px;
 }

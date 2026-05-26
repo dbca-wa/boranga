@@ -308,6 +308,7 @@ class OccurrenceSerializer(BaseModelSerializer):
     processing_status = serializers.CharField(source="get_processing_status_display")
     scientific_name = serializers.CharField(source="species.taxonomy.scientific_name", allow_null=True)
     community_name = serializers.CharField(source="community.name", allow_null=True)
+    community_common_id = serializers.CharField(source="community.taxonomy.community_common_id", allow_null=True)
     species_taxonomy_id = serializers.IntegerField(source="species.taxonomy.id", allow_null=True)
     community_id = serializers.IntegerField(source="community.id", allow_null=True)
     group_type = serializers.CharField(source="group_type.name", allow_null=True)
@@ -501,6 +502,7 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
             "occurrence_name_text",
             "region",
             "district",
+            "site",
         )
         datatables_always_serialize = (
             "id",
@@ -1353,6 +1355,7 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
     region = serializers.CharField(source="location.region.name", allow_null=True, read_only=True)
     district = serializers.CharField(source="location.district.name", allow_null=True, read_only=True)
     last_modified_by_name = serializers.SerializerMethodField()
+    site_names = serializers.SerializerMethodField()
     datetime_created = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
     lodgement_date = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
     datetime_updated_display = serializers.DateTimeField(source="datetime_updated", format="%d/%m/%Y", allow_null=True)
@@ -1386,6 +1389,7 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
             "datetime_updated",
             "region",
             "district",
+            "site_names",
             "last_modified_by_name",
             "datetime_created",
             "lodgement_date",
@@ -1409,6 +1413,10 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
             "locked",
             "datetime_updated",
         )
+
+    def get_site_names(self, obj):
+        names = obj.sites.filter(visible=True).values_list("site_name", flat=True)
+        return ", ".join(n for n in names if n)
 
     def get_community_number(self, obj):
         if not obj.community:
@@ -1492,6 +1500,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     species_taxonomy_id = serializers.IntegerField(source="species.taxonomy.id", allow_null=True)
     species_number = serializers.CharField(source="species.species_number", read_only=True)
     community_number = serializers.CharField(source="community.community_number", read_only=True)
+    community_common_id = serializers.CharField(source="community.taxonomy.community_common_id", allow_null=True)
     allowed_assessors = EmailUserSerializer(many=True)
     location = serializers.SerializerMethodField()
     habitat_composition = serializers.SerializerMethodField()
@@ -1531,6 +1540,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
             "species_number",
             "community_number",
             "community_id",
+            "community_common_id",
             "occurrence_report_number",
             "datetime_created",
             "lodgement_date",

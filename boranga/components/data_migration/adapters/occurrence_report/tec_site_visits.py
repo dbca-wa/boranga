@@ -5,6 +5,7 @@ from boranga.components.data_migration.registry import (
     _result,
     build_legacy_map_transform,
     dependent_from_column_factory,
+    emailuser_object_by_legacy_username_factory,
     fk_lookup_static,
     static_value_factory,
 )
@@ -13,7 +14,7 @@ from boranga.components.users.models import SubmitterCategory
 from ..base import ExtractionResult, SourceAdapter
 from ..sources import Source
 from . import schema
-from .tec_shared import TEC_USER_LOOKUP
+from .tec_shared import DUMMY_TEC_USER, TEC_USER_LOOKUP
 
 # Lookup submitter category by name (not hardcoded ID)
 SUBMITTER_CATEGORY_DBCA = fk_lookup_static(
@@ -130,9 +131,49 @@ def get_occurrence_report_content_type_id():
     return _OCR_CONTENT_TYPE_ID
 
 
+# Cache for the dummy TEC user's full name to avoid repeated DB queries
+_DUMMY_TEC_FULL_NAME_CACHE = None
+
+
+def _get_dummy_tec_full_name() -> str:
+    """Return the full name of the dummy TEC user, falling back to 'DBCA'."""
+    global _DUMMY_TEC_FULL_NAME_CACHE
+    if _DUMMY_TEC_FULL_NAME_CACHE is not None:
+        return _DUMMY_TEC_FULL_NAME_CACHE
+    try:
+        from ledger_api_client.ledger_models import EmailUserRO
+
+        user = EmailUserRO.objects.filter(email__iexact=DUMMY_TEC_USER).first()
+        if user:
+            full_name = user.get_full_name()
+            if full_name and full_name.strip():
+                _DUMMY_TEC_FULL_NAME_CACHE = full_name.strip()
+                return _DUMMY_TEC_FULL_NAME_CACHE
+    except Exception:
+        pass
+    _DUMMY_TEC_FULL_NAME_CACHE = "DBCA"
+    return _DUMMY_TEC_FULL_NAME_CACHE
+
+
 class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
     source_key = Source.TEC_SITE_VISITS.value
     domain = "occurrence_report"
+
+    # Reusable transform: USERNAME -> EmailUser object -> full name
+    _EMAILUSER_OBJ = emailuser_object_by_legacy_username_factory("TEC")
+
+    @staticmethod
+    def _get_full_name_or_default(value, ctx):
+        """Call get_full_name() on EmailUserRO object, fall back to dummy TEC user's name."""
+        if value is not None:
+            try:
+                if hasattr(value, "get_full_name"):
+                    full_name = value.get_full_name()
+                    if full_name and full_name.strip():
+                        return _result(full_name.strip())
+            except Exception:
+                pass
+        return _result(_get_dummy_tec_full_name())
 
     PIPELINES = {
         "internal_application": [static_value_factory(True)],
@@ -149,8 +190,11 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
         "OCRObserverDetail__main_observer": [static_value_factory(True)],
         "OCRObserverDetail__visible": [static_value_factory(True)],
         # Task 12334: observer_name from SV_DESCRIBED_BY (mapped by schema, pass through)
-        # SubmitterInformation defaults (Task 12570: name default "DBCA" since SITE_VISITS has no USERNAME column)
-        "SubmitterInformation__name": [static_value_factory("DBCA")],
+        # Task 12570: SubmitterInformation name field - map USERNAME to EmailUser full name
+        "SubmitterInformation__name": [
+            dependent_from_column_factory("submitter", mapping=_EMAILUSER_OBJ),
+            _get_full_name_or_default,
+        ],
         "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
         "SubmitterInformation__organisation": [static_value_factory("DBCA")],
         # OCRLocation defaults from Parent Occurrence
@@ -175,7 +219,8 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
             )
         ],
         # Geometry defaults
-        "OccurrenceReportGeometry__locked": [static_value_factory(True)],
+        # Lock geometry only when the OCR is approved; all other statuses get locked=False
+        "OccurrenceReportGeometry__locked": [static_value_factory(False)],
         "OccurrenceReportGeometry__show_on_map": [static_value_factory(True)],
         "OccurrenceReportGeometry__geometry": [
             lambda val, ctx: _result(make_geometry(ctx.row.get("GDA94LAT"), ctx.row.get("GDA94LONG")))
@@ -257,7 +302,13 @@ class OccurrenceReportTecSiteVisitsAdapter(SourceAdapter):
                 canonical["migrated_from_id"] = f"tec-site-{visit_id}"
 
             # Linking to Parent Occurrence via SITES lookup
+            # S_ID is the unique site identifier that cross-references SITES.csv.
+            # It is also the OccurrenceSite.site_name set during the OCC migration
+            # run, so we preserve it as _s_id for the handler to link this ORF to
+            # the correct OccurrenceSite via related_occurrence_reports (M2M).
             s_id = raw.get("S_ID")
+            if s_id:
+                canonical["_s_id"] = s_id
             if s_id and s_id in sites_lookup:
                 site_row = sites_lookup[s_id]
 
