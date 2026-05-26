@@ -7178,8 +7178,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         "error_message": f"Error creating model instance: {e}",
                     }
                 )
+                return
             except ValidationError as e:
-                logger.error(f"Validation error saving model instance: {e}")
+                logger.warning(f"Validation error saving model instance: {e}")
                 errors.append(
                     {
                         "row_index": row_index,
@@ -7188,6 +7189,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         "error_message": str(e.message if hasattr(e, "message") else e),
                     }
                 )
+                return
 
         # Post-processing: propagate OccurrenceReport.observation_date -> obs_date on
         # any child model instance that has an obs_date field and was not given an
@@ -7958,8 +7960,8 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         try:
             import_task.validate_headers(buffer, self)
         except ValidationError as e:
-            logger.error(f"Error validating headers: {e}")
-            logger.error(traceback.format_exc())
+            logger.warning(f"Error validating headers: {e}")
+            logger.warning(traceback.format_exc())
             errors.append(
                 {
                     "error_type": "header_validation",
@@ -7986,8 +7988,8 @@ class OccurrenceReportBulkImportSchema(BaseModel):
         try:
             import_task.process_row(ocr_migrated_from_ids, 0, headers, row, errors)
         except Exception as e:
-            logger.error(f"Error processing sample row: {e}")
-            logger.error(traceback.format_exc())
+            logger.warning(f"Error processing sample row: {e}")
+            logger.warning(traceback.format_exc())
             errors.append(
                 {
                     "error_type": "row_validation",
