@@ -2810,7 +2810,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 "Bulk-creating %d OccurrenceReportDocument records (RSS=%.0fMB)", len(docs_to_create), _rss_mb()
             )
             try:
-                OccurrenceReportDocument.objects.bulk_create(docs_to_create, batch_size=BATCH)
+                created_docs = OccurrenceReportDocument.objects.bulk_create(docs_to_create, batch_size=BATCH)
+                # Set document_number for bulk-created records (model save() is bypassed by bulk_create).
+                for doc in created_docs:
+                    doc.document_number = f"D{doc.pk}"
+                if created_docs:
+                    OccurrenceReportDocument.objects.bulk_update(created_docs, ["document_number"], batch_size=BATCH)
                 # Fix uploaded_date via batched SQL UPDATE (auto_now_add prevents direct assignment).
                 # Group by date to minimise round-trips instead of one query per doc.
                 if docs_need_uploaded_date:
