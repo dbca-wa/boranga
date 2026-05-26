@@ -941,6 +941,13 @@ def lookup_model_value_factory(model_name: str, field_name: str, static_value: A
         from django.apps import apps
         from django.core.exceptions import FieldDoesNotExist
 
+        # When a static fallback value is configured, treat this transform as a
+        # "fill-in-if-missing" step: pass through the incoming value unchanged if
+        # it is already resolved (not None). This prevents the static fallback from
+        # overwriting a successfully mapped value from a prior pipeline step.
+        if static_value is not None and value is not None:
+            return _result(value)
+
         # Determine value to search: either the static config or the row value
         search_value = static_value if static_value is not None else value
 
