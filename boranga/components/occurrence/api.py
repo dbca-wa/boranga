@@ -2661,6 +2661,10 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
         if filter_occurrence_name and not filter_occurrence_name.lower() == "all":
             queryset = queryset.filter(occurrence_name__icontains=filter_occurrence_name)
 
+        filter_site = request.POST.get("filter_site")
+        if filter_site:
+            queryset = queryset.filter(sites__site_name__icontains=filter_site).distinct()
+
         filter_scientific_name = request.POST.get("filter_scientific_name")
         if filter_scientific_name and not filter_scientific_name.lower() == "all":
             queryset = queryset.filter(species__taxonomy__id=filter_scientific_name)

@@ -1355,6 +1355,7 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
     region = serializers.CharField(source="location.region.name", allow_null=True, read_only=True)
     district = serializers.CharField(source="location.district.name", allow_null=True, read_only=True)
     last_modified_by_name = serializers.SerializerMethodField()
+    site_names = serializers.SerializerMethodField()
     datetime_created = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
     lodgement_date = serializers.DateTimeField(format="%d/%m/%Y", allow_null=True)
     datetime_updated_display = serializers.DateTimeField(source="datetime_updated", format="%d/%m/%Y", allow_null=True)
@@ -1388,6 +1389,7 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
             "datetime_updated",
             "region",
             "district",
+            "site_names",
             "last_modified_by_name",
             "datetime_created",
             "lodgement_date",
@@ -1411,6 +1413,10 @@ class ListOccurrenceSerializer(OccurrenceSerializer):
             "locked",
             "datetime_updated",
         )
+
+    def get_site_names(self, obj):
+        names = obj.sites.filter(visible=True).values_list("site_name", flat=True)
+        return ", ".join(n for n in names if n)
 
     def get_community_number(self, obj):
         if not obj.community:
