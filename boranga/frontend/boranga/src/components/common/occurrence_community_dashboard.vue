@@ -598,9 +598,9 @@ export default {
                 'Last Modified Date',
                 'Created Date',
                 'Activated Date',
+                'Site(s)',
                 'Status',
                 'Action',
-                'Site(s)',
             ];
         },
         column_id: function () {
@@ -876,9 +876,9 @@ export default {
                     vm.column_last_modified_date,
                     vm.column_created_date,
                     vm.column_activated_date,
+                    vm.column_site,
                     vm.column_status,
                     vm.column_action,
-                    vm.column_site,
                 ];
                 search = true;
             }
