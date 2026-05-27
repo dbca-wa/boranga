@@ -192,56 +192,82 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                 for oa in created_ocr_assoc:
                     existing_ocr_assoc[oa.occurrence_report_id] = oa
 
-            # Step 2: Collect unique taxonomy_ids (not taxon_name_id!) needed for AssociatedSpeciesTaxonomy
-            # Following occurrence_reports.py pattern: use taxonomy.pk (id), not taxon_name_id
-            taxonomy_ids_needed = set()
-            for row in rows:
-                tid_raw = row.get("taxon_name_id")
-                if not tid_raw:
-                    continue
-                try:
-                    taxon_name_id = int(tid_raw)
-                except ValueError:
-                    continue
+            # Step 2: Collect one (site_visit_id, taxonomy.pk, comments) spec per unique
+            # (site_visit, taxonomy) pair.  We must NOT deduplicate globally by taxonomy.pk
+            # alone because each site visit may have different comments for the same species,
+            # and AST rows are per-parent (comments is parent-specific data).
+            seen_for_ast_creation = set()
+            ast_spec_keys = []  # ordered list of (vid_str, taxonomy.pk) — matches create_objs
+            ast_spec_objs = []  # matching AssociatedSpeciesTaxonomy instances to bulk_create
 
-                taxonomy = taxonomies.get(taxon_name_id)
-                if taxonomy:
-                    taxonomy_ids_needed.add(taxonomy.pk)  # Use taxonomy.pk (the id field)
+            for vid, species_rows in grouped.items():
+                if vid not in ocrs:
+                    continue  # Skip site visits with no matching OCR (errors logged in Step 5)
+                for s_row in species_rows:
+                    tid_raw = s_row.get("taxon_name_id")
+                    if not tid_raw:
+                        continue
+                    try:
+                        taxon_name_id = int(tid_raw)
+                    except ValueError:
+                        continue
+                    taxonomy = taxonomies.get(taxon_name_id)
+                    if not taxonomy:
+                        continue
+                    dedup_key = (str(vid), taxonomy.pk)
+                    if dedup_key in seen_for_ast_creation:
+                        continue
+                    seen_for_ast_creation.add(dedup_key)
+                    comments = s_row.get("comments") or ""
+                    ast_spec_keys.append(dedup_key)
+                    ast_spec_objs.append(AssociatedSpeciesTaxonomy(taxonomy_id=taxonomy.pk, comments=comments))
 
-            # Step 3 & 4: Always create fresh AssociatedSpeciesTaxonomy rows — never reuse existing ones.
-            # AST rows contain parent-specific data (comments, species_role) so sharing them across
-            # different parent records causes cross-contamination.
+            # Step 3 & 4: Always create fresh AssociatedSpeciesTaxonomy rows — one per
+            # (site_visit, taxonomy) pair so that per-parent fields like `comments` are
+            # never shared across different occurrence reports.
+            # taxid_to_ast is keyed on (vid_str, taxonomy.pk) to match Step 5 lookups.
             taxid_to_ast = {}
 
-            if taxonomy_ids_needed:
-                create_objs = [AssociatedSpeciesTaxonomy(taxonomy_id=tid) for tid in taxonomy_ids_needed]
-
+            if ast_spec_objs:
                 try:
-                    created = AssociatedSpeciesTaxonomy.objects.bulk_create(create_objs, batch_size=500)
+                    created = AssociatedSpeciesTaxonomy.objects.bulk_create(ast_spec_objs, batch_size=500)
                     logger.info(f"Bulk created {len(created)} new AssociatedSpeciesTaxonomy records.")
                     stats["ast_created"] = len(created)
                     # Django 4.1+ on Postgres sets PKs on returned instances directly.
-                    for ast in created:
-                        if ast.pk and ast.taxonomy_id not in taxid_to_ast:
-                            taxid_to_ast[ast.taxonomy_id] = ast
-                    # Fallback: fetch back any that didn't get their PK set.
-                    unfetched = taxonomy_ids_needed - set(taxid_to_ast.keys())
-                    if unfetched:
-                        for ast in AssociatedSpeciesTaxonomy.objects.filter(
-                            taxonomy_id__in=list(unfetched), species_role__isnull=True
-                        ).order_by("-pk"):
-                            if ast.taxonomy_id not in taxid_to_ast:
-                                taxid_to_ast[ast.taxonomy_id] = ast
+                    for key, ast in zip(ast_spec_keys, created):
+                        if ast.pk:
+                            taxid_to_ast[key] = ast
+                    # Fallback: re-fetch any that didn't get their PK set.
+                    missing_keys = [k for k in ast_spec_keys if k not in taxid_to_ast]
+                    if missing_keys:
+                        missing_tax_pks = list({k[1] for k in missing_keys})
+                        fetched = {
+                            ast.pk: ast
+                            for ast in AssociatedSpeciesTaxonomy.objects.filter(
+                                taxonomy_id__in=missing_tax_pks
+                            ).order_by("-pk")
+                        }
+                        # Re-associate by matching order (best-effort fallback)
+                        for key in missing_keys:
+                            _, tax_pk = key
+                            candidate = next(
+                                (a for a in fetched.values() if a.taxonomy_id == tax_pk and key not in taxid_to_ast),
+                                None,
+                            )
+                            if candidate:
+                                taxid_to_ast[key] = candidate
                 except Exception as e:
                     logger.error(f"Bulk create failed: {e}. Falling back to individual creation.")
                     created_count = 0
-                    for tid in taxonomy_ids_needed:
+                    for key, obj in zip(ast_spec_keys, ast_spec_objs):
                         try:
-                            ast = AssociatedSpeciesTaxonomy.objects.create(taxonomy_id=tid)
-                            taxid_to_ast[ast.taxonomy_id] = ast
+                            ast = AssociatedSpeciesTaxonomy.objects.create(
+                                taxonomy_id=obj.taxonomy_id, comments=obj.comments
+                            )
+                            taxid_to_ast[key] = ast
                             created_count += 1
                         except Exception as inner_e:
-                            logger.error(f"Failed to create AssociatedSpeciesTaxonomy for taxonomy_id={tid}: {inner_e}")
+                            logger.error(f"Failed to create AssociatedSpeciesTaxonomy for key={key}: {inner_e}")
                     stats["ast_created"] = created_count
 
             # Step 5: Build many-to-many relationships
@@ -355,7 +381,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                         )
                         continue
 
-                    ast = taxid_to_ast.get(taxonomy.pk)
+                    ast = taxid_to_ast.get((str(vid), taxonomy.pk))
                     if ast:
                         m2m_by_ocr_assoc[ocr_assoc].add(ast)
                     else:
@@ -366,7 +392,7 @@ class AssociatedSpeciesImporter(BaseSheetImporter):
                                 "taxon_name_id": taxon_name_id,
                                 "level": "error",
                                 "reason": "ast_not_found",
-                                "message": f"AssociatedSpeciesTaxonomy not found for taxonomy.pk {taxonomy.pk}",
+                                "message": f"AssociatedSpeciesTaxonomy not found for (vid={vid}, taxonomy.pk={taxonomy.pk})",
                                 "row": s_row,
                             }
                         )
