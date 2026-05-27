@@ -1705,6 +1705,15 @@ export default {
             );
         },
     },
+    watch: {
+        allowBlankDisabled(disabled) {
+            // When a field becomes non-nullable with no default, force allow_blank to false.
+            // This handles runtime changes (e.g. removing a default value).
+            if (disabled && this.selectedColumn && this.selectedColumn.id) {
+                this.selectedColumn.xlsx_data_validation_allow_blank = false;
+            }
+        },
+    },
     created() {
         this.fetchBulkImportSchema();
         this.fetchDefaultValueChoices();
@@ -2183,6 +2192,11 @@ export default {
                 this.showDjangoImportFieldSelect = true;
             }
             this.$nextTick(() => {
+                // Enforce allow_blank=false for mandatory fields that may have
+                // a stale allow_blank=true value from when the field was nullable.
+                if (this.allowBlankDisabled && this.selectedColumn) {
+                    this.selectedColumn.xlsx_data_validation_allow_blank = false;
+                }
                 this.enablePopovers();
                 this.$refs['django-import-model'].focus();
             });
