@@ -2439,6 +2439,73 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 link.occurrencesite_id,
                             )
 
+        # Additional requirement: also link via OccurrenceReport.site (persisted DB field).
+        # OccurrenceReport.site stores the S_ID value from SITE_VISITS.csv; this covers
+        # cases where _s_id was not available in the in-memory merged dict above.
+        # For each child ORF with OccurrenceReport.site == OccurrenceSite.site_name,
+        # add a cross-reference to that ORF in OccurrenceSite.related_occurrence_reports.
+        tec_site_visit_ocr_qs = (
+            OccurrenceReport.objects.filter(
+                migrated_from_id__startswith="tec-site-",
+                occurrence__isnull=False,
+            )
+            .exclude(site="")
+            .values_list("id", "site", "occurrence_id")
+        )
+
+        sv_site_link_data_db = list(tec_site_visit_ocr_qs)  # [(ocr_pk, site_name, occ_pk), ...]
+
+        if sv_site_link_data_db:
+            logger.info(
+                "OccurrenceReportImporter: linking %d TEC site-visit ORFs to OccurrenceSites via site field",
+                len(sv_site_link_data_db),
+            )
+            occ_ids = list({occ_pk for _, _, occ_pk in sv_site_link_data_db})
+            sites_by_occ_id_and_name = {}
+            for site in OccurrenceSite.objects.filter(occurrence_id__in=occ_ids):
+                key = (site.occurrence_id, site.site_name)
+                sites_by_occ_id_and_name[key] = site
+
+            SiteOcrThrough = OccurrenceSite.related_occurrence_reports.through
+            existing_site_links_db = set(
+                SiteOcrThrough.objects.filter(
+                    occurrencereport_id__in=[ocr_pk for ocr_pk, _, _ in sv_site_link_data_db]
+                ).values_list("occurrencesite_id", "occurrencereport_id")
+            )
+            site_through_to_create_db = []
+            for ocr_pk, site_name, occ_pk in sv_site_link_data_db:
+                site = sites_by_occ_id_and_name.get((occ_pk, site_name))
+                if site and (site.pk, ocr_pk) not in existing_site_links_db:
+                    site_through_to_create_db.append(
+                        SiteOcrThrough(occurrencesite_id=site.pk, occurrencereport_id=ocr_pk)
+                    )
+
+            if site_through_to_create_db:
+                try:
+                    SiteOcrThrough.objects.bulk_create(
+                        site_through_to_create_db, batch_size=BATCH, ignore_conflicts=True
+                    )
+                    logger.info(
+                        "OccurrenceReportImporter: created %d OccurrenceSite<->ORF links (via site field)",
+                        len(site_through_to_create_db),
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to bulk_create OccurrenceSite links (via site field); falling back to individual adds"
+                    )
+                    for link in site_through_to_create_db:
+                        try:
+                            SiteOcrThrough.objects.get_or_create(
+                                occurrencesite_id=link.occurrencesite_id,
+                                occurrencereport_id=link.occurrencereport_id,
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Failed to link OCR pk=%s to OccurrenceSite pk=%s (via site field)",
+                                link.occurrencereport_id,
+                                link.occurrencesite_id,
+                            )
+
         # Slim op_map down to only the fields still needed from here onward.
         # Kept fields (used after this point):
         #   - identification_data: create_meta loop (~line 3240)
