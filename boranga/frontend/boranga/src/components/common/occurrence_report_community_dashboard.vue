@@ -794,6 +794,7 @@ export default {
                 orderable: false,
                 searchable: false,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 name: 'main_observer',
                 render: function (data, type, full) {
                     return full.main_observer;
@@ -840,6 +841,7 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 name: 'occurrence__occurrence_name',
             };
         },

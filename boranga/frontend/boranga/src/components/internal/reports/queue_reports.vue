@@ -234,7 +234,7 @@
                         </div>
                     </div>
 
-                    <!-- WA Legislative Category (species / CS) -->
+                    <!-- WA Legislative (species / CS) -->
                     <div
                         v-if="
                             selectedCategory === 'species' ||
@@ -243,7 +243,7 @@
                         class="row mb-3"
                     >
                         <label class="col-sm-3 col-form-label fw-bold"
-                            >WA Legislative Category</label
+                            >WA Legislative</label
                         >
                         <div class="col-sm-6">
                             <select
@@ -262,7 +262,7 @@
                         </div>
                     </div>
 
-                    <!-- WA Priority Category (species / CS) -->
+                    <!-- WA Priority (species / CS) -->
                     <div
                         v-if="
                             selectedCategory === 'species' ||
@@ -271,7 +271,7 @@
                         class="row mb-3"
                     >
                         <label class="col-sm-3 col-form-label fw-bold"
-                            >WA Priority Category</label
+                            >WA Priority</label
                         >
                         <div class="col-sm-6">
                             <SelectFilter

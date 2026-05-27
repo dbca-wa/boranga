@@ -678,13 +678,12 @@
                             >Conservation Criteria:</label
                         >
                         <div class="col-sm-7">
-                            <input
+                            <textarea
                                 id="proposed_conservation_criteria"
                                 v-model="
                                     conservation_status_obj.conservation_criteria
                                 "
                                 :disabled="isReadOnly"
-                                type="text"
                                 class="form-control"
                                 :placeholder="
                                     isReadOnly

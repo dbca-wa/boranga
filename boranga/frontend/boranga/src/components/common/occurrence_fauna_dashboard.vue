@@ -562,7 +562,7 @@ export default {
                 'Scientific Name',
                 'Common Name',
                 'Wild Status',
-                'Number of Reports',
+                '# ORFs',
                 'Migrated From ID',
                 'Region',
                 'District',
@@ -601,11 +601,12 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 name: 'occurrence_name',
                 render: function (data, type, full) {
                     if (full.occurrence_name) {
                         let value = full.occurrence_name;
-                        let result = helpers.dtPopover(value, 30, 'hover');
+                        let result = helpers.dtPopover(value, 80, 'hover');
                         return type == 'export' ? value : result;
                     }
                     return '';
@@ -618,10 +619,11 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (data, type, full) {
                     if (full.scientific_name) {
                         let value = full.scientific_name;
-                        let result = helpers.dtPopover(value, 30, 'hover');
+                        let result = helpers.dtPopover(value, 80, 'hover');
                         return type == 'export' ? value : result;
                     }
                     return '';
@@ -635,6 +637,7 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 name: 'wild_status__name',
             };
         },
@@ -658,6 +661,7 @@ export default {
                 orderable: false,
                 searchable: false,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 name: 'common_name',
             };
         },

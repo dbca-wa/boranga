@@ -115,7 +115,7 @@
                 <div class="col-md-3">
                     <div class="form-group">
                         <label for="wa-legislative-category"
-                            >WA Legislative Category:</label
+                            >WA Legislative:</label
                         >
                         <select
                             id="wa-legislative-category"
@@ -137,7 +137,7 @@
                     <div class="form-group">
                         <SelectFilter
                             id="wa-priority-category-filter"
-                            title="WA Priority Category:"
+                            title="WA Priority:"
                             :options="wa_priority_categories"
                             :multiple="true"
                             :pre-selected-filter-item="
@@ -865,8 +865,8 @@ export default {
                 'Species',
                 'Scientific Name',
                 'Common Name',
-                'WA Legislative Category',
-                'WA Priority Category',
+                'WA Legislative',
+                'WA Priority',
                 'Change Type',
                 'Fauna Group',
                 'WA Priority List',
@@ -935,8 +935,9 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (value, type) {
-                    let result = helpers.dtPopover(value, 30, 'hover');
+                    let result = helpers.dtPopover(value, 80, 'hover');
                     return type == 'export' ? value : result;
                 },
                 name: 'species__taxonomy__scientific_name',
@@ -948,8 +949,9 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (value, type) {
-                    let result = helpers.dtPopover(value, 30, 'hover');
+                    let result = helpers.dtPopover(value, 80, 'hover');
                     return type == 'export' ? value : result;
                 },
                 name: 'species__taxonomy__vernaculars__vernacular_name',

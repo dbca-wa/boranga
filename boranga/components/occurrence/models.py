@@ -7169,13 +7169,30 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         field.set(m2m_field["value"])
 
             except IntegrityError as e:
-                logger.error(f"Error creating model instance: {e}")
+                error_str = str(e)
+                if "unique_occurrence_name_per_species" in error_str:
+                    occ_name = getattr(current_model_instance, "occurrence_name", None)
+                    friendly_message = (
+                        f"An occurrence with the name '{occ_name}' already exists for this species. "
+                        "Please link to the existing occurrence instead of providing a new occurrence name."
+                    )
+                    logger.warning(f"Duplicate occurrence name rejected during bulk import: {friendly_message}")
+                elif "unique_occurrence_name_per_community" in error_str:
+                    occ_name = getattr(current_model_instance, "occurrence_name", None)
+                    friendly_message = (
+                        f"An occurrence with the name '{occ_name}' already exists for this community. "
+                        "Please link to the existing occurrence instead of providing a new occurrence name."
+                    )
+                    logger.warning(f"Duplicate occurrence name rejected during bulk import: {friendly_message}")
+                else:
+                    friendly_message = f"Error creating model instance: {e}"
+                    logger.error(f"Error creating model instance: {e}")
                 errors.append(
                     {
                         "row_index": row_index,
                         "error_type": "integrity",
                         "data": model_data,
-                        "error_message": f"Error creating model instance: {e}",
+                        "error_message": friendly_message,
                     }
                 )
                 return
