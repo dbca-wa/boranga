@@ -589,7 +589,7 @@ export default {
                 'Community Name',
                 'Community ID',
                 'Wild Status',
-                'Number of Reports',
+                '# ORFs',
                 'Migrated From ID',
                 'Region',
                 'District',

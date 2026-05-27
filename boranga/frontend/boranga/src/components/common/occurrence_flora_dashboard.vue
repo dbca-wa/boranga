@@ -535,7 +535,7 @@ export default {
                 'Occurrence Name',
                 'Scientific Name',
                 'Wild Status',
-                'Number of Reports',
+                '# ORFs',
                 'Migrated From ID',
                 'Region',
                 'District',

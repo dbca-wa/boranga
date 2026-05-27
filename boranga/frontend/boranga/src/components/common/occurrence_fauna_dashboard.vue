@@ -562,7 +562,7 @@ export default {
                 'Scientific Name',
                 'Common Name',
                 'Wild Status',
-                'Number of Reports',
+                '# ORFs',
                 'Migrated From ID',
                 'Region',
                 'District',
