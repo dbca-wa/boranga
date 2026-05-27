@@ -644,6 +644,7 @@ export default {
                 orderable: true,
                 searchable: false,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (data, type, full) {
                     if (full.regions) {
                         return full.regions;
@@ -660,6 +661,7 @@ export default {
                 orderable: true,
                 searchable: false,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (data, type, full) {
                     if (full.districts) {
                         return full.districts;

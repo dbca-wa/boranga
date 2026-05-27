@@ -697,8 +697,9 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (value, type) {
-                    let result = helpers.dtPopover(value, 30, 'hover');
+                    let result = helpers.dtPopover(value, 80, 'hover');
                     return type == 'export' ? value : result;
                 },
                 name: 'taxonomy__scientific_name',
@@ -710,8 +711,9 @@ export default {
                 orderable: true,
                 searchable: true,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 render: function (value, type) {
-                    let result = helpers.dtPopover(value, 30, 'hover');
+                    let result = helpers.dtPopover(value, 80, 'hover');
                     return type == 'export' ? value : result;
                 },
                 name: 'taxonomy__vernaculars__vernacular_name',
@@ -844,6 +846,7 @@ export default {
                 orderable: true,
                 searchable: false,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 name: 'regions__name',
             };
         },
@@ -853,6 +856,7 @@ export default {
                 orderable: true,
                 searchable: false,
                 visible: true,
+                className: 'dt-wrap-two-lines',
                 name: 'districts__name',
             };
         },
