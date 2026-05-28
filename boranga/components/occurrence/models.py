@@ -7263,6 +7263,28 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 _derived_count_status = settings.COUNT_STATUS_NOT_COUNTED
             OCRAnimalObservation.objects.filter(pk=_animal_obs.pk).update(count_status=_derived_count_status)
 
+        # Post-processing: auto-derive OCRPlantCount.count_status from the imported count
+        # fields (flora schemas). OCRPlantCount.save() skips auto-derivation when the OCR
+        # has a migrated_from_id (to protect legacy migration data), but bulk-imported OCRs
+        # also carry a migrated_from_id, so we apply the same logic here via a direct UPDATE.
+        _plant_count = model_instances.get(OCRPlantCount._meta.model_name)
+        if _plant_count is not None:
+            _detailed_plant_fields = [
+                "detailed_alive_mature",
+                "detailed_dead_mature",
+                "detailed_alive_juvenile",
+                "detailed_dead_juvenile",
+                "detailed_alive_seedling",
+                "detailed_dead_seedling",
+            ]
+            if any(getattr(_plant_count, f, None) is not None for f in _detailed_plant_fields):
+                _derived_plant_count_status = settings.COUNT_STATUS_COUNTED
+            elif _plant_count.simple_alive is not None or _plant_count.simple_dead is not None:
+                _derived_plant_count_status = settings.COUNT_STATUS_SIMPLE_COUNT
+            else:
+                _derived_plant_count_status = settings.COUNT_STATUS_NOT_COUNTED
+            OCRPlantCount.objects.filter(pk=_plant_count.pk).update(count_status=_derived_plant_count_status)
+
         # Post-processing: auto-fill SubmitterInformation for bulk imports.
         # The record is auto-created (name + contact_details from Ledger) when the OCR is
         # saved; here we additionally assign the "DBCA S&C" submitter category.
