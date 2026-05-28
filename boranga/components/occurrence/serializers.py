@@ -502,6 +502,7 @@ class ListOccurrenceReportSerializer(BaseModelSerializer):
             "occurrence_name_text",
             "region",
             "district",
+            "ocr_for_occ_name",
             "site",
         )
         datatables_always_serialize = (
@@ -648,6 +649,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
             "migrated_from_id",
             "region",
             "district",
+            "ocr_for_occ_name",
             "datetime_approved",
             "datetime_updated",
             "last_modified_by_name",

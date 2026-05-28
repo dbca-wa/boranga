@@ -510,6 +510,7 @@ export default {
                 'Occurrence Number',
                 'Region',
                 'District',
+                'Suggested Occurrence Name',
                 'Observation Date',
                 'Submitted Date',
                 'Status',
@@ -629,6 +630,15 @@ export default {
                 name: 'location__district__name',
             };
         },
+        column_suggested_occurrence_name: function () {
+            return {
+                data: 'ocr_for_occ_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'ocr_for_occ_name',
+            };
+        },
         column_observation_date: function () {
             return {
                 data: 'observation_date',
@@ -716,6 +726,7 @@ export default {
                 vm.column_occurrence,
                 vm.column_region,
                 vm.column_district,
+                vm.column_suggested_occurrence_name,
                 vm.column_observation_date,
                 vm.column_lodgement_date,
                 vm.column_status,
