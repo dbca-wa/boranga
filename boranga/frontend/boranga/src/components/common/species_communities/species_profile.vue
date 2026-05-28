@@ -1269,8 +1269,13 @@ export default {
                 ? true
                 : false;
         },
+        isHistorical: function () {
+            return this.species_community.processing_status === 'Historical'
+                ? true
+                : false;
+        },
         isPublic: function () {
-            return this.isActive &&
+            return (this.isActive || this.isHistorical) &&
                 this.species_community.publishing_status.species_public
                 ? true
                 : false;
