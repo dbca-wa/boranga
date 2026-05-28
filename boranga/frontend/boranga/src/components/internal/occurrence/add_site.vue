@@ -10,7 +10,12 @@
         >
             <div class="container-fluid">
                 <div class="row">
-                    <form class="form-horizontal" name="siteForm">
+                    <div v-if="loadingSite" class="text-center py-5">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <form v-else class="form-horizontal" name="siteForm">
                         <alert v-if="errorString" type="danger"
                             ><strong>{{ errorString }}</strong></alert
                         >
@@ -334,6 +339,7 @@ export default {
     data: function () {
         return {
             isModalOpen: false,
+            loadingSite: false,
             form: null,
             site_id: String,
             site_action: String,
@@ -458,6 +464,7 @@ export default {
         },
         close: function () {
             this.isModalOpen = false;
+            this.loadingSite = false;
             this.siteObj = {
                 related_occurrence_reports: [],
             };
