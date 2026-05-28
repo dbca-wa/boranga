@@ -238,6 +238,9 @@ class LimitedEmailUserSerializer(EmailUserSerializer):
 
 class HelpTextEntrySerializer(BaseModelSerializer):
     SANITIZE_OUTPUT = True
+    # text is admin-controlled rich HTML — skip sanitization so that link
+    # attributes such as target="_blank" and rel="noopener" are preserved.
+    SANITIZE_EXCLUDE_FIELDS = ["text"]
     user_can_administer = serializers.SerializerMethodField()
 
     class Meta:

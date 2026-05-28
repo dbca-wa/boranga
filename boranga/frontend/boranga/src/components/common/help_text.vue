@@ -27,7 +27,7 @@
                         :id="helpTextEntry.section_id"
                         class="bi bi-info-circle-fill text-primary help-text-popover me-2"
                     ></i
-                    >{{ helpTextEntry.text }}
+                    ><span v-html="helpTextEntry.text"></span>
                     <template v-if="helpTextEntry.user_can_administer">
                         <a
                             :href="`/admin/boranga/helptextentry/${helpTextEntry.id}/change/`"
@@ -87,6 +87,7 @@ export default {
                         if (vm.helpTextEntry.icon_with_popover) {
                             new bootstrap.Popover(vm.$refs.popoverIcon, {
                                 container: 'body',
+                                html: true,
                             });
                         }
                     });
