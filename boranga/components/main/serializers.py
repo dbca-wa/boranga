@@ -36,9 +36,18 @@ class NH3SanitizeSerializerMixin:
     Output sanitization is disabled by default to avoid double-escaping
     (e.g. "&" -> "&amp;"). Enable per-serializer by setting
     SANITIZE_OUTPUT = True on the serializer class if you really need it.
+
+    To exempt specific fields from sanitization (both input and output), list
+    them in SANITIZE_EXCLUDE_FIELDS on the serializer class, e.g.:
+
+        SANITIZE_EXCLUDE_FIELDS = ['text']
+
+    This is useful for admin-controlled rich-HTML fields where sanitization
+    would incorrectly strip intentional attributes such as target="_blank".
     """
 
     SANITIZE_OUTPUT = False
+    SANITIZE_EXCLUDE_FIELDS: list[str] = []
 
     def to_internal_value(self, data):
         if isinstance(data, list):
@@ -76,7 +85,10 @@ class NH3SanitizeSerializerMixin:
         else:
             data = dict(data)
 
+        exclude = set(getattr(self, "SANITIZE_EXCLUDE_FIELDS", []))
         for field_name, field in self.fields.items():
+            if field_name in exclude:
+                continue
             if isinstance(field, serializers.CharField):
                 value = data.get(field_name)
                 if isinstance(value, str):
@@ -93,7 +105,10 @@ class NH3SanitizeSerializerMixin:
         if not getattr(self, "SANITIZE_OUTPUT", False):
             return rep
 
+        exclude = set(getattr(self, "SANITIZE_EXCLUDE_FIELDS", []))
         for field_name, field in self.fields.items():
+            if field_name in exclude:
+                continue
             if isinstance(field, serializers.CharField):
                 value = rep.get(field_name)
                 if isinstance(value, str):
