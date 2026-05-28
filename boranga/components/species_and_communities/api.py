@@ -1123,14 +1123,20 @@ class ExternalCommunityViewSet(viewsets.ReadOnlyModelViewSet):
             ).values_list("conservation_status__community__id", flat=True)
             qs = qs.filter(
                 Q(
-                    processing_status=Species.PROCESSING_STATUS_ACTIVE,
+                    processing_status__in=[
+                        Species.PROCESSING_STATUS_ACTIVE,
+                        Species.PROCESSING_STATUS_HISTORICAL,
+                    ],
                     community_publishing_status__community_public=True,
                 )
                 | Q(id__in=referral_community_ids)
             )
         else:
             qs = qs.filter(
-                processing_status=Species.PROCESSING_STATUS_ACTIVE,
+                processing_status__in=[
+                    Species.PROCESSING_STATUS_ACTIVE,
+                    Species.PROCESSING_STATUS_HISTORICAL,
+                ],
                 community_publishing_status__community_public=True,
             )
         return qs
@@ -1257,14 +1263,20 @@ class ExternalSpeciesViewSet(viewsets.ReadOnlyModelViewSet):
             ).values_list("conservation_status__species__id", flat=True)
             qs = qs.filter(
                 Q(
-                    processing_status=Species.PROCESSING_STATUS_ACTIVE,
+                    processing_status__in=[
+                        Species.PROCESSING_STATUS_ACTIVE,
+                        Species.PROCESSING_STATUS_HISTORICAL,
+                    ],
                     species_publishing_status__species_public=True,
                 )
                 | Q(id__in=referral_species_ids)
             )
         else:
             qs = qs.filter(
-                processing_status=Species.PROCESSING_STATUS_ACTIVE,
+                processing_status__in=[
+                    Species.PROCESSING_STATUS_ACTIVE,
+                    Species.PROCESSING_STATUS_HISTORICAL,
+                ],
                 species_publishing_status__species_public=True,
             )
         return qs
