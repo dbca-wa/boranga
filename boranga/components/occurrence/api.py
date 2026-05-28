@@ -1324,6 +1324,41 @@ class OccurrenceReportViewSet(
 
     @list_route(
         methods=[
+            "GET",
+        ],
+        detail=True,
+    )
+    def discarded_geometry(self, request, *args, **kwargs):
+        """Returns discarded (visible=False) geometries for this occurrence report."""
+        from boranga.components.occurrence.serializers import DiscardedOCRGeometrySerializer
+
+        ocr_instance = self.get_object()
+        qs = ocr_instance.ocr_geometry.filter(visible=False)
+        serializer = DiscardedOCRGeometrySerializer(qs, many=True, context={"request": request})
+        return Response(serializer.data)
+
+    @list_route(
+        methods=[
+            "POST",
+        ],
+        detail=True,
+    )
+    def reinstate_geometry(self, request, *args, **kwargs):
+        """Reinstates a discarded geometry for this occurrence report."""
+        ocr_instance = self.get_object()
+        geometry_id = request.data.get("geometry_id")
+        if not geometry_id:
+            raise serializers.ValidationError("geometry_id is required")
+        try:
+            geometry = ocr_instance.ocr_geometry.get(id=geometry_id, visible=False)
+        except OccurrenceReportGeometry.DoesNotExist:
+            raise serializers.ValidationError("Discarded geometry not found for this occurrence report")
+        geometry.visible = True
+        geometry.save()
+        return Response({"reinstated": True, "geometry_id": geometry.id})
+
+    @list_route(
+        methods=[
             "POST",
         ],
         detail=True,
@@ -4408,6 +4443,41 @@ class OccurrenceViewSet(
         new_instance = serializer.save()
 
         return Response(OCCLocationSerializer(new_instance).data)
+
+    @list_route(
+        methods=[
+            "GET",
+        ],
+        detail=True,
+    )
+    def discarded_geometry(self, request, *args, **kwargs):
+        """Returns discarded (visible=False) geometries for this occurrence."""
+        from boranga.components.occurrence.serializers import DiscardedOCCGeometrySerializer
+
+        occ_instance = self.get_object()
+        qs = occ_instance.occ_geometry.filter(visible=False)
+        serializer = DiscardedOCCGeometrySerializer(qs, many=True, context={"request": request})
+        return Response(serializer.data)
+
+    @list_route(
+        methods=[
+            "POST",
+        ],
+        detail=True,
+    )
+    def reinstate_geometry(self, request, *args, **kwargs):
+        """Reinstates a discarded geometry for this occurrence."""
+        occ_instance = self.get_object()
+        geometry_id = request.data.get("geometry_id")
+        if not geometry_id:
+            raise serializers.ValidationError("geometry_id is required")
+        try:
+            geometry = occ_instance.occ_geometry.get(id=geometry_id, visible=False)
+        except OccurrenceGeometry.DoesNotExist:
+            raise serializers.ValidationError("Discarded geometry not found for this occurrence")
+        geometry.visible = True
+        geometry.save()
+        return Response({"reinstated": True, "geometry_id": geometry.id})
 
     @list_route(
         methods=[

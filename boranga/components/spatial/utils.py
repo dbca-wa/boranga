@@ -436,7 +436,6 @@ def save_geometry(
     ):
         return
 
-    action = request.data.get("action", None)
     geometry_id_intersect_data = {}
     for feature in geometry.get("features"):
         supported_geometry_types = ["MultiPolygon", "Polygon", "MultiPoint", "Point"]
@@ -591,9 +590,6 @@ def save_geometry(
                     continue
                 geometry_data["drawn_by"] = geometry.drawn_by
                 geometry_data["last_updated_by"] = request.user.id
-                geometry_data["locked"] = (
-                    action in ["submit"] and geometry.drawn_by == request.user.id or geometry.locked
-                )
                 serializer = InstanceGeometrySaveSerializer(geometry, data=geometry_data)
                 is_new_geometry = False
                 # Capture existing state to detect whether geometry data actually changes
@@ -611,7 +607,9 @@ def save_geometry(
                     from boranga.components.species_and_communities.models import GroupType
 
                     if hasattr(instance, "group_type") and instance.group_type.name == GroupType.GROUP_TYPE_FAUNA:
-                        existing_count = InstanceGeometry.objects.filter(**{instance_fk_field_name: instance}).count()
+                        existing_count = InstanceGeometry.objects.filter(
+                            **{instance_fk_field_name: instance}, visible=True
+                        ).count()
                         if existing_count >= 1:
                             raise serializers.ValidationError(
                                 "Fauna occurrences are limited to one geometry. "
@@ -620,7 +618,6 @@ def save_geometry(
 
                 geometry_data["drawn_by"] = request.user.id
                 geometry_data["last_updated_by"] = request.user.id
-                geometry_data["locked"] = action in ["submit"]
                 serializer = InstanceGeometrySaveSerializer(data=geometry_data)
                 is_new_geometry = True
 
@@ -693,24 +690,24 @@ def save_geometry(
                     buffer_geometry.delete()
                     logger.info(f"Deleted buffer geometry for {instance_model_name} geometry: {geometry_instance}")
 
-    # Remove any ocr geometries from the db that are no longer in the ocr_geometry that was submitted
-    # Prevent deletion of polygons that are locked after status change (e.g. after submit)
+    # Discard any geometries from the db that are no longer in the submitted geometry list.
+    # Discarded geometries have visible=False and can be reinstated by the user.
     geometry_ids = list(geometry_id_intersect_data.keys())
 
-    # Build the base queryset for geometries to potentially delete
-    to_delete_qs = InstanceGeometry.objects.filter(**{instance_fk_field_name: instance}).exclude(
-        Q(id__in=geometry_ids) | Q(locked=True)
+    # Build the base queryset for visible geometries to potentially discard
+    to_discard_qs = InstanceGeometry.objects.filter(**{instance_fk_field_name: instance}, visible=True).exclude(
+        Q(id__in=geometry_ids)
     )
 
     # For non-occurrence geometries, respect the drawn_by constraint
-    # For occurrence geometries, only users who can edit the occurrence can delete geometries
+    # For occurrence geometries, only users who can edit the occurrence can discard geometries
     if instance_fk_field_name != "occurrence":
-        # OccurrenceReport geometries: allow assessors to delete any geometry
+        # OccurrenceReport geometries: allow assessors to discard any geometry
         # when the ORF is With Assessor or With Referral, otherwise restrict
         # to the user's own geometries.
         from boranga.components.occurrence.models import OccurrenceReport
 
-        assessor_can_delete_any = (
+        assessor_can_discard_any = (
             is_occurrence_assessor(request)
             and hasattr(instance, "processing_status")
             and instance.processing_status
@@ -719,30 +716,26 @@ def save_geometry(
                 OccurrenceReport.PROCESSING_STATUS_WITH_REFERRAL,
             ]
         )
-        if not assessor_can_delete_any:
-            to_delete_qs = to_delete_qs.exclude(~Q(drawn_by=request.user.id))
+        if not assessor_can_discard_any:
+            to_discard_qs = to_discard_qs.exclude(~Q(drawn_by=request.user.id))
     elif not instance.can_user_edit:
         # User cannot edit this occurrence, so restrict to only their own geometries
-        to_delete_qs = to_delete_qs.exclude(~Q(drawn_by=request.user.id))
+        to_discard_qs = to_discard_qs.exclude(~Q(drawn_by=request.user.id))
 
     if instance_fk_field_name == "occurrence":
-        affected_tenure_ids = list(
-            OccurrenceTenure.objects.filter(occurrence_geometry__in=to_delete_qs).values_list("id", flat=True)
-        )
-
-        # Delete buffer geometries for parents being deleted
-        buffers_deleted = BufferGeometry.objects.filter(buffered_from_geometry__in=to_delete_qs).delete()
+        # Delete buffer geometries for parents being discarded (derived data, recreated on reinstate)
+        buffers_deleted = BufferGeometry.objects.filter(buffered_from_geometry__in=to_discard_qs).delete()
         if buffers_deleted[0] > 0:
             logger.info(
-                f"Deleted {buffers_deleted[0]} buffer geometries for {instance_model_name} {instance} (parent removed)"
+                f"Deleted {buffers_deleted[0]} buffer geometries for {instance_model_name} {instance} (parent discarded)"
             )
 
-    deleted_geometry_ids = list(to_delete_qs.values_list("id", flat=True))
-    deleted_geometries = to_delete_qs.delete()
-    if deleted_geometries[0] > 0:
-        logger.info(f"Deleted {instance_model_name} geometries: {deleted_geometries} for {instance}")
+    discarded_geometry_ids = list(to_discard_qs.values_list("id", flat=True))
+    discarded_count = to_discard_qs.update(visible=False)
+    if discarded_count > 0:
+        logger.info(f"Discarded {discarded_count} {instance_model_name} geometries for {instance}")
         if instance_fk_field_name == "occurrence":
-            for geom_id in deleted_geometry_ids:
+            for geom_id in discarded_geometry_ids:
                 OccurrenceUserAction.log_action(
                     instance,
                     OccurrenceUserAction.ACTION_DELETE_GEOMETRY.format(
@@ -751,12 +744,6 @@ def save_geometry(
                     ),
                     request.user.id,
                 )
-
-    if instance_fk_field_name == "occurrence":
-        # we save affected tenures to record the historical change
-        affected_tenures = OccurrenceTenure.objects.filter(id__in=affected_tenure_ids)
-        for i in affected_tenures:
-            i.save(version_user=request.user)
 
     return geometry_id_intersect_data
 

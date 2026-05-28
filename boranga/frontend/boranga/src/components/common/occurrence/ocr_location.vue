@@ -56,7 +56,112 @@
                     }"
                     @crs-select-search="searchForCRS"
                     @dirty="mapIsDirty = $event"
+                    @features-discarded="updateLocationDetails()"
                 ></MapComponent>
+            </div>
+
+            <div class="row my-3">
+                <div class="col">
+                    <div class="border rounded p-3">
+                        <div
+                            class="d-flex align-items-center"
+                            style="cursor: pointer"
+                            @click="
+                                showDiscardedGeometries =
+                                    !showDiscardedGeometries
+                            "
+                        >
+                            <i
+                                class="bi"
+                                :class="
+                                    showDiscardedGeometries
+                                        ? 'bi-chevron-down'
+                                        : 'bi-chevron-right'
+                                "
+                            ></i>
+                            <span class="ms-2 fw-semibold"
+                                >Discarded Geometries ({{
+                                    discardedGeometries.length
+                                }})</span
+                            >
+                            <span
+                                v-if="discardedGeometriesEasterEgg"
+                                ref="easterEggSpan"
+                                class="ms-2 fst-italic"
+                                :style="{
+                                    fontSize: '0.75em',
+                                    color: '#c0c0c0',
+                                    opacity: discardedEasterEggFading ? 0 : 1,
+                                    transition: 'opacity 0.7s ease',
+                                }"
+                                >Nothing Lasts but Nothing is Lost</span
+                            >
+                        </div>
+                        <div v-show="showDiscardedGeometries" class="mt-2">
+                            <div
+                                v-if="discardedGeometries.length === 0"
+                                class="text-muted small"
+                            >
+                                No discarded geometries.
+                            </div>
+                            <div
+                                v-else
+                                class="rounded-bottom overflow-hidden border"
+                            >
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="table-secondary">
+                                        <tr>
+                                            <th>Drawn By</th>
+                                            <th>Date Drawn</th>
+                                            <th>Geometry Type</th>
+                                            <th v-if="canEditGeometry">
+                                                Action
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr
+                                            v-for="geom in discardedGeometries"
+                                            :key="geom.id"
+                                        >
+                                            <td>{{ geom.drawn_by || '—' }}</td>
+                                            <td>{{ geom.created_date }}</td>
+                                            <td>{{ geom.geometry_type }}</td>
+                                            <td v-if="canEditGeometry">
+                                                <button
+                                                    class="btn btn-sm btn-outline-success"
+                                                    :disabled="
+                                                        reinstatingGeometryId ===
+                                                        geom.id
+                                                    "
+                                                    @click.prevent="
+                                                        reinstateGeometry(
+                                                            geom.id
+                                                        )
+                                                    "
+                                                >
+                                                    <span
+                                                        v-if="
+                                                            reinstatingGeometryId ===
+                                                            geom.id
+                                                        "
+                                                        class="spinner-border spinner-border-sm"
+                                                        role="status"
+                                                        aria-hidden="true"
+                                                    ></span>
+                                                    <i
+                                                        class="bi bi-arrow-counterclockwise"
+                                                    ></i>
+                                                    Reinstate
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="row mb-3">
@@ -532,6 +637,11 @@ export default {
             datum_list: [],
             coordinate_source_list: [],
             location_accuracy_list: [],
+            discardedGeometries: [],
+            reinstatingGeometryId: null,
+            showDiscardedGeometries: false,
+            discardedGeometriesEasterEgg: true, // Math.random() < 0.07
+            discardedEasterEggFading: false,
         };
     },
     computed: {
@@ -704,6 +814,7 @@ export default {
             name: null,
         });
         this.filterDistrict();
+        this.fetchDiscardedGeometries();
     },
     mounted: function () {
         let vm = this;
@@ -711,6 +822,20 @@ export default {
             vm.eventListeners();
             // Capture original state after Vue has fully processed the component
             vm.resetDirtyState();
+            if (vm.discardedGeometriesEasterEgg && vm.$refs.easterEggSpan) {
+                const observer = new IntersectionObserver((entries) => {
+                    if (entries[0].isIntersecting) {
+                        observer.disconnect();
+                        setTimeout(() => {
+                            vm.discardedEasterEggFading = true;
+                        }, 1500);
+                        setTimeout(() => {
+                            vm.discardedGeometriesEasterEgg = false;
+                        }, 2200);
+                    }
+                });
+                observer.observe(vm.$refs.easterEggSpan);
+            }
         });
     },
     methods: {
@@ -816,6 +941,7 @@ export default {
                         }
                     });
                     vm.$refs.component_map.forceToRefreshMap();
+                    vm.fetchDiscardedGeometries();
                     vm.$nextTick(() => {
                         vm.$refs.component_map.takeSnapshot();
                         vm.mapIsDirty = false;
@@ -843,6 +969,72 @@ export default {
             this.$nextTick(() => {
                 this.mapContainerId = this.$refs.component_map.map_container_id;
             });
+        },
+        fetchDiscardedGeometries: async function () {
+            const vm = this;
+            try {
+                const response = await fetch(
+                    api_endpoints.ocr_discarded_geometry(
+                        vm.occurrence_report_obj.id
+                    )
+                );
+                if (response.ok) {
+                    vm.discardedGeometries = await response.json();
+                }
+            } catch (error) {
+                console.error('Error fetching discarded geometries:', error);
+            }
+        },
+        reinstateGeometry: async function (geometryId) {
+            const vm = this;
+            const result = await swal.fire({
+                title: 'Reinstate geometry?',
+                text: 'The geometry will be reinstated and visible on the map.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, reinstate',
+                cancelButtonText: 'Cancel',
+                customClass: {
+                    confirmButton: 'btn btn-primary',
+                    cancelButton: 'btn btn-secondary',
+                },
+                reverseButtons: true,
+            });
+            if (!result.isConfirmed) {
+                return;
+            }
+            vm.reinstatingGeometryId = geometryId;
+            try {
+                const response = await fetch(
+                    api_endpoints.ocr_reinstate_geometry(
+                        vm.occurrence_report_obj.id
+                    ),
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': helpers.getCookie('csrftoken'),
+                        },
+                        body: JSON.stringify({ geometry_id: geometryId }),
+                    }
+                );
+                if (response.ok) {
+                    await vm.fetchDiscardedGeometries();
+                    await vm.$refs.component_map.reloadQueryLayer();
+                } else {
+                    const data = await response.json();
+                    swal.fire({
+                        title: 'Error',
+                        text: data.detail || 'Could not reinstate geometry.',
+                        icon: 'error',
+                        customClass: { confirmButton: 'btn btn-primary' },
+                    });
+                }
+            } catch (error) {
+                console.error('Error reinstating geometry:', error);
+            } finally {
+                vm.reinstatingGeometryId = null;
+            }
         },
         searchForCRS: function (search, loading) {
             const vm = this;

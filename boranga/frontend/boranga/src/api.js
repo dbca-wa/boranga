@@ -179,6 +179,19 @@ export default {
     occ_site: '/api/occurrence_sites.json',
     occ_profile_dict: '/api/occ_profile_dict',
 
+    ocr_discarded_geometry: function (id) {
+        return `/api/occurrence_report/${id}/discarded_geometry/`;
+    },
+    ocr_reinstate_geometry: function (id) {
+        return `/api/occurrence_report/${id}/reinstate_geometry/`;
+    },
+    occ_discarded_geometry: function (id) {
+        return `/api/occurrence/${id}/discarded_geometry/`;
+    },
+    occ_reinstate_geometry: function (id) {
+        return `/api/occurrence/${id}/reinstate_geometry/`;
+    },
+
     combine_key_contacts_lookup:
         '/api/occurrence_paginated/combine_key_contacts_lookup/',
     combine_documents_lookup:

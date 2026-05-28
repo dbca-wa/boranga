@@ -2123,6 +2123,7 @@ class GeometryBase(BaseModel):
 
     created_date = models.DateTimeField(auto_now_add=True, null=False, blank=False)
     updated_date = models.DateTimeField(auto_now=True, null=False, blank=False)
+    visible = models.BooleanField(default=True)  # to prevent deletion, hidden and still be available for reinstatement
 
     class Meta:
         abstract = True
@@ -2253,7 +2254,6 @@ class OccurrenceReportGeometry(GeometryBase, DrawnByGeometry):
         null=True,
         related_name="ocr_geometry",
     )
-    locked = models.BooleanField(default=False)
     show_on_map = models.BooleanField(default=True)
 
     color = ColorField(blank=True, null=True)
@@ -4941,7 +4941,6 @@ class OccurrenceGeometry(GeometryBase, DrawnByGeometry):
         null=True,
         related_name="occ_geometry",
     )
-    locked = models.BooleanField(default=False)
     buffer_radius = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
 
     color = ColorField(default="#3333FF")  # Light blue

@@ -1155,8 +1155,8 @@
                         class="optional-layers-button-wrapper"
                         :title="
                             featureCount
-                                ? 'Select feature(s) to delete'
-                                : 'No features to delete'
+                                ? 'Select feature(s) to discard'
+                                : 'No features to discard'
                         "
                     >
                         <div
@@ -1167,7 +1167,7 @@
                                     : 'btn-danger',
                                 navbarButtonsDisabled ? 'disabled' : '',
                             ]"
-                            :title="`Delete ${
+                            :title="`Discard ${
                                 selectedFeatureIds.length
                             } selected feature${
                                 selectedFeatureIds.length > 1 ? 's' : ''
@@ -2914,6 +2914,19 @@ export default {
                 // Unset loading map spinner here
                 vm.setLoadingMap(false);
             }, timeout);
+        },
+        async reloadQueryLayer() {
+            const vm = this;
+            const layerDef = vm.queryLayerDefinition;
+            if (!layerDef.api_url) return;
+            const rawProposals = await vm.fetchProposals(
+                vm,
+                layerDef.api_url,
+                layerDef.ids,
+                layerDef.query_param_key
+            );
+            const proposals = vm.initialiseProposals(rawProposals);
+            vm.loadMapFeatures(proposals, layerDef.name);
         },
         addJoint: function (point, styles) {
             let s = this.createStyle('#3399cc', '#3399cc', 'Point', 2);
@@ -4893,64 +4906,57 @@ export default {
         removeModelFeatures: function () {
             console.log('Removing model features');
             let vm = this;
-            let cannot_delete_features = [];
-            console.log('selectedFeatureIds', vm.selectedFeatureIds);
-            console.log('Selected features:', vm.selectedFeatures());
-            const features = vm.selectedFeatures().filter((feature) => {
-                if (
-                    [undefined, false].includes(
-                        feature.getProperties().locked
-                    ) ||
-                    vm.debug // Allow deletion of locked features if debug mode is enabled
-                ) {
-                    return feature;
-                } else {
-                    console.warn(
-                        `Cannot delete feature. ${
-                            feature.getProperties().id
-                        } is locked`
-                    );
-                    cannot_delete_features.push(feature.getProperties().id);
-                }
-            });
-            console.log('Features to delete:', features);
-
-            console.log('Cannot delete features:', cannot_delete_features);
-            if (cannot_delete_features.length > 0) {
-                vm.errorMessageProperty(null);
-                vm.errorMessageProperty(
-                    `Cannot delete feature(s) ${cannot_delete_features.join(
-                        ', '
-                    )} anymore.`
-                );
+            const features = vm.selectedFeatures();
+            if (!features.length) {
+                return;
             }
-
-            console.log('Removing feature from layer');
-
-            const layersWithFeatures = vm.getLayersWithFeatures();
-            layersWithFeatures.map((layer) => {
-                const source = layer.getSource();
-                features.map((feature) => {
-                    if (source.hasFeature(feature)) {
-                        vm.deletedFeaturesProperty(feature);
-                        source.removeFeature(feature);
-                    }
-                });
-            });
-
-            // A list of selected features ol uids
-            const featuresOlUids = features.map((feature) => {
-                return Number(feature.ol_uid);
-            }, []);
-            // Remove selected features from `selectedFeatureCollection`
-            [...vm.selectedFeatureCollection.getArray()].forEach((feature) => {
-                if (
-                    feature &&
-                    featuresOlUids.includes(Number(feature.ol_uid))
-                ) {
-                    console.log(`Removing feature ${feature.ol_uid}`);
-                    vm.selectedFeatureCollection.remove(feature);
+            const featureCount = features.length;
+            swal.fire({
+                title: `Discard ${featureCount > 1 ? featureCount + ' geometries' : 'geometry'}?`,
+                text: 'The geometry will be discarded and can be reinstated from the discarded geometries panel below the map.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Yes, discard',
+                cancelButtonText: 'Cancel',
+                customClass: {
+                    confirmButton: 'btn btn-primary',
+                    cancelButton: 'btn btn-secondary',
+                },
+                reverseButtons: true,
+            }).then((result) => {
+                if (!result.isConfirmed) {
+                    return;
                 }
+                console.log('Removing feature from layer');
+
+                const layersWithFeatures = vm.getLayersWithFeatures();
+                layersWithFeatures.map((layer) => {
+                    const source = layer.getSource();
+                    features.map((feature) => {
+                        if (source.hasFeature(feature)) {
+                            vm.deletedFeaturesProperty(feature);
+                            source.removeFeature(feature);
+                        }
+                    });
+                });
+
+                // A list of selected features ol uids
+                const featuresOlUids = features.map((feature) => {
+                    return Number(feature.ol_uid);
+                }, []);
+                // Remove selected features from `selectedFeatureCollection`
+                [...vm.selectedFeatureCollection.getArray()].forEach(
+                    (feature) => {
+                        if (
+                            feature &&
+                            featuresOlUids.includes(Number(feature.ol_uid))
+                        ) {
+                            console.log(`Removing feature ${feature.ol_uid}`);
+                            vm.selectedFeatureCollection.remove(feature);
+                        }
+                    }
+                );
+                vm.$emit('features-discarded');
             });
         },
         /**

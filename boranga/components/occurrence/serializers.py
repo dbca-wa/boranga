@@ -243,7 +243,7 @@ class OccurrenceGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSerializer
             "area_sqm",
             "area_sqhm",
             "geometry_source",
-            "locked",
+            "visible",
             "object_id",
             "content_type",
             "buffer_radius",
@@ -338,7 +338,7 @@ class OccurrenceSerializer(BaseModelSerializer):
     combined_occurrence_id = serializers.SerializerMethodField()
     wild_status_name = serializers.CharField(source="wild_status.name", allow_null=True)
     can_add_log = serializers.SerializerMethodField()
-    occ_geometry = OccurrenceGeometrySerializer(many=True, read_only=True)
+    occ_geometry = serializers.SerializerMethodField(read_only=True)
     show_locked_indicator = serializers.BooleanField(read_only=True)
     editing_window_minutes = serializers.IntegerField(read_only=True)
 
@@ -457,6 +457,10 @@ class OccurrenceSerializer(BaseModelSerializer):
     def get_occurrence_reports(self, obj):
         serializer = ListOccurrenceReportSerializer(obj.occurrence_reports.all(), many=True, context=self.context)
         return serializer.data
+
+    def get_occ_geometry(self, obj):
+        qs = obj.occ_geometry.filter(visible=True)
+        return OccurrenceGeometrySerializer(qs, many=True, context=self.context).data
 
 
 class ListOccurrenceReportSerializer(BaseModelSerializer):
@@ -772,7 +776,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
 
         ct = ContentType.objects.get_for_model(OccurrenceReportGeometry)
         # Use list() so prefetch_related cache is used when available
-        ocr_geom_ids = [g.id for g in obj.ocr_geometry.all()]
+        ocr_geom_ids = [g.id for g in obj.ocr_geometry.filter(visible=True)]
         if not ocr_geom_ids:
             return []
         return list(
@@ -785,7 +789,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
         )
 
     def get_geometry_show_on_map(self, obj):
-        return obj.ocr_geometry.filter(show_on_map=True).exists()
+        return obj.ocr_geometry.filter(show_on_map=True, visible=True).exists()
 
     def get_assessor(self, obj):
         if obj.assigned_officer:
@@ -1181,14 +1185,16 @@ class OCRLocationSerializer(BaseModelSerializer):
 
     def get_has_boundary(self, obj):
         return (
-            obj.occurrence_report.ocr_geometry.annotate(geom_type=GeometryType("geometry"))
+            obj.occurrence_report.ocr_geometry.filter(visible=True)
+            .annotate(geom_type=GeometryType("geometry"))
             .filter(geom_type="POLYGON")
             .exists()
         )
 
     def get_has_points(self, obj):
         return (
-            obj.occurrence_report.ocr_geometry.annotate(geom_type=GeometryType("geometry"))
+            obj.occurrence_report.ocr_geometry.filter(visible=True)
+            .annotate(geom_type=GeometryType("geometry"))
             .filter(geom_type="POINT")
             .exists()
         )
@@ -1218,7 +1224,7 @@ class OccurrenceReportGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSeri
             "area_sqm",
             "area_sqhm",
             "geometry_source",
-            "locked",
+            "visible",
             "report_copied_from",
             "object_id",
             "content_type",
@@ -1278,8 +1284,46 @@ class OccurrenceReportGeometrySerializer(BaseTypeSerializer, GeoFeatureModelSeri
         return None
 
 
+class DiscardedOCRGeometrySerializer(BaseModelSerializer):
+    drawn_by = serializers.SerializerMethodField(read_only=True)
+    geometry_type = serializers.SerializerMethodField(read_only=True)
+    created_date = serializers.DateTimeField(format="%d/%m/%Y %H:%M", read_only=True)
+
+    class Meta:
+        model = OccurrenceReportGeometry
+        fields = ["id", "drawn_by", "created_date", "geometry_type"]
+
+    def get_drawn_by(self, obj):
+        if obj.drawn_by:
+            email_user = retrieve_email_user(obj.drawn_by)
+            return EmailUserSerializer(email_user).data.get("fullname", None)
+        return None
+
+    def get_geometry_type(self, obj):
+        return obj.geometry.geom_type if obj.geometry else None
+
+
+class DiscardedOCCGeometrySerializer(BaseModelSerializer):
+    drawn_by = serializers.SerializerMethodField(read_only=True)
+    geometry_type = serializers.SerializerMethodField(read_only=True)
+    created_date = serializers.DateTimeField(format="%d/%m/%Y %H:%M", read_only=True)
+
+    class Meta:
+        model = OccurrenceGeometry
+        fields = ["id", "drawn_by", "created_date", "geometry_type"]
+
+    def get_drawn_by(self, obj):
+        if obj.drawn_by:
+            email_user = retrieve_email_user(obj.drawn_by)
+            return EmailUserSerializer(email_user).data.get("fullname", None)
+        return None
+
+    def get_geometry_type(self, obj):
+        return obj.geometry.geom_type if obj.geometry else None
+
+
 class ListOCRReportMinimalSerializer(BaseModelSerializer):
-    ocr_geometry = OccurrenceReportGeometrySerializer(many=True, read_only=True)
+    ocr_geometry = serializers.SerializerMethodField(read_only=True)
     label = serializers.SerializerMethodField(read_only=True)
     processing_status_display = serializers.CharField(read_only=True, source="get_processing_status_display")
     lodgement_date_display = serializers.DateTimeField(read_only=True, format="%d/%m/%Y", source="lodgement_date")
@@ -1298,6 +1342,10 @@ class ListOCRReportMinimalSerializer(BaseModelSerializer):
             "lodgement_date_display",
             "details_url",
         )
+
+    def get_ocr_geometry(self, obj):
+        qs = obj.ocr_geometry.filter(visible=True)
+        return OccurrenceReportGeometrySerializer(qs, many=True, context=self.context).data
 
     def get_label(self, obj):
         return "Occurrence Report"
@@ -1514,7 +1562,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     plant_count = serializers.SerializerMethodField()
     animal_observation = serializers.SerializerMethodField()
     identification = serializers.SerializerMethodField()
-    ocr_geometry = OccurrenceReportGeometrySerializer(many=True, read_only=True)
+    ocr_geometry = serializers.SerializerMethodField(read_only=True)
     # label used for new polygon featuretoast on map_component
     label = serializers.SerializerMethodField(read_only=True)
     model_name = serializers.SerializerMethodField(read_only=True)
@@ -1694,6 +1742,10 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     def get_can_user_copy(self, obj):
         request = self.context["request"]
         return obj.submitter == request.user.id or is_occurrence_assessor(request)
+
+    def get_ocr_geometry(self, obj):
+        qs = obj.ocr_geometry.filter(visible=True)
+        return OccurrenceReportGeometrySerializer(qs, many=True, context=self.context).data
 
 
 class OccurrenceReportSerializer(BaseOccurrenceReportSerializer):
@@ -2418,14 +2470,16 @@ class SaveOCRLocationSerializer(BaseModelSerializer):
 
     def get_has_boundary(self, obj):
         return (
-            obj.occurrence_report.ocr_geometry.annotate(geom_type=GeometryType("geometry"))
+            obj.occurrence_report.ocr_geometry.filter(visible=True)
+            .annotate(geom_type=GeometryType("geometry"))
             .filter(geom_type="POLYGON")
             .exists()
         )
 
     def get_has_points(self, obj):
         return (
-            obj.occurrence_report.ocr_geometry.annotate(geom_type=GeometryType("geometry"))
+            obj.occurrence_report.ocr_geometry.filter(visible=True)
+            .annotate(geom_type=GeometryType("geometry"))
             .filter(geom_type="POINT")
             .exists()
         )
@@ -2528,7 +2582,7 @@ class OccurrenceReportGeometrySaveSerializer(GeoFeatureModelSerializer):
             "original_geometry_ewkb",
             "drawn_by",
             "last_updated_by",
-            "locked",
+            "visible",
             "content_type",
             "object_id",
             "show_on_map",
@@ -3748,7 +3802,7 @@ class OCCLocationSerializer(BaseModelSerializer):
 
 
 class ListOCCMinimalSerializer(BaseModelSerializer):
-    occ_geometry = OccurrenceGeometrySerializer(many=True, read_only=True)
+    occ_geometry = serializers.SerializerMethodField(read_only=True)
     label = serializers.SerializerMethodField(read_only=True)
     processing_status_display = serializers.CharField(read_only=True, source="get_processing_status_display")
     # lodgement_date_display = serializers.DateTimeField(
@@ -3769,6 +3823,10 @@ class ListOCCMinimalSerializer(BaseModelSerializer):
             # "lodgement_date_display",
             "details_url",
         )
+
+    def get_occ_geometry(self, obj):
+        qs = obj.occ_geometry.filter(visible=True)
+        return OccurrenceGeometrySerializer(qs, many=True, context=self.context).data
 
     def get_label(self, obj):
         return "Occurrence"
@@ -3842,7 +3900,7 @@ class OccurrenceGeometrySaveSerializer(GeoFeatureModelSerializer):
             "original_geometry_ewkb",
             "drawn_by",
             "last_updated_by",
-            "locked",
+            "visible",
             "buffer_radius",
             "content_type",
             "object_id",
