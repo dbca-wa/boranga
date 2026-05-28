@@ -8893,6 +8893,11 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
         field = model_class._meta.get_field(self.django_import_field_name)
 
+        # Normalise whitespace-only strings (e.g. a single space typed into a cell)
+        # to empty string so that the allow_blank check below treats them as blank.
+        if isinstance(cell_value, str):
+            cell_value = cell_value.strip()
+
         if self.default_value:
             if self.default_value == self.DEFAULT_VALUE_BULK_IMPORT_SUBMITTER:
                 cell_value = task.email_user
