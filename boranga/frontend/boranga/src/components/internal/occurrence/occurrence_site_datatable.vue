@@ -293,11 +293,14 @@ export default {
         editSite: function (id) {
             this.$refs.site_detail.site_id = id;
             this.$refs.site_detail.site_action = 'edit';
+            this.$refs.site_detail.loadingSite = true;
             fetch(helpers.add_endpoint_json(api_endpoints.occ_site, id)).then(
                 async (response) => {
                     this.$refs.site_detail.siteObj = await response.json();
+                    this.$refs.site_detail.loadingSite = false;
                 },
                 (err) => {
+                    this.$refs.site_detail.loadingSite = false;
                     console.log(err);
                 }
             );
@@ -306,11 +309,14 @@ export default {
         viewSite: function (id) {
             this.$refs.site_detail.site_id = id;
             this.$refs.site_detail.site_action = 'view';
+            this.$refs.site_detail.loadingSite = true;
             fetch(helpers.add_endpoint_json(api_endpoints.occ_site, id)).then(
                 async (response) => {
                     this.$refs.site_detail.siteObj = await response.json();
+                    this.$refs.site_detail.loadingSite = false;
                 },
                 (err) => {
+                    this.$refs.site_detail.loadingSite = false;
                     console.log(err);
                 }
             );

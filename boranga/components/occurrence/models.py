@@ -2123,6 +2123,7 @@ class GeometryBase(BaseModel):
 
     created_date = models.DateTimeField(auto_now_add=True, null=False, blank=False)
     updated_date = models.DateTimeField(auto_now=True, null=False, blank=False)
+    visible = models.BooleanField(default=True)  # to prevent deletion, hidden and still be available for reinstatement
 
     class Meta:
         abstract = True
@@ -2253,7 +2254,6 @@ class OccurrenceReportGeometry(GeometryBase, DrawnByGeometry):
         null=True,
         related_name="ocr_geometry",
     )
-    locked = models.BooleanField(default=False)
     show_on_map = models.BooleanField(default=True)
 
     color = ColorField(blank=True, null=True)
@@ -4941,7 +4941,6 @@ class OccurrenceGeometry(GeometryBase, DrawnByGeometry):
         null=True,
         related_name="occ_geometry",
     )
-    locked = models.BooleanField(default=False)
     buffer_radius = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
 
     color = ColorField(default="#3333FF")  # Light blue
@@ -6603,9 +6602,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             return
 
         # Gate status-dependent models based on processing_status of the OCR row.
-        # Both OccurrenceReportApprovalDetails and Occurrence are only relevant once the
-        # OCR has reached the approver stage — the decision to create or link an OCC is
-        # made during assessment/approval, not while the report is still with an assessor.
+        # OccurrenceReportApprovalDetails is relevant once the OCR has reached the approver
+        # stage (with_approver or approved). Occurrence creation/linking, however, only
+        # happens when the OCR is fully approved — a with_approver ORF must not create an OCC.
         ocr_model_data = dict(
             zip(
                 models.get(OccurrenceReport._meta.model_name, {}).get("field_names", []),
@@ -6618,6 +6617,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             OccurrenceReport.PROCESSING_STATUS_APPROVED,
         ):
             models.pop(OccurrenceReportApprovalDetails._meta.model_name, None)
+        if row_processing_status != OccurrenceReport.PROCESSING_STATUS_APPROVED:
             models.pop(Occurrence._meta.model_name, None)
 
         # Validate that approved OCRs have enough data to link or create an Occurrence.
@@ -7261,6 +7261,28 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             else:
                 _derived_count_status = settings.COUNT_STATUS_NOT_COUNTED
             OCRAnimalObservation.objects.filter(pk=_animal_obs.pk).update(count_status=_derived_count_status)
+
+        # Post-processing: auto-derive OCRPlantCount.count_status from the imported count
+        # fields (flora schemas). OCRPlantCount.save() skips auto-derivation when the OCR
+        # has a migrated_from_id (to protect legacy migration data), but bulk-imported OCRs
+        # also carry a migrated_from_id, so we apply the same logic here via a direct UPDATE.
+        _plant_count = model_instances.get(OCRPlantCount._meta.model_name)
+        if _plant_count is not None:
+            _detailed_plant_fields = [
+                "detailed_alive_mature",
+                "detailed_dead_mature",
+                "detailed_alive_juvenile",
+                "detailed_dead_juvenile",
+                "detailed_alive_seedling",
+                "detailed_dead_seedling",
+            ]
+            if any(getattr(_plant_count, f, None) is not None for f in _detailed_plant_fields):
+                _derived_plant_count_status = settings.COUNT_STATUS_COUNTED
+            elif _plant_count.simple_alive is not None or _plant_count.simple_dead is not None:
+                _derived_plant_count_status = settings.COUNT_STATUS_SIMPLE_COUNT
+            else:
+                _derived_plant_count_status = settings.COUNT_STATUS_NOT_COUNTED
+            OCRPlantCount.objects.filter(pk=_plant_count.pk).update(count_status=_derived_plant_count_status)
 
         # Post-processing: auto-fill SubmitterInformation for bulk imports.
         # The record is auto-created (name + contact_details from Ledger) when the OCR is
@@ -8870,6 +8892,11 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             return cell_value, errors_added
 
         field = model_class._meta.get_field(self.django_import_field_name)
+
+        # Normalise whitespace-only strings (e.g. a single space typed into a cell)
+        # to empty string so that the allow_blank check below treats them as blank.
+        if isinstance(cell_value, str):
+            cell_value = cell_value.strip()
 
         if self.default_value:
             if self.default_value == self.DEFAULT_VALUE_BULK_IMPORT_SUBMITTER:

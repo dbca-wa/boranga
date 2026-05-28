@@ -692,6 +692,7 @@ export default {
                 'Region',
                 'District',
                 'Site',
+                'Suggested Occurrence Name',
                 'Submitted on',
                 'Submitter',
                 'Approved Date',
@@ -959,6 +960,15 @@ export default {
                 },
             };
         },
+        column_suggested_occurrence_name: function () {
+            return {
+                data: 'ocr_for_occ_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'ocr_for_occ_name',
+            };
+        },
         datatable_options: function () {
             let vm = this;
             let columns;
@@ -1000,6 +1010,7 @@ export default {
                 vm.column_region,
                 vm.column_district,
                 vm.column_site,
+                vm.column_suggested_occurrence_name,
                 vm.column_lodgement_date,
                 vm.column_submitter,
                 vm.column_approved_date,

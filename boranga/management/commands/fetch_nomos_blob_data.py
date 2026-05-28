@@ -48,7 +48,17 @@ class Command(BaseCommand):
                     send_nomos_script_failed([err_msg])
                     return
 
-                # 3) Schema validation against every record
+                # 3a) Normalize Python-style string booleans to JSON booleans.
+                # Some NOMOS exports serialize booleans as the Python string
+                # literals 'True'/'False' rather than JSON true/false.
+                _BOOL_FIELDS = ("is_current",)
+                _STR_TO_BOOL = {"True": True, "False": False}
+                for record in taxon:
+                    for field in _BOOL_FIELDS:
+                        if field in record and isinstance(record[field], str):
+                            record[field] = _STR_TO_BOOL.get(record[field], record[field])
+
+                # 3b) Schema validation against every record
                 taxon_record_schema = {
                     "type": "object",
                     "required": ["taxon_name_id", "canonical_name", "kingdom_id", "rank_id", "is_current"],

@@ -641,6 +641,7 @@ export default {
                 'Migrated From ID',
                 'Region',
                 'District',
+                'Suggested Occurrence Name',
                 'Submitted on',
                 'Submitter',
                 'Approved Date',
@@ -795,6 +796,15 @@ export default {
                 name: 'location__district__name',
             };
         },
+        column_suggested_occurrence_name: function () {
+            return {
+                data: 'ocr_for_occ_name',
+                orderable: false,
+                searchable: false,
+                visible: true,
+                name: 'ocr_for_occ_name',
+            };
+        },
         column_approved_date: function () {
             return {
                 data: 'datetime_approved',
@@ -923,6 +933,7 @@ export default {
                 vm.column_migrated_from_id,
                 vm.column_region,
                 vm.column_district,
+                vm.column_suggested_occurrence_name,
                 vm.column_lodgement_date,
                 vm.column_submitter,
                 vm.column_approved_date,
