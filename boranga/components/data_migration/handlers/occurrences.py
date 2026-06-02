@@ -1833,7 +1833,7 @@ class OccurrenceImporter(BaseSheetImporter):
                             INSERT INTO boranga_buffergeometry
                                 (buffered_from_geometry_id, geometry, object_id,
                                  content_type_id, color, stroke, opacity,
-                                 created_date, updated_date)
+                                 visible, created_date, updated_date)
                             SELECT
                                 og.id,
                                 ST_SetSRID(
@@ -1845,6 +1845,7 @@ class OccurrenceImporter(BaseSheetImporter):
                                 '#FFFF00',
                                 '#FF9900',
                                 0.5,
+                                TRUE,
                                 NOW(),
                                 NOW()
                             FROM boranga_occurrencegeometry og
