@@ -640,7 +640,12 @@ export default {
             discardedGeometries: [],
             reinstatingGeometryId: null,
             showDiscardedGeometries: false,
-            discardedGeometriesEasterEgg: true, // Math.random() < 0.07
+            discardedGeometriesEasterEgg: (() => {
+                if (sessionStorage.getItem('easterEggSeen')) return false;
+                const show = Math.random() < 0.07;
+                if (show) sessionStorage.setItem('easterEggSeen', '1');
+                return show;
+            })(),
             discardedEasterEggFading: false,
         };
     },
