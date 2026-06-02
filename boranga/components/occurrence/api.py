@@ -377,6 +377,13 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
             if filter_last_modified_to_date:
                 queryset = queryset.filter(datetime_updated__date__lte=filter_last_modified_to_date)
 
+            filter_approved_cs = request.POST.get("filter_approved_cs")
+            if filter_approved_cs and filter_approved_cs.lower() == "true":
+                queryset = (
+                    queryset.filter(species__conservation_status__processing_status="approved").distinct()
+                    | queryset.filter(community__conservation_status__processing_status="approved").distinct()
+                )
+
         else:
             total_count = queryset.count()
 
@@ -2767,6 +2774,13 @@ class OccurrenceFilterBackend(DatatablesFilterBackend):
             queryset = queryset.filter(datetime_updated__date__gte=filter_last_modified_from_date)
         if filter_last_modified_to_date:
             queryset = queryset.filter(datetime_updated__date__lte=filter_last_modified_to_date)
+
+        filter_approved_cs = request.POST.get("filter_approved_cs")
+        if filter_approved_cs and filter_approved_cs.lower() == "true":
+            queryset = (
+                queryset.filter(species__conservation_status__processing_status="approved").distinct()
+                | queryset.filter(community__conservation_status__processing_status="approved").distinct()
+            )
 
         fields = self.get_fields(request)
 
