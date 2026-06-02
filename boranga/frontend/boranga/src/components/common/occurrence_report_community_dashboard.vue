@@ -165,6 +165,25 @@
                         />
                     </div>
                 </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
+                            for="ocr-community-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="ocr-community-approved-cs"
+                                v-model="filterOCRCommunityApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="row">
                 <div class="col-md-6">
@@ -438,6 +457,11 @@ export default {
             required: false,
             default: 'filterOCRCommunityLastModifiedToDate',
         },
+        filterOCRCommunityApprovedCS_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRCommunityApprovedCS',
+        },
         filterOCRCommunitySite_cache: {
             type: String,
             required: false,
@@ -607,6 +631,11 @@ export default {
                   )
                 : '',
 
+            filterOCRCommunityApprovedCS:
+                sessionStorage.getItem(
+                    this.filterOCRCommunityApprovedCS_cache
+                ) || 'false',
+
             filterOCRCommunitySite: (() => {
                 const v = sessionStorage.getItem(
                     this.filterOCRCommunitySite_cache
@@ -660,7 +689,8 @@ export default {
                 this.filterOCRCommunityApprovedFromDate === '' &&
                 this.filterOCRCommunityApprovedToDate === '' &&
                 this.filterOCRCommunityLastModifiedFromDate === '' &&
-                this.filterOCRCommunityLastModifiedToDate === ''
+                this.filterOCRCommunityLastModifiedToDate === '' &&
+                this.filterOCRCommunityApprovedCS === 'false'
             ) {
                 return false;
             } else {
@@ -1093,6 +1123,7 @@ export default {
                             vm.filterOCRCommunityLastModifiedFromDate;
                         d.filter_last_modified_to_date =
                             vm.filterOCRCommunityLastModifiedToDate;
+                        d.filter_approved_cs = vm.filterOCRCommunityApprovedCS;
                     },
                 },
                 dom:
@@ -1336,6 +1367,17 @@ export default {
             sessionStorage.setItem(
                 vm.filterOCRCommunityLastModifiedToDate_cache,
                 vm.filterOCRCommunityLastModifiedToDate
+            );
+        },
+        filterOCRCommunityApprovedCS: function () {
+            let vm = this;
+            vm.$refs.community_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRCommunityApprovedCS_cache,
+                vm.filterOCRCommunityApprovedCS
             );
         },
         filterOCRCommunitySite: function () {

@@ -127,17 +127,17 @@ class SpeciesTfaunaAdapter(SourceAdapter):
             logger.exception("TFAUNA: failed to preload FaunaSubGroup parent map")
 
         # Task 11854: processing_status — determine from approved ConservationStatus.
-        # Pre-load NameID → taxonomy_id from LegacyTaxonomyMapping, then build a
+        # Pre-load SpCode → taxonomy_id from LegacyTaxonomyMapping, then build a
         # set of taxonomy_ids that have a current approved CS.
         from boranga.components.data_migration.registry import _load_legacy_taxonomy_id_mappings
 
         ltm_table = _load_legacy_taxonomy_id_mappings("TFAUNA")
-        # Build NameID → taxonomy_id lookup for quick resolution in the row loop.
-        name_id_to_taxonomy_id: dict[str, int] = {}
+        # Build SpCode → taxonomy_id lookup for quick resolution in the row loop.
+        sp_code_to_taxonomy_id: dict[str, int] = {}
         for legacy_id, entry in ltm_table.items():
             tid = entry.get("taxonomy_id")
             if tid:
-                name_id_to_taxonomy_id[legacy_id] = tid
+                sp_code_to_taxonomy_id[legacy_id] = tid
 
         # Taxonomy IDs with at least one approved ConservationStatus.
         taxonomy_ids_with_approved_cs: set[int] = set()
@@ -188,11 +188,11 @@ class SpeciesTfaunaAdapter(SourceAdapter):
                 pass
             canonical["migrated_from_id"] = str(sp_code) if sp_code else None
 
-            # taxonomy_id: use NameID column (legacy taxon name id).
+            # taxonomy_id: use SpCode (= TAXONID in the mapping CSV).
             # The pipeline TAXONOMY_TRANSFORM resolves this via
             # LegacyTaxonomyMapping to the actual Taxonomy FK.
-            name_id_raw = (raw.get("NameID") or "").strip()
-            canonical["taxonomy_id"] = name_id_raw if name_id_raw and name_id_raw != "0" else None
+            sp_code_key = (sp_code or "").strip()
+            canonical["taxonomy_id"] = sp_code_key if sp_code_key else None
 
             # Task 11848: comment
             # 1a. Resolve Category code via TFAUNA_CATEGORY_MAP (CategoryList)
@@ -234,8 +234,8 @@ class SpeciesTfaunaAdapter(SourceAdapter):
             # IF the species has a current Approved ConservationStatus → Active
             # (and all SpeciesPublishingStatus sections → Public).
             # ELSE → Historical (and all SpeciesPublishingStatus sections → Private).
-            # Resolve NameID → taxonomy_id, then check the pre-loaded approved CS set.
-            resolved_tax_id = name_id_to_taxonomy_id.get(name_id_raw) if name_id_raw else None
+            # Resolve SpCode → taxonomy_id, then check the pre-loaded approved CS set.
+            resolved_tax_id = sp_code_to_taxonomy_id.get(sp_code_key) if sp_code_key else None
             if resolved_tax_id and resolved_tax_id in taxonomy_ids_with_approved_cs:
                 canonical["processing_status"] = "active"
             else:

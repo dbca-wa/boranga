@@ -141,9 +141,15 @@ The command will output a list of migration runs to process each of the chunks a
 
 # -- TFAUNA
 
+## Populate required mappings
+
+./manage.py populate_legacy_username_map private-media/legacy_data/TFAUNA/legacy-username-emailuser-map-TFAUNA.csv --legacy-system TFAUNA --update
+./manage.py populate_legacy_value_map private-media/legacy_data/TFAUNA/legacy-data-map-TFAUNA.csv --legacy-system TFAUNA --update
+./manage.py populate_legacy_taxonomy_mapping private-media/legacy_data/TFAUNA/legacy-species-names-mapped-Nomos-ID-TFAUNA.csv --list-name TFAUNA
+
 ## Species
 
-./manage.py migrate_data run species_legacy private-media/legacy_data/TFAUNA/Species List.csv --sources TFAUNA --wipe-targets --seed-history
+./manage.py migrate_data run species_legacy "private-media/legacy_data/TFAUNA/Species List.csv" --sources TFAUNA --wipe-targets --seed-history
 
 ## Conservation Status
 

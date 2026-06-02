@@ -341,6 +341,7 @@ class OccurrenceSerializer(BaseModelSerializer):
     occ_geometry = serializers.SerializerMethodField(read_only=True)
     show_locked_indicator = serializers.BooleanField(read_only=True)
     editing_window_minutes = serializers.IntegerField(read_only=True)
+    cs_category_code = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Occurrence
@@ -447,6 +448,24 @@ class OccurrenceSerializer(BaseModelSerializer):
             return OCCIdentificationSerializer(qs).data
         except OCCIdentification.DoesNotExist:
             return OCCIdentificationSerializer().data
+
+    def get_cs_category_code(self, obj):
+        if obj.species:
+            cs = obj.species.approved_conservation_status
+        elif obj.community:
+            cs = obj.community.approved_conservation_status
+        else:
+            return ""
+        if not cs:
+            return ""
+        codes = []
+        if cs.wa_legislative_category:
+            codes.append(cs.wa_legislative_category.code)
+        if cs.wa_priority_category:
+            codes.append(cs.wa_priority_category.code)
+        if not codes:
+            return ""
+        return "(" + ", ".join(codes) + ")"
 
     def get_label(self, obj):
         return "Occurrence"
@@ -1578,6 +1597,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     can_user_edit = serializers.SerializerMethodField()
     can_user_copy = serializers.SerializerMethodField()
     common_names = serializers.SerializerMethodField(read_only=True)
+    cs_category_code = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = OccurrenceReport
@@ -1635,6 +1655,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
             "ocr_for_occ_number",
             "ocr_for_occ_name",
             "common_names",
+            "cs_category_code",
         )
 
     def get_readonly(self, obj):
@@ -1738,6 +1759,24 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
     def get_can_user_edit(self, obj):
         request = self.context["request"]
         return obj.can_user_edit(request)
+
+    def get_cs_category_code(self, obj):
+        if obj.species:
+            cs = obj.species.approved_conservation_status
+        elif obj.community:
+            cs = obj.community.approved_conservation_status
+        else:
+            return ""
+        if not cs:
+            return ""
+        codes = []
+        if cs.wa_legislative_category:
+            codes.append(cs.wa_legislative_category.code)
+        if cs.wa_priority_category:
+            codes.append(cs.wa_priority_category.code)
+        if not codes:
+            return ""
+        return "(" + ", ".join(codes) + ")"
 
     def get_can_user_copy(self, obj):
         request = self.context["request"]
@@ -1956,6 +1995,7 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
             "editing_window_minutes",
             "is_unlocked",
             "datetime_updated",
+            "cs_category_code",
         )
 
     def get_approved_by_name(self, obj):

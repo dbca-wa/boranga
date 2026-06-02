@@ -154,6 +154,25 @@
                         />
                     </div>
                 </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
+                            for="ocr-fauna-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="ocr-fauna-approved-cs"
+                                v-model="filterOCRFaunaApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="row">
                 <div class="col-md-6">
@@ -423,6 +442,11 @@ export default {
             required: false,
             default: 'filterOCRFaunaLastModifiedToDate',
         },
+        filterOCRFaunaApprovedCS_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCRFaunaApprovedCS',
+        },
     },
     data() {
         return {
@@ -583,6 +607,10 @@ export default {
                   )
                 : '',
 
+            filterOCRFaunaApprovedCS:
+                sessionStorage.getItem(this.filterOCRFaunaApprovedCS_cache) ||
+                'false',
+
             filterListsSpecies: {},
             filterRegionDistrict: {},
             occurrence_list: [],
@@ -631,7 +659,8 @@ export default {
                 this.filterOCRFaunaApprovedFromDate === '' &&
                 this.filterOCRFaunaApprovedToDate === '' &&
                 this.filterOCRFaunaLastModifiedFromDate === '' &&
-                this.filterOCRFaunaLastModifiedToDate === ''
+                this.filterOCRFaunaLastModifiedToDate === '' &&
+                this.filterOCRFaunaApprovedCS === 'false'
             ) {
                 return false;
             } else {
@@ -1067,6 +1096,7 @@ export default {
                             vm.filterOCRFaunaLastModifiedFromDate;
                         d.filter_last_modified_to_date =
                             vm.filterOCRFaunaLastModifiedToDate;
+                        d.filter_approved_cs = vm.filterOCRFaunaApprovedCS;
                     },
                 },
                 dom:
@@ -1310,6 +1340,17 @@ export default {
             sessionStorage.setItem(
                 vm.filterOCRFaunaLastModifiedToDate_cache,
                 vm.filterOCRFaunaLastModifiedToDate
+            );
+        },
+        filterOCRFaunaApprovedCS: function () {
+            let vm = this;
+            vm.$refs.fauna_ocr_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCRFaunaApprovedCS_cache,
+                vm.filterOCRFaunaApprovedCS
             );
         },
     },

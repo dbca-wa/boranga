@@ -109,6 +109,25 @@
                         />
                     </div>
                 </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
+                            for="occ-flora-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="occ-flora-approved-cs"
+                                v-model="filterOCCFloraApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="row">
                 <div class="col-md-6">
@@ -347,6 +366,11 @@ export default {
             required: false,
             default: 'filterOCCFloraLastModifiedToDate',
         },
+        filterOCCFloraApprovedCS_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCFloraApprovedCS',
+        },
     },
     data() {
         return {
@@ -462,6 +486,10 @@ export default {
                   )
                 : '',
 
+            filterOCCFloraApprovedCS:
+                sessionStorage.getItem(this.filterOCCFloraApprovedCS_cache) ||
+                'false',
+
             filterListsSpecies: {},
             filterRegionDistrict: {},
             occurrence_list: [],
@@ -508,7 +536,8 @@ export default {
                 this.filterOCCFloraActivatedFromDate === '' &&
                 this.filterOCCFloraActivatedToDate === '' &&
                 this.filterOCCFloraLastModifiedFromDate === '' &&
-                this.filterOCCFloraLastModifiedToDate === ''
+                this.filterOCCFloraLastModifiedToDate === '' &&
+                this.filterOCCFloraApprovedCS === 'false'
             ) {
                 return false;
             } else {
@@ -880,6 +909,7 @@ export default {
                             vm.filterOCCFloraLastModifiedFromDate;
                         d.filter_last_modified_to_date =
                             vm.filterOCCFloraLastModifiedToDate;
+                        d.filter_approved_cs = vm.filterOCCFloraApprovedCS;
                         d.is_internal = vm.is_internal;
                     },
                 },
@@ -1058,6 +1088,17 @@ export default {
             sessionStorage.setItem(
                 vm.filterOCCFloraLastModifiedToDate_cache,
                 vm.filterOCCFloraLastModifiedToDate
+            );
+        },
+        filterOCCFloraApprovedCS: function () {
+            let vm = this;
+            vm.$refs.flora_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCFloraApprovedCS_cache,
+                vm.filterOCCFloraApprovedCS
             );
         },
     },

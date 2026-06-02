@@ -135,6 +135,27 @@
                 </div>
             </div>
             <div class="row">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
+                            for="occ-community-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="occ-community-approved-cs"
+                                v-model="filterOCCCommunityApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
                 <div class="col-md-6">
                     <label for="" class="form-label px-2"
                         >Review Due Date Range:</label
@@ -376,6 +397,11 @@ export default {
             required: false,
             default: 'filterOCCCommunitySite',
         },
+        filterOCCCommunityApprovedCS_cache: {
+            type: String,
+            required: false,
+            default: 'filterOCCCommunityApprovedCS',
+        },
     },
     data() {
         return {
@@ -510,6 +536,11 @@ export default {
                 return v && v !== 'all' ? v : '';
             })(),
 
+            filterOCCCommunityApprovedCS:
+                sessionStorage.getItem(
+                    this.filterOCCCommunityApprovedCS_cache
+                ) || 'false',
+
             filterListsCommunity: {},
             filterRegionDistrict: {},
             occurrence_list: [],
@@ -558,7 +589,8 @@ export default {
                 this.filterOCCCommunityActivatedFromDate === '' &&
                 this.filterOCCCommunityActivatedToDate === '' &&
                 this.filterOCCCommunityLastModifiedFromDate === '' &&
-                this.filterOCCCommunityLastModifiedToDate === ''
+                this.filterOCCCommunityLastModifiedToDate === '' &&
+                this.filterOCCCommunityApprovedCS === 'false'
             ) {
                 return false;
             } else {
@@ -948,6 +980,7 @@ export default {
                             vm.filterOCCCommunityLastModifiedFromDate;
                         d.filter_last_modified_to_date =
                             vm.filterOCCCommunityLastModifiedToDate;
+                        d.filter_approved_cs = vm.filterOCCCommunityApprovedCS;
                         d.is_internal = vm.is_internal;
                     },
                 },
@@ -1148,6 +1181,17 @@ export default {
             sessionStorage.setItem(
                 vm.filterOCCCommunitySite_cache,
                 vm.filterOCCCommunitySite
+            );
+        },
+        filterOCCCommunityApprovedCS: function () {
+            let vm = this;
+            vm.$refs.community_occ_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterOCCCommunityApprovedCS_cache,
+                vm.filterOCCCommunityApprovedCS
             );
         },
     },
