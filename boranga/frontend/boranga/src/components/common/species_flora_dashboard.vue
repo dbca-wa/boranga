@@ -227,7 +227,7 @@
                         <label
                             class="form-check-label"
                             for="international-relevance"
-                            >International Relevance</label
+                            >Other Conservation Assessment</label
                         >
                         <div class="form-check form-switch mt-1">
                             <input

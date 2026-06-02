@@ -361,7 +361,7 @@
                         </div>
                     </div>
 
-                    <!-- International Relevance (species / CS) -->
+                    <!-- Other Conservation Assessment (species / CS) -->
                     <div
                         v-if="
                             selectedCategory === 'species' ||
@@ -370,7 +370,7 @@
                         class="row mb-3"
                     >
                         <label class="col-sm-3 col-form-label fw-bold"
-                            >International Relevance</label
+                            >Other Conservation Assessment</label
                         >
                         <div class="col-sm-6 d-flex align-items-center">
                             <div class="form-check mb-0">
