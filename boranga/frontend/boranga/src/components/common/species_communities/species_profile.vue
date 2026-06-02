@@ -849,7 +849,11 @@
                         >Conservation Plan Exists:
                         <HelpText
                             v-if="
-                                species_community.processing_status === 'Draft'
+                                species_community.processing_status ===
+                                    'Draft' ||
+                                (species_community.processing_status ===
+                                    'Active' &&
+                                    !isReadOnly)
                             "
                             section_id="species_profile_conservation_plan_exists"
                     /></label>
