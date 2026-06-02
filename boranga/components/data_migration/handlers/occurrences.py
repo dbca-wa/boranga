@@ -1435,7 +1435,6 @@ class OccurrenceImporter(BaseSheetImporter):
                             defaults = {
                                 "geometry": circle,
                                 "original_geometry_ewkb": original_point.ewkb,
-                                "locked": True,
                             }
                             if occ_content_type:
                                 defaults["content_type"] = occ_content_type
@@ -1469,7 +1468,6 @@ class OccurrenceImporter(BaseSheetImporter):
                 elif any(k.startswith("OccurrenceGeometry__") for k in merged):
                     defaults = {
                         "geometry": merged.get("OccurrenceGeometry__geometry"),
-                        "locked": merged.get("OccurrenceGeometry__locked"),
                         "buffer_radius": merged.get("OccurrenceGeometry__buffer_radius"),
                     }
                     if occ_content_type:
@@ -1802,7 +1800,7 @@ class OccurrenceImporter(BaseSheetImporter):
             if geo_update:
                 OccurrenceGeometry.objects.bulk_update(
                     geo_update,
-                    ["geometry", "locked", "content_type", "original_geometry_ewkb", "buffer_radius"],
+                    ["geometry", "content_type", "original_geometry_ewkb", "buffer_radius"],
                     batch_size=BATCH,
                 )
 
