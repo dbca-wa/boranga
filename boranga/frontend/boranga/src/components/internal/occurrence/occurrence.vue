@@ -6,7 +6,7 @@
                     Occurrence: {{ occurrence.occurrence_number }} -
                     <span class="text-capitalize">{{ display_group_type }}</span
                     ><template v-if="occurrence.cs_category_code">
-                        {{ occurrence.cs_category_code }}</template
+                        {{ ' ' + occurrence.cs_category_code }}</template
                     >
                 </h3>
                 <h4

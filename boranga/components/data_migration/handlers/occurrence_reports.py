@@ -5024,7 +5024,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             geometry=src_geom.geometry,
                             content_type=occ_ct,
                             object_id=occ.pk,
-                            locked=src_geom.locked,
                             buffer_radius=getattr(src_geom, "buffer_radius", None),
                         )
                         geom_to_create.append(occ_geom)

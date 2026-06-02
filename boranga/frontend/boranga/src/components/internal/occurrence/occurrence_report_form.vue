@@ -11,7 +11,7 @@
                     {{ occurrence_report.occurrence_report_number }} -
                     <span class="text-capitalize">{{ display_group_type }}</span
                     ><template v-if="occurrence_report.cs_category_code">
-                        {{ occurrence_report.cs_category_code }}</template
+                        {{ ' ' + occurrence_report.cs_category_code }}</template
                     >
                 </h3>
                 <h4 class="text-muted mb-3 float-end">
