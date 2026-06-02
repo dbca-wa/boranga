@@ -149,7 +149,7 @@ The command will output a list of migration runs to process each of the chunks a
 
 ## Species
 
-./manage.py migrate_data run species_legacy private-media/legacy_data/TFAUNA/Species List.csv --sources TFAUNA --wipe-targets --seed-history
+./manage.py migrate_data run species_legacy "private-media/legacy_data/TFAUNA/Species List.csv" --sources TFAUNA --wipe-targets --seed-history
 
 ## Conservation Status
 
