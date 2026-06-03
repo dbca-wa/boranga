@@ -571,6 +571,11 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
         # Leave the following as _list otherwise django has remove the field and create a new one
         related_name="curr_commonwealth_conservation_list",
     )
+    commonwealth_conservation_categories = models.ManyToManyField(
+        CommonwealthConservationList,
+        blank=True,
+        related_name="curr_commonwealth_conservation_categories",
+    )
     other_conservation_assessment = models.ForeignKey(
         OtherConservationAssessmentList,
         on_delete=models.PROTECT,
