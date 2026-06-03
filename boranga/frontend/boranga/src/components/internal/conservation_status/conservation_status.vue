@@ -1050,40 +1050,40 @@ export default {
             return data ? moment(data).format('DD/MM/YYYY HH:mm:ss') : '';
         },
     },
-    beforeRouteEnter: function (to, from, next) {
-        fetch(
-            `/api/conservation_status/${to.params.conservation_status_id}/internal_conservation_status.json`
-        ).then(
-            async (response) => {
-                next(async (vm) => {
-                    const data = await response.json();
-                    vm.conservation_status_obj = data.conservation_status_obj;
-                });
-            },
-            (err) => {
-                console.log(err);
-            }
-        );
+    beforeRouteEnter: async function (to) {
+        try {
+            const response = await fetch(
+                `/api/conservation_status/${to.params.conservation_status_id}/internal_conservation_status.json`
+            );
+            const data = await response.json();
+            return (vm) => {
+                vm.conservation_status_obj = data.conservation_status_obj;
+            };
+        } catch (err) {
+            console.log(err);
+        }
     },
-    beforeRouteLeave(to, from, next) {
+    beforeRouteLeave: async function () {
         if (
             this.conservation_status_obj &&
             !this.conservation_status_obj.locked &&
             this.shouldShowTimerAndPoll
         ) {
-            swal.fire({
-                title: 'Conservation Status Unlocked',
-                text: 'Please lock the conservation status before leaving.',
-                icon: 'warning',
-                confirmButtonText: 'Ok',
-                customClass: {
-                    confirmButton: 'btn btn-primary',
-                },
-            }).then(() => {
-                next(false);
-            });
+            return swal
+                .fire({
+                    title: 'Conservation Status Unlocked',
+                    text: 'Please lock the conservation status before leaving.',
+                    icon: 'warning',
+                    confirmButtonText: 'Ok',
+                    customClass: {
+                        confirmButton: 'btn btn-primary',
+                    },
+                })
+                .then(() => {
+                    return false;
+                });
         } else {
-            next();
+            return true;
         }
     },
     data: function () {
