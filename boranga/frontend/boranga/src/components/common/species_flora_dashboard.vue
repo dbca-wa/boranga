@@ -207,6 +207,25 @@
                     <div class="form-group">
                         <label
                             class="form-check-label"
+                            for="species-flora-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="species-flora-approved-cs"
+                                v-model="filterFloraApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
                             for="commonwealth-relevance"
                             >Commonwealth Relevance</label
                         >
@@ -233,25 +252,6 @@
                             <input
                                 id="international-relevance"
                                 v-model="filterFloraInternationalRelevance"
-                                class="form-check-input"
-                                type="checkbox"
-                                true-value="true"
-                                false-value="false"
-                            />
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="form-group">
-                        <label
-                            class="form-check-label"
-                            for="species-flora-approved-cs"
-                            >Approved CS</label
-                        >
-                        <div class="form-check form-switch mt-1">
-                            <input
-                                id="species-flora-approved-cs"
-                                v-model="filterFloraApprovedCS"
                                 class="form-check-input"
                                 type="checkbox"
                                 true-value="true"

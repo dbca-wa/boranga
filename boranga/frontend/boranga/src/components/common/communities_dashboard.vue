@@ -162,6 +162,25 @@
                     <div class="form-group">
                         <label
                             class="form-check-label"
+                            for="species-community-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="species-community-approved-cs"
+                                v-model="filterCommunityApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
                             for="commonwealth-relevance"
                             >Commonwealth Relevance</label
                         >
@@ -188,25 +207,6 @@
                             <input
                                 id="international-relevance"
                                 v-model="filterCommunityInternationalRelevance"
-                                class="form-check-input"
-                                type="checkbox"
-                                true-value="true"
-                                false-value="false"
-                            />
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="form-group">
-                        <label
-                            class="form-check-label"
-                            for="species-community-approved-cs"
-                            >Approved CS</label
-                        >
-                        <div class="form-check form-switch mt-1">
-                            <input
-                                id="species-community-approved-cs"
-                                v-model="filterCommunityApprovedCS"
                                 class="form-check-input"
                                 type="checkbox"
                                 true-value="true"
