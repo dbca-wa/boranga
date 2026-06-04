@@ -12,7 +12,7 @@ from datetime import datetime
 from io import BytesIO
 
 from django.conf import settings
-from django.db.models import Count
+from django.db.models import Count, Q
 from openpyxl import Workbook
 from openpyxl.styles import Font
 
@@ -1086,8 +1086,30 @@ def get_occurrence_export(filters, limit):
         qs = qs.filter(community__taxonomy__community_name__icontains=filters["filter_community_name"])
     if filters.get("filter_occurrence_name"):
         qs = qs.filter(occurrence_name__icontains=filters["filter_occurrence_name"])
+    group_type_filter = filters.get("group_type")
     if filters.get("filter_approved_cs") == "true":
-        qs = qs.filter(conservation_status__processing_status="approved")
+        if group_type_filter:
+            if group_type_filter == "all":
+                qs = qs.filter(
+                    Q(
+                        species__isnull=False,
+                        species__conservation_status__processing_status="approved",
+                    )
+                    | Q(
+                        community__isnull=False,
+                        community__conservation_status__processing_status="approved",
+                    )
+                )
+            if group_type_filter in ["flora", "fauna"]:
+                qs = qs.filter(
+                    species__isnull=False,
+                    species__conservation_status__processing_status="approved",
+                )
+            if group_type_filter == "community":
+                qs = qs.filter(
+                    community__isnull=False,
+                    community__conservation_status__processing_status="approved",
+                )
     region_ids = _id_list(filters.get("filter_region"))
     if region_ids:
         qs = qs.filter(location__region__id__in=region_ids)
@@ -1223,8 +1245,9 @@ def get_occurrence_report_export(filters, limit):
         "observer_detail",
         "species__taxonomy__vernaculars",
     )
-    if filters.get("group_type") and filters["group_type"] != "all":
-        qs = qs.filter(group_type__name__iexact=filters["group_type"])
+    group_type_filter = filters.get("group_type")
+    if group_type_filter and group_type_filter != "all":
+        qs = qs.filter(group_type__name__iexact=group_type_filter)
     ps = filters.get("filter_status") or filters.get("processing_status")
     if ps and ps not in ("all", ""):
         qs = qs.filter(processing_status=ps)
@@ -1236,8 +1259,31 @@ def get_occurrence_report_export(filters, limit):
         qs = qs.filter(occurrence__occurrence_name__icontains=filters["filter_occurrence_name"])
     if filters.get("filter_occurrence") and filters["filter_occurrence"] not in ("all", ""):
         qs = qs.filter(occurrence__occurrence_number__icontains=filters["filter_occurrence"])
-    if filters.get("filter_approved_cs") == "true":
-        qs = qs.filter(conservation_status__processing_status="approved")
+    if group_type_filter:
+        filter_approved_cs = filters.get("filter_approved_cs") == "true"
+        if filter_approved_cs:
+            if group_type_filter == "all":
+                qs = qs.filter(
+                    Q(
+                        species__isnull=False,
+                        species__conservation_status__processing_status="approved",
+                    )
+                    | Q(
+                        community__isnull=False,
+                        community__conservation_status__processing_status="approved",
+                    )
+                )
+            if group_type_filter in ["flora", "fauna"]:
+                qs = qs.filter(
+                    species__isnull=False,
+                    species__conservation_status__processing_status="approved",
+                )
+            if group_type_filter == "community":
+                qs = qs.filter(
+                    community__isnull=False,
+                    community__conservation_status__processing_status="approved",
+                )
+
     region_ids = _id_list(filters.get("filter_region"))
     if region_ids:
         qs = qs.filter(location__region__id__in=region_ids)
