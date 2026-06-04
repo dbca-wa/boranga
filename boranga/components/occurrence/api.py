@@ -7,7 +7,7 @@ from django.contrib.contenttypes import models as ct_models
 from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.geos.error import GEOSException
 from django.core.cache import cache
-from django.db import models, transaction
+from django.db import NotSupportedError, models, transaction
 from django.db.models import CharField, Q, Value
 from django.db.models.functions import Concat
 from django.http import Http404, HttpResponse
@@ -540,7 +540,14 @@ class OccurrenceReportPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
     def occurrence_report_internal(self, request, *args, **kwargs):
         qs = self.get_queryset()
         qs = self.filter_queryset(qs)
-        qs = qs.prefetch_related("ocr_geometry")
+        try:
+            qs = qs.prefetch_related("ocr_geometry")
+        except NotSupportedError:
+            # Some filter operations (eg. union()) produce compound queries
+            # that don't support prefetch_related. In that case skip prefetch
+            # to avoid raising NotSupportedError and return the queryset
+            # without prefetching.
+            pass
 
         result_page = self.paginator.paginate_queryset(qs, request)
         serializer = ListInternalOccurrenceReportSerializer(result_page, context={"request": request}, many=True)
