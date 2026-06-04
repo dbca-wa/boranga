@@ -234,7 +234,7 @@ def get_species_export(filters, limit):
     if filters.get("filter_commonwealth_relevance") == "true":
         qs = qs.filter(
             conservation_status__processing_status="approved",
-            conservation_status__commonwealth_conservation_category__isnull=False,
+            conservation_status__commonwealth_conservation_categories__isnull=False,
         ).distinct()
     if filters.get("filter_international_relevance") == "true":
         qs = qs.filter(
@@ -247,6 +247,8 @@ def get_species_export(filters, limit):
             conservation_status__processing_status="approved",
             conservation_status__conservation_criteria__icontains=cc,
         ).distinct()
+    if filters.get("filter_approved_cs") == "true":
+        qs = qs.filter(conservation_status__processing_status="approved")
     fg = filters.get("filter_fauna_group")
     if fg and fg not in ("all", ""):
         qs = qs.filter(fauna_group_id=fg)
@@ -281,6 +283,12 @@ def get_species_export_fields(data, include_group_type=False):
         regions = ", ".join(obj.regions.all().values_list("name", flat=True))
         districts = ", ".join(obj.districts.all().values_list("name", flat=True))
         cs = _approved_cs(obj)
+        if cs:
+            commonwealth_conservation_categories = ", ".join(
+                cs.commonwealth_conservation_categories.values_list("code", flat=True)
+            )
+        else:
+            commonwealth_conservation_categories = ""
         pub = ""
         try:
             pub = "Public" if obj.species_publishing_status.species_public else "Private"
@@ -300,8 +308,7 @@ def get_species_export_fields(data, include_group_type=False):
             _approved_cs_field(cs, "wa_legislative_list.code"),
             _approved_cs_field(cs, "wa_legislative_category.code"),
             _approved_cs_field(cs, "wa_priority_category.code"),
-            _approved_cs_field(cs, "commonwealth_conservation_category.code"),
-            _approved_cs_field(cs, "other_conservation_assessment.code"),
+            commonwealth_conservation_categories,
             _approved_cs_field(cs, "conservation_criteria"),
             _safe(obj.get_processing_status_display()),
             pub,
@@ -381,7 +388,7 @@ def get_community_export(filters, limit):
     if filters.get("filter_commonwealth_relevance") == "true":
         qs = qs.filter(
             conservation_status__processing_status="approved",
-            conservation_status__commonwealth_conservation_category__isnull=False,
+            conservation_status__commonwealth_conservation_categories__isnull=False,
         ).distinct()
     if filters.get("filter_international_relevance") == "true":
         qs = qs.filter(
@@ -394,6 +401,8 @@ def get_community_export(filters, limit):
             conservation_status__processing_status="approved",
             conservation_status__conservation_criteria__icontains=cc,
         ).distinct()
+    if filters.get("filter_approved_cs") == "true":
+        qs = qs.filter(conservation_status__processing_status="approved")
     if filters.get("filter_community_common_id"):
         qs = qs.filter(taxonomy__community_common_id__icontains=filters["filter_community_common_id"])
     return list(qs[:limit])
@@ -409,6 +418,12 @@ def get_community_export_fields(data, include_group_type=False):
         regions = ", ".join(obj.regions.all().values_list("name", flat=True))
         districts = ", ".join(obj.districts.all().values_list("name", flat=True))
         cs = _approved_cs(obj)
+        if cs:
+            commonwealth_conservation_categories = ", ".join(
+                cs.commonwealth_conservation_categories.values_list("code", flat=True)
+            )
+        else:
+            commonwealth_conservation_categories = ""
         pub = ""
         try:
             pub = "Public" if obj.community_publishing_status.community_public else "Private"
@@ -424,7 +439,7 @@ def get_community_export_fields(data, include_group_type=False):
                 _approved_cs_field(cs, "wa_legislative_list.code"),
                 _approved_cs_field(cs, "wa_legislative_category.code"),
                 _approved_cs_field(cs, "wa_priority_category.code"),
-                _approved_cs_field(cs, "commonwealth_conservation_category.code"),
+                commonwealth_conservation_categories,
                 _approved_cs_field(cs, "other_conservation_assessment.code"),
                 _approved_cs_field(cs, "conservation_criteria"),
                 _safe(obj.get_processing_status_display()),
@@ -544,11 +559,11 @@ def get_species_and_communities_export(filters, limit):
     if filters.get("filter_commonwealth_relevance") == "true":
         species_qs = species_qs.filter(
             conservation_status__processing_status="approved",
-            conservation_status__commonwealth_conservation_category__isnull=False,
+            conservation_status__commonwealth_conservation_categories__isnull=False,
         ).distinct()
         community_qs = community_qs.filter(
             conservation_status__processing_status="approved",
-            conservation_status__commonwealth_conservation_category__isnull=False,
+            conservation_status__commonwealth_conservation_categories__isnull=False,
         ).distinct()
     if filters.get("filter_international_relevance") == "true":
         species_qs = species_qs.filter(
@@ -569,6 +584,9 @@ def get_species_and_communities_export(filters, limit):
             conservation_status__processing_status="approved",
             conservation_status__conservation_criteria__icontains=cc,
         ).distinct()
+    if filters.get("filter_approved_cs") == "true":
+        species_qs = species_qs.filter(conservation_status__processing_status="approved")
+        community_qs = community_qs.filter(conservation_status__processing_status="approved")
     fg = filters.get("filter_fauna_group")
     if fg and fg not in ("all", ""):
         species_qs = species_qs.filter(fauna_group_id=fg)
@@ -604,6 +622,12 @@ def get_species_and_communities_export_fields(data, include_group_type=False):
         except Exception:
             t = None
         cs = _approved_cs(obj)
+        if cs:
+            commonwealth_conservation_categories = ", ".join(
+                cs.commonwealth_conservation_categories.values_list("code", flat=True)
+            )
+        else:
+            commonwealth_conservation_categories = ""
         if is_community:
             group_type_name = "Community"
             scientific_name = ""
@@ -662,7 +686,7 @@ def get_species_and_communities_export_fields(data, include_group_type=False):
                 _approved_cs_field(cs, "wa_legislative_list.code"),
                 _approved_cs_field(cs, "wa_legislative_category.code"),
                 _approved_cs_field(cs, "wa_priority_category.code"),
-                _approved_cs_field(cs, "commonwealth_conservation_category.code"),
+                commonwealth_conservation_categories,
                 _approved_cs_field(cs, "other_conservation_assessment.code"),
                 _approved_cs_field(cs, "conservation_criteria"),
                 _safe(obj.get_processing_status_display()),
@@ -716,13 +740,13 @@ def get_conservation_status_species_export(filters, limit):
         "wa_legislative_category",
         "wa_priority_list",
         "wa_priority_category",
-        "commonwealth_conservation_category",
         "other_conservation_assessment",
         "change_code",
         "submitter_information__submitter_category",
     ).prefetch_related(
         "species__taxonomy__vernaculars",
         "species__taxonomy__informal_groups__classification_system_fk",
+        "commonwealth_conservation_categories",
     )
     # Filter by application_type (same field the dashboard uses) to exclude community CS
     if filters.get("group_type") and filters["group_type"] != "all":
@@ -765,7 +789,7 @@ def get_conservation_status_species_export(filters, limit):
     if d:
         qs = qs.filter(review_due_date__lte=d)
     if filters.get("filter_commonwealth_relevance") == "true":
-        qs = qs.exclude(commonwealth_conservation_category__isnull=True)
+        qs = qs.exclude(commonwealth_conservation_categories__isnull=True)
     if filters.get("filter_international_relevance") == "true":
         qs = qs.exclude(other_conservation_assessment__isnull=True)
     cc = filters.get("filter_conservation_criteria")
@@ -812,6 +836,9 @@ def get_conservation_status_species_export_fields(data, include_group_type=False
             for ig in (t.informal_groups.all() if t else [])
             if ig.classification_system_fk
         )
+        commonwealth_conservation_categories = ", ".join(
+            obj.commonwealth_conservation_categories.values_list("code", flat=True)
+        )
         si = getattr(obj, "submitter_information", None)
         row = [
             _safe(obj.conservation_status_number),
@@ -828,11 +855,7 @@ def get_conservation_status_species_export_fields(data, include_group_type=False
             _safe(getattr(obj.wa_priority_category, "code", "") if obj.wa_priority_category else ""),
             _safe(getattr(obj.wa_legislative_list, "code", "") if obj.wa_legislative_list else ""),
             _safe(getattr(obj.wa_legislative_category, "code", "") if obj.wa_legislative_category else ""),
-            _safe(
-                getattr(obj.commonwealth_conservation_category, "code", "")
-                if obj.commonwealth_conservation_category
-                else ""
-            ),
+            commonwealth_conservation_categories,
             _safe(getattr(obj.other_conservation_assessment, "code", "") if obj.other_conservation_assessment else ""),
             _safe(obj.conservation_criteria),
             _user_name(obj.submitter, user_cache),
@@ -891,11 +914,11 @@ def get_conservation_status_community_export(filters, limit):
         "wa_legislative_category",
         "wa_priority_list",
         "wa_priority_category",
-        "commonwealth_conservation_category",
         "other_conservation_assessment",
         "change_code",
         "submitter_information__submitter_category",
     ).prefetch_related(
+        "commonwealth_conservation_categories",
         "community__regions",
         "community__districts",
     )
@@ -937,7 +960,7 @@ def get_conservation_status_community_export(filters, limit):
     if d:
         qs = qs.filter(review_due_date__lte=d)
     if filters.get("filter_commonwealth_relevance") == "true":
-        qs = qs.exclude(commonwealth_conservation_category__isnull=True)
+        qs = qs.exclude(commonwealth_conservation_categories__isnull=True)
     if filters.get("filter_international_relevance") == "true":
         qs = qs.exclude(other_conservation_assessment__isnull=True)
     cc = filters.get("filter_conservation_criteria")
@@ -971,6 +994,7 @@ def get_conservation_status_community_export_fields(data, include_group_type=Fal
         t = comm.taxonomy if comm else None
         regions = ", ".join(comm.regions.all().values_list("name", flat=True)) if comm else ""
         districts = ", ".join(comm.districts.all().values_list("name", flat=True)) if comm else ""
+        commonwealth_conservation_categories = obj.commonwealth_conservation_categories.values_list("code", flat=True)
         si = getattr(obj, "submitter_information", None)
         rows.append(
             [
@@ -985,11 +1009,7 @@ def get_conservation_status_community_export_fields(data, include_group_type=Fal
                 _safe(getattr(obj.wa_priority_category, "code", "") if obj.wa_priority_category else ""),
                 _safe(getattr(obj.wa_legislative_list, "code", "") if obj.wa_legislative_list else ""),
                 _safe(getattr(obj.wa_legislative_category, "code", "") if obj.wa_legislative_category else ""),
-                _safe(
-                    getattr(obj.commonwealth_conservation_category, "code", "")
-                    if obj.commonwealth_conservation_category
-                    else ""
-                ),
+                commonwealth_conservation_categories,
                 _safe(
                     getattr(obj.other_conservation_assessment, "code", "") if obj.other_conservation_assessment else ""
                 ),
@@ -1066,6 +1086,8 @@ def get_occurrence_export(filters, limit):
         qs = qs.filter(community__taxonomy__community_name__icontains=filters["filter_community_name"])
     if filters.get("filter_occurrence_name"):
         qs = qs.filter(occurrence_name__icontains=filters["filter_occurrence_name"])
+    if filters.get("filter_approved_cs") == "true":
+        qs = qs.filter(conservation_status__processing_status="approved")
     region_ids = _id_list(filters.get("filter_region"))
     if region_ids:
         qs = qs.filter(location__region__id__in=region_ids)
@@ -1214,6 +1236,8 @@ def get_occurrence_report_export(filters, limit):
         qs = qs.filter(occurrence__occurrence_name__icontains=filters["filter_occurrence_name"])
     if filters.get("filter_occurrence") and filters["filter_occurrence"] not in ("all", ""):
         qs = qs.filter(occurrence__occurrence_number__icontains=filters["filter_occurrence"])
+    if filters.get("filter_approved_cs") == "true":
+        qs = qs.filter(conservation_status__processing_status="approved")
     region_ids = _id_list(filters.get("filter_region"))
     if region_ids:
         qs = qs.filter(location__region__id__in=region_ids)

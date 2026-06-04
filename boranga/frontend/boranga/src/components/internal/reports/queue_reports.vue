@@ -383,7 +383,32 @@
                                 <label
                                     class="form-check-label"
                                     for="filterInternationalRelevance"
-                                    >Internationally assessed only</label
+                                    >Other conservation assessment only</label
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="selectedCategory != 'conservation_status'"
+                        class="row mb-3"
+                    >
+                        <label class="col-sm-3 col-form-label fw-bold"
+                            >Approved CS</label
+                        >
+                        <div class="col-sm-6 d-flex align-items-center">
+                            <div class="form-check mb-0">
+                                <input
+                                    id="filterApprovedCS"
+                                    v-model="filterApprovedCS"
+                                    class="form-check-input"
+                                    type="checkbox"
+                                />
+                                <label
+                                    class="form-check-label"
+                                    for="filterApprovedCS"
+                                    >Only with approved conservation
+                                    status</label
                                 >
                             </div>
                         </div>
@@ -1100,6 +1125,7 @@ export default {
             filterPublicationStatus: 'all',
             filterCommonwealthRelevance: false,
             filterInternationalRelevance: false,
+            filterApprovedCS: false,
             filterConservationCriteria: '',
             filterFaunaGroup: 'all',
             filterFaunaSubGroup: 'all',
@@ -1249,6 +1275,7 @@ export default {
                 this.filterPublicationStatus !== 'all' ||
                 this.filterCommonwealthRelevance ||
                 this.filterInternationalRelevance ||
+                this.filterApprovedCS ||
                 this.filterConservationCriteria !== '' ||
                 this.filterFaunaGroup !== 'all' ||
                 this.filterFaunaSubGroup !== 'all' ||
@@ -1742,6 +1769,7 @@ export default {
             this.filterPublicationStatus = 'all';
             this.filterCommonwealthRelevance = false;
             this.filterInternationalRelevance = false;
+            this.filterApprovedCS = false;
             this.filterConservationCriteria = '';
             this.filterFaunaGroup = 'all';
             this.filterFaunaSubGroup = 'all';
@@ -1889,6 +1917,9 @@ export default {
             }
             if (this.filterInternationalRelevance) {
                 f.filter_international_relevance = 'true';
+            }
+            if (this.filterApprovedCS) {
+                f.filter_approved_cs = 'true';
             }
             if (this.filterConservationCriteria) {
                 f.filter_conservation_criteria =

@@ -272,6 +272,25 @@
                     <div class="form-group">
                         <label
                             class="form-check-label"
+                            for="species-fauna-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="species-fauna-approved-cs"
+                                v-model="filterFaunaApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
                             for="conservation-criteria"
                             >Conservation Criteria</label
                         >
@@ -439,6 +458,11 @@ export default {
             required: false,
             default: 'filterFaunaInternationalRelevance',
         },
+        filterFaunaApprovedCS_cache: {
+            type: String,
+            required: false,
+            default: 'filterFaunaApprovedCS',
+        },
         filterFaunaConsevationCriteria_cache: {
             type: String,
             required: false,
@@ -587,6 +611,11 @@ export default {
                       this.filterFaunaConsevationCriteria_cache
                   )
                 : '',
+            filterFaunaApprovedCS: sessionStorage.getItem(
+                this.filterFaunaApprovedCS_cache
+            )
+                ? sessionStorage.getItem(this.filterFaunaApprovedCS_cache)
+                : 'false',
 
             //Filter list for scientific name and common name
             filterListsSpecies: {},
@@ -641,7 +670,8 @@ export default {
                 this.filterFaunaWAPriorityCategory.length === 0 &&
                 this.filterFaunaCommonwealthRelevance === 'false' &&
                 this.filterFaunaInternationalRelevance === 'false' &&
-                this.filterFaunaConsevationCriteria === ''
+                this.filterFaunaConsevationCriteria === '' &&
+                this.filterFaunaApprovedCS === 'false'
             ) {
                 return false;
             } else {
@@ -904,9 +934,9 @@ export default {
                 visible: true,
             };
         },
-        column_commonwealth_conservation_category: function () {
+        column_commonwealth_conservation_categories: function () {
             return {
-                data: 'commonwealth_conservation_category',
+                data: 'commonwealth_conservation_categories',
                 orderable: false,
                 searchable: false,
                 visible: true,
@@ -1005,7 +1035,7 @@ export default {
                     vm.column_genera,
                     vm.column_wa_legislative_list,
                     vm.column_conservation_criteria,
-                    vm.column_commonwealth_conservation_category,
+                    vm.column_commonwealth_conservation_categories,
                     vm.column_other_conservation_assessment,
                     vm.column_informal_group,
                     vm.column_action,
@@ -1028,7 +1058,7 @@ export default {
                     vm.column_genera,
                     vm.column_wa_legislative_list,
                     vm.column_conservation_criteria,
-                    vm.column_commonwealth_conservation_category,
+                    vm.column_commonwealth_conservation_categories,
                     vm.column_other_conservation_assessment,
                     vm.column_informal_group,
                     vm.column_status,
@@ -1107,6 +1137,7 @@ export default {
                             vm.filterFaunaInternationalRelevance;
                         d.filter_conservation_criteria =
                             vm.filterFaunaConsevationCriteria;
+                        d.filter_approved_cs = vm.filterFaunaApprovedCS;
                         d.is_internal = vm.is_internal;
                     },
                 },
@@ -1322,6 +1353,17 @@ export default {
             sessionStorage.setItem(
                 vm.filterFaunaConsevationCriteria_cache,
                 vm.filterFaunaConsevationCriteria
+            );
+        },
+        filterFaunaApprovedCS: function () {
+            let vm = this;
+            vm.$refs.fauna_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterFaunaApprovedCS_cache,
+                vm.filterFaunaApprovedCS
             );
         },
     },

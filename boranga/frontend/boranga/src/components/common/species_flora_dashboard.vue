@@ -245,6 +245,25 @@
                     <div class="form-group">
                         <label
                             class="form-check-label"
+                            for="species-flora-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="species-flora-approved-cs"
+                                v-model="filterFloraApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
                             for="conservation-criteria"
                             >Conservation Criteria</label
                         >
@@ -407,6 +426,11 @@ export default {
             required: false,
             default: 'filterFloraInternationalRelevance',
         },
+        filterFloraApprovedCS_cache: {
+            type: String,
+            required: false,
+            default: 'filterFloraApprovedCS',
+        },
         filterFloraConsevationCriteria_cache: {
             type: String,
             required: false,
@@ -549,6 +573,11 @@ export default {
                       this.filterFloraConsevationCriteria_cache
                   )
                 : '',
+            filterFloraApprovedCS: sessionStorage.getItem(
+                this.filterFloraApprovedCS_cache
+            )
+                ? sessionStorage.getItem(this.filterFloraApprovedCS_cache)
+                : 'false',
 
             //Filter list for scientific name and common name
             filterListsSpecies: {},
@@ -601,7 +630,8 @@ export default {
                 this.filterFloraWAPriorityCategory.length === 0 &&
                 this.filterFloraCommonwealthRelevance === 'false' &&
                 this.filterFloraInternationalRelevance === 'false' &&
-                this.filterFloraConsevationCriteria === ''
+                this.filterFloraConsevationCriteria === '' &&
+                this.filterFloraApprovedCS === 'false'
             ) {
                 return false;
             } else {
@@ -787,9 +817,9 @@ export default {
                 visible: true,
             };
         },
-        column_commonwealth_conservation_category: function () {
+        column_commonwealth_conservation_categories: function () {
             return {
-                data: 'commonwealth_conservation_category',
+                data: 'commonwealth_conservation_categories',
                 orderable: false,
                 searchable: false,
                 visible: true,
@@ -936,7 +966,7 @@ export default {
                     vm.column_genera,
                     vm.column_wa_legislative_list,
                     vm.column_conservation_criteria,
-                    vm.column_commonwealth_conservation_category,
+                    vm.column_commonwealth_conservation_categories,
                     vm.column_other_conservation_assessment,
                     vm.column_informal_group,
                     vm.column_action,
@@ -957,7 +987,7 @@ export default {
                     vm.column_genera,
                     vm.column_wa_legislative_list,
                     vm.column_conservation_criteria,
-                    vm.column_commonwealth_conservation_category,
+                    vm.column_commonwealth_conservation_categories,
                     vm.column_other_conservation_assessment,
                     vm.column_informal_group,
                     vm.column_status,
@@ -1032,6 +1062,7 @@ export default {
                             vm.filterFloraInternationalRelevance;
                         d.filter_conservation_criteria =
                             vm.filterFloraConsevationCriteria;
+                        d.filter_approved_cs = vm.filterFloraApprovedCS;
                         d.is_internal = vm.is_internal;
                     },
                 },
@@ -1235,6 +1266,17 @@ export default {
             sessionStorage.setItem(
                 vm.filterFloraConsevationCriteria_cache,
                 vm.filterFloraConsevationCriteria
+            );
+        },
+        filterFloraApprovedCS: function () {
+            let vm = this;
+            vm.$refs.flora_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterFloraApprovedCS_cache,
+                vm.filterFloraApprovedCS
             );
         },
     },

@@ -90,21 +90,23 @@
                 </div>
                 <div
                     v-if="
-                        conservation_status?.commonwealth_conservation_category_code
+                        conservation_status
+                            ?.commonwealth_conservation_categories.length
                     "
                     class="row mb-3"
                 >
                     <label
-                        for="commonwealth_conservation_category"
+                        for="commonwealth_conservation_categories"
                         class="col-sm-4 col-form-label"
-                        >Commonwealth Conservation List</label
+                        >Commonwealth Conservation Categories</label
                     >
                     <div class="col-sm-8">
-                        <input
-                            id="commonwealth_conservation_category"
-                            class="form-control"
-                            :value="`${conservation_status.commonwealth_conservation_category_code} - ${conservation_status.commonwealth_conservation_category_label}`"
-                        />
+                        <span
+                            v-for="category in conservation_status.commonwealth_conservation_categories"
+                            :key="category.code"
+                        >
+                            {{ category }}
+                        </span>
                     </div>
                 </div>
                 <div
