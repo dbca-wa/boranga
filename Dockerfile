@@ -106,7 +106,7 @@ RUN apt-get update && \
     ca-certificates \
     tzdata \
     wget && \
-    apt-get remove --purge -y binutils rust-coreutils 2>/dev/null || true && \
+    apt-get remove --purge -y binutils rust-coreutils git mtr patch vim 2>/dev/null || true && \
     apt-get autoremove -y && \
     update-ca-certificates && \
     apt-get clean && \
