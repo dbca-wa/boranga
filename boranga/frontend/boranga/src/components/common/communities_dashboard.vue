@@ -162,6 +162,25 @@
                     <div class="form-group">
                         <label
                             class="form-check-label"
+                            for="species-community-approved-cs"
+                            >Approved CS</label
+                        >
+                        <div class="form-check form-switch mt-1">
+                            <input
+                                id="species-community-approved-cs"
+                                v-model="filterCommunityApprovedCS"
+                                class="form-check-input"
+                                type="checkbox"
+                                true-value="true"
+                                false-value="false"
+                            />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label
+                            class="form-check-label"
                             for="commonwealth-relevance"
                             >Commonwealth Relevance</label
                         >
@@ -340,6 +359,11 @@ export default {
             required: false,
             default: 'filterCommunityInternationalRelevance',
         },
+        filterCommunityApprovedCS_cache: {
+            type: String,
+            required: false,
+            default: 'filterCommunityApprovedCS',
+        },
         filterCommunityConsevationCriteria_cache: {
             type: String,
             required: false,
@@ -454,6 +478,11 @@ export default {
                       this.filterCommunityConsevationCriteria_cache
                   )
                 : '',
+            filterCommunityApprovedCS: sessionStorage.getItem(
+                this.filterCommunityApprovedCS_cache
+            )
+                ? sessionStorage.getItem(this.filterCommunityApprovedCS_cache)
+                : 'false',
 
             //Filter list for Community select box
             filterListsCommunities: {},
@@ -498,7 +527,8 @@ export default {
                 this.filterCommunityWAPriorityCategory.length === 0 &&
                 this.filterCommunityCommonwealthRelevance === 'false' &&
                 this.filterCommunityInternationalRelevance === 'false' &&
-                this.filterCommunityConsevationCriteria === ''
+                this.filterCommunityConsevationCriteria === '' &&
+                this.filterCommunityApprovedCS === 'false'
             ) {
                 return false;
             } else {
@@ -696,9 +726,9 @@ export default {
                 visible: true,
             };
         },
-        column_commonwealth_conservation_category: function () {
+        column_commonwealth_conservation_categories: function () {
             return {
-                data: 'commonwealth_conservation_category',
+                data: 'commonwealth_conservation_categories',
                 orderable: false,
                 searchable: false,
                 visible: true,
@@ -794,7 +824,7 @@ export default {
                     vm.column_district,
                     vm.column_wa_legislative_list,
                     vm.column_conservation_criteria,
-                    vm.column_commonwealth_conservation_category,
+                    vm.column_commonwealth_conservation_categories,
                     vm.column_other_conservation_assessment,
                     vm.column_action,
                 ];
@@ -812,7 +842,7 @@ export default {
                     vm.column_district,
                     vm.column_wa_legislative_list,
                     vm.column_conservation_criteria,
-                    vm.column_commonwealth_conservation_category,
+                    vm.column_commonwealth_conservation_categories,
                     vm.column_other_conservation_assessment,
                     vm.column_status,
                     vm.column_action,
@@ -879,6 +909,7 @@ export default {
                             vm.filterCommunityInternationalRelevance;
                         d.filter_conservation_criteria =
                             vm.filterCommunityConsevationCriteria;
+                        d.filter_approved_cs = vm.filterCommunityApprovedCS;
                         d.is_internal = vm.is_internal;
                     },
                 },
@@ -1038,6 +1069,17 @@ export default {
             sessionStorage.setItem(
                 vm.filterCommunityConsevationCriteria_cache,
                 vm.filterCommunityConsevationCriteria
+            );
+        },
+        filterCommunityApprovedCS: function () {
+            let vm = this;
+            vm.$refs.communities_datatable.vmDataTable.ajax.reload(
+                helpers.enablePopovers,
+                true
+            );
+            sessionStorage.setItem(
+                vm.filterCommunityApprovedCS_cache,
+                vm.filterCommunityApprovedCS
             );
         },
     },

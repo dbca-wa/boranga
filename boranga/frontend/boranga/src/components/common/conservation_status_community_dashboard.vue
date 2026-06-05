@@ -973,13 +973,13 @@ export default {
                 name: 'wa_legislative_category__code',
             };
         },
-        column_commonwealth_conservation_category: function () {
+        column_commonwealth_conservation_categories: function () {
             return {
-                data: 'commonwealth_conservation_category',
+                data: 'commonwealth_conservation_categories',
                 orderable: true,
                 searchable: false,
                 visible: true,
-                name: 'commonwealth_conservation_category',
+                name: 'commonwealth_conservation_categories',
             };
         },
         column_other_conservation_assessment: function () {
@@ -1152,7 +1152,7 @@ export default {
                 vm.column_wa_priority_list,
                 vm.column_wa_legislative_list,
                 vm.column_conservation_criteria,
-                vm.column_commonwealth_conservation_category,
+                vm.column_commonwealth_conservation_categories,
                 vm.column_effective_from,
                 vm.column_effective_to,
                 vm.column_review_due_date,

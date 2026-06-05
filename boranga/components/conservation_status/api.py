@@ -279,9 +279,9 @@ class SpeciesConservationStatusFilterBackend(DatatablesFilterBackend):
         filter_commonwealth_relevance = request.POST.get("filter_commonwealth_relevance")
         if filter_commonwealth_relevance == "true":
             if queryset.model is ConservationStatus:
-                queryset = queryset.exclude(commonwealth_conservation_category__isnull=True)
+                queryset = queryset.exclude(commonwealth_conservation_categories__isnull=True)
             elif queryset.model is ConservationStatusReferral:
-                queryset = queryset.exclude(conservation_status__commonwealth_conservation_category__isnull=True)
+                queryset = queryset.exclude(conservation_status__commonwealth_conservation_categories__isnull=True)
 
         filter_international_relevance = request.POST.get("filter_international_relevance")
         if filter_international_relevance == "true":
@@ -569,9 +569,9 @@ class CommunityConservationStatusFilterBackend(DatatablesFilterBackend):
         filter_commonwealth_relevance = request.POST.get("filter_commonwealth_relevance")
         if filter_commonwealth_relevance == "true":
             if queryset.model is ConservationStatus:
-                queryset = queryset.exclude(commonwealth_conservation_category__isnull=True)
+                queryset = queryset.exclude(commonwealth_conservation_categories__isnull=True)
             elif queryset.model is ConservationStatusReferral:
-                queryset = queryset.exclude(conservation_status__commonwealth_conservation_category__isnull=True)
+                queryset = queryset.exclude(conservation_status__commonwealth_conservation_categories__isnull=True)
 
         filter_international_relevance = request.POST.get("filter_international_relevance")
         if filter_international_relevance == "true":

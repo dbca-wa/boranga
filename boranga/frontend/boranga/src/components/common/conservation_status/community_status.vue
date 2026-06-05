@@ -846,69 +846,58 @@
                             >Commonwealth Conservation Category:</label
                         >
                         <div class="col-sm-7">
-                            <template v-if="!isReadOnly">
-                                <template
-                                    v-if="
-                                        commonwealth_conservation_categories &&
-                                        commonwealth_conservation_categories.length >
-                                            0 &&
-                                        conservation_status_obj.commonwealth_conservation_category_id &&
-                                        !commonwealth_conservation_categories
-                                            .map((d) => d.id)
-                                            .includes(
-                                                conservation_status_obj.commonwealth_conservation_category_id
-                                            )
-                                    "
-                                >
-                                    <input
-                                        v-if="
-                                            conservation_status_obj.commonwealth_conservation_category
-                                        "
-                                        type="text"
-                                        class="form-control mb-3"
-                                        :value="
-                                            conservation_status_obj.commonwealth_conservation_category +
-                                            ' (Now Archived)'
-                                        "
-                                        disabled
-                                    />
-                                    <div class="mb-3 text-muted">
-                                        Change commonwealth conservation list
-                                        to:
+                            <Multiselect
+                                id="proposed_commonwealth_conservation_category"
+                                ref="proposed_commonwealth_conservation_category"
+                                v-model="
+                                    conservation_status_obj.commonwealth_conservation_category_ids
+                                "
+                                mode="tags"
+                                :options="commonwealth_conservation_categories"
+                                :key="
+                                    commonwealth_conservation_categories.length
+                                "
+                                value-prop="id"
+                                track-by="id"
+                                label="label"
+                                :placeholder="'Select Commonwealth Conservation Categories'"
+                                :disabled="isReadOnly"
+                                :searchable="true"
+                                :can-clear="true"
+                                :close-on-select="false"
+                            >
+                                <!-- 1. Customize how the items look inside the dropdown menu list -->
+                                <template #option="{ option }">
+                                    <span class="dropdown-combined-label">
+                                        <strong>{{ option.code }}</strong> -
+                                        {{ option.label }}
+                                    </span>
+                                </template>
+
+                                <!-- 2. Customize how the selected items look inside the input box tags -->
+                                <template #tag="{ option, handleTagRemove }">
+                                    <div
+                                        class="multiselect-tag is-user-selectable"
+                                    >
+                                        <span
+                                            >{{ option.code }} -
+                                            {{ option.label }}</span
+                                        >
+                                        <!-- This button preserves the native "x" click-to-delete action -->
+                                        <span
+                                            v-if="!isReadOnly"
+                                            class="multiselect-tag-remove"
+                                            @mousedown.prevent="
+                                                handleTagRemove(option, $event)
+                                            "
+                                        >
+                                            <span
+                                                class="multiselect-tag-remove-icon"
+                                            ></span>
+                                        </span>
                                     </div>
                                 </template>
-                                <select
-                                    id="proposed_commonwealth_conservation_category"
-                                    v-model="
-                                        conservation_status_obj.commonwealth_conservation_category_id
-                                    "
-                                    :disabled="isReadOnly"
-                                    class="form-select"
-                                >
-                                    <option :value="null">
-                                        &mdash; None &mdash;
-                                    </option>
-                                    <option
-                                        v-for="option in commonwealth_conservation_categories"
-                                        :key="option.id"
-                                        :value="option.id"
-                                    >
-                                        {{ option.code }} - {{ option.label }}
-                                    </option>
-                                </select>
-                            </template>
-                            <template v-else>
-                                <input
-                                    class="form-control"
-                                    type="text"
-                                    :disabled="true"
-                                    :value="
-                                        conservation_status_obj.commonwealth_conservation_category
-                                            ? conservation_status_obj.commonwealth_conservation_category
-                                            : 'N/A'
-                                    "
-                                />
-                            </template>
+                            </Multiselect>
                         </div>
                     </div>
                     <div class="row mb-3">
@@ -1537,6 +1526,7 @@ import { v4 as uuid } from 'uuid';
 import FormSection from '@/components/forms/section_toggle.vue';
 import CollapsibleComponent from '@/components/forms/collapsible_component.vue';
 import HelpText from '@/components/common/help_text.vue';
+import Multiselect from '@vueform/multiselect';
 import { api_endpoints, constants } from '@/utils/hooks';
 
 export default {
@@ -1545,6 +1535,7 @@ export default {
         CollapsibleComponent,
         FormSection,
         HelpText,
+        Multiselect,
     },
     props: {
         conservation_status_obj: {
@@ -2247,5 +2238,21 @@ input[type='text'],
 select {
     width: 100%;
     padding: 0.375rem 2.25rem 0.375rem 0.75rem;
+}
+
+/* Target the inner tag text wrapper explicitly when the parent multiselect is disabled */
+:deep(.multiselect.is-disabled .multiselect-tag) {
+    /* Restores the missing right padding buffer when the 'x' button disappears */
+    padding-right: 12px !important;
+
+    /* Optional: Ensures long descriptions transition into neat dots rather than a jagged cut-off */
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* Ensure the wrapper respects a standard line layout */
+:deep(.multiselect.is-disabled .multiselect-tags-search-wrapper) {
+    display: none !important; /* Hides the flashing text cursor entirely when disabled */
 }
 </style>

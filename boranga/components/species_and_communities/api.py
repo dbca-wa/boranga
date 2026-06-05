@@ -841,7 +841,7 @@ class SpeciesFilterBackend(DatatablesFilterBackend):
                 queryset.filter(
                     conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
                 )
-                .exclude(conservation_status__commonwealth_conservation_category__isnull=True)
+                .exclude(conservation_status__commonwealth_conservation_categories__isnull=True)
                 .distinct()
             )
 
@@ -860,6 +860,13 @@ class SpeciesFilterBackend(DatatablesFilterBackend):
             queryset = queryset.filter(
                 conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
                 conservation_status__conservation_criteria__icontains=filter_conservation_criteria,
+            ).distinct()
+
+        # filter_approved_cs - show only species with an approved Conservation Status
+        filter_approved_cs = request.POST.get("filter_approved_cs")
+        if filter_approved_cs and filter_approved_cs.lower() == "true":
+            queryset = queryset.filter(
+                conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED
             ).distinct()
 
         fields = self.get_fields(request)
@@ -1029,7 +1036,7 @@ class CommunitiesFilterBackend(DatatablesFilterBackend):
                 queryset.filter(
                     conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
                 )
-                .exclude(conservation_status__commonwealth_conservation_category__isnull=True)
+                .exclude(conservation_status__commonwealth_conservation_categories__isnull=True)
                 .distinct()
             )
 
@@ -1048,6 +1055,13 @@ class CommunitiesFilterBackend(DatatablesFilterBackend):
             queryset = queryset.filter(
                 conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
                 conservation_status__conservation_criteria__icontains=filter_conservation_criteria,
+            ).distinct()
+
+        # filter_approved_cs - show only communities with an approved Conservation Status
+        filter_approved_cs = request.GET.get("filter_approved_cs")
+        if filter_approved_cs and filter_approved_cs.lower() == "true":
+            queryset = queryset.filter(
+                conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED
             ).distinct()
 
         fields = self.get_fields(request)
