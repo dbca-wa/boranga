@@ -8595,6 +8595,18 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
     @cached_property
     def filtered_foreign_key_count(self):
+        # Special case: OCRAssociatedSpecies.related_species with a taxonomy-traversing
+        # lookup field. The xlsx preview queries Taxonomy directly, so the count must
+        # match — count Taxonomy rows, not AssociatedSpeciesTaxonomy rows.
+        if (
+            self.django_import_content_type_id
+            and self.django_import_content_type.model == OCRAssociatedSpecies._meta.model_name
+            and self.django_import_field_name == "related_species"
+            and self.django_lookup_field_name
+        ):
+            leaf_field = self.django_lookup_field_name.split("__")[-1]
+            return Taxonomy.objects.values(leaf_field).filter(**{f"{leaf_field}__isnull": False}).distinct().count()
+
         if not self.filtered_related_model_qs:
             return 0
 
