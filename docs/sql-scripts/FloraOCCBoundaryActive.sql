@@ -178,6 +178,7 @@ geom AS (
         ) AS area_sq_m
     FROM boranga_occurrencegeometry g
     WHERE ST_GeometryType(g.geometry) IN ('ST_Polygon', 'ST_MultiPolygon')
+      AND g.visible = TRUE
 )
 
 -- ===========================================================================

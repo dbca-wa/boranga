@@ -189,6 +189,7 @@ geom AS (
         g.updated_date
     FROM boranga_occurrencereportgeometry g
     WHERE ST_GeometryType(g.geometry) IN ('ST_Point', 'ST_MultiPoint')
+      AND g.visible = TRUE
 )
 
 -- ===========================================================================
