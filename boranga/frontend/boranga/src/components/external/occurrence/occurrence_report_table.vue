@@ -493,9 +493,7 @@ export default {
             }
         },
         addOCRVisibility: function () {
-            let visibility;
-            visibility = true;
-            return visibility;
+            return window.env?.enable_external_proposals !== false;
         },
         datatable_headers: function () {
             return [

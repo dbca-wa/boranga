@@ -1142,6 +1142,15 @@ class ConservationStatusViewSet(CheckUpdatedActionMixin, viewsets.GenericViewSet
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
+        if (
+            not getattr(settings, "ENABLE_EXTERNAL_PROPOSALS", True)
+            and not is_internal(request)
+            and not request.user.is_superuser
+        ):
+            return Response(
+                {"detail": "External proposals are currently disabled."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
             group_type_id = GroupType.objects.get(id=request.data.get("application_type_id"))
         except GroupType.DoesNotExist:
