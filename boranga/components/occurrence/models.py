@@ -6660,6 +6660,59 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         if row_error_count > 0:
             return
 
+        # Validate OCRHabitatCondition percentage totals.
+        # The six condition fields must sum to either 0.00 (not filled in) or 100.00.
+        # In UPDATE mode we merge row values with existing DB values before summing.
+        _hq_model_name = OCRHabitatCondition._meta.model_name
+        _hq_pct_fields = ["pristine", "excellent", "very_good", "good", "degraded", "completely_degraded"]
+        if _hq_model_name in models:
+            _hq_row_data = dict(
+                zip(
+                    models[_hq_model_name]["field_names"],
+                    models[_hq_model_name]["values"],
+                )
+            )
+            # In update mode, load existing values and overlay the row values on top.
+            _hq_merged = {}
+            if mode == "update" and prefixed_migrated_from_id in (set(ocr_instances) | existing_ocr_mids):
+                try:
+                    _ocr_for_hq = ocr_instances.get(prefixed_migrated_from_id) or OccurrenceReport.objects.get(
+                        migrated_from_id=prefixed_migrated_from_id
+                    )
+                    _existing_hq = getattr(_ocr_for_hq, "habitat_condition", None)
+                    if _existing_hq:
+                        for _f in _hq_pct_fields:
+                            _hq_merged[_f] = getattr(_existing_hq, _f, Decimal("0.00")) or Decimal("0.00")
+                except Exception:
+                    pass
+            # Row values override whatever was loaded from the DB.
+            for _f in _hq_pct_fields:
+                if _f in _hq_row_data and _hq_row_data[_f] is not None:
+                    _hq_merged[_f] = Decimal(str(_hq_row_data[_f]))
+            _hq_total = sum(_hq_merged.get(_f, Decimal("0.00")) for _f in _hq_pct_fields)
+            if _hq_total != Decimal("0.00") and _hq_total != Decimal("100.00"):
+                _hq_col_headers = []
+                for _f in _hq_pct_fields:
+                    _col = self.schema.columns.filter(
+                        django_import_content_type__model=_hq_model_name,
+                        django_import_field_name=_f,
+                    ).first()
+                    if _col:
+                        _hq_col_headers.append(_col.xlsx_column_header_name)
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": row,
+                        "error_message": (
+                            f"Habitat condition percentages must total either 0.00 or 100.00, "
+                            f"but the current total is {_hq_total}. "
+                            f"Affected fields: {', '.join(_hq_col_headers or _hq_pct_fields)}."
+                        ),
+                    }
+                )
+                return
+
         # Gate status-dependent models based on processing_status of the OCR row.
         # OccurrenceReportApprovalDetails is relevant once the OCR has reached the approver
         # stage (with_approver or approved). Occurrence creation/linking, however, only
