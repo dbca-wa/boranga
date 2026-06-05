@@ -6335,7 +6335,35 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     )
                 )
 
+                # Pre-scan the workbook for prefixed migrated_from_id values
+                # and perform a single DB query to find which OCRs already
+                # exist in the database. This avoids a per-row exists() call.
+                try:
+                    prefixed_ids = []
+                    _prefix = settings.OCR_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _task_pk = self.pk if self.pk is not None else 0
+                    for idx, r in enumerate(rows):
+                        ocr_mid = r[0]
+                        suffix = ocr_mid if ocr_mid else (idx + 2)
+                        prefixed_ids.append(f"{_prefix}-{_task_pk:0{_pad}d}-{suffix}")
+
+                    if prefixed_ids:
+                        existing = OccurrenceReport.objects.filter(migrated_from_id__in=prefixed_ids).values_list(
+                            "migrated_from_id", flat=True
+                        )
+                        self._existing_ocr_mids = set(existing)
+                    else:
+                        self._existing_ocr_mids = set()
+                except Exception:
+                    # Non-fatal: fall back to an empty set so per-row logic
+                    # will consider only in-memory seen IDs.
+                    self._existing_ocr_mids = set()
+
                 ocr_migrated_from_ids = []
+                # Track OCR instances created during this import run so child rows
+                # can find parents created earlier in the same transaction.
+                ocr_instances = {}
 
                 for index, row in enumerate(rows):
                     if index + 1 > self.rows:
@@ -6350,7 +6378,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         with transaction.atomic():
                             self.rows_processed = index + 1
                             self.save()
-                            self.process_row(ocr_migrated_from_ids, index, headers, row, errors)
+                            self.process_row(ocr_migrated_from_ids, ocr_instances, index, headers, row, errors)
                     except IntegrityError as e:
                         logger.exception(f"IntegrityError on row {index + 2} for import {self.id}: {e}")
                         errors.append(
@@ -6461,7 +6489,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
             return []
 
-    def process_row(self, ocr_migrated_from_ids, index, headers, row, errors):
+    def process_row(self, ocr_migrated_from_ids, ocr_instances, index, headers, row, errors):
         # Row 1 in the XLSX is the header; data starts at row 2, so add 2 to the 0-based index.
         row_index = index + 2
 
@@ -6496,11 +6524,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         _suffix = ocr_migrated_from_id if ocr_migrated_from_id else row_index
         prefixed_migrated_from_id = f"{_prefix}-{_task_pk:0{_pad}d}-{_suffix}"
 
+        existing_ocr_mids = getattr(self, "_existing_ocr_mids", set())
         mode = "create"
-        if (
-            prefixed_migrated_from_id in ocr_migrated_from_ids
-            or OccurrenceReport.objects.filter(migrated_from_id=prefixed_migrated_from_id).exists()
-        ):
+        if prefixed_migrated_from_id in ocr_migrated_from_ids or prefixed_migrated_from_id in existing_ocr_mids:
             mode = "update"
 
         if prefixed_migrated_from_id not in ocr_migrated_from_ids:
@@ -6522,6 +6548,39 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             cell_value = row[column_index]
             if cell_value is not None and column.django_import_content_type not in required_content_types:
                 required_content_types.append(column.django_import_content_type)
+
+        # If the only populated field for the OccurrenceReport (OCR) content type
+        # is `migrated_from_id` then treat the OCR content type as empty. This
+        # prevents rows that merely supply a migrated_from_id (for linking)
+        # from being considered updates to the parent OCR and accidentally
+        # overwriting parent fields.
+        try:
+            # Find a content type object in the required list that matches the
+            # OccurrenceReport model name.
+            orc_ct = None
+            for ct in required_content_types:
+                if getattr(ct, "model", None) == OccurrenceReport._meta.model_name:
+                    orc_ct = ct
+                    break
+
+            if orc_ct and mode == "update":
+                # Check which OCR fields are actually populated (excluding migrated_from_id)
+                ocr_fields_populated = []
+                for column_index, column in enumerate(self.schema.columns.all()):
+                    if column.django_import_content_type == orc_ct:
+                        cell_value = row[column_index]
+                        # Skip the migrated_from_id column itself
+                        if cell_value is not None and column.django_import_field_name != "migrated_from_id":
+                            ocr_fields_populated.append(column.django_import_field_name)
+
+                # If no OCR fields (other than migrated_from_id) are populated, this is a
+                # child-only row. Exclude OCR from validation to allow child records to be
+                # appended without requiring full OCR field population.
+                if len(ocr_fields_populated) == 0:
+                    required_content_types = [ct for ct in required_content_types if ct != orc_ct]
+        except Exception:
+            # Non-fatal: if anything goes wrong, fall back to existing behaviour.
+            pass
 
         indexes_to_remove = []
         for column_index, column in enumerate(self.schema.columns.all()):
@@ -6769,6 +6828,22 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 return
 
         model_instances = {}
+
+        # If this is an UPDATE mode child-only row (OCR content type was excluded),
+        # pre-load the existing OccurrenceReport instance into `model_instances`.
+        # This allows child records to attach to the parent OCR.
+        if mode == "update" and OccurrenceReport._meta.model_name not in models:
+            # First, check if parent was created earlier in this import run (in-memory)
+            if prefixed_migrated_from_id in ocr_instances:
+                model_instances[OccurrenceReport._meta.model_name] = ocr_instances[prefixed_migrated_from_id]
+            # Otherwise, try to load from DB if it exists (from previous import)
+            elif prefixed_migrated_from_id in existing_ocr_mids:
+                try:
+                    existing_ocr = OccurrenceReport.objects.get(migrated_from_id=prefixed_migrated_from_id)
+                    model_instances[OccurrenceReport._meta.model_name] = existing_ocr
+                except Exception:
+                    # Non-fatal: let later logic surface an appropriate error.
+                    pass
         for current_model_name in models:
             model_data = dict(
                 zip(
@@ -7119,6 +7194,10 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
                 model_instances[current_model_instance._meta.model_name] = current_model_instance
                 logger.info(f"Model instance saved: {current_model_instance}")
+
+                # Track OCR instances so child rows can find parents created in this import
+                if current_model_instance._meta.model_name == OccurrenceReport._meta.model_name:
+                    ocr_instances[prefixed_migrated_from_id] = current_model_instance
 
                 # Deal with special case of relating Occurrence to OccurrenceReport
                 if current_model_instance._meta.model_name == Occurrence._meta.model_name:
