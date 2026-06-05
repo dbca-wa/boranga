@@ -60,13 +60,16 @@ active_cs AS (
     SELECT
         cs.community_id,
         wal.code  AS wa_legislative_list_code,
-        ccl.code  AS commonwealth_conservation_code
+        string_agg(DISTINCT ccl.code, ', ' ORDER BY ccl.code) AS commonwealth_conservation_code
     FROM boranga_conservationstatus cs
     LEFT JOIN boranga_walegislativelist wal ON cs.wa_legislative_list_id = wal.id
+    LEFT JOIN boranga_conservationstatus_commonwealth_conservation_categories cs_ccl
+        ON cs.id = cs_ccl.conservationstatus_id
     LEFT JOIN boranga_commonwealthconservationlist ccl
-        ON cs.commonwealth_conservation_category_id = ccl.id
+        ON cs_ccl.commonwealthconservationlist_id = ccl.id
     WHERE cs.processing_status IN ('approved', 'delisted')
       AND cs.community_id IS NOT NULL
+    GROUP BY cs.community_id, wal.code
 ),
 
 -- -- Approved-only Conservation Status (exclude delisted) --------------------
