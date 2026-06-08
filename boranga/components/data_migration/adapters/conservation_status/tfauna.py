@@ -113,7 +113,7 @@ PIPELINES = {
     "wa_legislative_list": ["strip", "blank_to_none", "wa_legislative_list_from_code"],
     "wa_priority_category": ["strip", "blank_to_none", "wa_priority_category_from_code"],
     "wa_priority_list": ["strip", "blank_to_none", "wa_priority_list_from_code"],
-    "commonwealth_conservation_category": ["strip", "blank_to_none", COMMONWEALTH_LOOKUP],
+    "commonwealth_conservation_category": ["strip", "blank_to_none"],
     "iucn_version": ["strip", "blank_to_none", IUCN_LOOKUP],
     "change_code": ["strip", "blank_to_none", CHANGE_CODE_LOOKUP],
     "other_conservation_assessment": ["strip", "blank_to_none", OTHER_ASSESSMENT_LOOKUP],
