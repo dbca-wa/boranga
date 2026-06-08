@@ -32,6 +32,7 @@ COLUMN_MAP = {
     "internal_application": "internal_application",
     "locked": "locked",
     # TFAUNA/TPFL format additions
+    "SpCode": "migrated_from_id",
     "species_taxonomy": "species_taxonomy_taxon_name_id",  # Nomos taxon_name_id (TFAUNA)
     "TAXONID": "species_taxonomy_taxon_name_id",  # Nomos taxon_name_id (TPFL)
     "other_conservation_assessment": "other_conservation_assessment",
