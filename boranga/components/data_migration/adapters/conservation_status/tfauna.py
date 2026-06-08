@@ -48,8 +48,10 @@ from boranga.components.conservation_status.models import (
 )
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
+    _result,
     datetime_iso_factory,
     fk_lookup,
+    taxonomy_lookup_legacy_id_mapping,
 )
 from boranga.components.species_and_communities.models import GroupType
 
@@ -61,6 +63,29 @@ logger = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 DEFAULT_EMAIL = "boranga.tfauna@dbca.wa.gov.au"
+
+SPECIES_LOOKUP = taxonomy_lookup_legacy_id_mapping("TFAUNA")
+
+
+def populate_species_id_from_migrated_from_id(value, ctx):
+    """Pipeline transform: extract taxon_name_id from migrated_from_id for SPECIES_LOOKUP.
+
+    migrated_from_id format: "tfauna-{original_taxon_name_id}-{count:02d}"
+    Returns the integer taxon_name_id so the next pipeline step (SPECIES_LOOKUP)
+    can resolve it to a taxonomy PK.
+    """
+    migrated_id = ctx.row.get("migrated_from_id") if (ctx and ctx.row) else None
+    if migrated_id and isinstance(migrated_id, str) and migrated_id.startswith("tfauna-"):
+        # Format: "tfauna-{legacy_taxon_name_id}-{count:02d}"
+        # The count suffix is always the last segment; everything in between is the code.
+        parts = migrated_id.split("-")
+        if len(parts) >= 3:
+            # Rejoin middle parts in case the code itself contains hyphens
+            code = "-".join(parts[1:-1]).strip()
+            if code:
+                return _result(code)
+    return _result(None)
+
 
 # Processing-status code → Boranga value  (Task 12021)
 PROCESSING_STATUS_MAP = {
@@ -82,7 +107,7 @@ DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     # species_id is resolved to Taxonomy PK in extract(); pipeline just validates
-    "species_id": ["strip", "blank_to_none", "required"],
+    "species_id": [populate_species_id_from_migrated_from_id, SPECIES_LOOKUP, "required"],
     "review_due_date": ["strip", "smart_date_parse"],
     "wa_legislative_category": ["strip", "blank_to_none", "wa_legislative_category_from_code"],
     "wa_legislative_list": ["strip", "blank_to_none", "wa_legislative_list_from_code"],
