@@ -222,9 +222,10 @@ class ListSpeciesConservationStatusSerializer(BaseModelSerializer):
     wa_priority_category = serializers.CharField(source="wa_priority_category.code", allow_null=True)
     wa_legislative_list = serializers.CharField(source="wa_legislative_list.code", allow_null=True)
     wa_legislative_category = serializers.CharField(source="wa_legislative_category.code", allow_null=True)
-    commonwealth_conservation_categories = CommonwealthConservationListSerializer(
+    commonwealth_conservation_categories = serializers.SlugRelatedField(
         many=True,
         read_only=True,
+        slug_field="code",
     )
     commonwealth_conservation_category_ids = serializers.PrimaryKeyRelatedField(
         many=True,
@@ -419,9 +420,10 @@ class ListCommunityConservationStatusSerializer(BaseModelSerializer):
     wa_priority_category = serializers.CharField(source="wa_priority_category.code", allow_null=True)
     wa_legislative_list = serializers.CharField(source="wa_legislative_list.code", allow_null=True)
     wa_legislative_category = serializers.CharField(source="wa_legislative_category.code", allow_null=True)
-    commonwealth_conservation_categories = CommonwealthConservationListSerializer(
+    commonwealth_conservation_categories = serializers.SlugRelatedField(
         many=True,
         read_only=True,
+        slug_field="code",
     )
     commonwealth_conservation_category_ids = serializers.PrimaryKeyRelatedField(
         many=True,
