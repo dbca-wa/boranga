@@ -284,6 +284,20 @@ class ConservationStatusTfaunaAdapter(SourceAdapter):
                         new_date = dt + timedelta(days=365 * 10 + 2)
                     canonical["review_due_date"] = new_date
 
+            # Populate comment with values from the Gazettal comments, Review Comments, Commonwealth Comments, Action Plan Comments and	Red List Comments
+            comment_parts = []
+            for col in [
+                "gazettal_comments",
+                "review_comments",
+                "commonwealth_comments",
+                "action_plan_comments",
+                "red_list_comments",
+            ]:
+                value = canonical.get(col)
+                if value and str(value).strip():
+                    comment_parts.append(str(value).strip())
+            canonical["comment"] = "\n".join(comment_parts) if comment_parts else None
+
             # ── approval_level  (Task 12000) ─────────────────────────
             if not wa_leg_cat or not str(wa_leg_cat).strip():
                 canonical["approval_level"] = "immediate"
