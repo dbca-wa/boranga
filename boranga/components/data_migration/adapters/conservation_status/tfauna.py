@@ -168,7 +168,7 @@ class ConservationStatusTfaunaAdapter(SourceAdapter):
                 m_id = str(m_id).strip()
                 count = migrated_id_counts.get(m_id, 0) + 1
                 migrated_id_counts[m_id] = count
-                canonical["migrated_from_id"] = f"{m_id}-{count:02d}"
+                canonical["migrated_from_id"] = f"tfauna-{m_id}-{count:02d}"
 
             # ── Group Type ────────────────────────────────────────────
             canonical["group_type_id"] = group_type_id
