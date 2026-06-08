@@ -93,7 +93,7 @@ PIPELINES = {
     "change_code": ["strip", "blank_to_none", CHANGE_CODE_LOOKUP],
     "other_conservation_assessment": ["strip", "blank_to_none", OTHER_ASSESSMENT_LOOKUP],
     "conservation_criteria": ["strip", "blank_to_none"],
-    "processing_status": ["strip", "blank_to_none"],
+    "processing_status": ["strip", "blank_to_none", "required"],
     "effective_from_date": ["strip", "smart_date_parse"],
     "effective_to_date": ["strip", "smart_date_parse"],
     "listing_date": ["strip", "smart_date_parse"],
@@ -207,12 +207,6 @@ class ConservationStatusTfaunaAdapter(SourceAdapter):
                 # (species column mapped to species_id by schema)
                 # The pipeline "required" step will catch missing values.
                 pass
-
-            # ── Processing Status  (Task 12021) ──────────────────────
-            p_status = canonical.get("processing_status")
-            if p_status:
-                p_status = str(p_status).strip().upper()
-                canonical["processing_status"] = PROCESSING_STATUS_MAP.get(p_status, p_status.lower())
 
             # ── WA Priority List  (Task 11999) ───────────────────────
             raw_prio_cat = canonical.get("wa_priority_category")
