@@ -207,7 +207,7 @@ class Command(BaseCommand):
                         }
 
                         try:
-                            taxon_obj = Taxonomy.objects.get(taxon_name_id=t["taxon_name_id"])
+                            taxon_obj = Taxonomy.all_objects.get(taxon_name_id=t["taxon_name_id"])
                             # Determine if any of the fields would change
                             changed = False
                             for field_name, incoming_value in defaults.items():
