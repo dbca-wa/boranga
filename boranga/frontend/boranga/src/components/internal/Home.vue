@@ -280,14 +280,17 @@ export default {
             return `${localDate.toLocaleDateString()} at ${localDate.toLocaleTimeString()}`;
         },
     },
-    created: function () {
+    created: async function () {
         // env variable is set in base.html template from django
         var user_is_authenticated = `${env['user_is_authenticated']}`;
         if (user_is_authenticated.toString() === 'true') {
-            this.fetchProfile();
+            await this.fetchProfile();
+            this.fetchOutstandingReferrals();
+            this.fetchHomeCards();
+        } else {
+            // If not authenticated, still fetch home cards (treat as external)
+            this.fetchHomeCards();
         }
-        this.fetchOutstandingReferrals();
-        this.fetchHomeCards();
     },
     methods: {
         updateAreaOfInterest: function () {
@@ -316,7 +319,7 @@ export default {
         },
         fetchProfile: function () {
             let vm = this;
-            fetch(api_endpoints.profile, {
+            return fetch(api_endpoints.profile, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -332,10 +335,10 @@ export default {
         },
         fetchHomeCards: function () {
             let vm = this;
-            const sectionIds = [
-                'internal_home_card_left',
-                'internal_home_card_right',
-            ];
+            const isInternal = vm.profile?.user?.is_internal === true;
+            const sectionIds = isInternal
+                ? ['internal_home_card_left', 'internal_home_card_right']
+                : ['external_home_card_left', 'external_home_card_right'];
             sectionIds.forEach((sectionId, index) => {
                 fetch(`${api_endpoints.help_text_entries}/${sectionId}/`).then(
                     async (response) => {
