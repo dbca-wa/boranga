@@ -43,12 +43,12 @@ from boranga.components.conservation_status.models import (
     CommonwealthConservationList,
     ConservationChangeCode,
     ConservationStatus,
-    IUCNVersion,
     OtherConservationAssessmentList,
 )
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     _result,
+    build_legacy_map_transform,
     datetime_iso_factory,
     fk_lookup,
     taxonomy_lookup_legacy_id_mapping,
@@ -99,7 +99,14 @@ REVIEW_DUE_WA_LEG_CATS = {"CR", "EN", "VU"}
 
 # ── Pipeline look-ups (resolved during transform phase in handler) ───────────
 COMMONWEALTH_LOOKUP = fk_lookup(CommonwealthConservationList, "code")
-IUCN_LOOKUP = fk_lookup(IUCNVersion, "code")
+
+IUCN_VERSION_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TFAUNA",
+    list_name="iucn_version",
+    required=False,
+    return_type="id",
+)
+
 CHANGE_CODE_LOOKUP = fk_lookup(ConservationChangeCode, "code")
 OTHER_ASSESSMENT_LOOKUP = fk_lookup(OtherConservationAssessmentList, "code")
 DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
@@ -114,7 +121,7 @@ PIPELINES = {
     "wa_priority_category": ["strip", "blank_to_none", "wa_priority_category_from_code"],
     "wa_priority_list": ["strip", "blank_to_none", "wa_priority_list_from_code"],
     "commonwealth_conservation_category": ["strip", "blank_to_none"],
-    "iucn_version": ["strip", "blank_to_none", IUCN_LOOKUP],
+    "iucn_version": ["strip", "blank_to_none", IUCN_VERSION_TRANSFORM],
     "change_code": ["strip", "blank_to_none", CHANGE_CODE_LOOKUP],
     "other_conservation_assessment": ["strip", "blank_to_none", OTHER_ASSESSMENT_LOOKUP],
     "conservation_criteria": ["strip", "blank_to_none"],
