@@ -675,12 +675,17 @@ export default {
                 searchable: false,
                 visible: true,
                 className: 'dt-wrap-two-lines',
-                render: function (data, type, full) {
-                    if (full.regions) {
-                        return full.regions;
+                render: function (value, type) {
+                    let display = '';
+                    if (Array.isArray(value)) {
+                        display = value.join(', ');
+                    } else if (value === null || value === undefined) {
+                        display = '';
+                    } else {
+                        display = value;
                     }
-                    // Should not reach here
-                    return '';
+                    let result = helpers.dtPopover(display, 80, 'hover');
+                    return type == 'export' ? display : result;
                 },
                 name: 'regions__name',
             };
@@ -692,12 +697,17 @@ export default {
                 searchable: false,
                 visible: true,
                 className: 'dt-wrap-two-lines',
-                render: function (data, type, full) {
-                    if (full.districts) {
-                        return full.districts;
+                render: function (value, type) {
+                    let display = '';
+                    if (Array.isArray(value)) {
+                        display = value.join(', ');
+                    } else if (value === null || value === undefined) {
+                        display = '';
+                    } else {
+                        display = value;
                     }
-                    // Should not reach here
-                    return '';
+                    let result = helpers.dtPopover(display, 80, 'hover');
+                    return type == 'export' ? display : result;
                 },
                 name: 'districts__name',
             };
