@@ -2004,6 +2004,122 @@ def emailuser_object_by_legacy_username_factory(legacy_system: str) -> str:
     return name
 
 
+def emailuser_by_legacy_username_with_fallback_factory(
+    legacy_system: str,
+    fallback_email: str,
+) -> str:
+    """Like emailuser_by_legacy_username_factory, but falls back to the user identified
+    by fallback_email when the legacy username is not found or the input is empty/None.
+
+    On empty/None input: returns the fallback user ID (no error emitted).
+    On lookup failure: returns the fallback user ID with a warning issue (not error).
+
+    The fallback user is resolved lazily by email on first miss and cached thereafter.
+
+    Usage:
+      EMAILUSER = emailuser_by_legacy_username_with_fallback_factory(
+          "TFAUNA", "boranga.tfauna@dbca.wa.gov.au"
+      )
+      PIPELINES["submitter"] = ["strip", "blank_to_none", EMAILUSER]
+    """
+    if not legacy_system:
+        raise ValueError("legacy_system must be provided")
+    if not fallback_email:
+        raise ValueError("fallback_email must be provided")
+
+    key = f"emailuser_by_legacy_username_with_fallback:{legacy_system}:{fallback_email}"
+    name = "emailuser_by_legacy_username_fb_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    # Ensure the base (no-fallback) factory is registered first
+    base_name = emailuser_by_legacy_username_factory(legacy_system)
+
+    # Lazily resolved fallback user ID
+    _fallback: list[int | None] = [None]
+    _fallback_loaded = [False]
+
+    def _get_fallback_id() -> int | None:
+        if not _fallback_loaded[0]:
+            try:
+                user = EmailUserRO.objects.get(email__iexact=fallback_email)
+                _fallback[0] = user.id
+            except Exception:
+                logger.warning(
+                    "emailuser_by_legacy_username_with_fallback: fallback email '%s' not found",
+                    fallback_email,
+                )
+                _fallback[0] = None
+            _fallback_loaded[0] = True
+        return _fallback[0]
+
+    def inner(value, ctx):
+        if value in (None, ""):
+            return _result(_get_fallback_id())
+
+        base_fn = registry._fns.get(base_name)
+        if base_fn:
+            res = base_fn(value, ctx)
+            if not any(getattr(i, "level", "") == "error" for i in res.issues):
+                return res
+
+        fb_id = _get_fallback_id()
+        return _result(
+            fb_id,
+            TransformIssue(
+                "warning",
+                f"Username '{value}' has no {legacy_system} mapping; using fallback user (email={fallback_email})",
+            ),
+        )
+
+    registry._fns[name] = inner
+    return name
+
+
+def emailuser_object_by_legacy_username_with_fallback_factory(legacy_system: str) -> str:
+    """Like emailuser_object_by_legacy_username_factory, but silently returns None
+    (with a warning, not an error) when the legacy username lookup fails.
+
+    This is useful when the input value may be a display name rather than a
+    registered legacy username — lookup failure is expected and not an error.
+
+    Usage:
+      EMAILUSER_OBJ = emailuser_object_by_legacy_username_with_fallback_factory("TFAUNA")
+      GET_NAME = pluck_attribute_factory("get_full_name")
+      PIPELINES["SubmitterInformation__name"] = [EMAILUSER_OBJ, GET_NAME]
+    """
+    if not legacy_system:
+        raise ValueError("legacy_system must be provided")
+
+    key = f"emailuser_object_by_legacy_username_with_fallback:{legacy_system}"
+    name = "emailuser_object_by_legacy_username_fb_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    base_name = emailuser_object_by_legacy_username_factory(legacy_system)
+
+    def inner(value, ctx):
+        if value in (None, ""):
+            return _result(None)
+
+        base_fn = registry._fns.get(base_name)
+        if base_fn:
+            res = base_fn(value, ctx)
+            if not any(getattr(i, "level", "") == "error" for i in res.issues):
+                return res
+
+        return _result(
+            None,
+            TransformIssue(
+                "warning",
+                f"Username '{value}' has no {legacy_system} mapping; cannot resolve EmailUser object",
+            ),
+        )
+
+    registry._fns[name] = inner
+    return name
+
+
 @registry.register("split_multiselect")
 def t_split_multiselect(value, ctx):
     """Split a multi-select cell into a trimmed, deduped list (split on ';' or ',')."""
