@@ -17,8 +17,8 @@ from boranga.components.data_migration.registry import (
     build_legacy_map_transform,
     date_from_datetime_iso_local_factory,
     datetime_iso_factory,
-    emailuser_by_legacy_username_factory,
-    emailuser_object_by_legacy_username_factory,
+    emailuser_by_legacy_username_with_fallback_factory,
+    emailuser_object_by_legacy_username_with_fallback_factory,
     fk_lookup_static,
     geometry_from_coords_factory,
     region_from_district_factory,
@@ -41,52 +41,15 @@ logger = logging.getLogger(__name__)
 
 SPECIES_FROM_NAME_ID = taxonomy_lookup_legacy_id_mapping_species("TFAUNA", group_type="fauna")
 
-# ── Default TFAUNA user fallback ────────────────────────────────────
-# The default TFAUNA email user (boranga.tfauna@dbca.wa.gov.au) is used
-# when legacy username lookups fail due to absent LegacyUsernameEmailuserMapping.
-TFAUNA_DEFAULT_USER_ID = 474408
-
-
-def _emailuser_with_fallback(value, ctx=None):
-    """Pipeline transform: try legacy username lookup, fall back to default user."""
-    if value in (None, ""):
-        return _result(TFAUNA_DEFAULT_USER_ID)
-    # Try the standard lookup first
-
-    pipeline_fn = EMAILUSER_BY_LEGACY_USERNAME
-    # Call the registered transform function directly
-    from boranga.components.data_migration.registry import registry as _reg
-
-    fn = _reg._fns.get(pipeline_fn)
-    if fn:
-        res = fn(value, ctx)
-        # If the lookup succeeded (no error issues), return its result
-        if not any(getattr(i, "level", "") == "error" for i in res.issues):
-            return res
-    # Fallback to default user
-    return _result(TFAUNA_DEFAULT_USER_ID)
-
-
-def _emailuser_obj_with_fallback(value, ctx=None):
-    """Pipeline transform: try legacy username→EmailUser object lookup, fall back to default."""
-    if value in (None, ""):
-        return _result(None)
-    from boranga.components.data_migration.registry import registry as _reg
-
-    fn = _reg._fns.get(EMAILUSER_OBJ_BY_LEGACY_USERNAME)
-    if fn:
-        res = fn(value, ctx)
-        if not any(getattr(i, "level", "") == "error" for i in res.issues):
-            return res
-    # Fallback: return None (name extraction will fail gracefully)
-    return _result(None)
-
-
 # ── Factory transforms ──────────────────────────────────────────────
+# EmailUser by legacy username; unknown usernames fall back to the shared
+# TFAUNA service account (boranga.tfauna@dbca.wa.gov.au) with a warning.
+TFAUNA_FALLBACK_EMAIL = "boranga.tfauna@dbca.wa.gov.au"
 
-EMAILUSER_BY_LEGACY_USERNAME = emailuser_by_legacy_username_factory("TFAUNA")
-
-EMAILUSER_OBJ_BY_LEGACY_USERNAME = emailuser_object_by_legacy_username_factory("TFAUNA")
+EMAILUSER_BY_LEGACY_USERNAME = emailuser_by_legacy_username_with_fallback_factory("TFAUNA", TFAUNA_FALLBACK_EMAIL)
+# EmailUser object lookup; silently returns None when the username is not a registered
+# legacy mapping (e.g. when the value is a display name rather than a system username).
+EMAILUSER_OBJ_BY_LEGACY_USERNAME = emailuser_object_by_legacy_username_with_fallback_factory("TFAUNA")
 
 DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 
@@ -217,19 +180,19 @@ PIPELINES = {
     "comments": ["strip", "blank_to_none"],
     "record_source": ["strip", "blank_to_none"],
     "ocr_for_occ_name": ["strip", "blank_to_none"],
-    "submitter": ["strip", "blank_to_none", _emailuser_with_fallback],
-    "approved_by": ["strip", "blank_to_none", _emailuser_with_fallback],
+    "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME],
+    "approved_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME],
     # SubmitterInformation
     "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
     "SubmitterInformation__email_user": [
         "strip",
         "blank_to_none",
-        _emailuser_with_fallback,
+        EMAILUSER_BY_LEGACY_USERNAME,
     ],
     "SubmitterInformation__name": [
         "strip",
         "blank_to_none",
-        _emailuser_obj_with_fallback,
+        EMAILUSER_OBJ_BY_LEGACY_USERNAME,
         submitter_name_from_emailuser,
     ],
     "SubmitterInformation__organisation": [STATIC_DBCA],
