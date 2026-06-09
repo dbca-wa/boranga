@@ -173,6 +173,56 @@ export default {
             $(this.$refs[this.id]).resize(function () {
                 vm.vmDataTable.draw(true);
             });
+
+            // After each draw, detect cells where the CSS line-clamp is
+            // hiding content without a JS "see more" link and add one.
+            // requestAnimationFrame ensures layout is complete before we
+            // measure scrollHeight vs clientHeight.
+            vm.vmDataTable.on('draw.dt', function () {
+                requestAnimationFrame(function () {
+                    $(vm.$refs[vm.id])
+                        .find('td.dt-wrap-two-lines')
+                        .each(function () {
+                            var span = this.querySelector(':scope > span');
+                            if (!span) return;
+                            // Skip if a "see more" link is already present
+                            var next = span.nextElementSibling;
+                            if (
+                                next &&
+                                next.getAttribute('data-bs-toggle') ===
+                                    'popover'
+                            )
+                                return;
+                            // Only act when CSS is actually clipping content
+                            if (span.scrollHeight <= span.clientHeight) return;
+                            var raw = span.textContent || '';
+                            var escaped = raw
+                                .replace(/&/g, '&amp;')
+                                .replace(/"/g, '&quot;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;');
+                            var link = document.createElement('a');
+                            link.className = 'mx-0 ps-1 pe-0';
+                            link.href = 'javascript://';
+                            link.setAttribute('role', 'button');
+                            link.setAttribute('data-bs-toggle', 'popover');
+                            link.setAttribute('data-bs-trigger', 'hover');
+                            link.setAttribute('data-bs-placement', 'top');
+                            link.setAttribute('data-bs-html', 'true');
+                            link.setAttribute('data-bs-content', escaped);
+                            link.innerHTML = '<small>see more</small>';
+                            span.insertAdjacentElement('afterend', link);
+                            if (
+                                typeof bootstrap !== 'undefined' &&
+                                bootstrap.Popover
+                            ) {
+                                new bootstrap.Popover(link, {
+                                    container: 'body',
+                                });
+                            }
+                        });
+                });
+            });
         },
     },
 };
@@ -232,6 +282,23 @@ td.dt-wrap-two-lines > span {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+/* Reserve right-hand space for the absolutely-positioned "see more" link
+   only when one is present, so short single-line texts are not indented. */
+td.dt-wrap-two-lines > span:has(+ a[data-bs-toggle='popover']) {
+    padding-right: 3.2rem;
+}
+
+td.dt-wrap-two-lines {
+    position: relative;
+}
+
+td.dt-wrap-two-lines a[data-bs-toggle='popover'] {
+    position: absolute;
+    right: 0.25rem;
+    bottom: 0.125rem;
+    white-space: nowrap;
 }
 
 table.dataTable {
