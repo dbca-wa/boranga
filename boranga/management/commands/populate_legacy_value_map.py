@@ -58,9 +58,34 @@ class Command(BaseCommand):
         do_update = options["update"]
         create_missing = options["create_missing_targets"]
 
+        def _logical_csv_lines(fh):
+            """Yield logical CSV lines by joining physical lines until quotes balance.
+
+            This repairs files where quoted fields contain embedded newlines.
+            """
+            buf = ""
+            physical_count = 0
+            logical_count = 0
+            for physical in fh:
+                physical_count += 1
+                line = physical.rstrip("\r\n")
+                if buf == "":
+                    buf = line
+                else:
+                    buf += "\n" + line
+                # treat buffer as a complete record when quotes are balanced
+                if buf.count('"') % 2 == 0:
+                    logical_count += 1
+                    yield buf + "\n"
+                    buf = ""
+            if buf:
+                # final partial buffer: yield best-effort
+                logical_count += 1
+                yield buf + "\n"
+
         rows = []
         with open(csvfile, newline="", encoding="utf-8-sig") as fh:
-            reader = csv.DictReader(fh)
+            reader = csv.DictReader(_logical_csv_lines(fh))
             for r in reader:
                 rows.append(r)
 
@@ -70,14 +95,13 @@ class Command(BaseCommand):
         targets_created = 0
         with transaction.atomic():
             for row_index, r in enumerate(rows, start=2):
+                # parse list_name early so we can include it in skip messages
+                row_list_name = (r.get("list_name") or r.get("list") or "").strip() or None
                 legacy_value = (r.get("legacy_value") or r.get("legacy") or "").strip()
                 if not legacy_value:
-                    self.stderr.write(f"Skipping row {row_index} with no legacy_value")
+                    self.stderr.write(f"Skipping row {row_index} with no legacy_value (list_name={row_list_name!r})")
                     skipped += 1
                     continue
-
-                # list_name is taken per-row from the CSV (required)
-                row_list_name = (r.get("list_name") or r.get("list") or "").strip() or None
                 if not row_list_name:
                     self.stderr.write(
                         f"Missing list_name for legacy_value '{legacy_value}' at row {row_index}; skipping"
