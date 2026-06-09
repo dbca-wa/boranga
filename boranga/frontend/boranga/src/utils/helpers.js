@@ -261,12 +261,13 @@ export default {
     },
     dtPopover(value, truncate_length = 30, trigger = 'hover') {
         const ellipsis = '...';
-        const seeMoreLabel = 'see more';
         const raw = value == null ? '' : String(value);
-        // If the full text fits within the truncate length plus the
-        // space that would be taken by the "see more" label, show it
-        // in full instead of truncating and appending the label.
-        if (raw.length <= truncate_length + seeMoreLabel.length + 1) {
+        // Only skip truncation when the text actually fits within the
+        // column width. Texts longer than truncate_length must always
+        // be truncated and get a "see more" link so that the browser
+        // never applies CSS text-overflow ellipsis without a way to
+        // read the full value.
+        if (raw.length <= truncate_length) {
             return '<span>' + this.escapeHtml(raw) + '</span>';
         }
         const truncated = this.truncate(raw, {
@@ -289,12 +290,13 @@ export default {
     },
     dtPopoverSplit(value, truncate_length = 30, trigger = 'hover') {
         const ellipsis = '...';
-        const seeMoreLabel = 'see more';
         const raw = value == null ? '' : String(value);
-        // If the full text fits within the truncate length plus the
-        // space that would be taken by the "see more" label, show it
-        // in full instead of truncating and appending the label.
-        if (raw.length <= truncate_length + seeMoreLabel.length + 1) {
+        // Only skip truncation when the text actually fits within the
+        // column width. Texts longer than truncate_length must always
+        // be truncated and get a "see more" link so that the browser
+        // never applies CSS text-overflow ellipsis without a way to
+        // read the full value.
+        if (raw.length <= truncate_length) {
             return {
                 text: '<span>' + this.escapeHtml(raw) + '</span>',
                 link: '',
