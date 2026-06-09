@@ -1716,6 +1716,88 @@ def taxonomy_lookup_legacy_id_mapping(list_name: str) -> str:
     return name
 
 
+def taxonomy_lookup_legacy_id_mapping_species(list_name: str, group_type: str | None = None) -> str:
+    """Register and return a transform name that resolves a legacy taxon name id
+    (from `LegacyTaxonomyMapping`) to a boranga.Species PK.
+
+    Behaviour:
+      - on first call, joins LegacyTaxonomyMapping (keyed by legacy_taxon_name_id) with
+        Species (optionally filtered by group_type) into a fast in-memory dict
+      - returns the Species PK, or an error TransformIssue if no match is found
+
+    Args:
+        list_name: LegacyTaxonomyMapping list_name to filter by (e.g. "TFAUNA")
+        group_type: optional group type name filter (e.g. "fauna") to prevent
+                    cross-kingdom links where a legacy ID would map to a Species
+                    from a different kingdom.
+    """
+    if not list_name:
+        raise ValueError("list_name must be provided")
+
+    key_repr = f"taxon_id_to_species:{list_name}:{group_type or ''}"
+    name = "taxon_id_to_species_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    # Closure-level cache built lazily on first call: taxon_name_id (str) -> species_id (int)
+    _cache: dict[str, int] = {}
+    _initialized = [False]
+
+    def _build_cache() -> None:
+        table = _load_legacy_taxonomy_id_mappings(list_name)
+        tax_ids = {entry["taxonomy_id"] for entry in table.values() if entry.get("taxonomy_id")}
+        tax_to_sp: dict[int, int] = {}
+        if tax_ids:
+            try:
+                from boranga.components.species_and_communities.models import Species
+
+                qs = Species.objects.filter(taxonomy_id__in=tax_ids)
+                if group_type:
+                    qs = qs.filter(group_type__name=group_type)
+                for sp in qs.values("taxonomy_id", "id"):
+                    tax_to_sp[sp["taxonomy_id"]] = sp["id"]
+            except Exception:
+                logger.exception(
+                    "taxonomy_lookup_legacy_id_mapping_species: failed to load Species for list=%s",
+                    list_name,
+                )
+        for key, entry in table.items():
+            tax_id = entry.get("taxonomy_id")
+            if tax_id and tax_id in tax_to_sp:
+                _cache[key] = tax_to_sp[tax_id]
+        logger.info(
+            "taxonomy_lookup_legacy_id_mapping_species('%s', group_type=%r): %d NameId\u2192Species mappings",
+            list_name,
+            group_type,
+            len(_cache),
+        )
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(None)
+        if not _initialized[0]:
+            _build_cache()
+            _initialized[0] = True
+        key = str(value).strip()
+        sp_id = _cache.get(key)
+        if sp_id:
+            return _result(sp_id)
+        return _result(
+            value,
+            TransformIssue(
+                "error",
+                "No Species resolved for NameId="
+                + repr(key)
+                + f" (list: {list_name}"
+                + (f", group_type={group_type!r}" if group_type else "")
+                + ")",
+            ),
+        )
+
+    registry._fns[name] = _inner
+    return name
+
+
 @registry.register("upper")
 def t_upper(value, ctx):
     return _result(value.upper() if isinstance(value, str) else value)
