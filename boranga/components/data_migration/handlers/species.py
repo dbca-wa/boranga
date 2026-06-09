@@ -205,6 +205,14 @@ def _apply_tfauna_region_district(
                 warnings_details.append({"migrated_from_id": f"tfauna-{raw_sp_code}", "missing_region": name_part})
                 added_warnings += 1
 
+    # Also include all Districts that are children of any resolved Region.
+    # TFAUNA requirement: when a Region is specified for a species, all
+    # districts within that Region should be associated with the species.
+    if species_region_pks:
+        for dist_pk, parent_region_id in district_to_region.items():
+            if parent_region_id in species_region_pks:
+                desired_district_pairs.add((species_pk, dist_pk))
+
     # Step 2: resolve districts from Species Districts CSV, conditioned on region membership
     tfauna_dist_keys = district_links.get(raw_sp_code, [])
     for dist_key in tfauna_dist_keys:
