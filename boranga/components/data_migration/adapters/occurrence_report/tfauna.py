@@ -13,7 +13,6 @@ from django.conf import settings
 
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
-    TransformIssue,
     _result,
     build_legacy_map_transform,
     date_from_datetime_iso_local_factory,
@@ -24,6 +23,7 @@ from boranga.components.data_migration.registry import (
     geometry_from_coords_factory,
     region_from_district_factory,
     static_value_factory,
+    taxonomy_lookup_legacy_id_mapping_species,
 )
 from boranga.components.occurrence.models import OccurrenceReport
 from boranga.components.species_and_communities.models import GroupType
@@ -36,149 +36,10 @@ from . import schema
 logger = logging.getLogger(__name__)
 
 
-# ── Cached species lookup: NameId (taxon_name_id) → Species PK ─────
+# ── Species lookup: NameId (taxon_name_id) → Species PK ───────────
+# Resolved via LegacyTaxonomyMapping (list_name="TFAUNA"), fauna-only.
 
-_name_id_to_species_cache: dict[str, int] | None = None
-
-
-def _get_name_id_to_species_map() -> dict[str, int]:
-    """Build and cache a map from taxon_name_id → Species primary key
-    using TFAUNA LegacyTaxonomyMapping entries.
-
-    Only maps to fauna Species (group_type='fauna') to prevent cross-kingdom
-    links where a TFAUNA occurrence would incorrectly point to a flora Species.
-    """
-    global _name_id_to_species_cache
-    if _name_id_to_species_cache is not None:
-        return _name_id_to_species_cache
-
-    from boranga.components.main.models import LegacyTaxonomyMapping
-    from boranga.components.species_and_communities.models import Species
-
-    # taxonomy_id → species pk (fauna only)
-    tax_to_species: dict[int, int] = {}
-    for sp in Species.objects.filter(group_type__name="fauna").values("taxonomy_id", "id"):
-        if sp["taxonomy_id"]:
-            tax_to_species[sp["taxonomy_id"]] = sp["id"]
-
-    # taxon_name_id → species pk
-    result: dict[str, int] = {}
-    for m in LegacyTaxonomyMapping.objects.filter(list_name="TFAUNA").only("taxon_name_id", "taxonomy_id"):
-        if m.taxon_name_id and m.taxonomy_id:
-            sp_id = tax_to_species.get(m.taxonomy_id)
-            if sp_id:
-                result[str(m.taxon_name_id)] = sp_id
-
-    logger.info(
-        "TFAUNA species cache: %d NameId→Species mappings from %d TFAUNA taxonomy entries",
-        len(result),
-        LegacyTaxonomyMapping.objects.filter(list_name="TFAUNA").count(),
-    )
-    _name_id_to_species_cache = result
-    return result
-
-
-def _species_from_name_id(value, ctx=None):
-    """Pipeline transform: resolve NameId (taxon_name_id) → Species PK."""
-    if value in (None, ""):
-        return _result(None)
-    key = str(value).strip()
-    if not key:
-        return _result(None)
-    lookup = _get_name_id_to_species_map()
-    sp_id = lookup.get(key)
-    if sp_id:
-        return _result(sp_id)
-    return _result(
-        value,
-        TransformIssue("error", f"No Species resolved for TFAUNA NameId={key}"),
-    )
-
-
-# ── Cached district lookup: DistrictNo → District PK ───────────────
-
-_district_no_cache: dict[str, int] | None = None
-
-
-def _get_district_no_map() -> dict[str, int]:
-    """Build and cache a map from DistrictNo → District PK,
-    using the TFAUNA 'District' entries in LegacyValueMap that map
-    district names → District PKs, combined with a static DistrictNo→name table."""
-    global _district_no_cache
-    if _district_no_cache is not None:
-        return _district_no_cache
-
-    from boranga.components.main.models import LegacyValueMap
-
-    # Load TFAUNA District (name → target_object_id) from LegacyValueMap
-    name_to_pk: dict[str, int] = {}
-    for m in LegacyValueMap.objects.filter(legacy_system="TFAUNA", list_name="District"):
-        if m.legacy_value and m.target_object_id:
-            name_to_pk[m.legacy_value.strip().casefold()] = m.target_object_id
-
-    # Standard WA DBCA DistrictNo code → district name mapping
-    # Source: WA DEC/DBCA district numbering convention
-    _DISTRICT_NO_TO_NAME: dict[str, str] = {
-        "11": "Goldfields Region",
-        "12": "Esperance",
-        "13": "Albany",
-        "14": "Esperance",  # fallback
-        "21": "Swan Coastal",
-        "23": "Perth Hills",
-        "24": "Wellington",
-        "31": "Moora",
-        "32": "Central Wheatbelt",
-        "33": "Wheatbelt Region",
-        "41": "Geraldton",
-        "42": "Murchison",
-        "44": "Geraldton",  # fallback
-        "51": "Exmouth",
-        "53": "Pilbara Region",
-        "61": "East Kimberley",
-        "62": "West Kimberley",
-        "70": "Donnelly",  # SW region fallback
-        "71": "Albany",
-        "81": "Blackwood",
-        "82": "Donnelly",
-        "90": "Swan Coastal",
-        "91": "Frankland",
-        "92": "Frankland",  # fallback
-    }
-
-    result: dict[str, int] = {}
-    for code, name in _DISTRICT_NO_TO_NAME.items():
-        pk = name_to_pk.get(name.casefold())
-        if pk:
-            result[code] = pk
-        else:
-            logger.warning("TFAUNA DistrictNo %s → '%s' not found in District LegacyValueMap", code, name)
-
-    logger.info("TFAUNA district cache: %d DistrictNo→District PK mappings", len(result))
-    _district_no_cache = result
-    return result
-
-
-# ── Cached district → region map ───────────────────────────────────
-
-_district_pk_to_region_cache: dict[int, int] | None = None
-
-
-def _get_district_to_region_map() -> dict[int, int]:
-    """Build and cache a map from District PK → Region PK."""
-    global _district_pk_to_region_cache
-    if _district_pk_to_region_cache is not None:
-        return _district_pk_to_region_cache
-
-    from boranga.components.species_and_communities.models import District
-
-    result: dict[int, int] = {}
-    for d in District.objects.select_related("region").all():
-        if d.region_id:
-            result[d.pk] = d.region_id
-
-    _district_pk_to_region_cache = result
-    return result
-
+SPECIES_FROM_NAME_ID = taxonomy_lookup_legacy_id_mapping_species("TFAUNA", group_type="fauna")
 
 # ── Default TFAUNA user fallback ────────────────────────────────────
 # The default TFAUNA email user (boranga.tfauna@dbca.wa.gov.au) is used
@@ -250,7 +111,10 @@ SUBMITTER_CATEGORY_DBCA = fk_lookup_static(
 
 STATIC_DBCA = static_value_factory("DBCA")
 
-REGION_FROM_DISTRICT = region_from_district_factory()
+# District: DistrictNo code → District PK (via TFAUNA DistrictNo LegacyValueMap)
+DISTRICT_TRANSFORM = build_legacy_map_transform("TFAUNA", "DistrictNo", required=False)
+# Region: derived from OCRLocation__district (the raw DistrictNo code) via same map
+REGION_FROM_DISTRICT = region_from_district_factory(legacy_system="TFAUNA", list_name="DistrictNo")
 
 EPSG_CODE_DEFAULT = static_value_factory(settings.DEFAULT_SRID)
 
@@ -345,7 +209,7 @@ def _customer_status(_value, _ctx=None):
 
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
-    "species_id": ["strip", "blank_to_none", _species_from_name_id],
+    "species_id": ["strip", "blank_to_none", SPECIES_FROM_NAME_ID],
     "processing_status": ["strip", "required", _processing_status],
     "customer_status": [_customer_status],
     "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
@@ -377,8 +241,8 @@ PIPELINES = {
     "OCRLocation__locality": ["strip", "blank_to_none"],
     "OCRLocation__location_description": ["strip", "blank_to_none"],
     "OCRLocation__location_accuracy": ["strip", "blank_to_none", LOCATION_ACCURACY_TRANSFORM],
-    "OCRLocation__district": ["strip", "blank_to_none"],
-    "OCRLocation__region": ["strip", "blank_to_none"],  # region resolved in extract()
+    "OCRLocation__district": ["strip", "blank_to_none", DISTRICT_TRANSFORM],
+    "OCRLocation__region": [REGION_FROM_DISTRICT],
     # OCRObservationDetail
     "OCRObservationDetail__comments": ["strip", "blank_to_none"],
     # OCRIdentification
@@ -440,18 +304,10 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             if name_id:
                 canonical["species_id"] = name_id
 
-            # ── district: resolve DistrictNo → District FK ─────
+            # ── district: pass raw DistrictNo; pipeline resolves → District PK + Region
             district_no = (raw.get("DistrictNo") or "").strip()
             if district_no:
-                district_map = _get_district_no_map()
-                district_pk = district_map.get(district_no)
-                if district_pk:
-                    canonical["OCRLocation__district"] = district_pk
-                    # Also resolve region from district
-                    region_map = _get_district_to_region_map()
-                    region_pk = region_map.get(district_pk)
-                    if region_pk:
-                        canonical["OCRLocation__region"] = region_pk
+                canonical["OCRLocation__district"] = district_no
 
             # ── migrated_from_id prefix ─────────────────────────
             mid = canonical.get("migrated_from_id")
