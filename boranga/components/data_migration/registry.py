@@ -2794,82 +2794,79 @@ def conditional_transform_factory(
     return name
 
 
-def region_from_district_factory():
+def region_from_district_factory(
+    legacy_system: str = "TPFL",
+    list_name: str = "DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
+):
     """
-    Factory that returns a registered transform name for deriving region_id from district_id.
+    Factory that returns a registered transform name for deriving region_id from
+    district_id via a LegacyValueMap lookup.
 
-    This transform looks up a District by its ID and extracts the associated region_id.
-    Results are cached for the duration of the migration run to avoid repeated DB lookups.
+    The transform ignores its input value and instead reads OCRLocation__district
+    from the raw row context (the pre-transform legacy code), resolves it to a
+    District PK via LegacyValueMap, then returns the associated region_id.
+    Results are cached per district_id for the duration of the migration run.
 
-    IMPORTANT: This transform is designed to work with the raw CSV row and extracts the
-    OCRLocation__district value from the row context, applies the district transform to it,
-    then derives the region from the transformed district ID.
+    Args:
+        legacy_system: the LegacyValueMap legacy_system to query (default "TPFL")
+        list_name: the LegacyValueMap list_name to query
+                   (default "DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)")
 
     Usage:
-      REGION_FROM_DISTRICT_TRANSFORM = region_from_district_factory()
-      PIPELINES["OCRLocation__region"] = [REGION_FROM_DISTRICT_TRANSFORM]
-
-    The transform ignores the input value (OCRLocation__region from CSV) and instead derives
-    the region from the OCRLocation__district in the same row. Returns None if district is
-    not found or cannot be transformed.
+      REGION_FROM_DISTRICT = region_from_district_factory()  # TPFL
+      REGION_FROM_DISTRICT = region_from_district_factory("TFAUNA", "DistrictNo")
+      PIPELINES["OCRLocation__region"] = [REGION_FROM_DISTRICT]
     """
-    key = "region_from_district"
+    key = f"region_from_district:{legacy_system}:{list_name}"
     name = "region_from_district_" + hashlib.sha1(key.encode()).hexdigest()[:8]
 
     if name in registry._fns:
         return name
 
-    # Create a cache dict that persists for the migration run
-    district_to_region_cache = {}
+    # Per-instance cache: district_id (int) -> region_id (int|None)
+    district_to_region_cache: dict[int, int | None] = {}
 
     def inner(value, ctx: TransformContext):
-        # Ignore the input value (OCRLocation__region from CSV, which is usually empty)
-        # Instead, derive region from OCRLocation__district in the row
         if not ctx or not isinstance(ctx.row, dict):
             return _result(None)
 
-        # Get the raw district value from the row (this will be a legacy code like "5", "67")
         raw_district_value = ctx.row.get("OCRLocation__district")
         if raw_district_value is None or raw_district_value == "":
             return _result(None)
 
-        # Derive region from the raw district value by looking it up in LegacyValueMap
         try:
             from django.contrib.contenttypes.models import ContentType
 
             from boranga.components.main.models import LegacyValueMap
             from boranga.components.species_and_communities.models import District
 
-            # Get the District content type and look up the legacy mapping
             district_ct = ContentType.objects.get_for_model(District)
             lvm = LegacyValueMap.objects.filter(
-                legacy_system="TPFL",
-                list_name="DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
+                legacy_system=legacy_system,
+                list_name=list_name,
                 legacy_value=str(raw_district_value).strip(),
                 target_content_type=district_ct,
                 active=True,
             ).first()
 
-            if lvm:
-                district_id = lvm.target_object_id
-                # Check cache
-                if district_id in district_to_region_cache:
-                    return _result(district_to_region_cache[district_id])
-
-                # Look up district and extract region_id
-                district = District.objects.get(pk=district_id)
-                region_id = district.region_id
-                # Cache the result
-                district_to_region_cache[district_id] = region_id
-                return _result(region_id)
-            else:
+            if not lvm:
                 return _result(
                     None,
                     TransformIssue(
                         "warning",
-                        f"No legacy mapping found for DISTRICT value '{raw_district_value}'",
+                        f"No {legacy_system}.{list_name} mapping for DISTRICT value '{raw_district_value}'",
                     ),
                 )
+
+            district_id = lvm.target_object_id
+            if district_id in district_to_region_cache:
+                return _result(district_to_region_cache[district_id])
+
+            district = District.objects.get(pk=district_id)
+            region_id = district.region_id
+            district_to_region_cache[district_id] = region_id
+            return _result(region_id)
+
         except Exception as e:
             return _result(
                 None,
