@@ -82,7 +82,7 @@ RUN cd /app/boranga/frontend/boranga && npm run build && \
 
 RUN touch /app/.env && \
     $VIRTUAL_ENV/bin/python manage.py collectstatic --noinput && \
-    $VIRTUAL_ENV/bin/python manage.py script_hash_indexes --skip-checks=database
+    $VIRTUAL_ENV/bin/python manage.py script_hash_indexes --skip-checks
 
 # --- Runtime: clean image with only runtime packages and built artifacts ---
 FROM ${BASE_IMAGE} AS runtime
