@@ -54,6 +54,7 @@ from boranga.components.occurrence.models import (
     OCCObservationDetail,
     OCCPlantCount,
     Occurrence,
+    OccurrenceDocument,
     OccurrenceGeometry,
     OccurrenceReport,
     OccurrenceReportDocument,
@@ -216,6 +217,67 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     logger.info("Reset primary key sequence for table %s to %s", table, max_id)
             except Exception:
                 logger.exception("Failed to reset OccurrenceReport primary key sequence")
+
+            # When TFAUNA is in the active sources, also wipe the Occurrence records
+            # that were auto-created from approved TFAUNA OCRs (identified by the
+            # "tfauna-orf-" migrated_from_id prefix).  These are owned by the
+            # occurrence_report_legacy TFAUNA run, not by the occurrence_legacy handler.
+            if Source.TFAUNA.value in (sources or []):
+                tfauna_occ_filter = {"migrated_from_id__startswith": "tfauna-orf-"}
+                tfauna_occ_count = Occurrence.objects.filter(**tfauna_occ_filter).count()
+                if tfauna_occ_count:
+                    logger.warning(
+                        "OccurrenceReportImporter: TFAUNA — wiping %d auto-created Occurrence records "
+                        "(migrated_from_id prefix 'tfauna-orf-') and their children ...",
+                        tfauna_occ_count,
+                    )
+                    # Clean reversion history for TFAUNA Occurrences and OCC child
+                    # models before deleting the rows so the seeder won't encounter
+                    # stale Version records on the next run.
+                    occ_cleaner = ReversionHistoryCleaner(batch_size=2000)
+                    occ_cleaner.clear_for_model(Occurrence, tfauna_occ_filter)
+                    for _occ_child_model, _rel_path in [
+                        (OccurrenceGeometry, "occurrence"),
+                        (OCCLocation, "occurrence"),
+                        (OCCHabitatComposition, "occurrence"),
+                        (OCCHabitatCondition, "occurrence"),
+                        (OCCIdentification, "occurrence"),
+                        (OCCObservationDetail, "occurrence"),
+                        (OCCFireHistory, "occurrence"),
+                        (OCCAssociatedSpecies, "occurrence"),
+                        (OccurrenceDocument, "occurrence"),
+                    ]:
+                        try:
+                            occ_cleaner.clear_for_related_model(_occ_child_model, _rel_path, tfauna_occ_filter)
+                        except Exception:
+                            logger.exception("Failed to clear reversion history for %s", _occ_child_model.__name__)
+                    logger.info("TFAUNA Occurrence reversion cleanup stats: %s", occ_cleaner.get_stats())
+                    try:
+                        Occurrence.objects.filter(**tfauna_occ_filter).delete()
+                        logger.info("Deleted TFAUNA Occurrence records.")
+                    except Exception:
+                        logger.exception("Failed to delete TFAUNA Occurrence records")
+                    # Reset the Occurrence PK sequence too.
+                    try:
+                        if getattr(conn, "vendor", None) == "postgresql":
+                            occ_table = Occurrence._meta.db_table
+                            with conn.cursor() as cur:
+                                cur.execute(f"SELECT MAX(id) FROM {occ_table}")
+                                row = cur.fetchone()
+                                occ_max_id = row[0] if row else None
+                                if occ_max_id is not None:
+                                    cur.execute(
+                                        "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                        [occ_table, "id", occ_max_id, True],
+                                    )
+                                else:
+                                    cur.execute(
+                                        "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                        [occ_table, "id", 1, False],
+                                    )
+                            logger.info("Reset primary key sequence for table %s to %s", occ_table, occ_max_id)
+                    except Exception:
+                        logger.exception("Failed to reset Occurrence primary key sequence")
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
