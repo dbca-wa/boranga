@@ -257,11 +257,6 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             canonical["processing_status"] = "ACCEPTED"  # pipeline will map
             canonical["internal_application"] = True
 
-            # ── district: pass raw DistrictNo; pipeline resolves → District PK + Region
-            district_no = (raw.get("DistrictNo") or "").strip()
-            if district_no:
-                canonical["OCRLocation__district"] = district_no
-
             # ── migrated_from_id prefix ─────────────────────────
             mid = canonical.get("migrated_from_id")
             if mid and not str(mid).startswith("tfauna-"):
