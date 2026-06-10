@@ -2528,6 +2528,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # via those references; what is freed here are the op dict containers
         # themselves plus the slimmed merged dicts (~14 keys × 54k ops).
         del ops
+        import gc
+
+        gc.collect()  # prompt Python to reclaim freed op containers immediately
 
         # SubmitterInformation: OneToOne - create or update submitter information
         # Note: OneToOne relationship is defined on OccurrenceReport side (submitter_information field)
@@ -3082,7 +3085,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # simultaneously (OCRLocation, OCRHabitatComposition, …), each with 54 k
         # Django model instances. That can push peak RSS above 5 GB. Flushing
         # every CHILD_FLUSH_EACH items keeps each list bounded in size.
-        CHILD_FLUSH_EACH = 15000
+        CHILD_FLUSH_EACH = 2000
 
         # Fetch ContentType once before processing geometries
         from django.contrib.contenttypes.models import ContentType
@@ -3107,6 +3110,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # -------------------------------------------------------------------
         # Defined here (after all referenced variables are initialised) so that
         # ruff can verify every name used inside the closure is already bound.
+        # CHILD_FLUSH_EACH is intentionally small (2 000) to keep each child
+        # list bounded while the loop runs over the full ~250 k TFAUNA dataset.
+        # The original value of 15 000 kept up to 15 k model instances per list
+        # alive simultaneously; 2 000 caps that at ~13 % of the previous peak.
 
         def _flush_child_lists():
             """Flush accumulated child-record lists to the DB and clear them in place.
@@ -3578,23 +3585,38 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # the (potentially much larger) create_meta pass.
         _flush_child_lists()
 
+        # Free to_update early — the 9 sub-dicts per tuple (habitat_data,
+        # location_data, etc.) are no longer needed after the to_update loop above.
+        # Extract only the OCR instances now so we can release the large tuples
+        # before the create_meta pass, which is far larger for TFAUNA.
+        to_update_instances = [t[0] for t in to_update]
+        _to_update_count = len(to_update_instances)
+        del to_update
+        gc.collect()  # prompt Python to reclaim freed to_update sub-dicts immediately
+
         # Handle created ones
         logger.debug(f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}")
         # logger.info(f"created_map keys: {list(created_map.keys())}")
 
         cm_processed = 0
-        for (
-            mig,
-            habitat_data,
-            habitat_condition,
-            submitter_information_data,
-            location_data,
-            observation_detail_data,
-            geometry_data,
-            plant_count_data,
-            vegetation_structure_data,
-            fire_history_data,
-        ) in create_meta:
+        for cm_idx, _cm_item in enumerate(create_meta):
+            (
+                mig,
+                habitat_data,
+                habitat_condition,
+                submitter_information_data,
+                location_data,
+                observation_detail_data,
+                geometry_data,
+                plant_count_data,
+                vegetation_structure_data,
+                fire_history_data,
+            ) = _cm_item
+            # Release the tuple immediately so its sub-dicts can be reclaimed by
+            # GC once the local variable references are rebound in the next
+            # iteration.  This keeps only ~1 iteration's worth of sub-dicts live
+            # at a time rather than all 54 k at once.
+            create_meta[cm_idx] = None
             cm_processed += 1
             if cm_processed % 500 == 0:
                 logger.info(
@@ -4598,7 +4620,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)
-        updated += len(to_update)
+        updated += _to_update_count  # saved before to_update was freed above
 
         # Free child-record prefetch dicts and instance lists — all flushed to DB.
         del existing_habs, existing_conds, existing_idents, existing_locations
@@ -4610,14 +4632,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
         del animal_obs_to_create, animal_obs_to_update
         del vegetation_structures_to_create, vegetation_structures_to_update
         del fire_history_to_create, fire_history_to_update, ocr_geom_batch_create
+        # to_update and to_update_instances were already extracted and freed before
+        # the create_meta loop (see above).
 
-        # Slim to_update: only OCR instances are needed from here (for pop_section_map).
-        # Dropping the 9 sub-dicts per tuple releases habitat/location/etc data.
-        to_update_instances = [t[0] for t in to_update]
-        del to_update
-
-        # Free create_meta — sub-dicts consumed during the loop above.
+        # Free create_meta — items were progressively nulled out during the loop,
+        # releasing sub-dicts one iteration at a time. Deleting the list itself
+        # frees the remaining None entries and the list object.
         del create_meta
+        gc.collect()  # prompt Python to reclaim freed create_meta entries
 
         logger.info(
             "OccurrenceReportImporter: freed child-record structures (RSS=%.0fMB)",
