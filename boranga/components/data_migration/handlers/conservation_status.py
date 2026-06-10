@@ -217,6 +217,9 @@ class ConservationStatusImporter(BaseSheetImporter):
         # Prepare lists for bulk operations
         submitter_infos = []
         cs_objects = []
+        # Map migrated_from_id -> [code, ...] for TFAUNA M2M
+        # (populated during the row loop; applied after bulk_create)
+        tfauna_m2m_map: dict[str, list[str]] = {}
 
         # Cache EmailUserRO full-name lookups so repeated submitters don't
         # trigger redundant external DB queries.
@@ -337,7 +340,6 @@ class ConservationStatusImporter(BaseSheetImporter):
                     wa_priority_category=row.get("wa_priority_category"),  # Transformed to object
                     wa_legislative_list=row.get("wa_legislative_list"),  # Transformed to object
                     wa_legislative_category=row.get("wa_legislative_category"),  # Transformed to object
-                    commonwealth_conservation_category_id=row.get("commonwealth_conservation_category"),
                     iucn_version_id=row.get("iucn_version"),
                     change_code_id=row.get("change_code"),
                     other_conservation_assessment_id=row.get("other_conservation_assessment"),
@@ -356,6 +358,21 @@ class ConservationStatusImporter(BaseSheetImporter):
                     application_type_id=row.get("group_type_id"),
                     approval_level=row.get("approval_level"),
                 )
+                if _src in [
+                    Source.TEC.value,
+                    Source.TPFL.value,
+                ]:
+                    cs.commonwealth_conservation_category_id = row.get("commonwealth_conservation_category")
+                elif _src == Source.TFAUNA.value:
+                    # Pipeline returns the raw (stripped) code string, which may be
+                    # comma-separated (e.g. "EN" or "EN,VU"). Store the codes for
+                    # post-bulk_create M2M assignment.
+                    raw_codes = row.get("commonwealth_conservation_category")
+                    if raw_codes:
+                        codes = [c.strip() for c in str(raw_codes).split(",") if c.strip()]
+                        if codes:
+                            tfauna_m2m_map[row.get("migrated_from_id", "")] = codes
+
                 cs_objects.append(cs)
 
             except Exception as e:
@@ -406,6 +423,41 @@ class ConservationStatusImporter(BaseSheetImporter):
                 ConservationStatus.objects.bulk_update(to_update, ["conservation_status_number"])
 
             stats["created"] += len(created_cs)
+
+        # Set commonwealth_conservation_categories M2M for TFAUNA records.
+        # tfauna_m2m_map holds {migrated_from_id: [code, ...]} collected during
+        # the row loop. We resolve all codes in a single DB query then bulk-insert
+        # through-model rows.
+        if tfauna_m2m_map and cs_objects:
+            from boranga.components.conservation_status.models import CommonwealthConservationList
+
+            ThroughModel = ConservationStatus.commonwealth_conservation_categories.through
+            # Build migrated_from_id -> created CS PK index
+            m2m_id_map = {cs.migrated_from_id: cs.pk for cs in created_cs if cs.migrated_from_id in tfauna_m2m_map}
+            # Resolve all codes in one query
+            all_codes = {code for codes in tfauna_m2m_map.values() for code in codes}
+            code_to_pk = dict(CommonwealthConservationList.objects.filter(code__in=all_codes).values_list("code", "id"))
+            through_records = []
+            for mig_id, codes in tfauna_m2m_map.items():
+                cs_pk = m2m_id_map.get(mig_id)
+                if not cs_pk:
+                    continue
+                for code in codes:
+                    cat_pk = code_to_pk.get(code)
+                    if cat_pk:
+                        through_records.append(
+                            ThroughModel(
+                                conservationstatus_id=cs_pk,
+                                commonwealthconservationlist_id=cat_pk,
+                            )
+                        )
+            if through_records:
+                ThroughModel.objects.bulk_create(through_records, ignore_conflicts=True)
+                logger.info(
+                    "Set commonwealth_conservation_categories M2M for %d TFAUNA records (%d through rows)",
+                    len(m2m_id_map),
+                    len(through_records),
+                )
 
         # ── Task 11854: post-persist Species processing_status + publishing ──
         # Now that CS records exist, update Species.processing_status and

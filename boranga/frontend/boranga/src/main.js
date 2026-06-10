@@ -80,6 +80,22 @@ function refreshReadOnlyStatus() {
         .catch(() => false);
 }
 
+/** Fetches whether external proposals (CS and OCR submissions) are enabled, stores in window.env. */
+function refreshExternalProposalsEnabled() {
+    return originalFetch('/api/enable_external_proposals')
+        .then((r) => r.json())
+        .then((data) => {
+            window.env = window.env || {};
+            window.env.enable_external_proposals =
+                !!data.enable_external_proposals;
+            return window.env.enable_external_proposals;
+        })
+        .catch(() => {
+            window.env = window.env || {};
+            window.env.enable_external_proposals = true;
+        });
+}
+
 // Check on initial page load.
 refreshReadOnlyStatus();
 
@@ -224,4 +240,9 @@ window.fetch = ((orig) => {
 })(originalFetch);
 
 app.use(router);
-router.isReady().then(() => app.mount('#app'));
+// Gate app mount on the external-proposals flag being fetched so that computed
+// properties (addCSVisibility / addOCRVisibility) never evaluate before
+// window.env.enable_external_proposals is set.
+Promise.all([router.isReady(), refreshExternalProposalsEnabled()]).then(() =>
+    app.mount('#app')
+);

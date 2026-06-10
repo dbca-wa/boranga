@@ -1,0 +1,232 @@
+[
+  {
+    "model": "boranga.sampletype",
+    "pk": 1,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Fresh carcass",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 2,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "name": "Frozen carcass",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 3,
+    "fields": {
+      "order": 2,
+      "archived": false,
+      "name": "Degenerated carcass",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 4,
+    "fields": {
+      "order": 3,
+      "archived": false,
+      "name": "Partial carcass",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 5,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "name": "DNA sample",
+      "group_type": 3
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 6,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Specimen",
+      "group_type": 3
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 7,
+    "fields": {
+      "order": 4,
+      "archived": false,
+      "name": "Skull/bones",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 8,
+    "fields": {
+      "order": 6,
+      "archived": false,
+      "name": "Fur/Hair/Skin",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 9,
+    "fields": {
+      "order": 5,
+      "archived": false,
+      "name": "Scats",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 10,
+    "fields": {
+      "order": 17,
+      "archived": false,
+      "name": "Other (specify in comments)",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 13,
+    "fields": {
+      "order": 2,
+      "archived": false,
+      "name": "Other (specify in comments)",
+      "group_type": 3
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 14,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "name": "Other (specify in comments)",
+      "group_type": 1
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 15,
+    "fields": {
+      "order": 10,
+      "archived": false,
+      "name": "Spirit specimen",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 16,
+    "fields": {
+      "order": 7,
+      "archived": false,
+      "name": "DNA sample",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 17,
+    "fields": {
+      "order": 8,
+      "archived": false,
+      "name": "Eggs/Eggshell",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 18,
+    "fields": {
+      "order": 9,
+      "archived": false,
+      "name": "Feathers",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 19,
+    "fields": {
+      "order": 11,
+      "archived": false,
+      "name": "Stomach contents",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 20,
+    "fields": {
+      "order": 12,
+      "archived": false,
+      "name": "Taxidermied",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 21,
+    "fields": {
+      "order": 13,
+      "archived": false,
+      "name": "Shell",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 22,
+    "fields": {
+      "order": 14,
+      "archived": false,
+      "name": "Live specimen",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 23,
+    "fields": {
+      "order": 15,
+      "archived": false,
+      "name": "No specimen",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 24,
+    "fields": {
+      "order": 16,
+      "archived": false,
+      "name": "Photo",
+      "group_type": 2
+    }
+  },
+  {
+    "model": "boranga.sampletype",
+    "pk": 25,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Specimen",
+      "group_type": 1
+    }
+  }
+]

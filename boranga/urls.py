@@ -194,6 +194,11 @@ router.registry.sort(key=lambda x: x[0])
 
 api_patterns = [
     re_path(r"^api/read_only_status$", views.ReadOnlyStatusView.as_view(), name="read-only-status"),
+    re_path(
+        r"^api/enable_external_proposals$",
+        views.ExternalProposalsEnabledView.as_view(),
+        name="enable-external-proposals",
+    ),
     re_path(r"^api/profile$", users_api.GetProfile.as_view(), name="get-profile"),
     re_path(
         r"^api/geojson_to_shapefile$",

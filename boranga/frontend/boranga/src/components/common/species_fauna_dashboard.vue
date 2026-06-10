@@ -897,6 +897,18 @@ export default {
                 searchable: false, // handles by filter_queryset override method - class ProposalFilterBackend
                 visible: true,
                 className: 'dt-wrap-two-lines',
+                render: function (value, type) {
+                    let display = '';
+                    if (Array.isArray(value)) {
+                        display = value.join(', ');
+                    } else if (value === null || value === undefined) {
+                        display = '';
+                    } else {
+                        display = value;
+                    }
+                    let result = helpers.dtPopover(display, 80, 'hover');
+                    return type == 'export' ? display : result;
+                },
                 name: 'regions__name',
             };
         },
@@ -907,6 +919,18 @@ export default {
                 searchable: false, // handles by filter_queryset override method - class ProposalFilterBackend
                 visible: true,
                 className: 'dt-wrap-two-lines',
+                render: function (value, type) {
+                    let display = '';
+                    if (Array.isArray(value)) {
+                        display = value.join(', ');
+                    } else if (value === null || value === undefined) {
+                        display = '';
+                    } else {
+                        display = value;
+                    }
+                    let result = helpers.dtPopover(display, 80, 'hover');
+                    return type == 'export' ? display : result;
+                },
                 name: 'districts__name',
             };
         },

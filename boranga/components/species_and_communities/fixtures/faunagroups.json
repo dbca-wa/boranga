@@ -1,0 +1,32 @@
+[
+  {
+    "model": "boranga.faunagroup",
+    "pk": 1,
+    "fields": { "order": 0, "archived": false, "name": "Mammal" }
+  },
+  {
+    "model": "boranga.faunagroup",
+    "pk": 2,
+    "fields": { "order": 1, "archived": false, "name": "Bird" }
+  },
+  {
+    "model": "boranga.faunagroup",
+    "pk": 3,
+    "fields": { "order": 2, "archived": false, "name": "Reptile" }
+  },
+  {
+    "model": "boranga.faunagroup",
+    "pk": 4,
+    "fields": { "order": 3, "archived": false, "name": "Amphibian" }
+  },
+  {
+    "model": "boranga.faunagroup",
+    "pk": 5,
+    "fields": { "order": 4, "archived": false, "name": "Fish" }
+  },
+  {
+    "model": "boranga.faunagroup",
+    "pk": 6,
+    "fields": { "order": 5, "archived": false, "name": "Invertebrate" }
+  }
+]

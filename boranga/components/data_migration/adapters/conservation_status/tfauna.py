@@ -43,13 +43,15 @@ from boranga.components.conservation_status.models import (
     CommonwealthConservationList,
     ConservationChangeCode,
     ConservationStatus,
-    IUCNVersion,
     OtherConservationAssessmentList,
 )
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
+    _result,
+    build_legacy_map_transform,
     datetime_iso_factory,
     fk_lookup,
+    taxonomy_lookup_legacy_id_mapping,
 )
 from boranga.components.species_and_communities.models import GroupType
 
@@ -61,6 +63,29 @@ logger = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 DEFAULT_EMAIL = "boranga.tfauna@dbca.wa.gov.au"
+
+SPECIES_LOOKUP = taxonomy_lookup_legacy_id_mapping("TFAUNA")
+
+
+def populate_species_id_from_migrated_from_id(value, ctx):
+    """Pipeline transform: extract taxon_name_id from migrated_from_id for SPECIES_LOOKUP.
+
+    migrated_from_id format: "tfauna-{original_taxon_name_id}-{count:02d}"
+    Returns the integer taxon_name_id so the next pipeline step (SPECIES_LOOKUP)
+    can resolve it to a taxonomy PK.
+    """
+    migrated_id = ctx.row.get("migrated_from_id") if (ctx and ctx.row) else None
+    if migrated_id and isinstance(migrated_id, str) and migrated_id.startswith("tfauna-"):
+        # Format: "tfauna-{legacy_taxon_name_id}-{count:02d}"
+        # The count suffix is always the last segment; everything in between is the code.
+        parts = migrated_id.split("-")
+        if len(parts) >= 3:
+            # Rejoin middle parts in case the code itself contains hyphens
+            code = "-".join(parts[1:-1]).strip()
+            if code:
+                return _result(code)
+    return _result(None)
+
 
 # Processing-status code → Boranga value  (Task 12021)
 PROCESSING_STATUS_MAP = {
@@ -74,7 +99,14 @@ REVIEW_DUE_WA_LEG_CATS = {"CR", "EN", "VU"}
 
 # ── Pipeline look-ups (resolved during transform phase in handler) ───────────
 COMMONWEALTH_LOOKUP = fk_lookup(CommonwealthConservationList, "code")
-IUCN_LOOKUP = fk_lookup(IUCNVersion, "code")
+
+IUCN_VERSION_TRANSFORM = build_legacy_map_transform(
+    legacy_system="TFAUNA",
+    list_name="iucn_version",
+    required=False,
+    return_type="id",
+)
+
 CHANGE_CODE_LOOKUP = fk_lookup(ConservationChangeCode, "code")
 OTHER_ASSESSMENT_LOOKUP = fk_lookup(OtherConservationAssessmentList, "code")
 DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
@@ -82,18 +114,18 @@ DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 PIPELINES = {
     "migrated_from_id": ["strip", "required"],
     # species_id is resolved to Taxonomy PK in extract(); pipeline just validates
-    "species_id": ["strip", "blank_to_none", "required"],
+    "species_id": [populate_species_id_from_migrated_from_id, SPECIES_LOOKUP, "required"],
     "review_due_date": ["strip", "smart_date_parse"],
     "wa_legislative_category": ["strip", "blank_to_none", "wa_legislative_category_from_code"],
     "wa_legislative_list": ["strip", "blank_to_none", "wa_legislative_list_from_code"],
     "wa_priority_category": ["strip", "blank_to_none", "wa_priority_category_from_code"],
     "wa_priority_list": ["strip", "blank_to_none", "wa_priority_list_from_code"],
-    "commonwealth_conservation_category": ["strip", "blank_to_none", COMMONWEALTH_LOOKUP],
-    "iucn_version": ["strip", "blank_to_none", IUCN_LOOKUP],
+    "commonwealth_conservation_category": ["strip", "blank_to_none"],
+    "iucn_version": ["strip", "blank_to_none", IUCN_VERSION_TRANSFORM],
     "change_code": ["strip", "blank_to_none", CHANGE_CODE_LOOKUP],
     "other_conservation_assessment": ["strip", "blank_to_none", OTHER_ASSESSMENT_LOOKUP],
     "conservation_criteria": ["strip", "blank_to_none"],
-    "processing_status": ["strip", "blank_to_none"],
+    "processing_status": ["strip", "blank_to_none", "required"],
     "effective_from_date": ["strip", "smart_date_parse"],
     "effective_to_date": ["strip", "smart_date_parse"],
     "listing_date": ["strip", "smart_date_parse"],
@@ -168,7 +200,7 @@ class ConservationStatusTfaunaAdapter(SourceAdapter):
                 m_id = str(m_id).strip()
                 count = migrated_id_counts.get(m_id, 0) + 1
                 migrated_id_counts[m_id] = count
-                canonical["migrated_from_id"] = f"{m_id}-{count:02d}"
+                canonical["migrated_from_id"] = f"tfauna-{m_id}-{count:02d}"
 
             # ── Group Type ────────────────────────────────────────────
             canonical["group_type_id"] = group_type_id
@@ -207,12 +239,6 @@ class ConservationStatusTfaunaAdapter(SourceAdapter):
                 # (species column mapped to species_id by schema)
                 # The pipeline "required" step will catch missing values.
                 pass
-
-            # ── Processing Status  (Task 12021) ──────────────────────
-            p_status = canonical.get("processing_status")
-            if p_status:
-                p_status = str(p_status).strip().upper()
-                canonical["processing_status"] = PROCESSING_STATUS_MAP.get(p_status, p_status.lower())
 
             # ── WA Priority List  (Task 11999) ───────────────────────
             raw_prio_cat = canonical.get("wa_priority_category")
@@ -257,6 +283,20 @@ class ConservationStatusTfaunaAdapter(SourceAdapter):
                     except ValueError:  # Feb 29
                         new_date = dt + timedelta(days=365 * 10 + 2)
                     canonical["review_due_date"] = new_date
+
+            # Populate comment with values from the Gazettal comments, Review Comments, Commonwealth Comments, Action Plan Comments and	Red List Comments
+            comment_parts = []
+            for col in [
+                "gazettal_comments",
+                "review_comments",
+                "commonwealth_comments",
+                "action_plan_comments",
+                "red_list_comments",
+            ]:
+                value = canonical.get(col)
+                if value and str(value).strip():
+                    comment_parts.append(str(value).strip())
+            canonical["comment"] = "\n".join(comment_parts) if comment_parts else None
 
             # ── approval_level  (Task 12000) ─────────────────────────
             if not wa_leg_cat or not str(wa_leg_cat).strip():

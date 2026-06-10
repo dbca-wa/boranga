@@ -177,6 +177,15 @@ class ReadOnlyStatusView(View):
         return response
 
 
+class ExternalProposalsEnabledView(View):
+    """Returns whether external users can submit conservation status and occurrence report proposals. Never cached."""
+
+    def get(self, request):
+        response = JsonResponse({"enable_external_proposals": getattr(settings, "ENABLE_EXTERNAL_PROPOSALS", True)})
+        response["Cache-Control"] = "no-store"
+        return response
+
+
 class ManagementCommandsView(LoginRequiredMixin, UserPassesTestMixin, TemplateView):
     template_name = "boranga/mgt-commands.html"
 

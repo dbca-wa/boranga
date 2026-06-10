@@ -1716,6 +1716,88 @@ def taxonomy_lookup_legacy_id_mapping(list_name: str) -> str:
     return name
 
 
+def taxonomy_lookup_legacy_id_mapping_species(list_name: str, group_type: str | None = None) -> str:
+    """Register and return a transform name that resolves a legacy taxon name id
+    (from `LegacyTaxonomyMapping`) to a boranga.Species PK.
+
+    Behaviour:
+      - on first call, joins LegacyTaxonomyMapping (keyed by legacy_taxon_name_id) with
+        Species (optionally filtered by group_type) into a fast in-memory dict
+      - returns the Species PK, or an error TransformIssue if no match is found
+
+    Args:
+        list_name: LegacyTaxonomyMapping list_name to filter by (e.g. "TFAUNA")
+        group_type: optional group type name filter (e.g. "fauna") to prevent
+                    cross-kingdom links where a legacy ID would map to a Species
+                    from a different kingdom.
+    """
+    if not list_name:
+        raise ValueError("list_name must be provided")
+
+    key_repr = f"taxon_id_to_species:{list_name}:{group_type or ''}"
+    name = "taxon_id_to_species_" + hashlib.sha1(key_repr.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    # Closure-level cache built lazily on first call: taxon_name_id (str) -> species_id (int)
+    _cache: dict[str, int] = {}
+    _initialized = [False]
+
+    def _build_cache() -> None:
+        table = _load_legacy_taxonomy_id_mappings(list_name)
+        tax_ids = {entry["taxonomy_id"] for entry in table.values() if entry.get("taxonomy_id")}
+        tax_to_sp: dict[int, int] = {}
+        if tax_ids:
+            try:
+                from boranga.components.species_and_communities.models import Species
+
+                qs = Species.objects.filter(taxonomy_id__in=tax_ids)
+                if group_type:
+                    qs = qs.filter(group_type__name=group_type)
+                for sp in qs.values("taxonomy_id", "id"):
+                    tax_to_sp[sp["taxonomy_id"]] = sp["id"]
+            except Exception:
+                logger.exception(
+                    "taxonomy_lookup_legacy_id_mapping_species: failed to load Species for list=%s",
+                    list_name,
+                )
+        for key, entry in table.items():
+            tax_id = entry.get("taxonomy_id")
+            if tax_id and tax_id in tax_to_sp:
+                _cache[key] = tax_to_sp[tax_id]
+        logger.info(
+            "taxonomy_lookup_legacy_id_mapping_species('%s', group_type=%r): %d NameId\u2192Species mappings",
+            list_name,
+            group_type,
+            len(_cache),
+        )
+
+    def _inner(value, ctx: TransformContext):
+        if value in (None, ""):
+            return _result(None)
+        if not _initialized[0]:
+            _build_cache()
+            _initialized[0] = True
+        key = str(value).strip()
+        sp_id = _cache.get(key)
+        if sp_id:
+            return _result(sp_id)
+        return _result(
+            value,
+            TransformIssue(
+                "error",
+                "No Species resolved for NameId="
+                + repr(key)
+                + f" (list: {list_name}"
+                + (f", group_type={group_type!r}" if group_type else "")
+                + ")",
+            ),
+        )
+
+    registry._fns[name] = _inner
+    return name
+
+
 @registry.register("upper")
 def t_upper(value, ctx):
     return _result(value.upper() if isinstance(value, str) else value)
@@ -1917,6 +1999,122 @@ def emailuser_object_by_legacy_username_factory(legacy_system: str) -> str:
             )
             cache[cache_key] = result
             return result
+
+    registry._fns[name] = inner
+    return name
+
+
+def emailuser_by_legacy_username_with_fallback_factory(
+    legacy_system: str,
+    fallback_email: str,
+) -> str:
+    """Like emailuser_by_legacy_username_factory, but falls back to the user identified
+    by fallback_email when the legacy username is not found or the input is empty/None.
+
+    On empty/None input: returns the fallback user ID (no error emitted).
+    On lookup failure: returns the fallback user ID with a warning issue (not error).
+
+    The fallback user is resolved lazily by email on first miss and cached thereafter.
+
+    Usage:
+      EMAILUSER = emailuser_by_legacy_username_with_fallback_factory(
+          "TFAUNA", "boranga.tfauna@dbca.wa.gov.au"
+      )
+      PIPELINES["submitter"] = ["strip", "blank_to_none", EMAILUSER]
+    """
+    if not legacy_system:
+        raise ValueError("legacy_system must be provided")
+    if not fallback_email:
+        raise ValueError("fallback_email must be provided")
+
+    key = f"emailuser_by_legacy_username_with_fallback:{legacy_system}:{fallback_email}"
+    name = "emailuser_by_legacy_username_fb_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    # Ensure the base (no-fallback) factory is registered first
+    base_name = emailuser_by_legacy_username_factory(legacy_system)
+
+    # Lazily resolved fallback user ID
+    _fallback: list[int | None] = [None]
+    _fallback_loaded = [False]
+
+    def _get_fallback_id() -> int | None:
+        if not _fallback_loaded[0]:
+            try:
+                user = EmailUserRO.objects.get(email__iexact=fallback_email)
+                _fallback[0] = user.id
+            except Exception:
+                logger.warning(
+                    "emailuser_by_legacy_username_with_fallback: fallback email '%s' not found",
+                    fallback_email,
+                )
+                _fallback[0] = None
+            _fallback_loaded[0] = True
+        return _fallback[0]
+
+    def inner(value, ctx):
+        if value in (None, ""):
+            return _result(_get_fallback_id())
+
+        base_fn = registry._fns.get(base_name)
+        if base_fn:
+            res = base_fn(value, ctx)
+            if not any(getattr(i, "level", "") == "error" for i in res.issues):
+                return res
+
+        fb_id = _get_fallback_id()
+        return _result(
+            fb_id,
+            TransformIssue(
+                "warning",
+                f"Username '{value}' has no {legacy_system} mapping; using fallback user (email={fallback_email})",
+            ),
+        )
+
+    registry._fns[name] = inner
+    return name
+
+
+def emailuser_object_by_legacy_username_with_fallback_factory(legacy_system: str) -> str:
+    """Like emailuser_object_by_legacy_username_factory, but silently returns None
+    (with a warning, not an error) when the legacy username lookup fails.
+
+    This is useful when the input value may be a display name rather than a
+    registered legacy username — lookup failure is expected and not an error.
+
+    Usage:
+      EMAILUSER_OBJ = emailuser_object_by_legacy_username_with_fallback_factory("TFAUNA")
+      GET_NAME = pluck_attribute_factory("get_full_name")
+      PIPELINES["SubmitterInformation__name"] = [EMAILUSER_OBJ, GET_NAME]
+    """
+    if not legacy_system:
+        raise ValueError("legacy_system must be provided")
+
+    key = f"emailuser_object_by_legacy_username_with_fallback:{legacy_system}"
+    name = "emailuser_object_by_legacy_username_fb_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    base_name = emailuser_object_by_legacy_username_factory(legacy_system)
+
+    def inner(value, ctx):
+        if value in (None, ""):
+            return _result(None)
+
+        base_fn = registry._fns.get(base_name)
+        if base_fn:
+            res = base_fn(value, ctx)
+            if not any(getattr(i, "level", "") == "error" for i in res.issues):
+                return res
+
+        return _result(
+            None,
+            TransformIssue(
+                "warning",
+                f"Username '{value}' has no {legacy_system} mapping; cannot resolve EmailUser object",
+            ),
+        )
 
     registry._fns[name] = inner
     return name
@@ -2712,82 +2910,79 @@ def conditional_transform_factory(
     return name
 
 
-def region_from_district_factory():
+def region_from_district_factory(
+    legacy_system: str = "TPFL",
+    list_name: str = "DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
+):
     """
-    Factory that returns a registered transform name for deriving region_id from district_id.
+    Factory that returns a registered transform name for deriving region_id from
+    district_id via a LegacyValueMap lookup.
 
-    This transform looks up a District by its ID and extracts the associated region_id.
-    Results are cached for the duration of the migration run to avoid repeated DB lookups.
+    The transform ignores its input value and instead reads OCRLocation__district
+    from the raw row context (the pre-transform legacy code), resolves it to a
+    District PK via LegacyValueMap, then returns the associated region_id.
+    Results are cached per district_id for the duration of the migration run.
 
-    IMPORTANT: This transform is designed to work with the raw CSV row and extracts the
-    OCRLocation__district value from the row context, applies the district transform to it,
-    then derives the region from the transformed district ID.
+    Args:
+        legacy_system: the LegacyValueMap legacy_system to query (default "TPFL")
+        list_name: the LegacyValueMap list_name to query
+                   (default "DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)")
 
     Usage:
-      REGION_FROM_DISTRICT_TRANSFORM = region_from_district_factory()
-      PIPELINES["OCRLocation__region"] = [REGION_FROM_DISTRICT_TRANSFORM]
-
-    The transform ignores the input value (OCRLocation__region from CSV) and instead derives
-    the region from the OCRLocation__district in the same row. Returns None if district is
-    not found or cannot be transformed.
+      REGION_FROM_DISTRICT = region_from_district_factory()  # TPFL
+      REGION_FROM_DISTRICT = region_from_district_factory("TFAUNA", "DistrictNo")
+      PIPELINES["OCRLocation__region"] = [REGION_FROM_DISTRICT]
     """
-    key = "region_from_district"
+    key = f"region_from_district:{legacy_system}:{list_name}"
     name = "region_from_district_" + hashlib.sha1(key.encode()).hexdigest()[:8]
 
     if name in registry._fns:
         return name
 
-    # Create a cache dict that persists for the migration run
-    district_to_region_cache = {}
+    # Per-instance cache: district_id (int) -> region_id (int|None)
+    district_to_region_cache: dict[int, int | None] = {}
 
     def inner(value, ctx: TransformContext):
-        # Ignore the input value (OCRLocation__region from CSV, which is usually empty)
-        # Instead, derive region from OCRLocation__district in the row
         if not ctx or not isinstance(ctx.row, dict):
             return _result(None)
 
-        # Get the raw district value from the row (this will be a legacy code like "5", "67")
         raw_district_value = ctx.row.get("OCRLocation__district")
         if raw_district_value is None or raw_district_value == "":
             return _result(None)
 
-        # Derive region from the raw district value by looking it up in LegacyValueMap
         try:
             from django.contrib.contenttypes.models import ContentType
 
             from boranga.components.main.models import LegacyValueMap
             from boranga.components.species_and_communities.models import District
 
-            # Get the District content type and look up the legacy mapping
             district_ct = ContentType.objects.get_for_model(District)
             lvm = LegacyValueMap.objects.filter(
-                legacy_system="TPFL",
-                list_name="DISTRICT (DRF_LOV_DEC_DISTRICT_VWS)",
+                legacy_system=legacy_system,
+                list_name=list_name,
                 legacy_value=str(raw_district_value).strip(),
                 target_content_type=district_ct,
                 active=True,
             ).first()
 
-            if lvm:
-                district_id = lvm.target_object_id
-                # Check cache
-                if district_id in district_to_region_cache:
-                    return _result(district_to_region_cache[district_id])
-
-                # Look up district and extract region_id
-                district = District.objects.get(pk=district_id)
-                region_id = district.region_id
-                # Cache the result
-                district_to_region_cache[district_id] = region_id
-                return _result(region_id)
-            else:
+            if not lvm:
                 return _result(
                     None,
                     TransformIssue(
                         "warning",
-                        f"No legacy mapping found for DISTRICT value '{raw_district_value}'",
+                        f"No {legacy_system}.{list_name} mapping for DISTRICT value '{raw_district_value}'",
                     ),
                 )
+
+            district_id = lvm.target_object_id
+            if district_id in district_to_region_cache:
+                return _result(district_to_region_cache[district_id])
+
+            district = District.objects.get(pk=district_id)
+            region_id = district.region_id
+            district_to_region_cache[district_id] = region_id
+            return _result(region_id)
+
         except Exception as e:
             return _result(
                 None,

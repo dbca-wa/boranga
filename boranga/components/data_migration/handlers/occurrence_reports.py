@@ -26,6 +26,11 @@ from boranga.components.data_migration.handlers.helpers import (
     normalize_create_kwargs,
     try_repair_geometry,
 )
+from boranga.components.data_migration.handlers.occurrences import (
+    _DISTRICT_WFS_LAYER,
+    _build_district_geo_lookup,
+    _load_district_shapes_from_wfs,
+)
 from boranga.components.data_migration.mappings import (
     load_sheet_associated_species_names,
 )
@@ -49,6 +54,7 @@ from boranga.components.occurrence.models import (
     OCCObservationDetail,
     OCCPlantCount,
     Occurrence,
+    OccurrenceDocument,
     OccurrenceGeometry,
     OccurrenceReport,
     OccurrenceReportDocument,
@@ -211,6 +217,67 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     logger.info("Reset primary key sequence for table %s to %s", table, max_id)
             except Exception:
                 logger.exception("Failed to reset OccurrenceReport primary key sequence")
+
+            # When TFAUNA is in the active sources, also wipe the Occurrence records
+            # that were auto-created from approved TFAUNA OCRs (identified by the
+            # "tfauna-orf-" migrated_from_id prefix).  These are owned by the
+            # occurrence_report_legacy TFAUNA run, not by the occurrence_legacy handler.
+            if Source.TFAUNA.value in (sources or []):
+                tfauna_occ_filter = {"migrated_from_id__startswith": "tfauna-orf-"}
+                tfauna_occ_count = Occurrence.objects.filter(**tfauna_occ_filter).count()
+                if tfauna_occ_count:
+                    logger.warning(
+                        "OccurrenceReportImporter: TFAUNA — wiping %d auto-created Occurrence records "
+                        "(migrated_from_id prefix 'tfauna-orf-') and their children ...",
+                        tfauna_occ_count,
+                    )
+                    # Clean reversion history for TFAUNA Occurrences and OCC child
+                    # models before deleting the rows so the seeder won't encounter
+                    # stale Version records on the next run.
+                    occ_cleaner = ReversionHistoryCleaner(batch_size=2000)
+                    occ_cleaner.clear_for_model(Occurrence, tfauna_occ_filter)
+                    for _occ_child_model, _rel_path in [
+                        (OccurrenceGeometry, "occurrence"),
+                        (OCCLocation, "occurrence"),
+                        (OCCHabitatComposition, "occurrence"),
+                        (OCCHabitatCondition, "occurrence"),
+                        (OCCIdentification, "occurrence"),
+                        (OCCObservationDetail, "occurrence"),
+                        (OCCFireHistory, "occurrence"),
+                        (OCCAssociatedSpecies, "occurrence"),
+                        (OccurrenceDocument, "occurrence"),
+                    ]:
+                        try:
+                            occ_cleaner.clear_for_related_model(_occ_child_model, _rel_path, tfauna_occ_filter)
+                        except Exception:
+                            logger.exception("Failed to clear reversion history for %s", _occ_child_model.__name__)
+                    logger.info("TFAUNA Occurrence reversion cleanup stats: %s", occ_cleaner.get_stats())
+                    try:
+                        Occurrence.objects.filter(**tfauna_occ_filter).delete()
+                        logger.info("Deleted TFAUNA Occurrence records.")
+                    except Exception:
+                        logger.exception("Failed to delete TFAUNA Occurrence records")
+                    # Reset the Occurrence PK sequence too.
+                    try:
+                        if getattr(conn, "vendor", None) == "postgresql":
+                            occ_table = Occurrence._meta.db_table
+                            with conn.cursor() as cur:
+                                cur.execute(f"SELECT MAX(id) FROM {occ_table}")
+                                row = cur.fetchone()
+                                occ_max_id = row[0] if row else None
+                                if occ_max_id is not None:
+                                    cur.execute(
+                                        "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                        [occ_table, "id", occ_max_id, True],
+                                    )
+                                else:
+                                    cur.execute(
+                                        "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                                        [occ_table, "id", 1, False],
+                                    )
+                            logger.info("Reset primary key sequence for table %s to %s", occ_table, occ_max_id)
+                    except Exception:
+                        logger.exception("Failed to reset Occurrence primary key sequence")
         finally:
             if not was_autocommit:
                 conn.set_autocommit(False)
@@ -360,6 +427,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
             action="store_true",
             help="Enable fuzzy matching for unresolved associated species names (slow).",
         )
+        parser.add_argument(
+            "--no-gis-district",
+            dest="no_gis_district",
+            action="store_true",
+            default=False,
+            help=(
+                "Skip GIS-based district/region assignment for TFAUNA OCRLocation and OCCLocation records. "
+                "By default, district shapes are fetched from GIS_SERVER_URL and each TFAUNA point is "
+                "intersected to determine the district."
+            ),
+        )
 
     def _parse_path_map(self, pairs):
         out = {}
@@ -396,6 +474,40 @@ class OccurrenceReportImporter(BaseSheetImporter):
         tec_site_species_map = {}
         if Source.TEC_SITE_VISITS.value in sources:
             tec_site_species_map = self.preload_tec_site_species_map(path)
+
+        # Load district shapes once for TFAUNA GIS-based district/region assignment.
+        # Only enabled when TFAUNA is in the active source set and --no-gis-district
+        # has not been passed.  Mirrors the pattern used in the occurrence_legacy handler.
+        # The resulting list of (district_pk, region_pk, shapely_geom) tuples is a few
+        # MB of Shapely objects and is held for the lifetime of this run() call only.
+        district_geo_lookup: list = []
+        if Source.TFAUNA.value in sources and not options.get("no_gis_district") and not ctx.dry_run:
+            _gis_base = getattr(settings, "GIS_SERVER_URL", None)
+            if _gis_base:
+                _gis_base = _gis_base.rstrip("/")
+                _sep = "&" if "?" in _gis_base else "?"
+                _districts_url = (
+                    f"{_gis_base}{_sep}service=WFS&version=2.0.0&request=GetFeature"
+                    f"&typeName={_DISTRICT_WFS_LAYER}&outputFormat=application%2Fjson"
+                    "&srsName=EPSG%3A4326"
+                )
+                _raw_shapes = _load_district_shapes_from_wfs(_districts_url, invert_xy=False)
+                if _raw_shapes:
+                    district_geo_lookup = _build_district_geo_lookup(_raw_shapes)
+                    logger.info(
+                        "TFAUNA GIS district: loaded %d district shapes for OCRLocation assignment",
+                        len(district_geo_lookup),
+                    )
+                else:
+                    logger.warning(
+                        "TFAUNA GIS district: no shapes loaded from WFS — district/region will not be set. "
+                        "Ensure GIS_SERVER_URL is configured correctly, or pass --no-gis-district to skip."
+                    )
+            else:
+                logger.warning(
+                    "TFAUNA GIS district: GIS_SERVER_URL not configured — "
+                    "district/region will not be set on OCRLocation/OCCLocation."
+                )
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
@@ -2528,6 +2640,9 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # via those references; what is freed here are the op dict containers
         # themselves plus the slimmed merged dicts (~14 keys × 54k ops).
         del ops
+        import gc
+
+        gc.collect()  # prompt Python to reclaim freed op containers immediately
 
         # SubmitterInformation: OneToOne - create or update submitter information
         # Note: OneToOne relationship is defined on OccurrenceReport side (submitter_information field)
@@ -3082,7 +3197,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # simultaneously (OCRLocation, OCRHabitatComposition, …), each with 54 k
         # Django model instances. That can push peak RSS above 5 GB. Flushing
         # every CHILD_FLUSH_EACH items keeps each list bounded in size.
-        CHILD_FLUSH_EACH = 15000
+        CHILD_FLUSH_EACH = 2000
 
         # Fetch ContentType once before processing geometries
         from django.contrib.contenttypes.models import ContentType
@@ -3107,6 +3222,10 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # -------------------------------------------------------------------
         # Defined here (after all referenced variables are initialised) so that
         # ruff can verify every name used inside the closure is already bound.
+        # CHILD_FLUSH_EACH is intentionally small (2 000) to keep each child
+        # list bounded while the loop runs over the full ~250 k TFAUNA dataset.
+        # The original value of 15 000 kept up to 15 k model instances per list
+        # alive simultaneously; 2 000 caps that at ~13 % of the previous peak.
 
         def _flush_child_lists():
             """Flush accumulated child-record lists to the DB and clear them in place.
@@ -3578,23 +3697,38 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # the (potentially much larger) create_meta pass.
         _flush_child_lists()
 
+        # Free to_update early — the 9 sub-dicts per tuple (habitat_data,
+        # location_data, etc.) are no longer needed after the to_update loop above.
+        # Extract only the OCR instances now so we can release the large tuples
+        # before the create_meta pass, which is far larger for TFAUNA.
+        to_update_instances = [t[0] for t in to_update]
+        _to_update_count = len(to_update_instances)
+        del to_update
+        gc.collect()  # prompt Python to reclaim freed to_update sub-dicts immediately
+
         # Handle created ones
         logger.debug(f"Processing create_meta: len={len(create_meta)}, created_map len={len(created_map)}")
         # logger.info(f"created_map keys: {list(created_map.keys())}")
 
         cm_processed = 0
-        for (
-            mig,
-            habitat_data,
-            habitat_condition,
-            submitter_information_data,
-            location_data,
-            observation_detail_data,
-            geometry_data,
-            plant_count_data,
-            vegetation_structure_data,
-            fire_history_data,
-        ) in create_meta:
+        for cm_idx, _cm_item in enumerate(create_meta):
+            (
+                mig,
+                habitat_data,
+                habitat_condition,
+                submitter_information_data,
+                location_data,
+                observation_detail_data,
+                geometry_data,
+                plant_count_data,
+                vegetation_structure_data,
+                fire_history_data,
+            ) = _cm_item
+            # Release the tuple immediately so its sub-dicts can be reclaimed by
+            # GC once the local variable references are rebound in the next
+            # iteration.  This keeps only ~1 iteration's worth of sub-dicts live
+            # at a time rather than all 54 k at once.
+            create_meta[cm_idx] = None
             cm_processed += 1
             if cm_processed % 500 == 0:
                 logger.info(
@@ -4598,7 +4732,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
         # Update stats counts for created/updated based on performed ops
         created += len(created_map)
-        updated += len(to_update)
+        updated += _to_update_count  # saved before to_update was freed above
 
         # Free child-record prefetch dicts and instance lists — all flushed to DB.
         del existing_habs, existing_conds, existing_idents, existing_locations
@@ -4610,14 +4744,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
         del animal_obs_to_create, animal_obs_to_update
         del vegetation_structures_to_create, vegetation_structures_to_update
         del fire_history_to_create, fire_history_to_update, ocr_geom_batch_create
+        # to_update and to_update_instances were already extracted and freed before
+        # the create_meta loop (see above).
 
-        # Slim to_update: only OCR instances are needed from here (for pop_section_map).
-        # Dropping the 9 sub-dicts per tuple releases habitat/location/etc data.
-        to_update_instances = [t[0] for t in to_update]
-        del to_update
-
-        # Free create_meta — sub-dicts consumed during the loop above.
+        # Free create_meta — items were progressively nulled out during the loop,
+        # releasing sub-dicts one iteration at a time. Deleting the list itself
+        # frees the remaining None entries and the list object.
         del create_meta
+        gc.collect()  # prompt Python to reclaim freed create_meta entries
 
         logger.info(
             "OccurrenceReportImporter: freed child-record structures (RSS=%.0fMB)",
@@ -4946,6 +5080,21 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "Fixed occurrence_number for %d Occurrences via SQL UPDATE",
                         len(pending_ids),
                     )
+                    # Fix ocr_for_occ_number on the linked OCRs in the same pass.
+                    # The ocrs_to_link loop ran while occurrence_number was still
+                    # "PENDING", so those OCRs now have ocr_for_occ_number='PENDING'.
+                    # A single SQL UPDATE resolves them all in one round-trip.
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "UPDATE boranga_occurrence_report "
+                            "SET ocr_for_occ_number = 'OCC' || occurrence_id::text "
+                            "WHERE occurrence_id = ANY(%s) AND ocr_for_occ_number = 'PENDING'",
+                            [pending_ids],
+                        )
+                    logger.info(
+                        "Fixed ocr_for_occ_number for OCRs linked to %d new Occurrences",
+                        len(pending_ids),
+                    )
                     # Also clear the cache once (not per-row)
                     cache.delete(settings.CACHE_KEY_MAP_OCCURRENCES)
 
@@ -5010,9 +5159,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # Link OCR → Occurrence
                 if ocr.occurrence_id != occ.pk:
                     ocr.occurrence_id = occ.pk
-                    # Also sync display fields
-                    if not ocr.ocr_for_occ_number:
-                        ocr.ocr_for_occ_number = occ.occurrence_number
+                    # Also sync display fields.  occ.occurrence_number may still be
+                    # "PENDING" in memory (the SQL fix updates the DB, not the
+                    # Python object), so derive the number directly from the PK —
+                    # the format is always 'OCC' + str(pk).
+                    if not ocr.ocr_for_occ_number or ocr.ocr_for_occ_number == "PENDING":
+                        ocr.ocr_for_occ_number = f"OCC{occ.pk}"
                     ocrs_to_link.append(ocr)
 
                 # Copy geometry if the Occurrence doesn't have one yet
@@ -5066,6 +5218,172 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 g.occurrence_id,
                                 exc,
                             )
+
+            # -----------------------------------------------------------------
+            # GIS district assignment: intersect each OCR Point against the
+            # pre-loaded district shapes.  Reuses ocr_geom_map (already in
+            # memory) — no extra geometry DB query needed.
+            # Updates OCRLocation.district_id/region_id, then mirrors the
+            # values onto the linked OCCLocation.
+            # -----------------------------------------------------------------
+            ocr_to_district: dict[int, tuple] = {}  # ocr_pk → (district_pk, region_pk)
+
+            if district_geo_lookup:
+                from shapely.wkt import loads as _shapely_wkt_loads
+
+                # Fetch OCRLocation records in one batch — lightweight query.
+                tfauna_ocr_pks = [ocr.pk for ocr in tfauna_approved_ocrs]
+                loc_by_ocr_pk: dict[int, object] = {
+                    loc.occurrence_report_id: loc
+                    for loc in OCRLocation.objects.filter(occurrence_report_id__in=tfauna_ocr_pks).only(
+                        "pk", "occurrence_report_id", "district_id", "region_id"
+                    )
+                }
+
+                locs_to_update_district = []
+                for ocr in tfauna_approved_ocrs:
+                    geom_obj = ocr_geom_map.get(ocr.pk)
+                    if not geom_obj or not geom_obj.geometry:
+                        continue
+                    loc = loc_by_ocr_pk.get(ocr.pk)
+                    if not loc:
+                        continue
+                    try:
+                        shp = _shapely_wkt_loads(geom_obj.geometry.wkt)
+                        # All TFAUNA geometries are Points — use containment rather
+                        # than intersection area (which is always 0 for a point).
+                        # A point can only be inside one district so break early.
+                        dist_pk, region_pk = None, None
+                        for _d_pk, _r_pk, _d_shp in district_geo_lookup:
+                            try:
+                                if _d_shp.contains(shp):
+                                    dist_pk, region_pk = _d_pk, _r_pk
+                                    break
+                            except Exception:
+                                pass
+                        if dist_pk is not None:
+                            loc.district_id = dist_pk
+                            loc.region_id = region_pk
+                            locs_to_update_district.append(loc)
+                            ocr_to_district[ocr.pk] = (dist_pk, region_pk)
+                    except Exception:
+                        logger.exception("GIS district: failed to intersect OCR pk=%s", ocr.pk)
+
+                if locs_to_update_district:
+                    OCRLocation.objects.bulk_update(
+                        locs_to_update_district,
+                        ["district_id", "region_id"],
+                        batch_size=BATCH,
+                    )
+                    logger.info(
+                        "TFAUNA GIS district: updated district/region for %d OCRLocation records",
+                        len(locs_to_update_district),
+                    )
+
+                del loc_by_ocr_pk, locs_to_update_district
+            else:
+                tfauna_ocr_pks = [ocr.pk for ocr in tfauna_approved_ocrs]
+
+            # -----------------------------------------------------------------
+            # Create / update OCCLocation for each TFAUNA Occurrence, populated
+            # from the corresponding OCRLocation (locality, location_description,
+            # district_id, region_id) discovered above.
+            # -----------------------------------------------------------------
+            ocr_loc_full: dict[int, object] = {
+                loc.occurrence_report_id: loc
+                for loc in OCRLocation.objects.filter(occurrence_report_id__in=tfauna_ocr_pks).only(
+                    "pk",
+                    "occurrence_report_id",
+                    "locality",
+                    "location_description",
+                    "district_id",
+                    "region_id",
+                    "location_accuracy_id",
+                )
+            }
+
+            occ_ids_for_loc = [occ.pk for occ in all_occ_by_mid.values() if occ.pk]
+            existing_occ_locs: dict[int, object] = {
+                ol.occurrence_id: ol
+                for ol in OCCLocation.objects.filter(occurrence_id__in=occ_ids_for_loc).only(
+                    "pk",
+                    "occurrence_id",
+                    "district_id",
+                    "region_id",
+                    "locality",
+                    "location_description",
+                    "location_accuracy_id",
+                )
+            }
+
+            occ_loc_to_create = []
+            occ_loc_to_update = []
+
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = occ_mig_id_map[ocr.migrated_from_id]
+                occ = all_occ_by_mid.get(occ_mid)
+                if not occ or not occ.pk:
+                    continue
+                ocr_loc = ocr_loc_full.get(ocr.pk)
+                dist_pk, region_pk = ocr_to_district.get(ocr.pk, (None, None))
+
+                # Fall back to whatever district/region was already on OCRLocation
+                # (e.g. if GIS lookup was skipped or shape not found).
+                if dist_pk is None and ocr_loc:
+                    dist_pk = getattr(ocr_loc, "district_id", None)
+                    region_pk = getattr(ocr_loc, "region_id", None)
+
+                locality = getattr(ocr_loc, "locality", None) if ocr_loc else None
+                location_description = getattr(ocr_loc, "location_description", None) if ocr_loc else None
+                location_accuracy_id = getattr(ocr_loc, "location_accuracy_id", None) if ocr_loc else None
+
+                if occ.pk in existing_occ_locs:
+                    existing = existing_occ_locs[occ.pk]
+                    changed = False
+                    for attr, val in [
+                        ("district_id", dist_pk),
+                        ("region_id", region_pk),
+                        ("locality", locality or ""),
+                        ("location_description", location_description or ""),
+                        ("location_accuracy_id", location_accuracy_id),
+                    ]:
+                        if val is not None and getattr(existing, attr) != val:
+                            setattr(existing, attr, val)
+                            changed = True
+                    if changed:
+                        occ_loc_to_update.append(existing)
+                else:
+                    kwargs = {"occurrence_id": occ.pk, "copied_ocr_location_id": getattr(ocr_loc, "pk", None)}
+                    if dist_pk is not None:
+                        kwargs["district_id"] = dist_pk
+                    if region_pk is not None:
+                        kwargs["region_id"] = region_pk
+                    if locality:
+                        kwargs["locality"] = locality
+                    if location_description:
+                        kwargs["location_description"] = location_description
+                    if location_accuracy_id is not None:
+                        kwargs["location_accuracy_id"] = location_accuracy_id
+                    occ_loc_to_create.append(OCCLocation(**kwargs))
+
+            if occ_loc_to_create:
+                OCCLocation.objects.bulk_create(occ_loc_to_create, batch_size=BATCH)
+                logger.info(
+                    "TFAUNA: created OCCLocation for %d Occurrences",
+                    len(occ_loc_to_create),
+                )
+            if occ_loc_to_update:
+                OCCLocation.objects.bulk_update(
+                    occ_loc_to_update,
+                    ["district_id", "region_id", "locality", "location_description", "location_accuracy_id"],
+                    batch_size=BATCH,
+                )
+                logger.info(
+                    "TFAUNA: updated OCCLocation for %d Occurrences",
+                    len(occ_loc_to_update),
+                )
+
+            del ocr_loc_full, existing_occ_locs, occ_loc_to_create, occ_loc_to_update
 
             logger.info(
                 "TFAUNA Occurrence creation complete: %d created, %d updated, %d geometry copied, %d OCRs linked",

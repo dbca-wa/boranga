@@ -35,7 +35,7 @@
     <a class="nav-link{% if 'species-communities' in request.path %} active{% endif %}" href="/external/species-communities">Species &amp; Communities</a>
   </li>
 {% endif %}
-{% if not is_internal_login and request.user.is_authenticated and is_contributor %}
+{% if not is_internal_login and request.user.is_authenticated and is_contributor and enable_external_proposals %}
   <li class="nav-item">
     <a class="nav-link{% if 'conservation-status' in request.path %} active{% endif %}" href="/external/conservation-status">Conservation Status</a>
   </li>

@@ -454,23 +454,38 @@ class OccurrenceReportFilterBackend(DatatablesFilterBackend):
         fields = self.get_fields(request)
 
         search_text = request.POST.get("search[value]")
-        search_queryset = None
+        search_ids = []
 
         # for search values that cannot be accommodated by DRF
+        # collect matching ids first (avoid building a union queryset)
         if search_text and "internal" in view.name:
             observer_ids = (
                 OCRObserverDetail.objects.filter(main_observer=True)
                 .filter(observer_name__icontains=search_text)
                 .values_list("occurrence_report__id", flat=True)
             )
-            search_queryset = queryset.filter(
-                Q(submitter_information__name__icontains=search_text) | Q(id__in=observer_ids)
+            search_ids = list(
+                queryset.filter(
+                    Q(submitter_information__name__icontains=search_text) | Q(id__in=observer_ids)
+                ).values_list("id", flat=True)
             )
 
+        # apply the regular filters
         queryset = super().filter_queryset(request, queryset, view)
 
-        if search_queryset:
-            queryset = search_queryset.union(queryset)
+        # if we had search-only matches, combine their ids with the filtered set
+        if search_ids:
+            try:
+                filtered_ids = list(queryset.values_list("id", flat=True))
+                combined_ids = set(filtered_ids) | set(search_ids)
+                model = queryset.model
+                if combined_ids:
+                    queryset = model.objects.filter(id__in=list(combined_ids))
+                else:
+                    queryset = model.objects.none()
+            except Exception:
+                # fall back to the original queryset if anything goes wrong
+                pass
 
         ordering = self.get_ordering(request, view, fields)
         if len(ordering):
@@ -616,6 +631,15 @@ class OccurrenceReportViewSet(
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
+        if (
+            not getattr(settings, "ENABLE_EXTERNAL_PROPOSALS", True)
+            and not is_internal(request)
+            and not request.user.is_superuser
+        ):
+            return Response(
+                {"detail": "External proposals are currently disabled."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
             group_type_id = GroupType.objects.get(id=request.data.get("group_type_id"))
         except GroupType.DoesNotExist:
