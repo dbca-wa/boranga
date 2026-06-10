@@ -10,6 +10,8 @@ import logging
 from collections import defaultdict
 
 from django.conf import settings
+from django.contrib.gis.geos import Point
+from pyproj import Transformer
 
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
@@ -410,9 +412,33 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             if hab_parts:
                 canonical["OCRHabitatComposition__habitat_notes"] = "; ".join(hab_parts)
 
-            # ── Geometry: ensure keys present for pipeline ──────
+            # ── Geometry: build Point from Lat/Long (GDA94) ──────
             if canonical.get("Lat") or canonical.get("Long"):
-                canonical["OccurrenceReportGeometry__geometry"] = None
+                try:
+                    lat_val = canonical.get("Lat")
+                    lon_val = canonical.get("Long")
+                    if lat_val is None or lon_val is None:
+                        raise ValueError("missing coordinate")
+                    lat = float(str(lat_val).strip())
+                    lon = float(str(lon_val).strip())
+
+                    # Source is GDA94 (EPSG:4283) per dataset knowledge
+                    source_epsg = "EPSG:4283"
+                    target_epsg = f"EPSG:{settings.DEFAULT_SRID}"
+
+                    if source_epsg != target_epsg:
+                        try:
+                            transformer = Transformer.from_crs(source_epsg, target_epsg, always_xy=True)
+                            lon, lat = transformer.transform(lon, lat)
+                        except Exception:
+                            # Fallback to using raw coords if transform fails
+                            pass
+
+                    canonical["OccurrenceReportGeometry__geometry"] = Point(lon, lat, srid=settings.DEFAULT_SRID)
+                except Exception:
+                    # If anything goes wrong, fall back to leaving geometry unset
+                    canonical["OccurrenceReportGeometry__geometry"] = None
+
                 canonical["OccurrenceReportGeometry__locked"] = True
                 canonical["OccurrenceReportGeometry__show_on_map"] = True
 
