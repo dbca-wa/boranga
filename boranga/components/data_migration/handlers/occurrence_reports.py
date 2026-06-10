@@ -26,6 +26,11 @@ from boranga.components.data_migration.handlers.helpers import (
     normalize_create_kwargs,
     try_repair_geometry,
 )
+from boranga.components.data_migration.handlers.occurrences import (
+    _DISTRICT_WFS_LAYER,
+    _build_district_geo_lookup,
+    _load_district_shapes_from_wfs,
+)
 from boranga.components.data_migration.mappings import (
     load_sheet_associated_species_names,
 )
@@ -360,6 +365,17 @@ class OccurrenceReportImporter(BaseSheetImporter):
             action="store_true",
             help="Enable fuzzy matching for unresolved associated species names (slow).",
         )
+        parser.add_argument(
+            "--no-gis-district",
+            dest="no_gis_district",
+            action="store_true",
+            default=False,
+            help=(
+                "Skip GIS-based district/region assignment for TFAUNA OCRLocation and OCCLocation records. "
+                "By default, district shapes are fetched from GIS_SERVER_URL and each TFAUNA point is "
+                "intersected to determine the district."
+            ),
+        )
 
     def _parse_path_map(self, pairs):
         out = {}
@@ -396,6 +412,40 @@ class OccurrenceReportImporter(BaseSheetImporter):
         tec_site_species_map = {}
         if Source.TEC_SITE_VISITS.value in sources:
             tec_site_species_map = self.preload_tec_site_species_map(path)
+
+        # Load district shapes once for TFAUNA GIS-based district/region assignment.
+        # Only enabled when TFAUNA is in the active source set and --no-gis-district
+        # has not been passed.  Mirrors the pattern used in the occurrence_legacy handler.
+        # The resulting list of (district_pk, region_pk, shapely_geom) tuples is a few
+        # MB of Shapely objects and is held for the lifetime of this run() call only.
+        district_geo_lookup: list = []
+        if Source.TFAUNA.value in sources and not options.get("no_gis_district") and not ctx.dry_run:
+            _gis_base = getattr(settings, "GIS_SERVER_URL", None)
+            if _gis_base:
+                _gis_base = _gis_base.rstrip("/")
+                _sep = "&" if "?" in _gis_base else "?"
+                _districts_url = (
+                    f"{_gis_base}{_sep}service=WFS&version=2.0.0&request=GetFeature"
+                    f"&typeName={_DISTRICT_WFS_LAYER}&outputFormat=application%2Fjson"
+                    "&srsName=EPSG%3A4326"
+                )
+                _raw_shapes = _load_district_shapes_from_wfs(_districts_url, invert_xy=False)
+                if _raw_shapes:
+                    district_geo_lookup = _build_district_geo_lookup(_raw_shapes)
+                    logger.info(
+                        "TFAUNA GIS district: loaded %d district shapes for OCRLocation assignment",
+                        len(district_geo_lookup),
+                    )
+                else:
+                    logger.warning(
+                        "TFAUNA GIS district: no shapes loaded from WFS — district/region will not be set. "
+                        "Ensure GIS_SERVER_URL is configured correctly, or pass --no-gis-district to skip."
+                    )
+            else:
+                logger.warning(
+                    "TFAUNA GIS district: GIS_SERVER_URL not configured — "
+                    "district/region will not be set on OCRLocation/OCCLocation."
+                )
 
         stats = ctx.stats.setdefault(self.slug, self.new_stats())
         all_rows: list[dict] = []
@@ -5088,6 +5138,172 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 g.occurrence_id,
                                 exc,
                             )
+
+            # -----------------------------------------------------------------
+            # GIS district assignment: intersect each OCR Point against the
+            # pre-loaded district shapes.  Reuses ocr_geom_map (already in
+            # memory) — no extra geometry DB query needed.
+            # Updates OCRLocation.district_id/region_id, then mirrors the
+            # values onto the linked OCCLocation.
+            # -----------------------------------------------------------------
+            ocr_to_district: dict[int, tuple] = {}  # ocr_pk → (district_pk, region_pk)
+
+            if district_geo_lookup:
+                from shapely.wkt import loads as _shapely_wkt_loads
+
+                # Fetch OCRLocation records in one batch — lightweight query.
+                tfauna_ocr_pks = [ocr.pk for ocr in tfauna_approved_ocrs]
+                loc_by_ocr_pk: dict[int, object] = {
+                    loc.occurrence_report_id: loc
+                    for loc in OCRLocation.objects.filter(occurrence_report_id__in=tfauna_ocr_pks).only(
+                        "pk", "occurrence_report_id", "district_id", "region_id"
+                    )
+                }
+
+                locs_to_update_district = []
+                for ocr in tfauna_approved_ocrs:
+                    geom_obj = ocr_geom_map.get(ocr.pk)
+                    if not geom_obj or not geom_obj.geometry:
+                        continue
+                    loc = loc_by_ocr_pk.get(ocr.pk)
+                    if not loc:
+                        continue
+                    try:
+                        shp = _shapely_wkt_loads(geom_obj.geometry.wkt)
+                        # All TFAUNA geometries are Points — use containment rather
+                        # than intersection area (which is always 0 for a point).
+                        # A point can only be inside one district so break early.
+                        dist_pk, region_pk = None, None
+                        for _d_pk, _r_pk, _d_shp in district_geo_lookup:
+                            try:
+                                if _d_shp.contains(shp):
+                                    dist_pk, region_pk = _d_pk, _r_pk
+                                    break
+                            except Exception:
+                                pass
+                        if dist_pk is not None:
+                            loc.district_id = dist_pk
+                            loc.region_id = region_pk
+                            locs_to_update_district.append(loc)
+                            ocr_to_district[ocr.pk] = (dist_pk, region_pk)
+                    except Exception:
+                        logger.exception("GIS district: failed to intersect OCR pk=%s", ocr.pk)
+
+                if locs_to_update_district:
+                    OCRLocation.objects.bulk_update(
+                        locs_to_update_district,
+                        ["district_id", "region_id"],
+                        batch_size=BATCH,
+                    )
+                    logger.info(
+                        "TFAUNA GIS district: updated district/region for %d OCRLocation records",
+                        len(locs_to_update_district),
+                    )
+
+                del loc_by_ocr_pk, locs_to_update_district
+            else:
+                tfauna_ocr_pks = [ocr.pk for ocr in tfauna_approved_ocrs]
+
+            # -----------------------------------------------------------------
+            # Create / update OCCLocation for each TFAUNA Occurrence, populated
+            # from the corresponding OCRLocation (locality, location_description,
+            # district_id, region_id) discovered above.
+            # -----------------------------------------------------------------
+            ocr_loc_full: dict[int, object] = {
+                loc.occurrence_report_id: loc
+                for loc in OCRLocation.objects.filter(occurrence_report_id__in=tfauna_ocr_pks).only(
+                    "pk",
+                    "occurrence_report_id",
+                    "locality",
+                    "location_description",
+                    "district_id",
+                    "region_id",
+                    "location_accuracy_id",
+                )
+            }
+
+            occ_ids_for_loc = [occ.pk for occ in all_occ_by_mid.values() if occ.pk]
+            existing_occ_locs: dict[int, object] = {
+                ol.occurrence_id: ol
+                for ol in OCCLocation.objects.filter(occurrence_id__in=occ_ids_for_loc).only(
+                    "pk",
+                    "occurrence_id",
+                    "district_id",
+                    "region_id",
+                    "locality",
+                    "location_description",
+                    "location_accuracy_id",
+                )
+            }
+
+            occ_loc_to_create = []
+            occ_loc_to_update = []
+
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = occ_mig_id_map[ocr.migrated_from_id]
+                occ = all_occ_by_mid.get(occ_mid)
+                if not occ or not occ.pk:
+                    continue
+                ocr_loc = ocr_loc_full.get(ocr.pk)
+                dist_pk, region_pk = ocr_to_district.get(ocr.pk, (None, None))
+
+                # Fall back to whatever district/region was already on OCRLocation
+                # (e.g. if GIS lookup was skipped or shape not found).
+                if dist_pk is None and ocr_loc:
+                    dist_pk = getattr(ocr_loc, "district_id", None)
+                    region_pk = getattr(ocr_loc, "region_id", None)
+
+                locality = getattr(ocr_loc, "locality", None) if ocr_loc else None
+                location_description = getattr(ocr_loc, "location_description", None) if ocr_loc else None
+                location_accuracy_id = getattr(ocr_loc, "location_accuracy_id", None) if ocr_loc else None
+
+                if occ.pk in existing_occ_locs:
+                    existing = existing_occ_locs[occ.pk]
+                    changed = False
+                    for attr, val in [
+                        ("district_id", dist_pk),
+                        ("region_id", region_pk),
+                        ("locality", locality or ""),
+                        ("location_description", location_description or ""),
+                        ("location_accuracy_id", location_accuracy_id),
+                    ]:
+                        if val is not None and getattr(existing, attr) != val:
+                            setattr(existing, attr, val)
+                            changed = True
+                    if changed:
+                        occ_loc_to_update.append(existing)
+                else:
+                    kwargs = {"occurrence_id": occ.pk, "copied_ocr_location_id": getattr(ocr_loc, "pk", None)}
+                    if dist_pk is not None:
+                        kwargs["district_id"] = dist_pk
+                    if region_pk is not None:
+                        kwargs["region_id"] = region_pk
+                    if locality:
+                        kwargs["locality"] = locality
+                    if location_description:
+                        kwargs["location_description"] = location_description
+                    if location_accuracy_id is not None:
+                        kwargs["location_accuracy_id"] = location_accuracy_id
+                    occ_loc_to_create.append(OCCLocation(**kwargs))
+
+            if occ_loc_to_create:
+                OCCLocation.objects.bulk_create(occ_loc_to_create, batch_size=BATCH)
+                logger.info(
+                    "TFAUNA: created OCCLocation for %d Occurrences",
+                    len(occ_loc_to_create),
+                )
+            if occ_loc_to_update:
+                OCCLocation.objects.bulk_update(
+                    occ_loc_to_update,
+                    ["district_id", "region_id", "locality", "location_description", "location_accuracy_id"],
+                    batch_size=BATCH,
+                )
+                logger.info(
+                    "TFAUNA: updated OCCLocation for %d Occurrences",
+                    len(occ_loc_to_update),
+                )
+
+            del ocr_loc_full, existing_occ_locs, occ_loc_to_create, occ_loc_to_update
 
             logger.info(
                 "TFAUNA Occurrence creation complete: %d created, %d updated, %d geometry copied, %d OCRs linked",
