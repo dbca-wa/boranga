@@ -120,7 +120,7 @@ def main():
         lines = ["set -euo pipefail"]
         for i, path in enumerate(output_files):
             wipe = " --wipe-targets" if i == 0 else ""
-            lines.append(f"./manage.py migrate_data run {handler} {path}{wipe}{extra}")
+            lines.append(f'./manage.py migrate_data run {handler} "{path}"{wipe}{extra}')
 
         inner = "\n".join(lines)
         print("\n--- Command to run (paste as-is) ---")
