@@ -263,11 +263,6 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             canonical["processing_status"] = "ACCEPTED"  # pipeline will map
             canonical["internal_application"] = True
 
-            # ── species_id: use NameId (taxon_name_id) not SpCode ──
-            name_id = (raw.get("NameId") or "").strip()
-            if name_id:
-                canonical["species_id"] = name_id
-
             # ── district: pass raw DistrictNo; pipeline resolves → District PK + Region
             district_no = (raw.get("DistrictNo") or "").strip()
             if district_no:
