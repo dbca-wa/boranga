@@ -229,6 +229,7 @@ PIPELINES = {
     "OCRAnimalObservation__dead_juvenile_unknown": ["strip", "blank_to_none", "to_int"],
     "OCRAnimalObservation__simple_alive": ["strip", "blank_to_none", "to_int"],
     "OCRAnimalObservation__simple_dead": ["strip", "blank_to_none", "to_int"],
+    "OCRAnimalObservation__obs_date": ["strip", "blank_to_none", "smart_date_parse"],
     # OCRFireHistory
     "OCRFireHistory__comment": ["strip", "blank_to_none"],
     # OCRAssociatedSpecies
