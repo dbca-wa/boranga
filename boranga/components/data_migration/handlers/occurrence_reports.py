@@ -5080,6 +5080,21 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "Fixed occurrence_number for %d Occurrences via SQL UPDATE",
                         len(pending_ids),
                     )
+                    # Fix ocr_for_occ_number on the linked OCRs in the same pass.
+                    # The ocrs_to_link loop ran while occurrence_number was still
+                    # "PENDING", so those OCRs now have ocr_for_occ_number='PENDING'.
+                    # A single SQL UPDATE resolves them all in one round-trip.
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "UPDATE boranga_occurrence_report "
+                            "SET ocr_for_occ_number = 'OCC' || occurrence_id::text "
+                            "WHERE occurrence_id = ANY(%s) AND ocr_for_occ_number = 'PENDING'",
+                            [pending_ids],
+                        )
+                    logger.info(
+                        "Fixed ocr_for_occ_number for OCRs linked to %d new Occurrences",
+                        len(pending_ids),
+                    )
                     # Also clear the cache once (not per-row)
                     cache.delete(settings.CACHE_KEY_MAP_OCCURRENCES)
 
@@ -5144,9 +5159,12 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 # Link OCR → Occurrence
                 if ocr.occurrence_id != occ.pk:
                     ocr.occurrence_id = occ.pk
-                    # Also sync display fields
-                    if not ocr.ocr_for_occ_number:
-                        ocr.ocr_for_occ_number = occ.occurrence_number
+                    # Also sync display fields.  occ.occurrence_number may still be
+                    # "PENDING" in memory (the SQL fix updates the DB, not the
+                    # Python object), so derive the number directly from the PK —
+                    # the format is always 'OCC' + str(pk).
+                    if not ocr.ocr_for_occ_number or ocr.ocr_for_occ_number == "PENDING":
+                        ocr.ocr_for_occ_number = f"OCC{occ.pk}"
                     ocrs_to_link.append(ocr)
 
                 # Copy geometry if the Occurrence doesn't have one yet
