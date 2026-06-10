@@ -23,7 +23,6 @@ from boranga.components.data_migration.registry import (
     emailuser_object_by_legacy_username_with_fallback_factory,
     fk_lookup_static,
     geometry_from_coords_factory,
-    region_from_district_factory,
     static_value_factory,
     taxonomy_lookup_legacy_id_mapping_species,
 )
@@ -75,11 +74,6 @@ SUBMITTER_CATEGORY_DBCA = fk_lookup_static(
 )
 
 STATIC_DBCA = static_value_factory("DBCA")
-
-# District: DistrictNo code → District PK (via TFAUNA DistrictNo LegacyValueMap)
-DISTRICT_TRANSFORM = build_legacy_map_transform("TFAUNA", "DistrictNo", required=False)
-# Region: derived from OCRLocation__district (the raw DistrictNo code) via same map
-REGION_FROM_DISTRICT = region_from_district_factory(legacy_system="TFAUNA", list_name="DistrictNo")
 
 EPSG_CODE_DEFAULT = static_value_factory(settings.DEFAULT_SRID)
 
@@ -206,8 +200,6 @@ PIPELINES = {
     "OCRLocation__locality": ["strip", "blank_to_none"],
     "OCRLocation__location_description": ["strip", "blank_to_none"],
     "OCRLocation__location_accuracy": ["strip", "blank_to_none", LOCATION_ACCURACY_TRANSFORM],
-    "OCRLocation__district": ["strip", "blank_to_none", DISTRICT_TRANSFORM],
-    "OCRLocation__region": [REGION_FROM_DISTRICT],
     # OCRObservationDetail
     "OCRObservationDetail__comments": ["strip", "blank_to_none"],
     # OCRIdentification
