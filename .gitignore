@@ -118,3 +118,7 @@ private-media/
 .db-backups/
 
 docs/sql-scripts/kb/
+
+# Ignore Subresource Integrity (SRI) manifest and files
+sri-manifest.json
+sri-files/*

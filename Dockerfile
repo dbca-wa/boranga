@@ -81,7 +81,8 @@ RUN cd /app/boranga/frontend/boranga && npm run build && \
     rm -rf /app/boranga/frontend/boranga/node_modules
 
 RUN touch /app/.env && \
-    $VIRTUAL_ENV/bin/python manage.py collectstatic --noinput
+    $VIRTUAL_ENV/bin/python manage.py collectstatic --noinput && \
+    $VIRTUAL_ENV/bin/python manage.py script_hash_indexes
 
 # --- Runtime: clean image with only runtime packages and built artifacts ---
 FROM ${BASE_IMAGE} AS runtime
@@ -135,6 +136,7 @@ COPY --from=builder --chown=oim:oim /app/manage.py /app/manage.py
 COPY --from=builder --chown=oim:oim /app/.env /app/.env
 COPY --from=builder --chown=oim:oim /app/python-cron /app/python-cron
 COPY --from=builder --chown=oim:oim /app/scripts /app/scripts
+COPY --from=builder --chown=oim:oim /app/sri-manifest.json /app/sri-manifest.json
 
 EXPOSE 8080
 HEALTHCHECK --interval=1m --timeout=5s --start-period=10s --retries=3 CMD ["wget", "-q", "-O", "-", "http://localhost:8080/"]

@@ -130,6 +130,7 @@ INSTALLED_APPS += [
     "django_filters",
     "ordered_model",
     "django_vite",
+    "wagov_utils.components.sri_utils",
 ]
 
 ADD_REVERSION_ADMIN = True
