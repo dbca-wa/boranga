@@ -18,7 +18,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     SITE_PREFIX='qml-dev' \
     SITE_DOMAIN='dbca.wa.gov.au' \
     BASE_URL='https://qml-dev.dbca.wa.gov.au' \
-    NOMOS_BLOB_URL='https://nomos.example.com'
+    NOMOS_BLOB_URL='https://nomos.example.com' \
+    ENABLE_SRI_CHECKS=True
 
 RUN apt-get update && \
     apt-get upgrade -y && \
