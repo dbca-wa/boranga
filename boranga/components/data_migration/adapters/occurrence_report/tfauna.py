@@ -29,6 +29,11 @@ from boranga.components.data_migration.registry import (
 from boranga.components.occurrence.models import OccurrenceReport
 from boranga.components.species_and_communities.models import GroupType
 from boranga.components.users.models import SubmitterCategory
+from boranga.settings import (
+    COUNT_STATUS_COUNTED,
+    COUNT_STATUS_NOT_COUNTED,
+    COUNT_STATUS_SIMPLE_COUNT,
+)
 
 from ..base import ExtractionResult, ExtractionWarning, SourceAdapter
 from ..sources import Source
@@ -118,12 +123,6 @@ def submitter_name_from_emailuser(value, ctx=None):
 
 def _derive_count_status(canonical: dict) -> str:
     """Derive OCRAnimalObservation count_status from populated count fields."""
-    from boranga.settings import (
-        COUNT_STATUS_COUNTED,
-        COUNT_STATUS_NOT_COUNTED,
-        COUNT_STATUS_SIMPLE_COUNT,
-    )
-
     detailed_fields = [
         "OCRAnimalObservation__alive_adult_male",
         "OCRAnimalObservation__dead_adult_male",
@@ -249,11 +248,26 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
         # Counter for sequential ocr_for_occ_name per SpCode
         sp_code_counters: dict[str, int] = defaultdict(int)
 
+        # Build the coordinate transformer once — creating it inside the loop
+        # for every row is expensive (~250k pyproj initialisation calls).
+        _default_srid = settings.DEFAULT_SRID
+        _source_epsg = "EPSG:4283"
+        _target_epsg = f"EPSG:{_default_srid}"
+        _needs_transform = _source_epsg != _target_epsg
+        _transformer = None
+        if _needs_transform:
+            try:
+                _transformer = Transformer.from_crs(_source_epsg, _target_epsg, always_xy=True)
+            except Exception:
+                _transformer = None
+
+        _fauna_group_type_id = get_group_type_id(GroupType.GROUP_TYPE_FAUNA)
+
         for raw in raw_rows:
             canonical = schema.map_raw_row(raw)
 
             # ── Core fields ─────────────────────────────────────
-            canonical["group_type_id"] = get_group_type_id(GroupType.GROUP_TYPE_FAUNA)
+            canonical["group_type_id"] = _fauna_group_type_id
             canonical["processing_status"] = "ACCEPTED"  # pipeline will map
             canonical["internal_application"] = True
 
@@ -409,19 +423,14 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
                     lat = float(str(lat_val).strip())
                     lon = float(str(lon_val).strip())
 
-                    # Source is GDA94 (EPSG:4283) per dataset knowledge
-                    source_epsg = "EPSG:4283"
-                    target_epsg = f"EPSG:{settings.DEFAULT_SRID}"
-
-                    if source_epsg != target_epsg:
+                    if _transformer is not None:
                         try:
-                            transformer = Transformer.from_crs(source_epsg, target_epsg, always_xy=True)
-                            lon, lat = transformer.transform(lon, lat)
+                            lon, lat = _transformer.transform(lon, lat)
                         except Exception:
                             # Fallback to using raw coords if transform fails
                             pass
 
-                    canonical["OccurrenceReportGeometry__geometry"] = Point(lon, lat, srid=settings.DEFAULT_SRID)
+                    canonical["OccurrenceReportGeometry__geometry"] = Point(lon, lat, srid=_default_srid)
                 except Exception:
                     # If anything goes wrong, fall back to leaving geometry unset
                     canonical["OccurrenceReportGeometry__geometry"] = None
@@ -430,7 +439,10 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
                 canonical["OccurrenceReportGeometry__show_on_map"] = True
 
             rows.append(canonical)
+            if len(rows) % 1000 == 0:
+                logger.info("TFAUNA extract: %d rows processed", len(rows))
 
+        logger.info("TFAUNA extract complete: %d rows total", len(rows))
         return ExtractionResult(rows=rows, warnings=warnings)
 
 
