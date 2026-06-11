@@ -99,7 +99,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     SITE_DOMAIN='dbca.wa.gov.au' \
     OSCAR_SHOP_NAME='Parks & Wildlife' \
     BPAY_ALLOWED=False \
-    PROJ_NETWORK=ON
+    PROJ_NETWORK=ON \
+    ENABLE_SRI_CHECK=True
 
 RUN apt-get update && \
     apt-get upgrade -y && \
@@ -137,6 +138,7 @@ COPY --from=builder --chown=oim:oim /app/.env /app/.env
 COPY --from=builder --chown=oim:oim /app/python-cron /app/python-cron
 COPY --from=builder --chown=oim:oim /app/scripts /app/scripts
 COPY --from=builder --chown=oim:oim /app/sri-manifest.json /app/sri-manifest.json
+COPY --from=builder --chown=oim:oim /app/sri-files /app/sri-files
 
 EXPOSE 8080
 HEALTHCHECK --interval=1m --timeout=5s --start-period=10s --retries=3 CMD ["wget", "-q", "-O", "-", "http://localhost:8080/"]
