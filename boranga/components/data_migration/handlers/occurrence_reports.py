@@ -1117,22 +1117,31 @@ class OccurrenceReportImporter(BaseSheetImporter):
         # Build op_map for O(1) access to per-migrated-id data (avoid O(n) scans)
         op_map = {o["migrated_from_id"]: o for o in ops}
 
-        # Prefetch existing OccurrenceReports to decide create vs update
+        # Prefetch existing OccurrenceReports to decide create vs update.
+        # Chunk the IN query to avoid sending 250k+ params to Postgres at once,
+        # which can OOM the DB server.
+        BATCH = 1000
         migrated_keys = [o["migrated_from_id"] for o in ops]
-        existing_by_migrated = {
-            s.migrated_from_id: s
-            for s in OccurrenceReport.objects.filter(migrated_from_id__in=migrated_keys).select_related("occurrence")
-        }
+        existing_by_migrated = {}
+        for _ek_i in range(0, len(migrated_keys), BATCH):
+            _ek_chunk = migrated_keys[_ek_i : _ek_i + BATCH]
+            for s in (
+                OccurrenceReport.objects.filter(migrated_from_id__in=_ek_chunk)
+                .select_related("occurrence")
+                .iterator(chunk_size=BATCH)
+            ):
+                existing_by_migrated[s.migrated_from_id] = s
 
         # Prepare lists for bulk ops
         to_create = []
         create_meta = []
         to_update = []
-        BATCH = 1000
+        _bulk_created_total = 0
 
         for op in ops:
             migrated_from_id = op["migrated_from_id"]
-            defaults = op["defaults"]
+            defaults = op.pop("defaults", {})  # pop now to free from op dict
+            op.pop("canonical", None)  # not needed beyond this loop
             habitat_data = op.get("habitat_data") or {}
             habitat_condition = op.get("habitat_condition") or {}
             submitter_information_data = op.get("submitter_information_data") or {}
@@ -1164,7 +1173,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
                 continue
 
-            # create new instance (bulk_create later)
+            # create new instance — flush to DB every BATCH items to cap peak memory
             create_kwargs = dict(defaults)
             create_kwargs["migrated_from_id"] = migrated_from_id
             if getattr(ctx, "migration_run", None) is not None:
@@ -1186,27 +1195,31 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
             )
 
-        # Free per-op defaults and canonical — now embedded in to_create / to_update instances.
-        for op in ops:
-            op.pop("defaults", None)
-            op.pop("canonical", None)
+            # Flush every BATCH instances so to_create never grows unboundedly.
+            if len(to_create) >= BATCH:
+                with transaction.atomic():
+                    OccurrenceReport.objects.bulk_create(to_create, batch_size=BATCH)
+                _bulk_created_total += len(to_create)
+                to_create.clear()
+
         del existing_by_migrated
 
-        # Bulk create new OccurrenceReports
-        created_map = {}
+        # Flush any remaining instances.
         if to_create:
+            with transaction.atomic():
+                OccurrenceReport.objects.bulk_create(to_create, batch_size=BATCH)
+            _bulk_created_total += len(to_create)
+            to_create.clear()
+        del to_create
+
+        # Report total created
+        created_map = {}
+        if _bulk_created_total:
             logger.info(
-                "OccurrenceReportImporter: bulk-creating %d new OccurrenceReports (RSS=%.0fMB)",
-                len(to_create),
+                "OccurrenceReportImporter: bulk-created %d new OccurrenceReports (RSS=%.0fMB)",
+                _bulk_created_total,
                 _rss_mb(),
             )
-            for i in range(0, len(to_create), BATCH):
-                chunk = to_create[i : i + BATCH]
-                with transaction.atomic():
-                    OccurrenceReport.objects.bulk_create(chunk, batch_size=BATCH)
-
-        # Free to_create list — instances will be re-fetched into created_map.
-        del to_create
 
         # Refresh created objects to get PKs — fetch in chunks to avoid
         # a single enormous query.  For TFAUNA, occurrences are created
