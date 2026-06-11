@@ -5086,7 +5086,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     # A single SQL UPDATE resolves them all in one round-trip.
                     with connection.cursor() as cursor:
                         cursor.execute(
-                            "UPDATE boranga_occurrence_report "
+                            "UPDATE boranga_occurrencereport "
                             "SET ocr_for_occ_number = 'OCC' || occurrence_id::text "
                             "WHERE occurrence_id = ANY(%s) AND ocr_for_occ_number = 'PENDING'",
                             [pending_ids],
