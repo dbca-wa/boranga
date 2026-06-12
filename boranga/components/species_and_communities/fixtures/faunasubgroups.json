@@ -1,0 +1,242 @@
+[
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 1,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Monotremes",
+      "fauna_group": 1
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 2,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "name": "Marsupials",
+      "fauna_group": 1
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 3,
+    "fields": {
+      "order": 2,
+      "archived": false,
+      "name": "Bats",
+      "fauna_group": 1
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 4,
+    "fields": {
+      "order": 3,
+      "archived": false,
+      "name": "Rodents",
+      "fauna_group": 1
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 5,
+    "fields": {
+      "order": 4,
+      "archived": false,
+      "name": "Feral and introduced mammals",
+      "fauna_group": 1
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 6,
+    "fields": {
+      "order": 5,
+      "archived": false,
+      "name": "Seals",
+      "fauna_group": 1
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 7,
+    "fields": {
+      "order": 6,
+      "archived": false,
+      "name": "Dugongs",
+      "fauna_group": 1
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 8,
+    "fields": {
+      "order": 7,
+      "archived": false,
+      "name": "Cetaceans",
+      "fauna_group": 1
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 9,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Birds",
+      "fauna_group": 2
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 10,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Snakes",
+      "fauna_group": 3
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 11,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "name": "Lizards",
+      "fauna_group": 3
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 12,
+    "fields": {
+      "order": 2,
+      "archived": false,
+      "name": "Turtles",
+      "fauna_group": 3
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 13,
+    "fields": {
+      "order": 3,
+      "archived": false,
+      "name": "Crocodiles",
+      "fauna_group": 3
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 14,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Frogs",
+      "fauna_group": 4
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 15,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Lampreys and hagfish",
+      "fauna_group": 5
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 16,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "name": "Sharks and rays",
+      "fauna_group": 5
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 17,
+    "fields": {
+      "order": 2,
+      "archived": false,
+      "name": "Bony fish",
+      "fauna_group": 5
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 18,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "name": "Crustaceans",
+      "fauna_group": 6
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 19,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "name": "Centipedes",
+      "fauna_group": 6
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 20,
+    "fields": {
+      "order": 2,
+      "archived": false,
+      "name": "Millipedes",
+      "fauna_group": 6
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 21,
+    "fields": {
+      "order": 3,
+      "archived": false,
+      "name": "Molluscs",
+      "fauna_group": 6
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 22,
+    "fields": {
+      "order": 4,
+      "archived": false,
+      "name": "Arachnids",
+      "fauna_group": 6
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 23,
+    "fields": {
+      "order": 5,
+      "archived": false,
+      "name": "Worms and Leeches",
+      "fauna_group": 6
+    }
+  },
+  {
+    "model": "boranga.faunasubgroup",
+    "pk": 24,
+    "fields": {
+      "order": 6,
+      "archived": false,
+      "name": "Insects",
+      "fauna_group": 6
+    }
+  }
+]

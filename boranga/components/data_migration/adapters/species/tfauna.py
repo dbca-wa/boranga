@@ -16,15 +16,9 @@ from boranga.components.data_migration.registry import (
 logger = logging.getLogger(__name__)
 
 # Task 11848: CategoryList – map single-letter category codes from the TFAUNA
-# "Species List" CSV to human-readable canonical names.  Populate with real
-# names when the authoritative CategoryList is provided by the data custodian.
-# Unknown codes are prefixed with "Category: " as a fallback.
-TFAUNA_CATEGORY_MAP: dict[str, str] = {
-    # code -> canonical name  (update when CategoryList is supplied)
-    # "A": "<canonical name for A>",
-    # "B": "<canonical name for B>",
-    # ...
-}
+# "Species List" CSV to human-readable canonical names.  The authoritative
+# source is the LegacyValueMap (list: "CategoryList"). Missing mappings are
+# considered fatal for the migration and will raise an error.
 
 
 def resolve_category(code: str) -> str:
@@ -36,15 +30,29 @@ def resolve_category(code: str) -> str:
     """
     if not code or not code.strip():
         return ""
-    code = code.strip()
-    canonical = TFAUNA_CATEGORY_MAP.get(code)
-    if canonical:
-        return canonical
-    logger.warning(
-        "TFAUNA CategoryList: no canonical name for code %r – using raw value",
-        code,
-    )
-    return f"Category: {code}"
+    code = str(code).strip()
+
+    # Use authoritative LegacyValueMap (list: CategoryList). Missing mapping
+    # is fatal — raise an error so the migration fails loud and early.
+    try:
+        dm_mappings.preload_map("TFAUNA", "CategoryList")
+        table = dm_mappings._CACHE.get(("TFAUNA", "CategoryList"), {})
+        norm = dm_mappings._norm(code)
+        entry = table.get(norm) or table.get(norm.casefold())
+    except Exception as e:
+        logger.exception("TFAUNA: CategoryList preload failed for %r: %s", code, e)
+        raise RuntimeError(f"TFAUNA CategoryList lookup failed for {code!r}: {e}")
+
+    if not entry:
+        raise ValueError(f"Unmapped TFAUNA.CategoryList value {code!r}: populate LegacyValueMap list 'CategoryList'")
+    if entry.get("ignored"):
+        raise ValueError(f"TFAUNA.CategoryList value {code!r} is mapped to IGNORE")
+
+    canonical = entry.get("canonical") or entry.get("raw")
+    if not canonical or not str(canonical).strip():
+        raise ValueError(f"TFAUNA.CategoryList mapping for {code!r} has empty canonical/raw value")
+
+    return str(canonical).strip()
 
 
 TAXONOMY_TRANSFORM = taxonomy_lookup_legacy_id_mapping("TFAUNA")
@@ -195,7 +203,9 @@ class SpeciesTfaunaAdapter(SourceAdapter):
             canonical["taxonomy_id"] = sp_code_key if sp_code_key else None
 
             # Task 11848: comment
-            # 1a. Resolve Category code via TFAUNA_CATEGORY_MAP (CategoryList)
+            # 1a. Resolve Category code via CategoryList  LegacyValueMap.
+            # This is the primary source of categorisation info so it's a required mapping.
+            # Missing mapping is fatal and raises an error.
             # 1b. Notes: plain string from Species Notes.csv (joined by SpCode)
             # 2. Concatenate with ". " separator
             category_raw = raw.get("Category", "")
