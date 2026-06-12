@@ -73,6 +73,7 @@ COPY --chown=oim:oim scripts/combine_csvs.py \
                       scripts/generate_uat_fixtures.sh \
                       scripts/partition_migration_data.py \
                       scripts/split_csv.py \
+                      scripts/split_tfauna_csv.py \
                       ./scripts/
 
 # Build Vue frontend, then discard node_modules so they aren't copied to runtime.
