@@ -138,18 +138,24 @@ def main() -> None:
     )
     parser.add_argument(
         "--handler-args",
-        default="",
+        nargs=argparse.REMAINDER,
+        default=[],
         metavar="ARGS",
-        help="Extra args appended to each migrate_data command, e.g. '--seed-history'.",
+        help="Extra args appended to each migrate_data command, e.g. --seed-history (no quoting required).",
     )
     args = parser.parse_args()
+
+    # Join any remaining handler args into a single string to be appended
+    # to the generated migrate_data commands. Using `argparse.REMAINDER`
+    # lets callers pass flags like `--seed-history` without extra quoting.
+    handler_args = " ".join(args.handler_args).strip()
 
     if not os.path.exists(args.input):
         print(f"Error: file not found: {args.input}", file=sys.stderr)
         sys.exit(1)
 
     output_dir = args.output_dir or os.path.join(os.path.dirname(os.path.abspath(args.input)), "chunks")
-    split_csv(args.input, args.target_rows, output_dir, args.handler_args)
+    split_csv(args.input, args.target_rows, output_dir, handler_args)
 
 
 if __name__ == "__main__":
