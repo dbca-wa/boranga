@@ -161,8 +161,8 @@ The command will output a list of migration runs to process each of the chunks a
 python scripts/split_tfauna_csv.py \
     "private-media/legacy_data/TFAUNA/Fauna Records.csv" \
     --target-rows 50000 \
-    --output-dir private-media/legacy_data/TFAUNA/chunks
-    --handler-args "--seed-history"
+    --output-dir private-media/legacy_data/TFAUNA/chunks \
+    --handler-args '--seed-history'
 
 # Then run the command it produces (may not be idential to below) — chunk 1 wipes, chunks 2-x append
 LOG=private-media/handler_output/occurrence_report_legacy_$(date +%Y%m%d_%H%M%S).log
