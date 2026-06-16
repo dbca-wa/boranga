@@ -521,7 +521,7 @@
                                     :value="
                                         conservation_status_obj.wa_legislative_list
                                             ? conservation_status_obj.wa_legislative_list
-                                            : 'N/A'
+                                            : '&mdash; None &mdash;'
                                     "
                                 />
                             </template>
@@ -595,7 +595,7 @@
                                     :value="
                                         conservation_status_obj.wa_legislative_category
                                             ? conservation_status_obj.wa_legislative_category
-                                            : 'N/A'
+                                            : '&mdash; None &mdash;'
                                     "
                                 />
                             </template>
@@ -665,7 +665,7 @@
                                     :value="
                                         conservation_status_obj.iucn_version
                                             ? conservation_status_obj.iucn_version
-                                            : 'N/A'
+                                            : '&mdash; None &mdash;'
                                     "
                                 />
                             </template>
@@ -687,7 +687,7 @@
                                 class="form-control"
                                 :placeholder="
                                     isReadOnly
-                                        ? 'N/A'
+                                        ? '&mdash; None &mdash;'
                                         : 'Enter Conservation Criteria if Applicable'
                                 "
                             />
@@ -759,7 +759,7 @@
                                     :value="
                                         conservation_status_obj.wa_priority_list
                                             ? conservation_status_obj.wa_priority_list
-                                            : 'N/A'
+                                            : '&mdash; None &mdash;'
                                     "
                                 />
                             </template>
@@ -833,7 +833,7 @@
                                     :value="
                                         conservation_status_obj.wa_priority_category
                                             ? conservation_status_obj.wa_priority_category
-                                            : 'N/A'
+                                            : '&mdash; None &mdash;'
                                     "
                                 />
                             </template>
@@ -965,7 +965,7 @@
                                     :value="
                                         conservation_status_obj.other_conservation_assessment
                                             ? conservation_status_obj.other_conservation_assessment
-                                            : 'N/A'
+                                            : '&mdash; None &mdash;'
                                     "
                                 />
                             </template>
