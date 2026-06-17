@@ -10,6 +10,7 @@ from typing import Any
 from django.db import models, transaction
 from django.utils import timezone
 
+from boranga.components.data_migration import mappings as dm_mappings
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.adapters.species import schema
 from boranga.components.data_migration.adapters.species.tfauna import SpeciesTfaunaAdapter
@@ -164,7 +165,7 @@ def _apply_tfauna_region_district(
     region_map_ci: dict,
     district_map: dict,
     district_map_ci: dict,
-    district_links: dict,
+    district_links: dict | None,
     district_to_region: dict,
     desired_region_pairs: set,
     desired_district_pairs: set,
@@ -179,11 +180,11 @@ def _apply_tfauna_region_district(
        ``region_map``, and add ``(species_pk, region_pk)`` pairs to
        ``desired_region_pairs``.
 
-    2. Look up the Species Districts CSV rows for this SpCode via
-       ``district_links``.  For each district name, resolve to a District PK
-       via ``district_map`` and only add ``(species_pk, district_pk)`` to
-       ``desired_district_pairs`` when the district's parent Region is already
-       in the species' resolved region set (per Task 11875 condition).
+    2. Expand resolved Regions to their child Districts.
+       For TFAUNA we do not parse inline district names — when Regions are
+       provided we include every District whose `region_id` is in the
+       resolved set. This enforces the requirement that assigning a Region
+       implies assignment to all its Districts.
 
     Returns the number of warning messages added (so the caller can increment
     its ``warn_count`` accordingly).
@@ -213,30 +214,9 @@ def _apply_tfauna_region_district(
             if parent_region_id in species_region_pks:
                 desired_district_pairs.add((species_pk, dist_pk))
 
-    # Step 2: resolve districts from Species Districts CSV, conditioned on region membership
-    tfauna_dist_keys = district_links.get(raw_sp_code, [])
-    for dist_key in tfauna_dist_keys:
-        pk = district_map.get(dist_key) or district_map_ci.get(dist_key.casefold() if dist_key else "")
-        if pk:
-            parent_region_id = district_to_region.get(pk)
-            if parent_region_id and parent_region_id in species_region_pks:
-                desired_district_pairs.add((species_pk, pk))
-            else:
-                # District's parent region not in migrated region set — skip per Task 11875
-                logger.debug(
-                    "TFAUNA: skipping district_pk=%s (%s) for SpCode=%s "
-                    "– parent region_id=%s not in species regions %s",
-                    pk,
-                    dist_key,
-                    raw_sp_code,
-                    parent_region_id,
-                    species_region_pks,
-                )
-        else:
-            msg = f"tfauna-{raw_sp_code}: unknown District value {dist_key!r}"
-            warnings.append(msg)
-            warnings_details.append({"migrated_from_id": f"tfauna-{raw_sp_code}", "missing_district": dist_key})
-            added_warnings += 1
+    # No further district parsing: districts are supplied by expanding the
+    # resolved Regions above (see the district_to_region walk earlier). There
+    # is nothing else to do here for TFAUNA.
 
     return added_warnings
 
@@ -527,14 +507,26 @@ class SpeciesImporter(BaseSheetImporter):
         # Task 11872+11875: TFAUNA-specific region and district lookup maps.
         # region_map_tfauna: legacy CALMRegion name → Region PK (from LegacyValueMap).
         # district_map_tfauna: legacy District name → District PK (from LegacyValueMap).
-        # tfauna_district_links: SpCode → list of legacy district names (from Species Districts CSV).
-        region_map_tfauna = load_legacy_to_pk_map(legacy_system="TFAUNA", model_name="Region")
+        # Districts may be provided inline in the adapter (comma/semicolon separated)
+        # and will be resolved via `district_map_tfauna`.
+        # Build region map from LegacyValueMap list 'CALMRegion' (cached)
+        dm_mappings.preload_map("TFAUNA", "CALMRegion")
+        calm_table = dm_mappings._CACHE.get(("TFAUNA", "CALMRegion"), {})
+        region_map_tfauna: dict[str, int] = {}
+        for _, entry in calm_table.items():
+            if entry.get("ignored"):
+                continue
+            tid = entry.get("target_id")
+            if not tid:
+                continue
+            raw = entry.get("raw") or ""
+            canonical = entry.get("canonical") or ""
+            for key in (raw, canonical):
+                ks = str(key).strip()
+                if ks:
+                    region_map_tfauna[ks] = int(tid)
+
         district_map_tfauna = load_legacy_to_pk_map(legacy_system="TFAUNA", model_name="District")
-        tfauna_district_links = load_species_to_district_links(
-            legacy_system="TFAUNA",
-            key_column="SpCode",
-            district_column="District",
-        )
         # Case-insensitive fallback maps for TFAUNA lookups
         region_map_tfauna_ci = {k.casefold(): v for k, v in region_map_tfauna.items()}
         district_map_tfauna_ci = {k.casefold(): v for k, v in district_map_tfauna.items()}
@@ -917,6 +909,11 @@ class SpeciesImporter(BaseSheetImporter):
         from boranga.components.species_and_communities.models import District
 
         def parse_district_keys(raw):
+            """Parse TPFL-style district raw values and resolve via `district_map`.
+
+            Expected format: semicolon-separated strings (TPFL). Returns
+            (resolved_ids, missing_keys).
+            """
             if not raw:
                 return [], []
             if isinstance(raw, str):
@@ -951,6 +948,10 @@ class SpeciesImporter(BaseSheetImporter):
             publish_to_update.append((obj.pk, processing_status_is_active))
 
             # collect desired district/region pairs for this species
+            # TPFL-style districts come from `districts_raw`; TFAUNA does not
+            # provide inline districts in the Species List CSV. Use the simple
+            # TPFL mapping parser here — TFAUNA will get districts from the
+            # resolved regions via `_apply_tfauna_region_district`.
             district_ids, missing = parse_district_keys(districts_raw)
             if missing:
                 warn_count += 1
@@ -965,7 +966,7 @@ class SpeciesImporter(BaseSheetImporter):
                 desired_district_pairs.add((obj.pk, did))
 
             # Task 11872+11875 (TFAUNA only): add regions from the Region column and
-            # conditionally add districts from the Species Districts CSV.
+            # conditionally add districts from inline district values.
             if str(obj.migrated_from_id).lower().startswith("tfauna-"):
                 raw_sp_code = obj.migrated_from_id[7:]
                 warn_count += _apply_tfauna_region_district(
@@ -976,7 +977,7 @@ class SpeciesImporter(BaseSheetImporter):
                     region_map_ci=region_map_tfauna_ci,
                     district_map=district_map_tfauna,
                     district_map_ci=district_map_tfauna_ci,
-                    district_links=tfauna_district_links,
+                    district_links=None,
                     district_to_region=all_district_to_region,
                     desired_region_pairs=desired_region_pairs,
                     desired_district_pairs=desired_district_pairs,
@@ -1016,6 +1017,7 @@ class SpeciesImporter(BaseSheetImporter):
                     )
                 )
 
+                # Use the TPFL parser for inline district values (if any).
                 district_ids, missing = parse_district_keys(districts_raw)
                 if missing:
                     warn_count += 1
@@ -1030,7 +1032,7 @@ class SpeciesImporter(BaseSheetImporter):
                     desired_district_pairs.add((obj.pk, did))
 
                 # Task 11872+11875 (TFAUNA only): add regions from the Region column and
-                # conditionally add districts from the Species Districts CSV.
+                # conditionally add districts from inline district values.
                 if str(migrated_from_id).lower().startswith("tfauna-"):
                     raw_sp_code = migrated_from_id[7:]
                     warn_count += _apply_tfauna_region_district(
@@ -1041,7 +1043,7 @@ class SpeciesImporter(BaseSheetImporter):
                         region_map_ci=region_map_tfauna_ci,
                         district_map=district_map_tfauna,
                         district_map_ci=district_map_tfauna_ci,
-                        district_links=tfauna_district_links,
+                        district_links=None,
                         district_to_region=all_district_to_region,
                         desired_region_pairs=desired_region_pairs,
                         desired_district_pairs=desired_district_pairs,

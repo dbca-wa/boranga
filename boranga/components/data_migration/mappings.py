@@ -111,7 +111,6 @@ def load_species_to_district_links(
     # Default CSV paths per legacy system
     _DEFAULT_PATHS: dict[str, str] = {
         "TPFL": str(BASE_DIR / "legacy_data/TPFL/DRF_TAXON_CONSV_LST_DISTRICTS.csv"),
-        "TFAUNA": str(BASE_DIR / "legacy_data/TFAUNA/Species Districts.csv"),
     }
 
     default_csv_path = _DEFAULT_PATHS.get(legacy_system.upper()) if legacy_system else None

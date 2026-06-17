@@ -147,9 +147,9 @@ The command will output a list of migration runs to process each of the chunks a
 ./manage.py populate_legacy_value_map private-media/legacy_data/TFAUNA/legacy-data-map-TFAUNA.csv --legacy-system TFAUNA --update --create-missing-targets
 ./manage.py populate_legacy_taxonomy_mapping private-media/legacy_data/TFAUNA/legacy-species-names-mapped-Nomos-ID-TFAUNA.csv --list-name TFAUNA
 
-## Species
+## Species (don't seed history on this run and the processing status and publication status are updated in the CS run)
 
-./manage.py migrate_data run species_legacy "private-media/legacy_data/TFAUNA/Species List.csv" --sources TFAUNA --wipe-targets --seed-history
+./manage.py migrate_data run species_legacy "private-media/legacy_data/TFAUNA/Species List.csv" --sources TFAUNA --wipe-targets
 
 ## Conservation Status
 
@@ -161,8 +161,8 @@ The command will output a list of migration runs to process each of the chunks a
 python scripts/split_tfauna_csv.py \
     "private-media/legacy_data/TFAUNA/Fauna Records.csv" \
     --target-rows 50000 \
-    --output-dir private-media/legacy_data/TFAUNA/chunks
-    --handler-args "--seed-history"
+    --output-dir private-media/legacy_data/TFAUNA/chunks \
+    --handler-args '--seed-history'
 
 # Then run the command it produces (may not be idential to below) — chunk 1 wipes, chunks 2-x append
 LOG=private-media/handler_output/occurrence_report_legacy_$(date +%Y%m%d_%H%M%S).log

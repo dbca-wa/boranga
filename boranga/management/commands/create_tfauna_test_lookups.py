@@ -195,7 +195,6 @@ class Command(BaseCommand):
         self.stdout.write(f"  Region:      seeded {seeded_regions} entries.")
 
         # ── 3. District  (Task 11875) ───────────────────────────────────────────
-        # Legacy district values in Species Districts.csv are full district names.
         seeded_districts = 0
         for district in District.objects.select_related("region").all():
             upsert_lvm("District", district.name, district.name, ct_district, district.id)

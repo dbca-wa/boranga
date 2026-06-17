@@ -300,6 +300,9 @@ class SpeciesTfaunaAdapter(SourceAdapter):
             region_raw = (raw.get("Region") or "").strip()
             if region_raw:
                 canonical["regions_raw"] = region_raw
+            # Note: no inline district column is expected in the TFAUNA Species
+            # List CSV by default. Districts are derived from Regions in the
+            # handler sources.
 
             # Task 11859, 11863, 11866, 11871, 11874, 11877 are related to child models (SpeciesDistribution etc)
             # The Handler creates the main Species object first.
