@@ -318,6 +318,7 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             ch_name = (raw.get("ChName") or "").strip()
             en_name = (raw.get("EnName") or "").strip()
             canonical["approved_by"] = ch_name if ch_name else en_name
+            canonical["last_modified_by"] = canonical["approved_by"]
 
             # ── submitter information (EnName) ──────────────────
             canonical["SubmitterInformation__email_user"] = en_name if en_name else None
