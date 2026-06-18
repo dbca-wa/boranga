@@ -172,6 +172,7 @@ PIPELINES = {
     "customer_status": [_customer_status],
     "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
     "observation_date": ["strip", "blank_to_none", DATE_LOCAL_PERTH],
+    "datetime_updated": ["strip", "blank_to_none", DATE_LOCAL_PERTH],
     "comments": ["strip", "blank_to_none"],
     "record_source": ["strip", "blank_to_none"],
     "ocr_for_occ_name": ["strip", "blank_to_none"],
@@ -326,6 +327,9 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
 
             # ── datetime_created = lodgement_date (EnDate) ─────────────────────
             canonical["datetime_created"] = canonical.get("lodgement_date")
+
+            # ── datetime_updated = ChDate (if present), else lodgement_date (EnDate) ─────
+            canonical["datetime_updated"] = raw.get("ChDate") or canonical.get("lodgement_date")
 
             # ── Observer contact: Address + Phone ───────────────
             addr = (raw.get("Address") or "").strip()
