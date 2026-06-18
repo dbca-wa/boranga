@@ -384,7 +384,14 @@ class OccurrenceReportBulkImportPermission(BasePermission):
         if request.user.is_superuser:
             return True
 
-        if view.action != "copy" and request.method not in permissions.SAFE_METHODS and obj.is_master:
+        # Some objects (e.g. OccurrenceReportBulkImportTask) don't have `is_master`.
+        # Treat missing attribute as False so the same permission class can be
+        # applied to both schema and task objects safely.
+        if (
+            view.action != "copy"
+            and request.method not in permissions.SAFE_METHODS
+            and getattr(obj, "is_master", False)
+        ):
             return is_django_admin(request)
 
         return is_django_admin(request) or is_occurrence_approver(request)
