@@ -335,7 +335,7 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
                 contact_parts.append(f"Address: {addr}")
             if phone:
                 contact_parts.append(f"Phone: {phone}")
-            canonical["OCRObserverDetail__contact"] = ". ".join(contact_parts) if contact_parts else None
+            canonical["OCRObserverDetail__contact"] = "\n".join(contact_parts) if contact_parts else None
             canonical["OCRObserverDetail__main_observer"] = True
 
             # ── OCRObservationDetail comments = ObservMethod ────
