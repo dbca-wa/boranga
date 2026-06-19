@@ -15,6 +15,7 @@ from pyproj import Transformer
 
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
+    TransformContext,
     _result,
     build_legacy_map_transform,
     date_from_datetime_iso_local_factory,
@@ -23,6 +24,7 @@ from boranga.components.data_migration.registry import (
     emailuser_object_by_legacy_username_with_fallback_factory,
     fk_lookup_static,
     geometry_from_coords_factory,
+    registry,
     static_value_factory,
     taxonomy_lookup_legacy_id_mapping_species,
 )
@@ -89,6 +91,14 @@ LOCATION_ACCURACY_TRANSFORM = build_legacy_map_transform(
     "TFAUNA",
     "Resolution",
     required=False,
+)
+
+# TenCode → canonical display name (e.g. "NP" → "National Park").
+TEN_CODE_CANONICAL = build_legacy_map_transform(
+    "TFAUNA",
+    "TenCode",
+    required=False,
+    return_type="canonical",
 )
 
 # ── Dead/alive determination helpers ────────────────────────────────
@@ -302,6 +312,10 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
                 parts.append(comments_val)
             ten_code = (raw.get("TenCode") or "").strip()
             if ten_code:
+                _ten_fn = registry._fns.get(TEN_CODE_CANONICAL)
+                if _ten_fn is not None:
+                    _ten_res = _ten_fn(ten_code, TransformContext(row=raw))
+                    ten_code = _ten_res.value if _ten_res.value is not None else ten_code
                 parts.append(f"Tenure: {ten_code}")
             canonical["comments"] = "; ".join(parts) if parts else ""
 
