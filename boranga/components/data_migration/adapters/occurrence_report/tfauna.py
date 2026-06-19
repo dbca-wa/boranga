@@ -115,11 +115,40 @@ def _is_dead(observ_type: str | None) -> bool:
 
 # ── Submitted-by helpers ────────────────────────────────────────────
 
+# Lazily cached fallback user name (resolved on first use).
+_fallback_name_cache: list = [None, False]  # [name, loaded]
+
+
+def _get_fallback_user_name() -> str | None:
+    if not _fallback_name_cache[1]:
+        try:
+            from ledger_api_client.ledger_models import EmailUserRO
+
+            user = EmailUserRO.objects.get(email__iexact=TFAUNA_FALLBACK_EMAIL)
+            _fallback_name_cache[0] = user.get_full_name() or None
+        except Exception:
+            _fallback_name_cache[0] = None
+        _fallback_name_cache[1] = True
+    return _fallback_name_cache[0]
+
 
 def submitter_name_from_emailuser(value, ctx=None):
-    """Extract full name from EmailUser object."""
+    """Extract full name from EmailUser object.
+
+    Falls back to:
+    - The raw EnName string if the EmailUser lookup missed (display name, not a
+      mapped username).
+    - The fallback service-account's full name when EnName is also empty (i.e.
+      the row has no submitter and EMAILUSER_BY_LEGACY_USERNAME resolved to the
+      TFAUNA fallback account).
+    """
     if value is None:
-        return _result(None)
+        if ctx and getattr(ctx, "row", None):
+            en_name = (ctx.row.get("EnName") or "").strip()
+            if en_name:
+                return _result(en_name)
+        # EnName is empty → fallback-user scenario; use that account's full name.
+        return _result(_get_fallback_user_name())
     try:
         if hasattr(value, "get_full_name"):
             return _result(value.get_full_name())
