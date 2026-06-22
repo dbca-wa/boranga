@@ -62,7 +62,7 @@ class Command(BaseCommand):
                 continue
 
             with connection.cursor() as cursor:
-                # Set a strict 2-minute DB timeout for THIS specific item
+                # Set a strict DB timeout for this specific job
                 cursor.execute(f"SET statement_timeout = {settings.QUEUE_JOB_ITEM_MAX_POSTGRES_RUN_TIME};")
 
                 try:
