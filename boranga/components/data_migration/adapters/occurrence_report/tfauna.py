@@ -269,7 +269,7 @@ PIPELINES = {
     "OCRIdentification__id_confirmed_by": ["strip", "blank_to_none"],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
     # OCRHabitatComposition
-    "OCRHabitatComposition__Landform": [
+    "OCRHabitatComposition__land_form": [
         "strip",
         "blank_to_none",
         LANDFORM_TRANSFORM,

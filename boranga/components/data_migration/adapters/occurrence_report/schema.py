@@ -165,7 +165,7 @@ COLUMN_MAP = {
     "Long": "Long",
     "Datum": "DATUM",
     "Resolution": "OCRLocation__location_accuracy",
-    "Landform": "OCRHabitatComposition__Landform",
+    "Landform": "OCRHabitatComposition__land_form",
     "VegType": "OCRVegetationStructure__vegetation_structure_layer_one",
     "Fire": "OCRFireHistory__comment",
     "Sp1": "Sp1",
