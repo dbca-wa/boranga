@@ -6051,6 +6051,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         default=PROCESSING_STATUS_QUEUED,
     )
 
+    history_seeded = models.BooleanField(default=False)
+
     class Meta:
         app_label = "boranga"
         verbose_name = "Occurrence Report Bulk Import Task"
