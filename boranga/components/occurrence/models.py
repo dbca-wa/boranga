@@ -7532,6 +7532,17 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         self.datetime_error = None
         self.error_row = None
         self.error_message = None
+        self.history_seeded = False
+        self.save()
+
+    def cancel(self):
+        if self.processing_status != self.PROCESSING_STATUS_QUEUED:
+            raise ValueError(
+                f"Cannot cancel bulk import task {self.id}: "
+                f"current status is '{self.processing_status}', expected 'queued'."
+            )
+        self.processing_status = self.PROCESSING_STATUS_ARCHIVED
+        self.archived = True
         self.save()
 
     def revert(self):

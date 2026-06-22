@@ -247,6 +247,7 @@
                                                 ></i>
                                                 Time Estimate
                                             </th>
+                                            <th scope="col">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody class="text-muted">
@@ -285,6 +286,18 @@
                                                 {{
                                                     queuedImport.estimated_processing_time_human_readable
                                                 }}
+                                            </td>
+                                            <td>
+                                                <button
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    @click="
+                                                        cancelBulkImportTask(
+                                                            queuedImport.id
+                                                        )
+                                                    "
+                                                >
+                                                    Cancel
+                                                </button>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -964,6 +977,46 @@ export default {
                                     }
                                 );
                             this.fetchCompletedImports();
+                        },
+                        (error) => {
+                            console.log(error);
+                        }
+                    );
+                }
+            });
+        },
+        cancelBulkImportTask(bulkImportTaskId) {
+            swal.fire({
+                title: 'Cancel Queued Import',
+                text: 'Are you sure you want to cancel this queued bulk import?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Cancel Import',
+                cancelButtonText: 'Go Back',
+                customClass: {
+                    confirmButton: 'btn btn-danger',
+                    cancelButton: 'btn btn-secondary',
+                },
+                reverseButtons: true,
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(
+                        `${api_endpoints.occurrence_report_bulk_imports}${bulkImportTaskId}/cancel/`,
+                        {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                        }
+                    ).then(
+                        (response) => {
+                            console.log(response);
+                            this.queuedImports = this.queuedImports.filter(
+                                (queuedImport) => {
+                                    return queuedImport.id !== bulkImportTaskId;
+                                }
+                            );
+                            this.fetchQueuedImports();
                         },
                         (error) => {
                             console.log(error);

@@ -5764,6 +5764,17 @@ class OccurrenceReportBulkImportTaskViewSet(
         return Response(status=status.HTTP_200_OK)
 
     @detail_route(methods=["patch"], detail=True)
+    def cancel(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.processing_status != OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED:
+            return Response(
+                {"detail": "Only queued imports can be cancelled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        instance.cancel()
+        return Response(status=status.HTTP_200_OK)
+
+    @detail_route(methods=["patch"], detail=True)
     def revert(self, request, *args, **kwargs):
         instance = self.get_object()
         instance.revert()
