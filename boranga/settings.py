@@ -261,6 +261,10 @@ CRON_CLASSES = [
     "boranga.cron.CronJobProcessReportQueue",
 ]
 
+QUEUE_JOB_MAX_RUN_TIME = env("QUEUE_JOB_MAX_RUN_TIME", 60 * 60)  # Default to 1 hour
+QUEUE_JOB_ITEM_MAX_POSTGRES_RUN_TIME = env(
+    "QUEUE_JOB_ITEM_MAX_POSTGRES_RUN_TIME", 1000 * 60 * 5
+)  # Default to 5 minutes per item
 
 BASE_URL = env("BASE_URL")
 
