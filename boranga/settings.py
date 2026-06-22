@@ -266,6 +266,8 @@ QUEUE_JOB_ITEM_MAX_POSTGRES_RUN_TIME = env(
     "QUEUE_JOB_ITEM_MAX_POSTGRES_RUN_TIME", 1000 * 60 * 2
 )  # Default to 2 minutes per item (Postgres uses milliseconds)
 
+DJANGO_CRON_LOCK_TIME = 2 * 60 * 60  # 2 hours instead of 24 hours in case an AKS redeploy causes a job to be locked
+
 BASE_URL = env("BASE_URL")
 
 # Additional logging for boranga
