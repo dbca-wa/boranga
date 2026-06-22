@@ -104,3 +104,15 @@ class CronJobProcessReportQueue(django_cron.CronJobBase):
         log.info("Process report queue cron job triggered, running...")
         management.call_command("run_queue_job")
         return "Job Completed Successfully"
+
+
+class CronJobSeedBulkImportHistory(django_cron.CronJobBase):
+    """Seed initial django-reversion history for completed OCR bulk import tasks, running every 5 minutes."""
+
+    schedule = django_cron.Schedule(run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=5)
+    code = "boranga.seed_bulk_import_history"
+
+    def do(self) -> None:
+        log.info("Seed bulk import history cron job triggered, running...")
+        management.call_command("ocr_seed_bulk_import_history")
+        return "Job Completed Successfully"
