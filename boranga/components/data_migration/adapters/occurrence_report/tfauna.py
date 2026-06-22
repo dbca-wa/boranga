@@ -190,14 +190,24 @@ def _derive_count_status(canonical: dict) -> str:
         "OCRAnimalObservation__dead_juvenile_unknown",
     ]
     has_detailed = any(canonical.get(f) is not None and str(canonical.get(f)).strip() != "" for f in detailed_fields)
-    if has_detailed:
-        return COUNT_STATUS_COUNTED
+    detailed_count = sum(int(canonical.get(f) or 0) for f in detailed_fields if canonical.get(f) is not None)
 
     simple_fields = [
         "OCRAnimalObservation__simple_alive",
         "OCRAnimalObservation__simple_dead",
     ]
     has_simple = any(canonical.get(f) is not None and str(canonical.get(f)).strip() != "" for f in simple_fields)
+    simple_count = sum(int(canonical.get(f) or 0) for f in simple_fields if canonical.get(f) is not None)
+
+    if has_detailed and has_simple:
+        if detailed_count > simple_count:
+            return COUNT_STATUS_COUNTED
+        elif simple_count > detailed_count:
+            return COUNT_STATUS_SIMPLE_COUNT
+
+    if has_detailed:
+        return COUNT_STATUS_COUNTED
+
     if has_simple:
         return COUNT_STATUS_SIMPLE_COUNT
 
