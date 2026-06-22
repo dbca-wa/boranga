@@ -101,6 +101,19 @@ TEN_CODE_CANONICAL = build_legacy_map_transform(
     return_type="canonical",
 )
 
+LANDFORM_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Landform",
+    required=False,
+)
+
+VEGETATION_TYPE_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "VegType",
+    required=False,
+    return_type="canonical",
+)
+
 # ── Dead/alive determination helpers ────────────────────────────────
 
 DEAD_OBSERV_TYPES = frozenset({"Dead", "Dead ", "Fossil", "Subfossil material"})
@@ -245,6 +258,14 @@ PIPELINES = {
     "OCRIdentification__barcode_number": ["strip", "blank_to_none"],
     "OCRIdentification__id_confirmed_by": ["strip", "blank_to_none"],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
+    # OCRHabitatComposition
+    "OCRHabitatComposition__Landform": [
+        "strip",
+        "blank_to_none",
+        LANDFORM_TRANSFORM,
+    ],
+    # OCRVegetationStructure
+    "OCRVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none", VEGETATION_TYPE_TRANSFORM],
     # OCRAnimalObservation fields — integers
     "OCRAnimalObservation__animal_observation_detail_comment": ["strip", "blank_to_none"],
     "OCRAnimalObservation__count_status": ["strip", "blank_to_none"],
