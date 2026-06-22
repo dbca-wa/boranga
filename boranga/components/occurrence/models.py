@@ -6367,6 +6367,21 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 # can find parents created earlier in the same transaction.
                 ocr_instances = {}
 
+                # Pre-fetch schema columns once to avoid 3-5 repeated DB queries
+                # per row inside process_row / validate.
+                schema_columns = list(self.schema.columns.select_related("django_import_content_type").all())
+                # Build a header lookup: (model_name, field_name) -> xlsx column header.
+                col_header_cache = {
+                    (
+                        col.django_import_content_type.model,
+                        col.django_import_field_name,
+                    ): col.xlsx_column_header_name
+                    for col in schema_columns
+                }
+                # User cache to avoid repeated Ledger EmailUser lookups for the
+                # same email address or ID across rows.
+                self._user_cache = {}
+
                 for index, row in enumerate(rows):
                     if index + 1 > self.rows:
                         logger.warning(
@@ -6379,8 +6394,22 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         # per-row savepoint so single-row failures don't abort the whole outer tx immediately
                         with transaction.atomic():
                             self.rows_processed = index + 1
-                            self.save()
-                            self.process_row(ocr_migrated_from_ids, ocr_instances, index, headers, row, errors)
+                            # Flush progress every 25 rows instead of every row to
+                            # cut write overhead from ~2000 UPDATEs to ~80.
+                            if self.rows_processed % 25 == 0 or self.rows_processed == self.rows:
+                                OccurrenceReportBulkImportTask.objects.filter(pk=self.pk).update(
+                                    rows_processed=self.rows_processed
+                                )
+                            self.process_row(
+                                ocr_migrated_from_ids,
+                                ocr_instances,
+                                index,
+                                headers,
+                                row,
+                                schema_columns,
+                                col_header_cache,
+                                errors,
+                            )
                     except IntegrityError as e:
                         logger.exception(f"IntegrityError on row {index + 2} for import {self.id}: {e}")
                         errors.append(
@@ -6477,27 +6506,23 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             self.datetime_completed = timezone.now()
             self.save()
 
-            # Seed initial reversion history for all records created by this task.
-            try:
-                from boranga.components.data_migration.history_seeding.reversion_seeder import (
-                    MigratedHistorySeeder,
-                )
-
-                seeder = MigratedHistorySeeder(batch_size=500)
-                count = seeder.seed_bulk_import_occurrence_reports(self.pk)
-                logger.info(f"Bulk import task {self.pk}: seeded {count} reversion version(s)")
-            except Exception:
-                logger.exception(f"Bulk import task {self.pk}: history seeding failed (non-fatal)")
+            # History seeding is handled separately by the
+            # ocr_seed_bulk_import_history management command / cron job.
 
             return []
 
-    def process_row(self, ocr_migrated_from_ids, ocr_instances, index, headers, row, errors):
+    def process_row(
+        self, ocr_migrated_from_ids, ocr_instances, index, headers, row, schema_columns, col_header_cache, errors
+    ):
         # Row 1 in the XLSX is the header; data starts at row 2, so add 2 to the 0-based index.
         row_index = index + 2
 
         row_hash = hashlib.sha256(str(row).encode()).hexdigest()
-        if OccurrenceReport.objects.filter(import_hash=row_hash).exists():
+        try:
             duplicate_ocr = OccurrenceReport.objects.get(import_hash=row_hash)
+        except OccurrenceReport.DoesNotExist:
+            pass
+        else:
             error_message = (
                 f"Row {row_index} has the exact same data as "
                 f"Occurrence Report {duplicate_ocr.occurrence_report_number} did when it was imported."
@@ -6546,7 +6571,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         # Find any sets of columns (models) where the fields are all empty
         # so that we can exclude them from the row data (and therefor not bother validating them)
         required_content_types = []
-        for column_index, column in enumerate(self.schema.columns.all()):
+        for column_index, column in enumerate(schema_columns):
             cell_value = row[column_index]
             if cell_value is not None and column.django_import_content_type not in required_content_types:
                 required_content_types.append(column.django_import_content_type)
@@ -6568,7 +6593,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             if orc_ct and mode == "update":
                 # Check which OCR fields are actually populated (excluding migrated_from_id)
                 ocr_fields_populated = []
-                for column_index, column in enumerate(self.schema.columns.all()):
+                for column_index, column in enumerate(schema_columns):
                     if column.django_import_content_type == orc_ct:
                         cell_value = row[column_index]
                         # Skip the migrated_from_id column itself
@@ -6585,7 +6610,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             pass
 
         indexes_to_remove = []
-        for column_index, column in enumerate(self.schema.columns.all()):
+        for column_index, column in enumerate(schema_columns):
             if column.django_import_content_type not in required_content_types:
                 indexes_to_remove.append(column_index)
 
@@ -6595,22 +6620,25 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         # Pre-resolve 'bulk_import_submitter' default values so that any validation
         # code reading directly from the raw row (e.g. the processing_status cross-column
         # checks) sees the actual email address rather than the sentinel string.
-        for _submitter_col in self.schema.columns.filter(
-            django_import_content_type__in=required_content_types,
-            default_value=OccurrenceReportBulkImportSchemaColumn.DEFAULT_VALUE_BULK_IMPORT_SUBMITTER,
+        for _submitter_col in (
+            col
+            for col in schema_columns
+            if col.django_import_content_type in required_content_types
+            and col.default_value == OccurrenceReportBulkImportSchemaColumn.DEFAULT_VALUE_BULK_IMPORT_SUBMITTER
         ):
             if _submitter_col.xlsx_column_header_name in headers:
                 row[headers.index(_submitter_col.xlsx_column_header_name)] = self.email_user
 
         # Validate each cell
-        for column_index, column in enumerate(
-            self.schema.columns.filter(django_import_content_type__in=required_content_types)
-        ):
+        filtered_columns = [col for col in schema_columns if col.django_import_content_type in required_content_types]
+        for column_index, column in enumerate(filtered_columns):
             column_error_count = 0
 
             cell_value = row[column_index]
 
-            cell_value, errors_added = column.validate(self, cell_value, mode, row_index, headers, row, errors)
+            cell_value, errors_added = column.validate(
+                self, cell_value, mode, row_index, headers, row, errors, schema_columns=schema_columns
+            )
 
             model_class = apps.get_model("boranga", column.django_import_content_type.model)
             field = model_class._meta.get_field(column.django_import_field_name)
@@ -6693,14 +6721,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     _hq_merged[_f] = Decimal(str(_hq_row_data[_f]))
             _hq_total = sum(_hq_merged.get(_f, Decimal("0.00")) for _f in _hq_pct_fields)
             if _hq_total != Decimal("0.00") and _hq_total != Decimal("100.00"):
-                _hq_col_headers = []
-                for _f in _hq_pct_fields:
-                    _col = self.schema.columns.filter(
-                        django_import_content_type__model=_hq_model_name,
-                        django_import_field_name=_f,
-                    ).first()
-                    if _col:
-                        _hq_col_headers.append(_col.xlsx_column_header_name)
+                _hq_col_headers = [
+                    col_header_cache[(_hq_model_name, _f)]
+                    for _f in _hq_pct_fields
+                    if (_hq_model_name, _f) in col_header_cache
+                ]
                 errors.append(
                     {
                         "row_index": row_index,
@@ -6756,11 +6781,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
             def _col_header(model_name, field_name):
                 """Return the xlsx column header for a given model/field, falling back to 'model.field'."""
-                col = self.schema.columns.filter(
-                    django_import_content_type__model=model_name,
-                    django_import_field_name=field_name,
-                ).first()
-                return col.xlsx_column_header_name if col else f"{model_name}.{field_name}"
+                return col_header_cache.get((model_name, field_name), f"{model_name}.{field_name}")
 
             orfapp = OccurrenceReportApprovalDetails._meta.model_name
 
@@ -7487,8 +7508,16 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         if not model_instance._meta.model_name == OccurrenceReport._meta.model_name:
             return
 
+        if not hasattr(self, "_user_cache"):
+            self._user_cache = {}
+
+        def _get_user(user_id):
+            if user_id not in self._user_cache:
+                self._user_cache[user_id] = EmailUser.objects.get(id=user_id)
+            return self._user_cache[user_id]
+
         log_suffix = " (via bulk importer)"
-        bulk_importer = EmailUser.objects.get(id=self.email_user)
+        bulk_importer = _get_user(self.email_user)
         request = get_mock_request(bulk_importer)
         if mode == "create":
             model_instance.log_user_action(
@@ -7500,7 +7529,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
                 OccurrenceReport.PROCESSING_STATUS_APPROVED,
             ]:
-                assessor = EmailUser.objects.get(id=model_instance.assigned_officer)
+                assessor = _get_user(model_instance.assigned_officer)
                 request = get_mock_request(assessor)
                 model_instance.log_user_action(
                     OccurrenceReportUserAction.ACTION_PROPOSED_APPROVAL.format(model_instance.occurrence_report_number)
@@ -7508,7 +7537,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     request,
                 )
             if model_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED:
-                approver = EmailUser.objects.get(id=model_instance.assigned_approver)
+                approver = _get_user(model_instance.assigned_approver)
                 request = get_mock_request(approver)
                 model_instance.log_user_action(
                     OccurrenceReportUserAction.ACTION_APPROVE.format(
@@ -9007,7 +9036,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
         return workbook
 
-    def validate(self, task, cell_value, mode, index, headers, row, errors):
+    def validate(self, task, cell_value, mode, index, headers, row, errors, schema_columns=None):
         from boranga.components.spatial.utils import get_geometry_array_from_geojson
 
         errors_added = 0
@@ -9085,10 +9114,21 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
                 OccurrenceReport.PROCESSING_STATUS_APPROVED,
             ]:
-                assigned_officer_column = self.schema.columns.filter(
-                    django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReport),
-                    django_import_field_name="assigned_officer",
-                ).first()
+                if schema_columns is not None:
+                    assigned_officer_column = next(
+                        (
+                            col
+                            for col in schema_columns
+                            if col.django_import_content_type.model == OccurrenceReport._meta.model_name
+                            and col.django_import_field_name == "assigned_officer"
+                        ),
+                        None,
+                    )
+                else:
+                    assigned_officer_column = self.schema.columns.filter(
+                        django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReport),
+                        django_import_field_name="assigned_officer",
+                    ).first()
                 assigned_officer_email = row[headers.index(assigned_officer_column.xlsx_column_header_name)]
                 assigned_officer_id = None
                 try:
@@ -9134,10 +9174,21 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                     )
                     errors_added += 1
             if cell_value == OccurrenceReport.PROCESSING_STATUS_APPROVED:
-                assigned_approver_column = self.schema.columns.filter(
-                    django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReport),
-                    django_import_field_name="assigned_approver",
-                ).first()
+                if schema_columns is not None:
+                    assigned_approver_column = next(
+                        (
+                            col
+                            for col in schema_columns
+                            if col.django_import_content_type.model == OccurrenceReport._meta.model_name
+                            and col.django_import_field_name == "assigned_approver"
+                        ),
+                        None,
+                    )
+                else:
+                    assigned_approver_column = self.schema.columns.filter(
+                        django_import_content_type=ct_models.ContentType.objects.get_for_model(OccurrenceReport),
+                        django_import_field_name="assigned_approver",
+                    ).first()
                 assigned_approver_email = row[headers.index(assigned_approver_column.xlsx_column_header_name)]
                 assigned_approver_id = None
                 if assigned_approver_email is None or assigned_approver_email == "":
@@ -9547,7 +9598,7 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             if issubclass(related_model, ArchivableModel):
                 related_model_qs = related_model_qs.exclude(archived=True)
 
-            if not related_model_qs.exists() or related_model_qs.count() == 0:
+            if not related_model_qs.exists():
                 error_message = f"No records found for foreign key {field.related_model._meta.model_name}"
                 errors.append(
                     {
