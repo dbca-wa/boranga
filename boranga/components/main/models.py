@@ -821,6 +821,7 @@ class JobQueue(BaseModel):
     job_cmd = models.CharField(max_length=255)
     status = models.SmallIntegerField(choices=STATUS_CHOICES, default=STATUS_PENDING)
     parameters_json = models.JSONField(null=True, blank=True)
+    started_dt = models.DateTimeField(null=True, blank=True)
     processed_dt = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(null=True, blank=True)
     user = models.IntegerField(blank=True, null=True)
