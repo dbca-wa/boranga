@@ -481,17 +481,6 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             ch_date = (raw.get("ChDate") or "").strip()
             canonical["ChDate"] = ch_date if ch_date else None
 
-            # ── Habitat notes: Landform + VegType ───────────────
-            hab_parts: list[str] = []
-            landform = (raw.get("Landform") or "").strip()
-            if landform:
-                hab_parts.append(f"Landform: {landform}")
-            veg_type = (raw.get("VegType") or "").strip()
-            if veg_type:
-                hab_parts.append(f"Vegetation Type: {veg_type}")
-            if hab_parts:
-                canonical["OCRHabitatComposition__habitat_notes"] = "; ".join(hab_parts)
-
             # ── Geometry: build Point from Lat/Long (GDA94) ──────
             if canonical.get("Lat") or canonical.get("Long"):
                 try:
