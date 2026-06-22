@@ -58,6 +58,15 @@
                                             >
                                         </option>
                                     </select>
+                                    <span
+                                        v-if="loading_schema_version"
+                                        class="spinner-border spinner-border text-primary m-3"
+                                        role="status"
+                                    >
+                                        <span class="visually-hidden"
+                                            >Loading schema...</span
+                                        >
+                                    </span>
                                 </div>
                                 <div
                                     v-else
@@ -676,6 +685,7 @@ export default {
             schema_versions: null,
             selected_schema: null,
             selected_schema_version: null,
+            loading_schema_version: false,
             importFileErrors: null,
         };
     },
@@ -728,6 +738,8 @@ export default {
             return `Version: ${schema_version.version} - ${schema_version.name ? schema_version.name : 'No Name'}`;
         },
         resetFileField() {
+            // show inline loading spinner while fetching the selected schema
+            this.loading_schema_version = true;
             fetch(
                 `${api_endpoints.occurrence_report_bulk_import_schemas}${this.selected_schema.id}/`
             ).then(
@@ -755,10 +767,12 @@ export default {
                                 popoverTriggerEl
                             );
                         });
+                        this.loading_schema_version = false;
                     });
                 },
                 (error) => {
                     console.log(error);
+                    this.loading_schema_version = false;
                 }
             );
         },
@@ -951,6 +965,7 @@ export default {
                     confirmButton: 'btn btn-primary',
                     cancelButton: 'btn btn-secondary',
                 },
+                buttonsStyling: false,
                 reverseButtons: true,
             }).then((result) => {
                 if (result.isConfirmed) {
@@ -995,8 +1010,9 @@ export default {
                 cancelButtonText: 'Go Back',
                 customClass: {
                     confirmButton: 'btn btn-danger',
-                    cancelButton: 'btn btn-secondary',
+                    cancelButton: 'btn btn-secondary me-2',
                 },
+                buttonsStyling: false,
                 reverseButtons: true,
             }).then((result) => {
                 if (result.isConfirmed) {
