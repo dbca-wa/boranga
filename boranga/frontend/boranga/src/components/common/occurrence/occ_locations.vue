@@ -27,10 +27,11 @@
                     :polygon-features-supported="true"
                     :drawable="!isReadOnly"
                     :editable="!isReadOnly"
+                    :selectable="isSelectable"
+                    :measurement-tool-available="measurementToolAvailable"
                     :file-upload-disabled="isReadOnly"
                     level="internal"
                     style-by="model"
-                    :selectable="true"
                     :coordinate-reference-systems="coordinateReferenceSystems"
                     :spatial-operations-allowed="['__all__']"
                     :tile-layer-api-url="tileLayerApiUrl"
@@ -607,7 +608,7 @@
 import { v4 as uuid } from 'uuid';
 import FormSection from '@/components/forms/section_toggle.vue';
 import HelpText from '@/components/common/help_text.vue';
-import { api_endpoints, helpers } from '@/utils/hooks';
+import { api_endpoints, helpers, constants } from '@/utils/hooks';
 import MapComponent from '../component_map.vue';
 import OccurrenceSiteDatatable from '@/components/internal/occurrence/occurrence_site_datatable.vue';
 import OccurrenceTenureDatatable from '@/components/internal/occurrence/occurrence_tenure_datatable.vue';
@@ -638,6 +639,10 @@ export default {
         isInternal: {
             type: Boolean,
             default: true,
+        },
+        profile: {
+            type: Object,
+            required: false,
         },
         canEditStatus: {
             type: Boolean,
@@ -789,6 +794,22 @@ export default {
         },
         isReadOnly: function () {
             return !this.occurrence_obj.can_user_edit;
+        },
+        measurementToolAvailable: function () {
+            return true;
+        },
+        isSelectable: function () {
+            return (
+                this.isReadOnly &&
+                (this.profile?.user.groups.includes(
+                    constants.GROUPS.READ_ONLY_USERS
+                ) ||
+                    (this.profile?.user.groups.every([
+                        constants.GROUPS.OCCURRENCE_ASSESSORS,
+                        constants.GROUPS.OCCURRENCE_APPROVERS,
+                    ]) &&
+                        this.occurrence_report.locked))
+            );
         },
         csrf_token: function () {
             return helpers.getCookie('csrftoken');
