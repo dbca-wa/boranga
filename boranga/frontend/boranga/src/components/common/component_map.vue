@@ -3998,12 +3998,19 @@ export default {
         createMap: function (baseLayers) {
             let container =
                 this.$refs.popup || document.getElementById('popup');
-            let overlay = new Overlay({
-                element: container,
-                autoPan: {
-                    margin: 110,
-                },
-            });
+            // Only create an overlay if the container element exists. If it's
+            // missing (e.g. not rendered yet in some environments), avoid
+            // passing a null overlay into the Map constructor which can cause
+            // OpenLayers to attempt to call `setMap` on a null object.
+            let overlay = null;
+            if (container) {
+                overlay = new Overlay({
+                    element: container,
+                    autoPan: {
+                        margin: 110,
+                    },
+                });
+            }
             const mousePositionControl = new MousePosition({
                 coordinateFormat: createStringXY(4),
                 projection: `EPSG:${this.effectiveMapSrid}`,
@@ -4023,7 +4030,7 @@ export default {
                         mousePositionControl,
                     ]),
                     layers: [baseLayers],
-                    overlays: [overlay],
+                    overlays: overlay ? [overlay] : [],
                     target: this.elem_id,
                     view: new View({
                         center: [115.95, -31.95],
