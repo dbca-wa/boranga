@@ -781,6 +781,7 @@
         </ProposeAppprove>
         <ProposeDecline
             ref="propose_decline"
+            :occurrence_report="occurrence_report"
             :occurrence_report_id="occurrence_report.id"
             :occurrence_report_number="
                 occurrence_report.occurrence_report_number

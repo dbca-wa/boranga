@@ -204,6 +204,7 @@
                                         style="width: 70%"
                                         class="form-control"
                                         name="cc_email"
+                                        :disabled="ccEmailDisabled"
                                     />
                                 </div>
                             </div>
@@ -223,7 +224,7 @@
 import modal from '@vue-utils/bootstrap-modal.vue';
 import alert from '@vue-utils/alert.vue';
 
-import { helpers, api_endpoints } from '@/utils/hooks.js';
+import { helpers, api_endpoints, constants } from '@/utils/hooks.js';
 export default {
     name: 'OcrProposeApprove',
     components: {
@@ -276,6 +277,13 @@ export default {
                     this.occurrence_report.comments;
             }
             return comment;
+        },
+        ccEmailDisabled: function () {
+            return !(
+                this.occurrence_report.processing_status ==
+                    constants.PROPOSAL_STATUS.WITH_ASSESSOR.TEXT &&
+                this.occurrence_report.user_is_assessor
+            );
         },
     },
     watch: {
