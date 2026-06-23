@@ -6777,6 +6777,15 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 )
             )
             has_occurrence_number = bool(_occ_model_dict.get("occurrence_number"))
+
+            # If the approval path explicitly requests creation of a new Occurrence via
+            # ORFAPP.new_occurrence_name, don't also treat an OCC.occurrence_number sample
+            # value as populated for the purposes of schema validation. This prevents the
+            # preview/sample generation from producing an ambiguous row where both a
+            # new occurrence name and an existing occurrence number are present.
+            if has_new_occurrence_name and has_occurrence_number:
+                _occ_model_dict["occurrence_number"] = None
+                has_occurrence_number = False
             has_occ_migrated_from_id = bool(_occ_model_dict.get("migrated_from_id"))
 
             def _col_header(model_name, field_name):
