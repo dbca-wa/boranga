@@ -1649,6 +1649,15 @@ export default {
             default: null,
         },
         /**
+         * When true the map will allow selecting features but not editing them.
+         * Use this for users who may view and select geometries but must not modify them.
+         */
+        selectable: {
+            type: Boolean,
+            required: false,
+            default: false,
+        },
+        /**
          * A geojson feature collection of features (possibly related to the context) to display on the map.
          */
         featureCollection: {
@@ -3172,9 +3181,10 @@ export default {
             });
 
             let extent_interactions = [vm.snap, vm.dragAndDrop];
-            if (vm.editable || window.env?.read_only) {
-                // Add the select interaction when editable or when in read-only verification
-                // mode so that features can be selected and downloaded as GeoJSON/Shapefile.
+            // Add the select interaction when editable, selectable, or when in read-only verification
+            // mode so that features can be selected and downloaded as GeoJSON/Shapefile.
+            // Note: `selectable` allows selection without enabling modify/transform/draw.
+            if (vm.editable || vm.selectable || window.env?.read_only) {
                 vm.select = vm.initialiseSelectFeatureEvent();
                 extent_interactions.push(vm.select);
             }
@@ -4378,7 +4388,13 @@ export default {
         },
         initialiseSelectFeatureEvent: function () {
             let vm = this;
-            if (!vm.editable && !window.env?.read_only) {
+            // Allow creating a Select interaction when the map is editable,
+            // when selection is enabled (`selectable`), or when running in
+            // read-only mode. Previously this only checked `editable` and
+            // `read_only` which could return `null` while `selectable` was
+            // true causing `null` to be added to the interactions collection
+            // and triggering a `setMap` on null.
+            if (!vm.editable && !vm.selectable && !window.env?.read_only) {
                 return null;
             }
             // A basic style for selected polygons
