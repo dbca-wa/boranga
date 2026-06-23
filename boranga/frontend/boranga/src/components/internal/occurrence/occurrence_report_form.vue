@@ -624,6 +624,7 @@
                         :can-edit-status="false"
                         :is_external="false"
                         :is_internal="true"
+                        :profile="profile"
                         @refresh-from-response="refreshFromResponse"
                         @refresh-occurrence-report="refreshOccurrenceReport()"
                         @save-occurrence-report="save_before_submit()"
