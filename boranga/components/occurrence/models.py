@@ -8108,6 +8108,64 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                     transaction.set_rollback(True)
                     return errors
 
+            # Also accept species/community values supplied against the OccurrenceReport
+            # model (schema often maps these to the parent OCR rather than the OCC child).
+            if (
+                column.django_import_content_type.model == OccurrenceReport._meta.model_name
+                and column.django_import_field_name == "species"
+            ):
+                if sample_value is None:
+                    errors.append(
+                        {
+                            "error_type": "column_validation",
+                            "error_message": (
+                                "Schema validation requires at least one Species with an associated Occurrence "
+                                "to exist in the database. Please create a Species and Occurrence before validating."
+                            ),
+                        }
+                    )
+                    transaction.set_rollback(True)
+                    return errors
+                try:
+                    species_or_community_identifier = Species.objects.get(taxonomy__scientific_name=sample_value)
+                except Species.DoesNotExist:
+                    errors.append(
+                        {
+                            "error_type": "column_validation",
+                            "error_message": f"Species with scientific name '{sample_value}' does not exist.",
+                        }
+                    )
+                    transaction.set_rollback(True)
+                    return errors
+
+            if (
+                column.django_import_content_type.model == OccurrenceReport._meta.model_name
+                and column.django_import_field_name == "community"
+            ):
+                if sample_value is None:
+                    errors.append(
+                        {
+                            "error_type": "column_validation",
+                            "error_message": (
+                                "Schema validation requires at least one Community with an associated Occurrence "
+                                "to exist in the database. Please create a Community and Occurrence before validating."
+                            ),
+                        }
+                    )
+                    transaction.set_rollback(True)
+                    return errors
+                try:
+                    species_or_community_identifier = Community.objects.get(taxonomy__community_common_id=sample_value)
+                except Community.DoesNotExist:
+                    errors.append(
+                        {
+                            "error_type": "column_validation",
+                            "error_message": f"Community with community common ID '{sample_value}' does not exist.",
+                        }
+                    )
+                    transaction.set_rollback(True)
+                    return errors
+
             if (
                 column.django_import_content_type.model == Occurrence._meta.model_name
                 and column.django_import_field_name == "migrated_from_id"
@@ -8968,13 +9026,30 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
                 # group type as the schema and same species or community name as the sample data)
                 group_type = self.schema.group_type
                 random_occurrence = Occurrence.objects.filter(group_type=group_type)
-                filter_field = {"species__taxonomy__scientific_name": species_or_community_identifier}
-                if group_type.name == "community":
-                    filter_field = {"community__taxonomy__community_common_id": species_or_community_identifier}
-                if not random_occurrence.filter(**filter_field).exists():
-                    species_or_community_display = (
-                        species_or_community_identifier if species_or_community_identifier else "Unknown"
+                # species_or_community_identifier may be either a string (e.g. scientific name / community id)
+                # or a Species/Community model instance depending on earlier lookup paths. Normalize
+                # to a plain identifier string for the occurrence lookup.
+                if isinstance(species_or_community_identifier, Species):
+                    identifier_value = (
+                        species_or_community_identifier.taxonomy.scientific_name
+                        if species_or_community_identifier.taxonomy
+                        else None
                     )
+                elif isinstance(species_or_community_identifier, Community):
+                    identifier_value = (
+                        species_or_community_identifier.taxonomy.community_common_id
+                        if species_or_community_identifier.taxonomy
+                        else None
+                    )
+                else:
+                    identifier_value = species_or_community_identifier
+
+                filter_field = {"species__taxonomy__scientific_name": identifier_value}
+                if group_type.name == "community":
+                    filter_field = {"community__taxonomy__community_common_id": identifier_value}
+
+                if not random_occurrence.filter(**filter_field).exists():
+                    species_or_community_display = identifier_value if identifier_value else "Unknown"
                     error_message = (
                         f"No occurrences found where species or community identifier = {species_or_community_display}"
                     )
