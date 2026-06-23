@@ -151,12 +151,7 @@
                                                         v-else
                                                         class="bi bi-card-checklist me-1"
                                                     ></i>
-                                                    Validat<template
-                                                        v-if="validatingSchema"
-                                                        >ing</template
-                                                    ><template v-else
-                                                        >e</template
-                                                    >
+                                                    Validate
                                                 </button>
                                                 <a
                                                     role="button"
