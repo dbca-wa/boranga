@@ -8119,6 +8119,68 @@ class OccurrenceReportBulkImportSchema(BaseModel):
 
         logger.info(f"Sample row: {sample_row}")
 
+        # Normalize generated OCRHabitatCondition percentage fields so the sample
+        # row either has all zeros or totals 100.00. get_sample_value generates
+        # independent random decimals for each field which can sum >100 and
+        # trigger validation failures during schema preview. Adjust the sample
+        # values here only for preview purposes so validation succeeds.
+        try:
+            _hq_pct_fields = [
+                "pristine",
+                "excellent",
+                "very_good",
+                "good",
+                "degraded",
+                "completely_degraded",
+            ]
+            # Collect indices in the sample_row corresponding to the HQ fields
+            hq_indices = []
+            for _idx, _col in enumerate(columns):
+                if (
+                    _col.django_import_content_type.model == OCRHabitatCondition._meta.model_name
+                    and _col.django_import_field_name in _hq_pct_fields
+                ):
+                    hq_indices.append(_idx)
+
+            if hq_indices:
+                total = Decimal("0.00")
+                values = {}
+                for _i in hq_indices:
+                    v = sample_row[_i]
+                    if v is None or v == "":
+                        d = Decimal("0.00")
+                    else:
+                        d = Decimal(str(v))
+                    values[_i] = d
+                    total += d
+
+                if total != Decimal("0.00") and total != Decimal("100.00"):
+                    # Scale non-zero values proportionally to sum to 100.00
+                    if total > Decimal("0.00"):
+                        scale = Decimal("100.00") / total
+                        for _i, _d in values.items():
+                            newv = (_d * scale).quantize(Decimal("0.01"))
+                            # Store as a string to avoid float binary representation
+                            sample_row[_i] = str(newv)
+                        # Fix any residual rounding error so the quantized values sum to exactly 100.00
+                        total_q = sum(Decimal(sample_row[_i]) for _i in hq_indices)
+                        if total_q != Decimal("100.00"):
+                            diff = Decimal("100.00") - total_q
+                            # Prefer adjusting the last non-zero field; fall back to first field
+                            adjusted = False
+                            for _i in reversed(hq_indices):
+                                if Decimal(sample_row[_i]) > Decimal("0.00"):
+                                    sample_row[_i] = str((Decimal(sample_row[_i]) + diff).quantize(Decimal("0.01")))
+                                    adjusted = True
+                                    break
+                            if not adjusted:
+                                sample_row[hq_indices[0]] = str(
+                                    (Decimal(sample_row[hq_indices[0]]) + diff).quantize(Decimal("0.01"))
+                                )
+        except Exception:
+            # Don't let normalization crash validation; fall back to raw sample_row
+            logger.exception("Failed to normalise habitat condition sample values")
+
         preview_import_file = self.preview_import_file
 
         # Write the sample row to the file
