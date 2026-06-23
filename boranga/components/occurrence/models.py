@@ -8198,8 +8198,28 @@ class OccurrenceReportBulkImportSchema(BaseModel):
 
         ocr_migrated_from_ids = []
 
+        # Build minimal structures expected by OccurrenceReportBulkImportTask.process_row
+        ocr_instances = {}
+        schema_columns = list(self.columns.select_related("django_import_content_type").all())
+        col_header_cache = {
+            (
+                col.django_import_content_type.model,
+                col.django_import_field_name,
+            ): col.xlsx_column_header_name
+            for col in schema_columns
+        }
+
         try:
-            import_task.process_row(ocr_migrated_from_ids, 0, headers, row, errors)
+            import_task.process_row(
+                ocr_migrated_from_ids,
+                ocr_instances,
+                0,
+                headers,
+                row,
+                schema_columns,
+                col_header_cache,
+                errors,
+            )
         except Exception as e:
             logger.warning(f"Error processing sample row: {e}")
             logger.warning(traceback.format_exc())
