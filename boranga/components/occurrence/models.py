@@ -1203,7 +1203,7 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
             request,
         )
 
-        send_approve_email_notification(self)
+        send_approve_email_notification(request, self)
 
     @transaction.atomic
     def back_to_assessor(self, request, validated_data):

@@ -423,19 +423,33 @@ def send_approver_decline_email_notification(reason, request, occurrence_report)
     return msg
 
 
-def send_approve_email_notification(occurrence_report):
-    """Recipient: May be internal or external user Note: Currently does not include a url
-    If a url is added in future it must be able to handle both internal and external users
-    """
+def send_approve_email_notification(request, occurrence_report):
+    """Recipient: May be internal or external user"""
 
     email = ApproveSendNotificationEmail()
     email.subject = f"Occurrence Report form Approved: " f"{occurrence_report.occurrence_report_number}"
 
     to_user = EmailUser.objects.get(id=occurrence_report.submitter)
 
+    url_name_prefix = "internal"
+
+    if not is_internal_by_user_id(to_user.id):
+        url_name_prefix = "external"
+
+    url = request.build_absolute_uri(
+        reverse(
+            f"{url_name_prefix}-occurrence-report-detail",
+            kwargs={"occurrence_report_pk": occurrence_report.id},
+        )
+    )
+
+    if not is_internal_by_user_id(to_user.id):
+        url = convert_internal_url_to_external_url(url)
+
     context = {
         "occurrence_report": occurrence_report,
         "submitter": to_user.get_full_name(),
+        "url": url,
     }
 
     cc_list = occurrence_report.approval_details.cc_email
