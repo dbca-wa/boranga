@@ -8,4 +8,8 @@
 
     Occurrence Report form {{occurrence_report.occurrence_report_number}} has been approved
 
+    You can access this Occurrence Report form using the following link:
+
+    {{ url }}
+
 {%  endblock %}

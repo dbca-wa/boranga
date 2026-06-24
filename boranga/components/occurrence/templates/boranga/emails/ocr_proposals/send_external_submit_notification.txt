@@ -11,4 +11,8 @@ Dear {{ submitter }},
     Lodgement date: {{ occurrence_report.lodgement_date }}
 
     You will receive an email notification if there is any incomplete information or documents missing from the occurrence report form.
+
+    You can access this Occurrence Report form using the following link:
+
+    {{ url }}
 {%  endblock %}
