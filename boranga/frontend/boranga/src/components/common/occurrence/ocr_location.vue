@@ -742,7 +742,7 @@ export default {
                     ([
                         constants.GROUPS.OCCURRENCE_ASSESSORS,
                         constants.GROUPS.OCCURRENCE_APPROVERS,
-                    ].some((g) => this.profile?.user.groups.includes(g)) &&
+                    ].some((g) => this.profile?.user?.groups?.includes(g)) &&
                         this.occurrence_report.locked))
             );
         },

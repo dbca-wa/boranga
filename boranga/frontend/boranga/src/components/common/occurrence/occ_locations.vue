@@ -801,13 +801,13 @@ export default {
         isSelectable: function () {
             return (
                 this.isReadOnly &&
-                (this.profile?.user.groups.includes(
+                (this.profile?.user?.groups?.includes(
                     constants.GROUPS.READ_ONLY_USERS
                 ) ||
                     ([
                         constants.GROUPS.OCCURRENCE_ASSESSORS,
                         constants.GROUPS.OCCURRENCE_APPROVERS,
-                    ].some((g) => this.profile?.user.groups.includes(g)) &&
+                    ].some((g) => this.profile?.user?.groups?.includes(g)) &&
                         this.occurrence_report.locked))
             );
         },
