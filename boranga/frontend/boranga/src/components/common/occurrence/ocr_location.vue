@@ -739,10 +739,10 @@ export default {
                 (this.profile?.user.groups.includes(
                     constants.GROUPS.READ_ONLY_USERS
                 ) ||
-                    (this.profile?.user.groups.every([
+                    ([
                         constants.GROUPS.OCCURRENCE_ASSESSORS,
                         constants.GROUPS.OCCURRENCE_APPROVERS,
-                    ]) &&
+                    ].some((g) => this.profile?.user.groups.includes(g)) &&
                         this.occurrence_report.locked))
             );
         },
