@@ -851,7 +851,7 @@ class SpeciesFilterBackend(DatatablesFilterBackend):
                 queryset.filter(
                     conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
                 )
-                .exclude(conservation_status__other_conservation_assessment__isnull=True)
+                .exclude(conservation_status__other_conservation_assessments__isnull=True)
                 .distinct()
             )
 
@@ -1046,7 +1046,7 @@ class CommunitiesFilterBackend(DatatablesFilterBackend):
                 queryset.filter(
                     conservation_status__processing_status=ConservationStatus.PROCESSING_STATUS_APPROVED,
                 )
-                .exclude(conservation_status__other_conservation_assessment__isnull=True)
+                .exclude(conservation_status__other_conservation_assessments__isnull=True)
                 .distinct()
             )
 

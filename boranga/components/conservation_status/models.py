@@ -568,11 +568,10 @@ class ConservationStatus(LockableModel, SubmitterInformationModelMixin, Revision
         blank=True,
         related_name="curr_commonwealth_conservation_categories",
     )
-    other_conservation_assessment = models.ForeignKey(
+    other_conservation_assessments = models.ManyToManyField(
         OtherConservationAssessmentList,
-        on_delete=models.PROTECT,
         blank=True,
-        null=True,
+        related_name="curr_other_conservation_assessments",
     )
     conservation_criteria = models.CharField(max_length=100, blank=True, null=True)
     cam_mou = models.BooleanField(null=True, blank=True)

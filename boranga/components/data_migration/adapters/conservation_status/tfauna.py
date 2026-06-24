@@ -43,7 +43,6 @@ from boranga.components.conservation_status.models import (
     CommonwealthConservationList,
     ConservationChangeCode,
     ConservationStatus,
-    OtherConservationAssessmentList,
 )
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
@@ -108,7 +107,6 @@ IUCN_VERSION_TRANSFORM = build_legacy_map_transform(
 )
 
 CHANGE_CODE_LOOKUP = fk_lookup(ConservationChangeCode, "code")
-OTHER_ASSESSMENT_LOOKUP = fk_lookup(OtherConservationAssessmentList, "code")
 DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 
 PIPELINES = {
@@ -123,7 +121,7 @@ PIPELINES = {
     "commonwealth_conservation_category": ["strip", "blank_to_none"],
     "iucn_version": ["strip", "blank_to_none", IUCN_VERSION_TRANSFORM],
     "change_code": ["strip", "blank_to_none", CHANGE_CODE_LOOKUP],
-    "other_conservation_assessment": ["strip", "blank_to_none", OTHER_ASSESSMENT_LOOKUP],
+    "other_conservation_assessment": ["strip", "blank_to_none"],
     "conservation_criteria": ["strip", "blank_to_none"],
     "processing_status": ["strip", "blank_to_none", "required"],
     "effective_from_date": ["strip", "smart_date_parse"],

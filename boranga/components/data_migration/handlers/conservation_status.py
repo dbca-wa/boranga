@@ -220,6 +220,9 @@ class ConservationStatusImporter(BaseSheetImporter):
         # Map migrated_from_id -> [code, ...] for TFAUNA M2M
         # (populated during the row loop; applied after bulk_create)
         tfauna_m2m_map: dict[str, list[str]] = {}
+        # Map migrated_from_id -> code for other_conservation_assessments M2M
+        # (populated during the row loop; applied after bulk_create)
+        oca_m2m_map: dict[str, str] = {}
 
         # Cache EmailUserRO full-name lookups so repeated submitters don't
         # trigger redundant external DB queries.
@@ -342,7 +345,6 @@ class ConservationStatusImporter(BaseSheetImporter):
                     wa_legislative_category=row.get("wa_legislative_category"),  # Transformed to object
                     iucn_version_id=row.get("iucn_version"),
                     change_code_id=row.get("change_code"),
-                    other_conservation_assessment_id=row.get("other_conservation_assessment"),
                     conservation_criteria=row.get("conservation_criteria"),
                     review_due_date=row.get("review_due_date"),
                     effective_from=row.get("effective_from_date"),
@@ -372,6 +374,11 @@ class ConservationStatusImporter(BaseSheetImporter):
                         codes = [c.strip() for c in str(raw_codes).split(",") if c.strip()]
                         if codes:
                             tfauna_m2m_map[row.get("migrated_from_id", "")] = codes
+
+                # Collect other_conservation_assessment code for M2M assignment
+                raw_oca = row.get("other_conservation_assessment")
+                if raw_oca:
+                    oca_m2m_map[row.get("migrated_from_id", "")] = str(raw_oca).strip()
 
                 cs_objects.append(cs)
 
@@ -457,6 +464,38 @@ class ConservationStatusImporter(BaseSheetImporter):
                     "Set commonwealth_conservation_categories M2M for %d TFAUNA records (%d through rows)",
                     len(m2m_id_map),
                     len(through_records),
+                )
+
+        # Set other_conservation_assessments M2M for all records that have an OCA code.
+        # oca_m2m_map holds {migrated_from_id: code} collected during the row loop.
+        if oca_m2m_map and cs_objects:
+            from boranga.components.conservation_status.models import OtherConservationAssessmentList
+
+            OcaThroughModel = ConservationStatus.other_conservation_assessments.through
+            oca_id_map = {cs.migrated_from_id: cs.pk for cs in created_cs if cs.migrated_from_id in oca_m2m_map}
+            all_oca_codes = set(oca_m2m_map.values())
+            oca_code_to_pk = dict(
+                OtherConservationAssessmentList.objects.filter(code__in=all_oca_codes).values_list("code", "id")
+            )
+            oca_through_records = []
+            for mig_id, code in oca_m2m_map.items():
+                cs_pk = oca_id_map.get(mig_id)
+                if not cs_pk:
+                    continue
+                oca_pk = oca_code_to_pk.get(code)
+                if oca_pk:
+                    oca_through_records.append(
+                        OcaThroughModel(
+                            conservationstatus_id=cs_pk,
+                            otherconservationassessmentlist_id=oca_pk,
+                        )
+                    )
+            if oca_through_records:
+                OcaThroughModel.objects.bulk_create(oca_through_records, ignore_conflicts=True)
+                logger.info(
+                    "Set other_conservation_assessments M2M for %d records (%d through rows)",
+                    len(oca_id_map),
+                    len(oca_through_records),
                 )
 
         # ── Task 11854: post-persist Species processing_status + publishing ──

@@ -110,9 +110,7 @@
                     </div>
                 </div>
                 <div
-                    v-if="
-                        conservation_status?.other_conservation_assessment_code
-                    "
+                    v-if="conservation_status?.other_conservation_assessments"
                     class="row mb-3"
                 >
                     <label
@@ -124,7 +122,9 @@
                         <input
                             id="other_conservation_assessment"
                             class="form-control"
-                            :value="`${conservation_status.other_conservation_assessment_code} - ${conservation_status.other_conservation_assessment_label}`"
+                            :value="
+                                conservation_status.other_conservation_assessments
+                            "
                         />
                     </div>
                 </div>

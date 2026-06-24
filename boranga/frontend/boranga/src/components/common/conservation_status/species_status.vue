@@ -967,68 +967,56 @@
                             >Other Conservation Assessment:</label
                         >
                         <div class="col-sm-7">
-                            <template v-if="!isReadOnly">
-                                <template
-                                    v-if="
-                                        other_conservation_assessments &&
-                                        other_conservation_assessments.length >
-                                            0 &&
-                                        conservation_status_obj.other_conservation_assessment_id &&
-                                        !other_conservation_assessments
-                                            .map((d) => d.id)
-                                            .includes(
-                                                conservation_status_obj.other_conservation_assessment_id
-                                            )
-                                    "
-                                >
-                                    <input
-                                        v-if="
-                                            conservation_status_obj.other_conservation_assessment
-                                        "
-                                        type="text"
-                                        class="form-control mb-3"
-                                        :value="
-                                            conservation_status_obj.other_conservation_assessment +
-                                            ' (Now Archived)'
-                                        "
-                                        disabled
-                                    />
-                                    <div class="mb-3 text-muted">
-                                        Change other conservation assessment to:
+                            <Multiselect
+                                id="proposed_other_conservation_assessment"
+                                ref="proposed_other_conservation_assessment"
+                                v-model="
+                                    conservation_status_obj.other_conservation_assessment_ids
+                                "
+                                mode="tags"
+                                :options="other_conservation_assessments"
+                                :key="other_conservation_assessments.length"
+                                value-prop="id"
+                                track-by="id"
+                                label="label"
+                                :placeholder="'Select Other Conservation Assessments'"
+                                :disabled="isReadOnly"
+                                :searchable="true"
+                                :can-clear="true"
+                                :close-on-select="false"
+                            >
+                                <!-- 1. Customize how the items look inside the dropdown menu list -->
+                                <template #option="{ option }">
+                                    <span class="dropdown-combined-label">
+                                        <strong>{{ option.code }}</strong> -
+                                        {{ option.label }}
+                                    </span>
+                                </template>
+
+                                <!-- 2. Customize how the selected items look inside the input box tags -->
+                                <template #tag="{ option, handleTagRemove }">
+                                    <div
+                                        class="multiselect-tag is-user-selectable"
+                                    >
+                                        <span
+                                            >{{ option.code }} -
+                                            {{ option.label }}</span
+                                        >
+                                        <!-- This button preserves the native "x" click-to-delete action -->
+                                        <span
+                                            v-if="!isReadOnly"
+                                            class="multiselect-tag-remove"
+                                            @mousedown.prevent="
+                                                handleTagRemove(option, $event)
+                                            "
+                                        >
+                                            <span
+                                                class="multiselect-tag-remove-icon"
+                                            ></span>
+                                        </span>
                                     </div>
                                 </template>
-                                <select
-                                    id="proposed_other_conservation_assessment"
-                                    v-model="
-                                        conservation_status_obj.other_conservation_assessment_id
-                                    "
-                                    :disabled="isReadOnly"
-                                    class="form-select"
-                                >
-                                    <option :value="null">
-                                        &mdash; None &mdash;
-                                    </option>
-                                    <option
-                                        v-for="option in other_conservation_assessments"
-                                        :key="option.id"
-                                        :value="option.id"
-                                    >
-                                        {{ option.code }} - {{ option.label }}
-                                    </option>
-                                </select>
-                            </template>
-                            <template v-else>
-                                <input
-                                    class="form-control"
-                                    type="text"
-                                    :disabled="true"
-                                    :value="
-                                        conservation_status_obj.other_conservation_assessment
-                                            ? conservation_status_obj.other_conservation_assessment
-                                            : '&mdash; None &mdash;'
-                                    "
-                                />
-                            </template>
+                            </Multiselect>
                         </div>
                     </div>
                     <div class="row mb-3">
