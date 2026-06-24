@@ -1703,6 +1703,12 @@ export default {
             }
             return false;
         },
+        isAssignedApprover: function () {
+            return (
+                this.conservation_status_obj.assigned_approver ==
+                this.conservation_status_obj.current_assessor.id
+            );
+        },
         isReadOnly: function () {
             if (this.is_external) {
                 return !this.conservation_status_obj.can_user_edit;
@@ -1714,9 +1720,10 @@ export default {
                 return true;
             } else {
                 if (
-                    ['Ready For Agenda'].includes(
+                    (['Ready For Agenda'].includes(
                         this.conservation_status_obj.processing_status
-                    ) ||
+                    ) &&
+                        !this.isAssignedApprover) ||
                     this.conservation_status_obj.locked
                 ) {
                     return true;
