@@ -2485,7 +2485,7 @@ class SaveOCRIdentificationSerializer(BaseModelSerializer):
 class SaveOCRLocationSerializer(BaseModelSerializer):
     region_id = serializers.IntegerField(required=False, allow_null=True)
     district_id = serializers.IntegerField(required=False, allow_null=True)
-    occurrence_report_id = serializers.IntegerField(required=True, allow_null=False)
+    occurrence_report_id = serializers.IntegerField(required=False, allow_null=True)
     coordinate_source_id = serializers.IntegerField(required=False, allow_null=True)
     location_accuracy_id = serializers.IntegerField(required=False, allow_null=True)
     has_boundary = serializers.SerializerMethodField()
