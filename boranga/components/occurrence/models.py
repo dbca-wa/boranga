@@ -973,7 +973,7 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
         send_approver_decline_email_notification(reason, request, self)
 
     @transaction.atomic
-    def decline(self, request, details):
+    def decline(self, request, data):
         if not self.can_assess(request):
             raise exceptions.OccurrenceReportNotAuthorized()
 
@@ -983,7 +983,20 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
                 f"{OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER}"
             )
 
-        reason = details.get("reason")
+        # The approver has the ability to modify these two fields
+        declined_details = self.declined_details
+        reason = data.get("reason")
+        cc_email = data.get("cc_email", None)
+
+        updated_fields = []
+        if reason != declined_details.reason:
+            declined_details.reason = reason
+            updated_fields.append("reason")
+        if cc_email != declined_details.cc_email:
+            declined_details.cc_email = cc_email
+            updated_fields.append("cc_email")
+        if updated_fields:
+            declined_details.save(update_fields=updated_fields)
 
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_DECLINED
         self.customer_status = OccurrenceReport.CUSTOMER_STATUS_DECLINED
@@ -1136,7 +1149,7 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
         send_approver_approve_email_notification(request, self)
 
     @transaction.atomic
-    def approve(self, request):
+    def approve(self, request, data):
         if not self.can_assess(request):
             raise exceptions.OccurrenceReportNotAuthorized()
 
@@ -1148,6 +1161,29 @@ class OccurrenceReport(LockableModel, SubmitterInformationModelMixin, Revisioned
 
         if not self.approval_details:
             raise ValidationError(f"Approval details are required to approve Occurrence Report {self}")
+
+        # The approver has the ability to modify these two fields
+        approval_details = self.approval_details
+        new_occurrence_name = data.get("new_occurrence_name")
+        details = data.get("details")
+        copy_ocr_comments_to_occ_comments = data.get("copy_ocr_comments_to_occ_comments")
+        cc_email = data.get("cc_email", None)
+
+        updated_fields = []
+        if new_occurrence_name != approval_details.new_occurrence_name:
+            approval_details.new_occurrence_name = new_occurrence_name
+            updated_fields.append("new_occurrence_name")
+        if details != approval_details.details:
+            approval_details.details = details
+            updated_fields.append("details")
+        if cc_email != approval_details.cc_email:
+            approval_details.cc_email = cc_email
+            updated_fields.append("cc_email")
+        if copy_ocr_comments_to_occ_comments != approval_details.copy_ocr_comments_to_occ_comments:
+            approval_details.copy_ocr_comments_to_occ_comments = copy_ocr_comments_to_occ_comments
+            updated_fields.append("copy_ocr_comments_to_occ_comments")
+        if updated_fields:
+            approval_details.save(update_fields=updated_fields)
 
         self.processing_status = OccurrenceReport.PROCESSING_STATUS_APPROVED
         self.customer_status = OccurrenceReport.CUSTOMER_STATUS_APPROVED

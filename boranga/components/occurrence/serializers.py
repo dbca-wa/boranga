@@ -3085,10 +3085,11 @@ class BackToAssessorSerializer(BaseSerializer):
 
 
 class ProposeApproveSerializer(BaseSerializer):
-    occurrence_id = serializers.IntegerField(allow_null=True)
+    occurrence_id = serializers.IntegerField(required=False, allow_null=True)
     new_occurrence_name = serializers.CharField(allow_blank=True)
     details = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     cc_email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    copy_ocr_comments_to_occ_comments = serializers.BooleanField(required=False, default=True)
 
 
 class SaveOccurrenceSerializer(BaseModelSerializer):

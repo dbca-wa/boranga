@@ -2001,7 +2001,9 @@ class OccurrenceReportViewSet(
 
         original_occ = instance.occurrence
 
-        instance.approve(request)
+        serializer = ProposeApproveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance.approve(request, serializer.validated_data)
 
         if original_occ and original_occ.id != instance.occurrence.id:
             original_occ.check_ocr_count_for_discard(request)
