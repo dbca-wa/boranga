@@ -582,7 +582,7 @@ class Species(RevisionedMixin):
     submitter = models.IntegerField(null=True, blank=True)  # EmailUserRO
     # parents will the original species  from the split/combine functionality
     parent_species = models.ManyToManyField("self", blank=True)
-    comment = models.CharField(max_length=500, null=True, blank=True)
+    comment = models.TextField(null=True, blank=True)
     department_file_numbers = models.CharField(max_length=512, null=True, blank=True)
     fauna_group = models.ForeignKey(
         FaunaGroup,
