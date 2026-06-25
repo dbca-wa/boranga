@@ -569,7 +569,7 @@ class Species(RevisionedMixin):
     districts = models.ManyToManyField(District, blank=True, related_name="species_districts")
     last_data_curation_date = models.DateField(blank=True, null=True)
     conservation_plan_exists = models.BooleanField(default=False)
-    conservation_plan_reference = models.CharField(max_length=500, null=True, blank=True)
+    conservation_plan_reference = models.TextField(null=True, blank=True)
     processing_status = models.CharField(
         "Processing Status",
         max_length=30,
@@ -729,7 +729,6 @@ class Species(RevisionedMixin):
         """
         officer_view_state = [
             Species.PROCESSING_STATUS_DRAFT,
-            Species.PROCESSING_STATUS_HISTORICAL,
         ]
         if self.processing_status in officer_view_state:
             return False
@@ -815,7 +814,6 @@ class Species(RevisionedMixin):
 
     def can_user_save(self, request):
         user_closed_state = [
-            Species.PROCESSING_STATUS_HISTORICAL,
             Species.PROCESSING_STATUS_DISCARDED,
         ]
 
@@ -1698,7 +1696,6 @@ class Community(RevisionedMixin):
 
     def can_user_save(self, request):
         user_closed_state = [
-            Community.PROCESSING_STATUS_HISTORICAL,
             Community.PROCESSING_STATUS_DISCARDED,
         ]
 
