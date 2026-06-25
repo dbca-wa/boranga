@@ -1320,55 +1320,48 @@
                     <div
                         v-if="
                             conservation_status_obj.current_conservation_status
-                                .commonwealth_conservation_category_id
+                                .commonwealth_conservation_categories
                         "
                         class="row mb-3"
                     >
                         <label
-                            for="current_commonwealth_conservation_category"
+                            for="current_commonwealth_conservation_categories"
                             class="col-sm-5 col-form-label"
                             >Commonwealth Conservation List:</label
                         >
                         <div class="col-sm-7">
-                            <select
-                                id="current_commonwealth_conservation_category"
+                            <input
+                                id="current_commonwealth_conservation_categories"
                                 v-model="
                                     conservation_status_obj
                                         .current_conservation_status
-                                        .commonwealth_conservation_category_id
+                                        .commonwealth_conservation_categories
                                 "
                                 :disabled="true"
-                                class="form-select"
-                            >
-                                <option
-                                    v-for="option in commonwealth_conservation_categories"
-                                    :key="option.id"
-                                    :value="option.id"
-                                >
-                                    {{ option.code }}
-                                </option>
-                            </select>
+                                type="text"
+                                class="form-control"
+                            />
                         </div>
                     </div>
                     <div
                         v-if="
                             conservation_status_obj.current_conservation_status
-                                .other_conservation_assessment
+                                .other_conservation_assessments
                         "
                         class="row mb-3"
                     >
                         <label
-                            for="current_other_conservation_assessment"
+                            for="current_other_conservation_assessments"
                             class="col-sm-5 col-form-label"
-                            >Other Conservation Assessment:</label
+                            >Other Conservation Assessments:</label
                         >
                         <div class="col-sm-7">
                             <input
-                                id="current_other_conservation_assessment"
+                                id="current_other_conservation_assessments"
                                 v-model="
                                     conservation_status_obj
                                         .current_conservation_status
-                                        .other_conservation_assessment
+                                        .other_conservation_assessments
                                 "
                                 :disabled="true"
                                 type="text"

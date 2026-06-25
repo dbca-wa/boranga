@@ -101,12 +101,13 @@
                         >Commonwealth Conservation Categories</label
                     >
                     <div class="col-sm-8">
-                        <span
-                            v-for="category in conservation_status.commonwealth_conservation_categories"
-                            :key="category.code"
-                        >
-                            {{ category }}
-                        </span>
+                        <input
+                            id="other_conservation_assessments"
+                            class="form-control"
+                            :value="
+                                conservation_status.commonwealth_conservation_categories
+                            "
+                        />
                     </div>
                 </div>
                 <div
@@ -114,13 +115,13 @@
                     class="row mb-3"
                 >
                     <label
-                        for="other_conservation_assessment"
+                        for="other_conservation_assessments"
                         class="col-sm-4 col-form-label"
                         >Other Conservation Assessment</label
                     >
                     <div class="col-sm-8">
                         <input
-                            id="other_conservation_assessment"
+                            id="other_conservation_assessments"
                             class="form-control"
                             :value="
                                 conservation_status.other_conservation_assessments

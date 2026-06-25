@@ -1040,11 +1040,11 @@ export default {
         },
         column_other_conservation_assessment: function () {
             return {
-                data: 'other_conservation_assessment',
+                data: 'other_conservation_assessments',
                 orderable: true,
                 searchable: true,
                 visible: true,
-                name: 'other_conservation_assessment__code',
+                name: 'other_conservation_assessments__code',
             };
         },
         column_conservation_criteria: function () {

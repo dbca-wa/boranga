@@ -83,12 +83,13 @@ class BasicConservationStatusSerializer(BaseModelSerializer):
         read_only_fields = fields
 
     def get_commonwealth_conservation_categories(self, obj):
-        if obj.commonwealth_conservation_categories:
-            for category in obj.commonwealth_conservation_categories.all():
-                if category.code and category.label:
-                    return f"{category.code} - {category.label}"
-                elif category.code:
-                    return category.code
+        if obj.commonwealth_conservation_categories.exists():
+            return ", ".join(obj.commonwealth_conservation_categories.values_list("code", flat=True))
+        return ""
+
+    def get_other_conservation_assessments(self, obj):
+        if obj.other_conservation_assessments.exists():
+            return ", ".join(obj.other_conservation_assessments.values_list("code", flat=True))
         return ""
 
     def get_under_review(self, obj):
@@ -891,6 +892,7 @@ class CurrentConservationStatusSerializer(BaseModelSerializer):
     without having to add lots of serializer method fields."""
 
     commonwealth_conservation_categories = serializers.SerializerMethodField(read_only=True)
+    other_conservation_assessments = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = ConservationStatus
@@ -904,17 +906,17 @@ class CurrentConservationStatusSerializer(BaseModelSerializer):
             "wa_priority_category_id",
             "commonwealth_conservation_categories",
             "other_conservation_assessments",
-            "other_conservation_assessment_ids",
             "conservation_criteria",
         ]
 
     def get_commonwealth_conservation_categories(self, obj):
-        if obj.commonwealth_conservation_categories:
-            for category in obj.commonwealth_conservation_categories.all():
-                if category.code and category.label:
-                    return f"{category.code} - {category.label}"
-                elif category.code:
-                    return category.code
+        if obj.commonwealth_conservation_categories.exists():
+            return ", ".join(obj.commonwealth_conservation_categories.values_list("code", flat=True))
+        return ""
+
+    def get_other_conservation_assessments(self, obj):
+        if obj.other_conservation_assessments.exists():
+            return ", ".join(obj.other_conservation_assessments.values_list("code", flat=True))
         return ""
 
 

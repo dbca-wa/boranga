@@ -968,7 +968,7 @@ export default {
         },
         column_other_conservation_assessment: function () {
             return {
-                data: 'other_conservation_assessment',
+                data: 'other_conservation_assessments',
                 orderable: false,
                 searchable: false,
                 visible: true,
