@@ -5006,6 +5006,8 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "processing_status": Occurrence.PROCESSING_STATUS_ACTIVE,
                     "comment": f"This Occurrence was auto-generated from a migrated Occurrence Report Form: ORF{ocr.pk} (migrated_from_id: {ocr.migrated_from_id})",
                     "locked": True,
+                    "last_modified_by": ocr.last_modified_by,
+                    "datetime_updated": ocr.datetime_updated,
                 }
                 if getattr(ctx, "migration_run", None) is not None:
                     defaults["migration_run"] = ctx.migration_run
