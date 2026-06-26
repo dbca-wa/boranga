@@ -1,0 +1,184 @@
+[
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 1,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "code": "ActionPlan LC",
+      "label": "Action Plan Least Concern",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 2,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "code": "ActionPlan EN",
+      "label": "Action Plan Endangered",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 3,
+    "fields": {
+      "order": 2,
+      "archived": false,
+      "code": "ActionPlan NT",
+      "label": "ActionPlan Near Threatened",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 4,
+    "fields": {
+      "order": 3,
+      "archived": false,
+      "code": "ActionPlan VU",
+      "label": "ActionPlan Vulnerable",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 5,
+    "fields": {
+      "order": 4,
+      "archived": false,
+      "code": "ActionPlan DD",
+      "label": "ActionPlan Data Deficient",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 6,
+    "fields": {
+      "order": 5,
+      "archived": false,
+      "code": "ActionPlan EX",
+      "label": "ActionPlan Extinct",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 7,
+    "fields": {
+      "order": 6,
+      "archived": false,
+      "code": "ActionPlan CR",
+      "label": "ActionPlan Critically Endangered",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 8,
+    "fields": {
+      "order": 7,
+      "archived": false,
+      "code": "Red List LC",
+      "label": "Red List  Least Concern",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 9,
+    "fields": {
+      "order": 8,
+      "archived": false,
+      "code": "Red List EN",
+      "label": "Red List Endangered",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 10,
+    "fields": {
+      "order": 9,
+      "archived": false,
+      "code": "Red List CR",
+      "label": "Red List Critically Endangered",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 11,
+    "fields": {
+      "order": 10,
+      "archived": false,
+      "code": "Red List VU",
+      "label": "Red List Vulnerable",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 12,
+    "fields": {
+      "order": 11,
+      "archived": false,
+      "code": "Red List NT",
+      "label": "Red List Near Threatened",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 13,
+    "fields": {
+      "order": 12,
+      "archived": false,
+      "code": "Red List DD",
+      "label": "Red List Data Deficient",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.otherconservationassessmentlist",
+    "pk": 14,
+    "fields": {
+      "order": 13,
+      "archived": false,
+      "code": "Red List EX",
+      "label": "Red List Extinct",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  }
+]
