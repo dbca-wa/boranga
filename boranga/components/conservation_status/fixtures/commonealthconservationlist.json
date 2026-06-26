@@ -1,0 +1,132 @@
+[
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 1,
+    "fields": {
+      "order": 0,
+      "archived": false,
+      "code": "CR",
+      "label": "Critically Endangered",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": true
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 2,
+    "fields": {
+      "order": 1,
+      "archived": false,
+      "code": "EN",
+      "label": "Endangered",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": true
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 3,
+    "fields": {
+      "order": 2,
+      "archived": false,
+      "code": "MI",
+      "label": "Migratory",
+      "applies_to_flora": false,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 4,
+    "fields": {
+      "order": 3,
+      "archived": false,
+      "code": "VU",
+      "label": "Vulnerable",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": true
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 5,
+    "fields": {
+      "order": 4,
+      "archived": false,
+      "code": "CD",
+      "label": "Conservation Dependent",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 6,
+    "fields": {
+      "order": 5,
+      "archived": false,
+      "code": "EX",
+      "label": "Extinct",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 7,
+    "fields": {
+      "order": 6,
+      "archived": false,
+      "code": "EW",
+      "label": "Extinct in the wild",
+      "applies_to_flora": true,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 8,
+    "fields": {
+      "order": 7,
+      "archived": false,
+      "code": "EPBC",
+      "label": "Environment Protection and Biodiversity Conservation Act 1999",
+      "applies_to_flora": false,
+      "applies_to_fauna": false,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 9,
+    "fields": {
+      "order": 8,
+      "archived": false,
+      "code": "MA",
+      "label": "Marine",
+      "applies_to_flora": false,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  },
+  {
+    "model": "boranga.commonwealthconservationlist",
+    "pk": 10,
+    "fields": {
+      "order": 9,
+      "archived": false,
+      "code": "CT",
+      "label": "Cetacean",
+      "applies_to_flora": false,
+      "applies_to_fauna": true,
+      "applies_to_communities": false
+    }
+  }
+]
