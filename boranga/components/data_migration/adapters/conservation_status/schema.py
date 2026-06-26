@@ -35,7 +35,7 @@ COLUMN_MAP = {
     "SpCode": "migrated_from_id",
     "species_taxonomy": "species_taxonomy_taxon_name_id",  # Nomos taxon_name_id (TFAUNA)
     "TAXONID": "species_taxonomy_taxon_name_id",  # Nomos taxon_name_id (TPFL)
-    "other_conservation_assessment": "other_conservation_assessment",
+    "Other_conservation_assessment": "other_conservation_assessment",
     "Gazettal comments": "gazettal_comments",
     "Review Comments": "review_comments",
     "Commonwealth Comments": "commonwealth_comments",
