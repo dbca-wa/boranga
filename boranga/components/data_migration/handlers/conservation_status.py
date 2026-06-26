@@ -375,10 +375,18 @@ class ConservationStatusImporter(BaseSheetImporter):
                         if codes:
                             tfauna_m2m_map[row.get("migrated_from_id", "")] = codes
 
-                # Collect other_conservation_assessment code for M2M assignment
-                raw_oca = row.get("other_conservation_assessment")
-                if raw_oca:
-                    oca_m2m_map[row.get("migrated_from_id", "")] = str(raw_oca).strip()
+                if _src == Source.TFAUNA.value:
+                    # Collect other_conservation_assessment code for M2M assignment
+                    raw_assessments = row.get("other_conservation_assessment")
+                    if raw_assessments:
+                        assessments = [a.strip() for a in str(raw_assessments).split(",") if a.strip()]
+                        if assessments:
+                            oca_m2m_map[row.get("migrated_from_id", "")] = assessments
+                else:
+                    # Collect other_conservation_assessment code for M2M assignment
+                    raw_oca = row.get("other_conservation_assessment")
+                    if raw_oca:
+                        oca_m2m_map[row.get("migrated_from_id", "")] = str(raw_oca).strip()
 
                 cs_objects.append(cs)
 
@@ -473,23 +481,27 @@ class ConservationStatusImporter(BaseSheetImporter):
 
             OcaThroughModel = ConservationStatus.other_conservation_assessments.through
             oca_id_map = {cs.migrated_from_id: cs.pk for cs in created_cs if cs.migrated_from_id in oca_m2m_map}
-            all_oca_codes = set(oca_m2m_map.values())
+            all_oca_codes = {code for codes in oca_m2m_map.values() for code in codes}
+            logger.debug(f"\n\n\nResolving OtherConservationAssessmentList codes: {all_oca_codes}\n\n\n")
             oca_code_to_pk = dict(
                 OtherConservationAssessmentList.objects.filter(code__in=all_oca_codes).values_list("code", "id")
             )
+            logger.debug(f"\n\n\nResolved OtherConservationAssessmentList codes to PKs: {oca_code_to_pk}\n\n\n")
             oca_through_records = []
-            for mig_id, code in oca_m2m_map.items():
+            for mig_id, codes in oca_m2m_map.items():
                 cs_pk = oca_id_map.get(mig_id)
                 if not cs_pk:
                     continue
-                oca_pk = oca_code_to_pk.get(code)
-                if oca_pk:
-                    oca_through_records.append(
-                        OcaThroughModel(
-                            conservationstatus_id=cs_pk,
-                            otherconservationassessmentlist_id=oca_pk,
+                for code in codes:
+                    logger.debug(f"Setting M2M for CS {cs_pk} -> OCA code {code}")
+                    oca_pk = oca_code_to_pk.get(code)
+                    if oca_pk:
+                        oca_through_records.append(
+                            OcaThroughModel(
+                                conservationstatus_id=cs_pk,
+                                otherconservationassessmentlist_id=oca_pk,
+                            )
                         )
-                    )
             if oca_through_records:
                 OcaThroughModel.objects.bulk_create(oca_through_records, ignore_conflicts=True)
                 logger.info(
