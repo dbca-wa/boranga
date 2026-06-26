@@ -692,10 +692,12 @@ class Species(RevisionedMixin):
 
     @property
     def can_user_edit(self):
-        return self.processing_status in [
+        approver_editable_state = [
             Species.PROCESSING_STATUS_DRAFT,
             Species.PROCESSING_STATUS_DISCARDED,
+            Species.PROCESSING_STATUS_HISTORICAL,
         ]
+        return self.processing_status in approver_editable_state
 
     @property
     def can_user_rename(self):
