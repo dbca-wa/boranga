@@ -1690,7 +1690,6 @@ class Community(RevisionedMixin):
         """
         officer_view_state = [
             Community.PROCESSING_STATUS_DRAFT,
-            Community.PROCESSING_STATUS_HISTORICAL,
         ]
         if self.processing_status in officer_view_state:
             return False
