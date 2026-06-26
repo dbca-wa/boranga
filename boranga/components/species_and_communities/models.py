@@ -1669,6 +1669,7 @@ class Community(RevisionedMixin):
         return self.processing_status in [
             Community.PROCESSING_STATUS_DRAFT,
             Community.PROCESSING_STATUS_DISCARDED,
+            Community.PROCESSING_STATUS_HISTORICAL,
         ]
 
     @property
