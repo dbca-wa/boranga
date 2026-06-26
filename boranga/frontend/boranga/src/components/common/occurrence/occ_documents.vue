@@ -32,6 +32,10 @@
             :is_internal="is_internal"
             @refresh-from-response="refreshFromResponse"
         ></DocumentDetail>
+        <ViewDocument
+            ref="view_document"
+            :is_internal="is_internal"
+        ></ViewDocument>
         <div v-if="occurenceDocumentHistoryId">
             <OccurenceDocumentHistory
                 ref="occ_document_history"
@@ -45,6 +49,7 @@
 <script>
 import { v4 as uuid } from 'uuid';
 import DocumentDetail from '@/components/common/add_document.vue';
+import ViewDocument from '@/components/common/view_document.vue';
 import datatable from '@vue-utils/datatable.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
 import HelpText from '@/components/common/help_text.vue';
@@ -58,6 +63,7 @@ export default {
         HelpText,
         datatable,
         DocumentDetail,
+        ViewDocument,
         OccurenceDocumentHistory,
     },
     props: {
@@ -250,7 +256,7 @@ export default {
                         data: 'id',
                         mRender: function (data, type, full) {
                             let links = '';
-
+                            links += `<a href='#' data-view-document='${full.id}'>View</a><br>`;
                             if (!vm.isReadOnly) {
                                 if (full.active) {
                                     links += `<a href='#${full.id}' data-edit-document='${full.id}'>Edit</a><br/>`;
@@ -310,6 +316,10 @@ export default {
             this.$refs.document_detail.document_action = 'add';
             this.$refs.document_detail.title = 'Add a new Document';
             this.$refs.document_detail.isModalOpen = true;
+        },
+        viewDocument: function (document) {
+            this.$refs.view_document.document = document;
+            this.$refs.view_document.isModalOpen = true;
         },
         editDocument: function (id) {
             this.$refs.document_detail.document_id = id;
@@ -466,6 +476,17 @@ export default {
         },
         addEventListeners: function () {
             let vm = this;
+            vm.$refs.documents_datatable.vmDataTable.on(
+                'click',
+                'a[data-view-document]',
+                function (e) {
+                    e.preventDefault();
+                    var document = vm.$refs.documents_datatable.vmDataTable
+                        .row($(this).parent())
+                        .data();
+                    vm.viewDocument(document);
+                }
+            );
             vm.$refs.documents_datatable.vmDataTable.on(
                 'click',
                 'a[data-edit-document]',

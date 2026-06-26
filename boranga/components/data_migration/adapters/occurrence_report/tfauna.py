@@ -15,6 +15,7 @@ from pyproj import Transformer
 
 from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
+    TransformContext,
     _result,
     build_legacy_map_transform,
     date_from_datetime_iso_local_factory,
@@ -23,6 +24,7 @@ from boranga.components.data_migration.registry import (
     emailuser_object_by_legacy_username_with_fallback_factory,
     fk_lookup_static,
     geometry_from_coords_factory,
+    registry,
     static_value_factory,
     taxonomy_lookup_legacy_id_mapping_species,
 )
@@ -91,6 +93,27 @@ LOCATION_ACCURACY_TRANSFORM = build_legacy_map_transform(
     required=False,
 )
 
+# TenCode → canonical display name (e.g. "NP" → "National Park").
+TEN_CODE_CANONICAL = build_legacy_map_transform(
+    "TFAUNA",
+    "TenCode",
+    required=False,
+    return_type="canonical",
+)
+
+LANDFORM_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Landform",
+    required=False,
+)
+
+VEGETATION_TYPE_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "VegType",
+    required=False,
+    return_type="canonical",
+)
+
 # ── Dead/alive determination helpers ────────────────────────────────
 
 DEAD_OBSERV_TYPES = frozenset({"Dead", "Dead ", "Fossil", "Subfossil material"})
@@ -105,11 +128,40 @@ def _is_dead(observ_type: str | None) -> bool:
 
 # ── Submitted-by helpers ────────────────────────────────────────────
 
+# Lazily cached fallback user name (resolved on first use).
+_fallback_name_cache: list = [None, False]  # [name, loaded]
+
+
+def _get_fallback_user_name() -> str | None:
+    if not _fallback_name_cache[1]:
+        try:
+            from ledger_api_client.ledger_models import EmailUserRO
+
+            user = EmailUserRO.objects.get(email__iexact=TFAUNA_FALLBACK_EMAIL)
+            _fallback_name_cache[0] = user.get_full_name() or None
+        except Exception:
+            _fallback_name_cache[0] = None
+        _fallback_name_cache[1] = True
+    return _fallback_name_cache[0]
+
 
 def submitter_name_from_emailuser(value, ctx=None):
-    """Extract full name from EmailUser object."""
+    """Extract full name from EmailUser object.
+
+    Falls back to:
+    - The raw EnName string if the EmailUser lookup missed (display name, not a
+      mapped username).
+    - The fallback service-account's full name when EnName is also empty (i.e.
+      the row has no submitter and EMAILUSER_BY_LEGACY_USERNAME resolved to the
+      TFAUNA fallback account).
+    """
     if value is None:
-        return _result(None)
+        if ctx and getattr(ctx, "row", None):
+            en_name = (ctx.row.get("EnName") or "").strip()
+            if en_name:
+                return _result(en_name)
+        # EnName is empty → fallback-user scenario; use that account's full name.
+        return _result(_get_fallback_user_name())
     try:
         if hasattr(value, "get_full_name"):
             return _result(value.get_full_name())
@@ -138,14 +190,24 @@ def _derive_count_status(canonical: dict) -> str:
         "OCRAnimalObservation__dead_juvenile_unknown",
     ]
     has_detailed = any(canonical.get(f) is not None and str(canonical.get(f)).strip() != "" for f in detailed_fields)
-    if has_detailed:
-        return COUNT_STATUS_COUNTED
+    detailed_count = sum(int(canonical.get(f) or 0) for f in detailed_fields if canonical.get(f) is not None)
 
     simple_fields = [
         "OCRAnimalObservation__simple_alive",
         "OCRAnimalObservation__simple_dead",
     ]
     has_simple = any(canonical.get(f) is not None and str(canonical.get(f)).strip() != "" for f in simple_fields)
+    simple_count = sum(int(canonical.get(f) or 0) for f in simple_fields if canonical.get(f) is not None)
+
+    if has_detailed and has_simple:
+        if detailed_count > simple_count:
+            return COUNT_STATUS_COUNTED
+        elif simple_count > detailed_count:
+            return COUNT_STATUS_SIMPLE_COUNT
+
+    if has_detailed:
+        return COUNT_STATUS_COUNTED
+
     if has_simple:
         return COUNT_STATUS_SIMPLE_COUNT
 
@@ -172,6 +234,7 @@ PIPELINES = {
     "customer_status": [_customer_status],
     "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
     "observation_date": ["strip", "blank_to_none", DATE_LOCAL_PERTH],
+    "datetime_updated": ["strip", "blank_to_none", DATE_LOCAL_PERTH],
     "comments": ["strip", "blank_to_none"],
     "record_source": ["strip", "blank_to_none"],
     "ocr_for_occ_name": ["strip", "blank_to_none"],
@@ -205,6 +268,14 @@ PIPELINES = {
     "OCRIdentification__barcode_number": ["strip", "blank_to_none"],
     "OCRIdentification__id_confirmed_by": ["strip", "blank_to_none"],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
+    # OCRHabitatComposition
+    "OCRHabitatComposition__land_form": [
+        "strip",
+        "blank_to_none",
+        LANDFORM_TRANSFORM,
+    ],
+    # OCRVegetationStructure
+    "OCRVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none", VEGETATION_TYPE_TRANSFORM],
     # OCRAnimalObservation fields — integers
     "OCRAnimalObservation__animal_observation_detail_comment": ["strip", "blank_to_none"],
     "OCRAnimalObservation__count_status": ["strip", "blank_to_none"],
@@ -301,6 +372,10 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
                 parts.append(comments_val)
             ten_code = (raw.get("TenCode") or "").strip()
             if ten_code:
+                _ten_fn = registry._fns.get(TEN_CODE_CANONICAL)
+                if _ten_fn is not None:
+                    _ten_res = _ten_fn(ten_code, TransformContext(row=raw))
+                    ten_code = _ten_res.value if _ten_res.value is not None else ten_code
                 parts.append(f"Tenure: {ten_code}")
             canonical["comments"] = "; ".join(parts) if parts else ""
 
@@ -318,6 +393,7 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             ch_name = (raw.get("ChName") or "").strip()
             en_name = (raw.get("EnName") or "").strip()
             canonical["approved_by"] = ch_name if ch_name else en_name
+            canonical["last_modified_by"] = canonical["approved_by"]
 
             # ── submitter information (EnName) ──────────────────
             canonical["SubmitterInformation__email_user"] = en_name if en_name else None
@@ -325,6 +401,9 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
 
             # ── datetime_created = lodgement_date (EnDate) ─────────────────────
             canonical["datetime_created"] = canonical.get("lodgement_date")
+
+            # ── datetime_updated = ChDate (if present), else lodgement_date (EnDate) ─────
+            canonical["datetime_updated"] = raw.get("ChDate") or canonical.get("lodgement_date")
 
             # ── Observer contact: Address + Phone ───────────────
             addr = (raw.get("Address") or "").strip()
@@ -334,7 +413,7 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
                 contact_parts.append(f"Address: {addr}")
             if phone:
                 contact_parts.append(f"Phone: {phone}")
-            canonical["OCRObserverDetail__contact"] = ". ".join(contact_parts) if contact_parts else None
+            canonical["OCRObserverDetail__contact"] = "\n".join(contact_parts) if contact_parts else None
             canonical["OCRObserverDetail__main_observer"] = True
 
             # ── OCRObservationDetail comments = ObservMethod ────
@@ -401,17 +480,6 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
             canonical["ChName"] = ch_name if ch_name else None
             ch_date = (raw.get("ChDate") or "").strip()
             canonical["ChDate"] = ch_date if ch_date else None
-
-            # ── Habitat notes: Landform + VegType ───────────────
-            hab_parts: list[str] = []
-            landform = (raw.get("Landform") or "").strip()
-            if landform:
-                hab_parts.append(f"Landform: {landform}")
-            veg_type = (raw.get("VegType") or "").strip()
-            if veg_type:
-                hab_parts.append(f"Vegetation Type: {veg_type}")
-            if hab_parts:
-                canonical["OCRHabitatComposition__habitat_notes"] = "; ".join(hab_parts)
 
             # ── Geometry: build Point from Lat/Long (GDA94) ──────
             if canonical.get("Lat") or canonical.get("Long"):

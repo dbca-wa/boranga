@@ -14,6 +14,17 @@
                     <alert v-if="errorString" type="danger"
                         ><strong>{{ errorString }}</strong></alert
                     >
+
+                    <div class="row mb-3 border-bottom">
+                        <label
+                            for="proposed_by"
+                            class="col-sm-4 col-form-label fw-bold"
+                            >Proposed By</label
+                        >
+                        <div class="col-sm-8 d-flex align-items-center">
+                            {{ approval_details.officer_name }}
+                        </div>
+                    </div>
                     <div
                         v-if="approval_details.occurrence"
                         class="row mb-3 border-bottom"
@@ -38,21 +49,18 @@
                                 >New Occurrence Name</label
                             >
                             <div class="col-sm-8 d-flex align-items-center">
-                                {{ approval_details.new_occurrence_name }}
+                                <input
+                                    id="create_new_occurrence"
+                                    ref="createNewOccurrence"
+                                    type="text"
+                                    class="form-control mb-3"
+                                    v-model="
+                                        approval_details.new_occurrence_name
+                                    "
+                                />
                             </div>
                         </div>
                     </template>
-
-                    <div class="row mb-3 border-bottom">
-                        <label
-                            for="proposed_by"
-                            class="col-sm-4 col-form-label fw-bold"
-                            >Proposed By</label
-                        >
-                        <div class="col-sm-8 d-flex align-items-center">
-                            {{ approval_details.officer_name }}
-                        </div>
-                    </div>
 
                     <div class="row mb-3 border-bottom">
                         <label
@@ -61,25 +69,52 @@
                             >Details from Assessor</label
                         >
                         <div class="col-sm-8 d-flex align-items-center">
-                            {{ approval_details.details }}
+                            <textarea
+                                class="form-control mb-3"
+                                v-model="approval_details.details"
+                            ></textarea>
                         </div>
                     </div>
 
                     <div class="row mb-3 border-bottom">
                         <label
-                            for="details_from_assessor"
+                            for="copy_ocr_comments_to_occ_comments"
                             class="col-sm-4 col-form-label fw-bold"
-                            >Copy Occurrence Report Comments to
-                            Occurrence?</label
+                            >Copy Comments to OCC?</label
                         >
-                        <div class="col-sm-8 d-flex align-items-center">
-                            <i
-                                class="bi bi-check-lg h4 text-success"
-                                v-if="
-                                    approval_details.copy_ocr_comments_to_occ_comments
-                                "
-                            ></i>
-                            <i class="bi bi-x-lg h4 text-error" v-else></i>
+                        <div class="col-sm-8">
+                            <div class="form-check form-check-inline mb-3">
+                                <input
+                                    id="copy_ocr_comments_to_occ_comments_yes"
+                                    class="form-check-input"
+                                    type="radio"
+                                    v-model="
+                                        approval_details.copy_ocr_comments_to_occ_comments
+                                    "
+                                    :value="true"
+                                />
+                                <label
+                                    for="copy_ocr_comments_to_occ_comments_yes"
+                                    class="form-check-label"
+                                    >Yes</label
+                                >
+                            </div>
+                            <div class="form-check form-check-inline mb-3">
+                                <input
+                                    id="copy_ocr_comments_to_occ_comments_no"
+                                    class="form-check-input"
+                                    type="radio"
+                                    v-model="
+                                        approval_details.copy_ocr_comments_to_occ_comments
+                                    "
+                                    :value="false"
+                                />
+                                <label
+                                    for="can_submitter_access_no"
+                                    class="form-check-label"
+                                    >No</label
+                                >
+                            </div>
                         </div>
                     </div>
 
@@ -90,7 +125,12 @@
                             >CC email</label
                         >
                         <div class="col-sm-8">
-                            {{ approval_details.cc_email }}
+                            <input
+                                type="email"
+                                class="form-control"
+                                id="cc_email"
+                                v-model="approval_details.cc_email"
+                            />
                         </div>
                     </div>
                 </form>
@@ -145,6 +185,9 @@ export default {
                     $(this.$refs.occurrence_name_lookup_approve).select2(
                         'open'
                     );
+                    if (this.$refs.createNewOccurrence) {
+                        this.$refs.createNewOccurrence.focus();
+                    }
                 });
             }
         },
@@ -197,7 +240,7 @@ export default {
                             headers: {
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify(vm.approve),
+                            body: JSON.stringify(vm.approval_details),
                         }
                     ).then(
                         async (response) => {

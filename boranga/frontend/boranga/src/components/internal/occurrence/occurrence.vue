@@ -189,6 +189,7 @@
                                 id="OccurrenceStart"
                                 ref="occurrence"
                                 :occurrence_obj="occurrence"
+                                :profile="profile"
                                 @refresh-from-response="refreshFromResponse"
                                 @dirty="isDirty = $event"
                             >
@@ -341,6 +342,7 @@ export default {
             editingWindowMinutes: null,
             serverDatetimeUpdated: null,
             editingCountdown: null,
+            profile: null,
         };
     },
     computed: {
@@ -459,6 +461,7 @@ export default {
     created: function () {
         if (!this.occurrence) {
             this.fetchOccurrence();
+            this.fetchProfile();
         }
     },
     mounted: function () {
@@ -476,6 +479,15 @@ export default {
         });
     },
     methods: {
+        fetchProfile() {
+            fetch(api_endpoints.profile)
+                .then(async (response) => {
+                    this.profile = await response.json();
+                })
+                .catch((error) => {
+                    console.log(error);
+                });
+        },
         leaving: function (e) {
             if (this.isDirty) {
                 e.preventDefault();

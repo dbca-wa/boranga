@@ -125,6 +125,7 @@
                         ref="occ_location"
                         :is-external="is_external"
                         :is-internal="is_internal"
+                        :profile="profile"
                         :can-edit-status="canEditStatus"
                         :occurrence_obj="occurrence_obj"
                         :referral="referral"
@@ -265,6 +266,10 @@ export default {
         is_internal: {
             type: Boolean,
             default: false,
+        },
+        profile: {
+            type: Object,
+            required: false,
         },
         canEditStatus: {
             type: Boolean,

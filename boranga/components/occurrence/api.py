@@ -2001,7 +2001,9 @@ class OccurrenceReportViewSet(
 
         original_occ = instance.occurrence
 
-        instance.approve(request)
+        serializer = ProposeApproveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance.approve(request, serializer.validated_data)
 
         if original_occ and original_occ.id != instance.occurrence.id:
             original_occ.check_ocr_count_for_discard(request)
@@ -5761,6 +5763,17 @@ class OccurrenceReportBulkImportTaskViewSet(
     def retry(self, request, *args, **kwargs):
         instance = self.get_object()
         instance.retry()
+        return Response(status=status.HTTP_200_OK)
+
+    @detail_route(methods=["patch"], detail=True)
+    def cancel(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.processing_status != OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED:
+            return Response(
+                {"detail": "Only queued imports can be cancelled."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        instance.cancel()
         return Response(status=status.HTTP_200_OK)
 
     @detail_route(methods=["patch"], detail=True)

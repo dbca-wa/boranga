@@ -173,9 +173,7 @@ class CadastreLayer(models.Model):
     geom = gis_models.GeometryField(srid=settings.DEFAULT_SRID, null=True)
 
     cad_pin = models.IntegerField(null=True, blank=True)
-    # cad_owner_name is not yet available in all KB cadastre layer versions.
-    # Add the field back here (and in the local feature-building in spatial/utils.py)
-    # once it is confirmed present in the prod layer.
+    cad_owner_name = models.CharField(max_length=255, null=True, blank=True)
     cad_owner_count = models.IntegerField(null=True, blank=True)
 
     class Meta:
@@ -821,6 +819,8 @@ class JobQueue(BaseModel):
     job_cmd = models.CharField(max_length=255)
     status = models.SmallIntegerField(choices=STATUS_CHOICES, default=STATUS_PENDING)
     parameters_json = models.JSONField(null=True, blank=True)
+    started_dt = models.DateTimeField(null=True, blank=True)
+    retry_count = models.IntegerField(default=0)
     processed_dt = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(null=True, blank=True)
     user = models.IntegerField(blank=True, null=True)

@@ -261,6 +261,17 @@ CRON_CLASSES = [
     "boranga.cron.CronJobProcessReportQueue",
 ]
 
+QUEUE_JOB_MAX_RUN_TIME = env("QUEUE_JOB_MAX_RUN_TIME", 60 * 10)  # Default to 10 minutes
+QUEUE_JOB_ITEM_MAX_POSTGRES_RUN_TIME = env(
+    "QUEUE_JOB_ITEM_MAX_POSTGRES_RUN_TIME", 1000 * 60 * 2
+)  # Default to 2 minutes per item (Postgres uses milliseconds)
+QUEUE_JOB_MAX_RETRIES = env("QUEUE_JOB_MAX_RETRIES", 3)  # Max number of times a job will be retried if it keeps failing
+
+DJANGO_CRON_LOCK_TIME = 2 * 60 * 60  # 2 hours instead of 24 hours in case an AKS redeploy causes a job to be locked
+
+CRON_MAX_RUN_TIME = env(
+    "CRON_MAX_RUN_TIME", 60 * 2
+)  # Default to 2 minutes for the entire cron run (not just individual jobs)
 
 BASE_URL = env("BASE_URL")
 

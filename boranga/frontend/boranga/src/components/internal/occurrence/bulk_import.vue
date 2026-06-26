@@ -58,6 +58,15 @@
                                             >
                                         </option>
                                     </select>
+                                    <span
+                                        v-if="loading_schema_version"
+                                        class="spinner-border spinner-border text-primary m-3"
+                                        role="status"
+                                    >
+                                        <span class="visually-hidden"
+                                            >Loading schema...</span
+                                        >
+                                    </span>
                                 </div>
                                 <div
                                     v-else
@@ -247,6 +256,7 @@
                                                 ></i>
                                                 Time Estimate
                                             </th>
+                                            <th scope="col">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody class="text-muted">
@@ -285,6 +295,18 @@
                                                 {{
                                                     queuedImport.estimated_processing_time_human_readable
                                                 }}
+                                            </td>
+                                            <td>
+                                                <button
+                                                    class="btn btn-sm btn-outline-danger"
+                                                    @click="
+                                                        cancelBulkImportTask(
+                                                            queuedImport.id
+                                                        )
+                                                    "
+                                                >
+                                                    Cancel
+                                                </button>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -663,6 +685,7 @@ export default {
             schema_versions: null,
             selected_schema: null,
             selected_schema_version: null,
+            loading_schema_version: false,
             importFileErrors: null,
         };
     },
@@ -715,6 +738,8 @@ export default {
             return `Version: ${schema_version.version} - ${schema_version.name ? schema_version.name : 'No Name'}`;
         },
         resetFileField() {
+            // show inline loading spinner while fetching the selected schema
+            this.loading_schema_version = true;
             fetch(
                 `${api_endpoints.occurrence_report_bulk_import_schemas}${this.selected_schema.id}/`
             ).then(
@@ -742,10 +767,12 @@ export default {
                                 popoverTriggerEl
                             );
                         });
+                        this.loading_schema_version = false;
                     });
                 },
                 (error) => {
                     console.log(error);
+                    this.loading_schema_version = false;
                 }
             );
         },
@@ -938,6 +965,7 @@ export default {
                     confirmButton: 'btn btn-primary',
                     cancelButton: 'btn btn-secondary',
                 },
+                buttonsStyling: false,
                 reverseButtons: true,
             }).then((result) => {
                 if (result.isConfirmed) {
@@ -964,6 +992,47 @@ export default {
                                     }
                                 );
                             this.fetchCompletedImports();
+                        },
+                        (error) => {
+                            console.log(error);
+                        }
+                    );
+                }
+            });
+        },
+        cancelBulkImportTask(bulkImportTaskId) {
+            swal.fire({
+                title: 'Cancel Queued Import',
+                text: 'Are you sure you want to cancel this queued bulk import?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Cancel Import',
+                cancelButtonText: 'Go Back',
+                customClass: {
+                    confirmButton: 'btn btn-danger',
+                    cancelButton: 'btn btn-secondary me-2',
+                },
+                buttonsStyling: false,
+                reverseButtons: true,
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    fetch(
+                        `${api_endpoints.occurrence_report_bulk_imports}${bulkImportTaskId}/cancel/`,
+                        {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                        }
+                    ).then(
+                        (response) => {
+                            console.log(response);
+                            this.queuedImports = this.queuedImports.filter(
+                                (queuedImport) => {
+                                    return queuedImport.id !== bulkImportTaskId;
+                                }
+                            );
+                            this.fetchQueuedImports();
                         },
                         (error) => {
                             console.log(error);

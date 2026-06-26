@@ -980,15 +980,42 @@ export default {
                 searchable: false,
                 visible: true,
                 name: 'commonwealth_conservation_categories',
+                render: function (data, type, full) {
+                    let html = '';
+                    if (full.commonwealth_conservation_categories) {
+                        for (
+                            let i = 0;
+                            i <
+                            full.commonwealth_conservation_categories.length;
+                            i++
+                        ) {
+                            html += `<span class="badge bg-primary me-2">${full.commonwealth_conservation_categories[i]}</span>`;
+                        }
+                    }
+                    return html;
+                },
             };
         },
         column_other_conservation_assessment: function () {
             return {
-                data: 'other_conservation_assessment',
+                data: 'other_conservation_assessments',
                 orderable: true,
                 searchable: true,
                 visible: true,
-                name: 'other_conservation_assessment__code',
+                name: 'other_conservation_assessments__code',
+                render: function (data, type, full) {
+                    let html = '';
+                    if (full.other_conservation_assessments) {
+                        for (
+                            let i = 0;
+                            i < full.other_conservation_assessments.length;
+                            i++
+                        ) {
+                            html += `<span class="badge bg-primary me-2">${full.other_conservation_assessments[i]}</span>`;
+                        }
+                    }
+                    return html;
+                },
             };
         },
         column_conservation_criteria: function () {

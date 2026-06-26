@@ -151,12 +151,7 @@
                                                         v-else
                                                         class="bi bi-card-checklist me-1"
                                                     ></i>
-                                                    Validat<template
-                                                        v-if="validatingSchema"
-                                                        >ing</template
-                                                    ><template v-else
-                                                        >e</template
-                                                    >
+                                                    Validate
                                                 </button>
                                                 <a
                                                     role="button"
@@ -1685,6 +1680,7 @@ export default {
         allowBlankDisabled() {
             // If selectedField is not set, keep control disabled
             if (!this.selectedField) return true;
+            if (!this.selectedColumn) return true;
             // Consider both a schema-level default_value and the model field's has_default metadata
             const hasDefault =
                 !(

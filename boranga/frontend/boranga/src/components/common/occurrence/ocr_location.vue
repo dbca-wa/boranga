@@ -28,6 +28,8 @@
                     :polygon-features-supported="isFauna == false"
                     :drawable="!isReadOnly"
                     :editable="!isReadOnly"
+                    :selectable="isSelectable"
+                    :measurement-tool-available="measurementToolAvailable"
                     :file-upload-disabled="isReadOnly"
                     level="external"
                     style-by="assessor"
@@ -36,7 +38,6 @@
                             ? ''
                             : 'Use the <b>draw</b> tool to draw the area of the report on the map.</br>You can <b>save</b> the report and continue at a later time.'
                     "
-                    :selectable="true"
                     :coordinate-reference-systems="coordinateReferenceSystems"
                     :spatial-operations-allowed="
                         formulaAvailable ? ['__all__'] : []
@@ -597,6 +598,10 @@ export default {
             type: Boolean,
             default: false,
         },
+        profile: {
+            type: Object,
+            required: false,
+        },
     },
     emits: ['dirty'],
     data: function () {
@@ -724,6 +729,22 @@ export default {
         },
         isReadOnly: function () {
             return this.occurrence_report_obj.readonly;
+        },
+        measurementToolAvailable: function () {
+            return true;
+        },
+        isSelectable: function () {
+            return (
+                this.isReadOnly &&
+                (this.profile?.user.groups.includes(
+                    constants.GROUPS.READ_ONLY_USERS
+                ) ||
+                    ([
+                        constants.GROUPS.OCCURRENCE_ASSESSORS,
+                        constants.GROUPS.OCCURRENCE_APPROVERS,
+                    ].some((g) => this.profile?.user?.groups?.includes(g)) &&
+                        this.occurrence_report.locked))
+            );
         },
         csrf_token: function () {
             return helpers.getCookie('csrftoken');

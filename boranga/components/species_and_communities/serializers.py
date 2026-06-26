@@ -70,7 +70,7 @@ class ListSpeciesSerializer(BaseModelSerializer):
     wa_legislative_category = serializers.SerializerMethodField()
     wa_priority_category = serializers.SerializerMethodField()
     commonwealth_conservation_categories = serializers.SerializerMethodField()
-    other_conservation_assessment = serializers.SerializerMethodField()
+    other_conservation_assessments = serializers.SerializerMethodField()
     conservation_criteria = serializers.SerializerMethodField()
     fauna_group_name = serializers.CharField(source="fauna_group.name", read_only=True, required=False, allow_null=True)
     fauna_sub_group_name = serializers.CharField(
@@ -100,7 +100,7 @@ class ListSpeciesSerializer(BaseModelSerializer):
             "wa_legislative_category",
             "wa_priority_category",
             "commonwealth_conservation_categories",
-            "other_conservation_assessment",
+            "other_conservation_assessments",
             "conservation_criteria",
             "fauna_group",
             "fauna_group_name",
@@ -128,7 +128,7 @@ class ListSpeciesSerializer(BaseModelSerializer):
             "wa_legislative_category",
             "wa_priority_category",
             "commonwealth_conservation_categories",
-            "other_conservation_assessment",
+            "other_conservation_assessments",
             "conservation_criteria",
             "fauna_group",
             "fauna_group_name",
@@ -224,10 +224,10 @@ class ListSpeciesSerializer(BaseModelSerializer):
             return ", ".join(categories_list)
         return ""
 
-    def get_other_conservation_assessment(self, obj):
+    def get_other_conservation_assessments(self, obj):
         conservation_status = obj.approved_conservation_status
-        if conservation_status and conservation_status.other_conservation_assessment:
-            return conservation_status.other_conservation_assessment.code
+        if conservation_status and conservation_status.other_conservation_assessments.exists():
+            return ", ".join(conservation_status.other_conservation_assessments.values_list("code", flat=True))
         return ""
 
     def get_conservation_criteria(self, obj):
@@ -251,7 +251,7 @@ class ListCommunitiesSerializer(BaseModelSerializer):
     wa_legislative_category = serializers.SerializerMethodField()
     wa_priority_category = serializers.SerializerMethodField()
     commonwealth_conservation_categories = serializers.SerializerMethodField()
-    other_conservation_assessment = serializers.SerializerMethodField()
+    other_conservation_assessments = serializers.SerializerMethodField()
     conservation_criteria = serializers.SerializerMethodField()
 
     class Meta:
@@ -274,7 +274,7 @@ class ListCommunitiesSerializer(BaseModelSerializer):
             "wa_legislative_category",
             "wa_priority_category",
             "commonwealth_conservation_categories",
-            "other_conservation_assessment",
+            "other_conservation_assessments",
             "conservation_criteria",
         )
         datatables_always_serialize = (
@@ -295,7 +295,7 @@ class ListCommunitiesSerializer(BaseModelSerializer):
             "wa_legislative_category",
             "wa_priority_category",
             "commonwealth_conservation_categories",
-            "other_conservation_assessment",
+            "other_conservation_assessments",
             "conservation_criteria",
         )
 
@@ -369,10 +369,11 @@ class ListCommunitiesSerializer(BaseModelSerializer):
             return ", ".join(categories_list)
         return ""
 
-    def get_other_conservation_assessment(self, obj):
+    def get_other_conservation_assessments(self, obj):
         conservation_status = obj.approved_conservation_status
-        if conservation_status and conservation_status.other_conservation_assessment:
-            return conservation_status.other_conservation_assessment.code
+        if conservation_status and conservation_status.other_conservation_assessments.exists():
+            assessments_list = conservation_status.other_conservation_assessments.all().values_list("code", flat=True)
+            return ", ".join(assessments_list)
         return ""
 
     def get_conservation_criteria(self, obj):

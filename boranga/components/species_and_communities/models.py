@@ -569,7 +569,7 @@ class Species(RevisionedMixin):
     districts = models.ManyToManyField(District, blank=True, related_name="species_districts")
     last_data_curation_date = models.DateField(blank=True, null=True)
     conservation_plan_exists = models.BooleanField(default=False)
-    conservation_plan_reference = models.CharField(max_length=500, null=True, blank=True)
+    conservation_plan_reference = models.TextField(null=True, blank=True)
     processing_status = models.CharField(
         "Processing Status",
         max_length=30,
@@ -582,7 +582,7 @@ class Species(RevisionedMixin):
     submitter = models.IntegerField(null=True, blank=True)  # EmailUserRO
     # parents will the original species  from the split/combine functionality
     parent_species = models.ManyToManyField("self", blank=True)
-    comment = models.CharField(max_length=500, null=True, blank=True)
+    comment = models.TextField(null=True, blank=True)
     department_file_numbers = models.CharField(max_length=512, null=True, blank=True)
     fauna_group = models.ForeignKey(
         FaunaGroup,
@@ -692,10 +692,12 @@ class Species(RevisionedMixin):
 
     @property
     def can_user_edit(self):
-        return self.processing_status in [
+        approver_editable_state = [
             Species.PROCESSING_STATUS_DRAFT,
             Species.PROCESSING_STATUS_DISCARDED,
+            Species.PROCESSING_STATUS_HISTORICAL,
         ]
+        return self.processing_status in approver_editable_state
 
     @property
     def can_user_rename(self):
@@ -729,7 +731,6 @@ class Species(RevisionedMixin):
         """
         officer_view_state = [
             Species.PROCESSING_STATUS_DRAFT,
-            Species.PROCESSING_STATUS_HISTORICAL,
         ]
         if self.processing_status in officer_view_state:
             return False
@@ -815,7 +816,6 @@ class Species(RevisionedMixin):
 
     def can_user_save(self, request):
         user_closed_state = [
-            Species.PROCESSING_STATUS_HISTORICAL,
             Species.PROCESSING_STATUS_DISCARDED,
         ]
 
@@ -1669,6 +1669,7 @@ class Community(RevisionedMixin):
         return self.processing_status in [
             Community.PROCESSING_STATUS_DRAFT,
             Community.PROCESSING_STATUS_DISCARDED,
+            Community.PROCESSING_STATUS_HISTORICAL,
         ]
 
     @property
@@ -1689,7 +1690,6 @@ class Community(RevisionedMixin):
         """
         officer_view_state = [
             Community.PROCESSING_STATUS_DRAFT,
-            Community.PROCESSING_STATUS_HISTORICAL,
         ]
         if self.processing_status in officer_view_state:
             return False
@@ -1698,7 +1698,6 @@ class Community(RevisionedMixin):
 
     def can_user_save(self, request):
         user_closed_state = [
-            Community.PROCESSING_STATUS_HISTORICAL,
             Community.PROCESSING_STATUS_DISCARDED,
         ]
 

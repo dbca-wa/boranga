@@ -968,7 +968,7 @@ export default {
         },
         column_other_conservation_assessment: function () {
             return {
-                data: 'other_conservation_assessment',
+                data: 'other_conservation_assessments',
                 orderable: false,
                 searchable: false,
                 visible: true,
@@ -992,7 +992,10 @@ export default {
                 render: function (data, type, full) {
                     let links = '';
                     if (!vm.is_external) {
-                        if (full.can_user_edit) {
+                        if (
+                            full.can_user_edit &&
+                            full.processing_status != 'Historical'
+                        ) {
                             if (full.processing_status == 'Discarded') {
                                 links += `<a href='#${full.id}' data-reinstate-species-proposal='${full.id}'>Reinstate</a><br/>`;
                             } else {

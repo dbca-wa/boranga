@@ -38,7 +38,6 @@
                                 <input
                                     v-model="decline.cc_email"
                                     type="text"
-                                    readonly
                                     style="width: 70%"
                                     class="form-control"
                                     name="cc_email"

@@ -26,5 +26,9 @@
 		You will receive a notification email if there is any incomplete information or documents missing from the proposal.
 	{% endif %}
 
+	You can access this proposal using the following link:
+
+	{{ url }}
+
 	For information on the listing process for proposals for threatened listings (new listing/change/delisting) please see https://www.dbca.wa.gov.au/management/threatened-species-and-communities/nominations-listing
 {%  endblock %}
