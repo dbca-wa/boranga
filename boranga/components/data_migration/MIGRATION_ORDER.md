@@ -181,6 +181,9 @@ PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "privat
 ' >"$LOG" 2>&1 &
 echo "PID $! Log: tail -f $LOG"
 
+# Make sure there are no missing 1 to 1 relations in legacy migrated ORFs and OCCs
+./manage.py ocr_fix_missing_empty_relations
+
 # --- Cleanup
 
 # Drop the functional index now that migrations are complete
