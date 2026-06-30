@@ -133,6 +133,12 @@ SECONDARY_SIGN_TRANSFORM = build_legacy_map_multi_transform(
     required=False,
 )
 
+PRIMARY_DETECTION_METHOD_TRANSFORM = build_legacy_map_multi_transform(
+    "TFAUNA",
+    "ObservType",
+    required=False,
+)
+
 # ── Dead/alive determination helpers ────────────────────────────────
 
 DEAD_OBSERV_TYPES = frozenset({"Dead", "Dead ", "Fossil", "Subfossil material"})
@@ -299,6 +305,7 @@ PIPELINES = {
     "OCRVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none", VEGETATION_TYPE_TRANSFORM],
     # OCRAnimalObservation fields — integers
     "OCRAnimalObservation__secondary_sign": ["strip", "blank_to_none", SECONDARY_SIGN_TRANSFORM],
+    "OCRAnimalObservation__primary_detection_method": ["strip", "blank_to_none", PRIMARY_DETECTION_METHOD_TRANSFORM],
     "OCRAnimalObservation__animal_observation_detail_comment": ["strip", "blank_to_none"],
     "OCRAnimalObservation__count_status": ["strip", "blank_to_none"],
     "OCRAnimalObservation__alive_adult_male": ["strip", "blank_to_none", "to_int"],
