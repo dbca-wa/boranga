@@ -284,6 +284,7 @@ PIPELINES = {
     "ocr_for_occ_name": ["strip", "blank_to_none"],
     "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME],
     "approved_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME],
+    "last_modified_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME],
     # SubmitterInformation
     "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
     "SubmitterInformation__email_user": [
@@ -443,11 +444,11 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
                 src_parts.append(f"Author: {author}")
             canonical["record_source"] = "; ".join(src_parts) if src_parts else None
 
-            # ── approved_by = ChName (if present), else EnName ──
+            # ── approved_by / last_modified_by = ChName (if present), else EnName ──
             ch_name = (raw.get("ChName") or "").strip()
             en_name = (raw.get("EnName") or "").strip()
             canonical["approved_by"] = ch_name if ch_name else en_name
-            canonical["last_modified_by"] = canonical["approved_by"]
+            canonical["last_modified_by"] = ch_name if ch_name else en_name
 
             # ── submitter information (EnName) ──────────────────
             canonical["SubmitterInformation__email_user"] = en_name if en_name else None
