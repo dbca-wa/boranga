@@ -150,7 +150,7 @@ COLUMN_MAP = {
     "OrgRole": "OCRObserverDetail__organisation",
     "Address": "Address",
     "Phone": "Phone",
-    "Certainty": "Certainty",
+    "Certainty": "OCRIdentification__identification_certainty",
     "NumSeen": "NumSeen",
     "AdultM": "AdultM",
     "AdultF": "AdultF",
