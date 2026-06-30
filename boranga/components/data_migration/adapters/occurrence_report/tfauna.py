@@ -139,6 +139,12 @@ PRIMARY_DETECTION_METHOD_TRANSFORM = build_legacy_map_multi_transform(
     required=False,
 )
 
+REPRODUCTIVE_STATE_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Breeding",
+    required=False,
+)
+
 # ── Dead/alive determination helpers ────────────────────────────────
 
 DEAD_OBSERV_TYPES = frozenset({"Dead", "Dead ", "Fossil", "Subfossil material"})
@@ -306,6 +312,7 @@ PIPELINES = {
     # OCRAnimalObservation fields — integers
     "OCRAnimalObservation__secondary_sign": ["strip", "blank_to_none", SECONDARY_SIGN_TRANSFORM],
     "OCRAnimalObservation__primary_detection_method": ["strip", "blank_to_none", PRIMARY_DETECTION_METHOD_TRANSFORM],
+    "OCRAnimalObservation__reproductive_state": ["strip", "blank_to_none", REPRODUCTIVE_STATE_TRANSFORM],
     "OCRAnimalObservation__animal_observation_detail_comment": ["strip", "blank_to_none"],
     "OCRAnimalObservation__count_status": ["strip", "blank_to_none"],
     "OCRAnimalObservation__alive_adult_male": ["strip", "blank_to_none", "to_int"],

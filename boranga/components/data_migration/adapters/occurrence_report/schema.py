@@ -179,7 +179,7 @@ COLUMN_MAP = {
     "ObservType": "OCRAnimalObservation__primary_detection_method",
     "SecSign": "OCRAnimalObservation__secondary_sign",
     "Observation": "OCRAnimalObservation__animal_observation_detail_comment",
-    "Breeding": "Breeding",
+    "Breeding": "OCRAnimalObservation__reproductive_state",
     "Identification": "OCRIdentification__id_confirmed_by",
     "SpHeld": "OCRIdentification__identification_comment",
     "SpCatNum": "OCRIdentification__barcode_number",
@@ -333,6 +333,7 @@ class OccurrenceReportRow:
     OCRAnimalObservation__secondary_sign: list | None = None
     OCRAnimalObservation__primary_detection_method: int | None = None
     OCRAnimalObservation__animal_observation_detail_comment: str | None = None
+    OCRAnimalObservation__reproductive_state: int | None = None
     OCRAnimalObservation__count_status: str | None = None
     OCRAnimalObservation__alive_adult_male: int | None = None
     OCRAnimalObservation__dead_adult_male: int | None = None
@@ -492,6 +493,9 @@ class OccurrenceReportRow:
             OCRAnimalObservation__secondary_sign=utils.safe_strip(d.get("OCRAnimalObservation__secondary_sign")),
             OCRAnimalObservation__primary_detection_method=utils.to_int_maybe(
                 d.get("OCRAnimalObservation__primary_detection_method")
+            ),
+            OCRAnimalObservation__reproductive_state=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__reproductive_state")
             ),
             OCRAnimalObservation__animal_observation_detail_comment=utils.safe_strip(
                 d.get("OCRAnimalObservation__animal_observation_detail_comment")
