@@ -151,6 +151,7 @@ COLUMN_MAP = {
     "Address": "Address",
     "Phone": "Phone",
     "Certainty": "OCRIdentification__identification_certainty",
+    "Specimen": "OCRIdentification__sample_type",
     "NumSeen": "NumSeen",
     "AdultM": "AdultM",
     "AdultF": "AdultF",
@@ -281,6 +282,7 @@ class OccurrenceReportRow:
     OCRIdentification__permit_id: str | None = None
     OCRIdentification__identification_comment: str | None = None
     OCRIdentification__identification_certainty: int | None = None
+    OCRIdentification__sample_type: int | None = None
     OCRIdentification__sample_destination: int | None = None
 
     # OCRLocation fields
@@ -448,6 +450,7 @@ class OccurrenceReportRow:
             OCRIdentification__identification_certainty=utils.to_int_maybe(
                 d.get("OCRIdentification__identification_certainty")
             ),
+            OCRIdentification__sample_type=utils.to_int_maybe(d.get("OCRIdentification__sample_type")),
             OCRIdentification__sample_destination=utils.to_int_maybe(d.get("OCRIdentification__sample_destination")),
             OCRLocation__coordinate_source=utils.to_int_maybe(d.get("OCRLocation__coordinate_source")),
             OCRLocation__location_accuracy=utils.to_int_maybe(d.get("OCRLocation__location_accuracy")),

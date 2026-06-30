@@ -151,6 +151,12 @@ IDENTIFICATION_CERTAINTY_TRANSFORM = build_legacy_map_transform(
     required=False,
 )
 
+SAMPLE_TYPE_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Specimen",
+    required=False,
+)
+
 # ── Dead/alive determination helpers ────────────────────────────────
 
 DEAD_OBSERV_TYPES = frozenset({"Dead", "Dead ", "Fossil", "Subfossil material"})
@@ -308,6 +314,7 @@ PIPELINES = {
     "OCRIdentification__id_confirmed_by": ["strip", "blank_to_none"],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
     "OCRIdentification__identification_certainty": ["strip", "blank_to_none", IDENTIFICATION_CERTAINTY_TRANSFORM],
+    "OCRIdentification__sample_type": ["strip", "blank_to_none", SAMPLE_TYPE_TRANSFORM],
     # OCRHabitatComposition
     "OCRHabitatComposition__land_form": [
         "strip",
