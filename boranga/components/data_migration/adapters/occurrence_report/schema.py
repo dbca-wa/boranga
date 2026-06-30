@@ -177,7 +177,7 @@ COLUMN_MAP = {
     "Sp6": "Sp6",
     "ObservMethod": "OCRObservationDetail__observation_method",
     "ObservType": "ObservType",
-    "SecSign": "SecSign",
+    "SecSign": "OCRAnimalObservation__secondary_sign",
     "Observation": "OCRAnimalObservation__animal_observation_detail_comment",
     "Breeding": "Breeding",
     "Identification": "OCRIdentification__id_confirmed_by",
@@ -330,6 +330,7 @@ class OccurrenceReportRow:
     OCRPlantCount__obs_date: date | None = None
 
     # OCRAnimalObservation fields
+    OCRAnimalObservation__secondary_sign: list | None = None
     OCRAnimalObservation__animal_observation_detail_comment: str | None = None
     OCRAnimalObservation__count_status: str | None = None
     OCRAnimalObservation__alive_adult_male: int | None = None
@@ -487,6 +488,7 @@ class OccurrenceReportRow:
             OCRPlantCount__vegetative_state_present=d.get("OCRPlantCount__vegetative_state_present"),
             OCRPlantCount__obs_date=obs_date,
             # OCRAnimalObservation
+            OCRAnimalObservation__secondary_sign=utils.safe_strip(d.get("OCRAnimalObservation__secondary_sign")),
             OCRAnimalObservation__animal_observation_detail_comment=utils.safe_strip(
                 d.get("OCRAnimalObservation__animal_observation_detail_comment")
             ),

@@ -17,6 +17,7 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     TransformContext,
     _result,
+    build_legacy_map_multi_transform,
     build_legacy_map_transform,
     date_from_datetime_iso_local_factory,
     datetime_iso_factory,
@@ -126,6 +127,11 @@ OBSERVATION_METHOD_TRANSFORM = build_legacy_map_transform(
     required=False,
 )
 
+SECONDARY_SIGN_TRANSFORM = build_legacy_map_multi_transform(
+    "TFAUNA",
+    "SecSign",
+    required=False,
+)
 
 # ── Dead/alive determination helpers ────────────────────────────────
 
@@ -292,6 +298,7 @@ PIPELINES = {
     # OCRVegetationStructure
     "OCRVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none", VEGETATION_TYPE_TRANSFORM],
     # OCRAnimalObservation fields — integers
+    "OCRAnimalObservation__secondary_sign": ["strip", "blank_to_none", SECONDARY_SIGN_TRANSFORM],
     "OCRAnimalObservation__animal_observation_detail_comment": ["strip", "blank_to_none"],
     "OCRAnimalObservation__count_status": ["strip", "blank_to_none"],
     "OCRAnimalObservation__alive_adult_male": ["strip", "blank_to_none", "to_int"],
