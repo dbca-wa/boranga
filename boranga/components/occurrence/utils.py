@@ -22,6 +22,7 @@ from boranga.components.occurrence.email import (
     send_submitter_submit_email_notification,
 )
 from boranga.components.occurrence.models import (
+    Occurrence,
     OccurrenceReport,
     OccurrenceReportAmendmentRequest,
     OccurrenceReportUserAction,
@@ -486,6 +487,64 @@ def validate_map_files(request, instance, foreign_key_field=None):
 
 
 # gets all species that are related to the occurrence's species - parents, children, parent's parents, etc
+# One-to-one child relations that must exist on both OccurrenceReport and Occurrence.
+# vegetation_structure is included because copy_ocr_section accesses it via bare
+# getattr() and raises RelatedObjectDoesNotExist when the row is absent.
+_OCR_OCC_CHILD_RELATIONS = [
+    "location",
+    "habitat_composition",
+    "habitat_condition",
+    "vegetation_structure",
+    "fire_history",
+    "associated_species",
+    "observation_detail",
+    "plant_count",
+    "animal_observation",
+    "identification",
+]
+
+# Some child relations are only relevant for certain group types.
+# Keys are relation names; values are kwargs passed to .exclude() when querying
+# for parents that need the relation created.
+_RELATION_GROUP_EXCLUSIONS = {
+    # Plant count is only relevant for flora records.
+    "plant_count": {"group_type__name__in": ["fauna", "community"]},
+    # Animal observation is only relevant for fauna records.
+    "animal_observation": {"group_type__name__in": ["flora", "community"]},
+}
+
+
+def fix_missing_occurrence_relations():
+    """
+    For each one-to-one child relation on OccurrenceReport and Occurrence, find
+    parent records with no corresponding child row and bulk-create the missing rows.
+
+    Needed because data migration paths may not create these rows (the API create
+    action does, but bulk import and legacy migration do not). Also required because
+    copy_ocr_section accesses these relations via bare getattr().
+
+    Returns a dict {'ocr': <count>, 'occ': <count>} of rows created.
+    """
+    counts = {"ocr": 0, "occ": 0}
+    for parent_model, key in [(OccurrenceReport, "ocr"), (Occurrence, "occ")]:
+        for rel_name in _OCR_OCC_CHILD_RELATIONS:
+            child_rel = parent_model._meta.get_field(rel_name)
+            child_model = child_rel.related_model
+            # attname includes the _id suffix, e.g. 'occurrence_report_id'
+            fk_id_attname = child_rel.field.attname
+            missing_qs = parent_model.objects.filter(**{f"{rel_name}__isnull": True})
+            exclusion = _RELATION_GROUP_EXCLUSIONS.get(rel_name)
+            if exclusion:
+                missing_qs = missing_qs.exclude(**exclusion)
+            missing_ids = list(missing_qs.values_list("id", flat=True))
+            if missing_ids:
+                # Note: models with a DB-querying __init__ (e.g. OCRHabitatComposition)
+                # will run those extra queries during list construction below.
+                child_model.objects.bulk_create([child_model(**{fk_id_attname: pk}) for pk in missing_ids])
+                counts[key] += len(missing_ids)
+    return counts
+
+
 def get_all_related_species(species_id, exclude=[]):
     species_ids = []
     # add species id to list
