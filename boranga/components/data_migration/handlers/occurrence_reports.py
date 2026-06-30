@@ -4922,7 +4922,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     when_dt = when_dt.replace(tzinfo=zoneinfo.ZoneInfo("Australia/Perth"))
             except Exception:
-                pass
+                logger.exception(f"{mid}: Failed to parse ChDate '{ch_date}'")
 
             action_text = "Edited to improve accuracy"  # Task 12868
             ua = OccurrenceReportUserAction(
