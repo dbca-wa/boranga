@@ -6542,6 +6542,22 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             self.datetime_completed = timezone.now()
             self.save()
 
+            # Fix any one-to-one child relations missing on imported records.
+            # Runs in a nested savepoint so a failure here cannot roll back
+            # the task-status save above.
+            try:
+                with transaction.atomic():
+                    from boranga.components.occurrence.utils import (
+                        fix_missing_occurrence_relations,
+                    )
+
+                    counts = fix_missing_occurrence_relations()
+                    logger.info(
+                        f"Bulk import {self.id}: fixed missing relations — OCR: {counts['ocr']}, OCC: {counts['occ']}"
+                    )
+            except Exception:
+                logger.exception(f"Bulk import {self.id}: failed to fix missing occurrence relations (non-fatal)")
+
             # History seeding is handled separately by the
             # ocr_seed_bulk_import_history management command / cron job.
 
