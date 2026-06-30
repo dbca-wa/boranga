@@ -114,6 +114,12 @@ VEGETATION_TYPE_TRANSFORM = build_legacy_map_transform(
     return_type="canonical",
 )
 
+OBSERVATION_METHOD_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "ObservMethod",
+    required=False,
+)
+
 # ── Dead/alive determination helpers ────────────────────────────────
 
 DEAD_OBSERV_TYPES = frozenset({"Dead", "Dead ", "Fossil", "Subfossil material"})
@@ -263,6 +269,7 @@ PIPELINES = {
     "OCRLocation__location_description": ["strip", "blank_to_none"],
     "OCRLocation__location_accuracy": ["strip", "blank_to_none", LOCATION_ACCURACY_TRANSFORM],
     # OCRObservationDetail
+    "OCRObservationDetail__observation_method": ["strip", "blank_to_none", OBSERVATION_METHOD_TRANSFORM],
     "OCRObservationDetail__comments": ["strip", "blank_to_none"],
     # OCRIdentification
     "OCRIdentification__barcode_number": ["strip", "blank_to_none"],

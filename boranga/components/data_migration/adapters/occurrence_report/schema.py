@@ -174,7 +174,7 @@ COLUMN_MAP = {
     "Sp4": "Sp4",
     "Sp5": "Sp5",
     "Sp6": "Sp6",
-    "ObservMethod": "ObservMethod",
+    "ObservMethod": "OCRObservationDetail__observation_method",
     "ObservType": "ObservType",
     "SecSign": "SecSign",
     "Observation": "OCRAnimalObservation__animal_observation_detail_comment",
