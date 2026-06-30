@@ -164,17 +164,20 @@ python scripts/split_tfauna_csv.py \
     --output-dir private-media/legacy_data/TFAUNA/chunks \
     --handler-args '--seed-history'
 
+# For a partitioned sample
+./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/fauna-records-partitioned.csv" --sources TFAUNA --seed-history
+
 # Then run the command it produces (may not be idential to below) — chunk 1 wipes, chunks 2-x append
 LOG=private-media/handler_output/occurrence_report_legacy_$(date +%Y%m%d_%H%M%S).log
 nohup bash -c '
 set -euo pipefail
-PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_001.csv" --sources TFAUNA --wipe-targets
-PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_002.csv" --sources TFAUNA
-PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_003.csv" --sources TFAUNA
-PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_004.csv" --sources TFAUNA
-PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_005.csv" --sources TFAUNA
-PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_006.csv" --sources TFAUNA
-PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_007.csv" --sources TFAUNA
+PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_001.csv" --sources TFAUNA --wipe-targets --seed-history
+PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_002.csv" --sources TFAUNA --seed-history
+PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_003.csv" --sources TFAUNA --seed-history
+PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_004.csv" --sources TFAUNA --seed-history
+PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_005.csv" --sources TFAUNA --seed-history
+PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_006.csv" --sources TFAUNA --seed-history
+PYTHONUNBUFFERED=1 ./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/chunks/chunk_007.csv" --sources TFAUNA --seed-history
 ' >"$LOG" 2>&1 &
 echo "PID $! Log: tail -f $LOG"
 
