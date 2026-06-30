@@ -145,6 +145,7 @@ COLUMN_MAP = {
     "DBNo": "migrated_from_id",
     "SpCode": "species_id",
     "Date": "observation_date",
+    "Time": "observation_time_id",
     "Observer": "OCRObserverDetail__observer_name",
     "OrgRole": "OCRObserverDetail__organisation",
     "Address": "Address",
@@ -233,6 +234,7 @@ class OccurrenceReportRow:
     processing_status: str | None = None
     customer_status: str | None = None
     observation_date: date | None = None
+    observation_time_id: int | None = None  # FK id (ObservationTime) after transform
     record_source: str | None = None
     comments: str | None = None
     ocr_for_occ_number: str | None = None
@@ -399,6 +401,7 @@ class OccurrenceReportRow:
             processing_status=utils.safe_strip(d.get("processing_status")),
             customer_status=utils.safe_strip(d.get("customer_status")),
             observation_date=obs_date,
+            observation_time_id=utils.to_int_maybe(d.get("observation_time_id")),
             record_source=utils.safe_strip(d.get("record_source")),
             comments=utils.safe_strip(d.get("comments")),
             ocr_for_occ_number=utils.safe_strip(d.get("ocr_for_occ_number")),
@@ -605,6 +608,7 @@ class OccurrenceReportRow:
             "locked": self.processing_status == "approved",
             "customer_status": self.customer_status,
             "observation_date": self.observation_date,
+            "observation_time_id": self.observation_time_id,
             "record_source": self.record_source,
             "comments": self.comments or "",
             "assigned_approver": self.assigned_approver_id,

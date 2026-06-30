@@ -22,13 +22,14 @@ from boranga.components.data_migration.registry import (
     datetime_iso_factory,
     emailuser_by_legacy_username_with_fallback_factory,
     emailuser_object_by_legacy_username_with_fallback_factory,
+    fk_lookup,
     fk_lookup_static,
     geometry_from_coords_factory,
     registry,
     static_value_factory,
     taxonomy_lookup_legacy_id_mapping_species,
 )
-from boranga.components.occurrence.models import OccurrenceReport
+from boranga.components.occurrence.models import ObservationTime, OccurrenceReport
 from boranga.components.species_and_communities.models import GroupType
 from boranga.components.users.models import SubmitterCategory
 from boranga.settings import (
@@ -63,6 +64,11 @@ DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 
 # For DateField columns: return the local (Perth) date to avoid day-shift from UTC conversion
 DATE_LOCAL_PERTH = date_from_datetime_iso_local_factory("Australia/Perth")
+
+OBSERVATION_TIME_FK_LOOKUP = fk_lookup(
+    model=ObservationTime,
+    lookup_field="name",
+)
 
 GEOMETRY_FROM_COORDS = geometry_from_coords_factory(
     latitude_field="Lat",
@@ -119,6 +125,7 @@ OBSERVATION_METHOD_TRANSFORM = build_legacy_map_transform(
     "ObservMethod",
     required=False,
 )
+
 
 # ── Dead/alive determination helpers ────────────────────────────────
 
@@ -240,6 +247,7 @@ PIPELINES = {
     "customer_status": [_customer_status],
     "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
     "observation_date": ["strip", "blank_to_none", DATE_LOCAL_PERTH],
+    "observation_time_id": ["strip", "blank_to_none", OBSERVATION_TIME_FK_LOOKUP],
     "datetime_updated": ["strip", "blank_to_none", DATE_LOCAL_PERTH],
     "comments": ["strip", "blank_to_none"],
     "record_source": ["strip", "blank_to_none"],
