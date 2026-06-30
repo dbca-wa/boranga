@@ -352,6 +352,10 @@ PIPELINES = {
     "OccurrenceReportGeometry__geometry": [GEOMETRY_FROM_COORDS],
     "OccurrenceReportGeometry__locked": [GEOMETRY_LOCKED_DEFAULT],
     "OccurrenceReportGeometry__show_on_map": [static_value_factory(True)],  # Task 12781
+    "ChDate": ["strip", "blank_to_none"],
+    "ChName": ["strip", "blank_to_none"],
+    "EnDate": ["strip", "blank_to_none"],
+    "EnName": ["strip", "blank_to_none"],
 }
 
 
