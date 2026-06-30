@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def to_int_maybe(v: Any) -> int | None:
@@ -37,15 +40,16 @@ def parse_date_iso(v: Any) -> datetime | None:
     if isinstance(v, datetime):
         return v
     s = str(v).strip()
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
         try:
             return datetime.fromisoformat(s) if "T" in s else datetime.strptime(s, fmt)
         except Exception:
-            continue
+            pass
     try:
         # last resort: fromisoformat (handles offsets)
         return datetime.fromisoformat(s)
     except Exception:
+        logger.exception(f"Failed to parse date '{s}' with fromisoformat")
         return None
 
 

@@ -233,9 +233,7 @@
                         </div>
                     </div>
                     <div
-                        v-else-if="
-                            hasUserEditMode || (isCommunity && isHistorical)
-                        "
+                        v-else-if="hasUserEditMode || isHistorical"
                         class="card-body border-top"
                     >
                         <div class="row">
@@ -327,7 +325,10 @@
                                         </div>
                                     </template>
                                 </div>
-                                <div v-if="isActive" class="row">
+                                <div
+                                    v-if="isActive || isHistorical"
+                                    class="row"
+                                >
                                     <div v-if="!isPublic" class="row mb-2">
                                         <div class="col-sm-12">
                                             <button

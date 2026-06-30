@@ -2762,6 +2762,84 @@ def build_legacy_map_transform(
     return name
 
 
+def build_legacy_map_multi_transform(
+    legacy_system: str,
+    list_name: str,
+    *,
+    required: bool = False,
+) -> str:
+    """
+    Register and return a transform name that splits a comma-delimited string of
+    legacy enumerated values, maps each token via the mappings.preload_map /
+    dm_mappings._CACHE mechanism, and returns a list of target ID strings.
+
+    Example: 'Heard/Call, Tracks' → ["1", "3"]
+
+    A per-input-string result cache is maintained inside the closure so that
+    repeated identical inputs (common in large CSVs) avoid redundant splits and
+    dict lookups.
+    """
+    key = f"legacy_map_multi:{legacy_system}:{list_name}"
+    name = "legacy_map_multi_" + hashlib.sha1(key.encode()).hexdigest()[:8]
+    if name in registry._fns:
+        return name
+
+    # Per-raw-value result cache: input_string → (ids_list, issues_list)
+    _cache: dict = {}
+
+    def fn(value, ctx):
+        if value in (None, ""):
+            if required:
+                return TransformResult(
+                    value=None,
+                    issues=[TransformIssue("error", f"{list_name} required")],
+                )
+            return _result(None)
+
+        cached = _cache.get(value)
+        if cached is not None:
+            ids, issues = cached
+            return TransformResult(value=ids if ids else None, issues=list(issues))
+
+        # Ensure the LegacyValueMap table is loaded (no-op after first call).
+        dm_mappings.preload_map(legacy_system, list_name)
+        table = dm_mappings._CACHE.get((legacy_system, list_name), {})
+
+        ids: list = []
+        issues: list = []
+        for token in value.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            norm = dm_mappings._norm(token)
+            if norm not in table:
+                issues.append(TransformIssue("error", f"Unmapped {legacy_system}.{list_name} value '{token}'"))
+                continue
+            entry = table[norm]
+            canonical = entry.get("canonical") or entry.get("raw")
+            canonical_norm = str(canonical).strip().casefold()
+            if canonical_norm in {dm_mappings.IGNORE_SENTINEL.casefold(), "ignore"}:
+                issues.append(
+                    TransformIssue(
+                        "info",
+                        f"Legacy {legacy_system}.{list_name} value '{token}' intentionally ignored",
+                    )
+                )
+                ctx.stats.setdefault("ignored_legacy_values", []).append(
+                    {"system": legacy_system, "list": list_name, "value": token}
+                )
+                continue
+            target_id = entry.get("target_id")
+            if target_id is not None:
+                ids.append(str(target_id))
+
+        _cache[value] = (ids, list(issues))
+        return TransformResult(value=ids if ids else None, issues=issues)
+
+    registry._fns[name] = fn
+    return name
+
+
 @registry.register("format_date_dmy")
 def t_format_date_dmy(value, ctx):
     """

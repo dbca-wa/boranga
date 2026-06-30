@@ -145,11 +145,13 @@ COLUMN_MAP = {
     "DBNo": "migrated_from_id",
     "SpCode": "species_id",
     "Date": "observation_date",
+    "Time": "observation_time_id",
     "Observer": "OCRObserverDetail__observer_name",
     "OrgRole": "OCRObserverDetail__organisation",
     "Address": "Address",
     "Phone": "Phone",
-    "Certainty": "Certainty",
+    "Certainty": "OCRIdentification__identification_certainty",
+    "Specimen": "OCRIdentification__sample_type",
     "NumSeen": "NumSeen",
     "AdultM": "AdultM",
     "AdultF": "AdultF",
@@ -174,11 +176,11 @@ COLUMN_MAP = {
     "Sp4": "Sp4",
     "Sp5": "Sp5",
     "Sp6": "Sp6",
-    "ObservMethod": "ObservMethod",
-    "ObservType": "ObservType",
-    "SecSign": "SecSign",
+    "ObservMethod": "OCRObservationDetail__observation_method",
+    "ObservType": "OCRAnimalObservation__primary_detection_method",
+    "SecSign": "OCRAnimalObservation__secondary_sign",
     "Observation": "OCRAnimalObservation__animal_observation_detail_comment",
-    "Breeding": "Breeding",
+    "Breeding": "OCRAnimalObservation__reproductive_state",
     "Identification": "OCRIdentification__id_confirmed_by",
     "SpHeld": "OCRIdentification__identification_comment",
     "SpCatNum": "OCRIdentification__barcode_number",
@@ -233,6 +235,7 @@ class OccurrenceReportRow:
     processing_status: str | None = None
     customer_status: str | None = None
     observation_date: date | None = None
+    observation_time_id: int | None = None  # FK id (ObservationTime) after transform
     record_source: str | None = None
     comments: str | None = None
     ocr_for_occ_number: str | None = None
@@ -279,6 +282,7 @@ class OccurrenceReportRow:
     OCRIdentification__permit_id: str | None = None
     OCRIdentification__identification_comment: str | None = None
     OCRIdentification__identification_certainty: int | None = None
+    OCRIdentification__sample_type: int | None = None
     OCRIdentification__sample_destination: int | None = None
 
     # OCRLocation fields
@@ -328,7 +332,10 @@ class OccurrenceReportRow:
     OCRPlantCount__obs_date: date | None = None
 
     # OCRAnimalObservation fields
+    OCRAnimalObservation__secondary_sign: list | None = None
+    OCRAnimalObservation__primary_detection_method: int | None = None
     OCRAnimalObservation__animal_observation_detail_comment: str | None = None
+    OCRAnimalObservation__reproductive_state: int | None = None
     OCRAnimalObservation__count_status: str | None = None
     OCRAnimalObservation__alive_adult_male: int | None = None
     OCRAnimalObservation__dead_adult_male: int | None = None
@@ -399,6 +406,7 @@ class OccurrenceReportRow:
             processing_status=utils.safe_strip(d.get("processing_status")),
             customer_status=utils.safe_strip(d.get("customer_status")),
             observation_date=obs_date,
+            observation_time_id=utils.to_int_maybe(d.get("observation_time_id")),
             record_source=utils.safe_strip(d.get("record_source")),
             comments=utils.safe_strip(d.get("comments")),
             ocr_for_occ_number=utils.safe_strip(d.get("ocr_for_occ_number")),
@@ -442,6 +450,7 @@ class OccurrenceReportRow:
             OCRIdentification__identification_certainty=utils.to_int_maybe(
                 d.get("OCRIdentification__identification_certainty")
             ),
+            OCRIdentification__sample_type=utils.to_int_maybe(d.get("OCRIdentification__sample_type")),
             OCRIdentification__sample_destination=utils.to_int_maybe(d.get("OCRIdentification__sample_destination")),
             OCRLocation__coordinate_source=utils.to_int_maybe(d.get("OCRLocation__coordinate_source")),
             OCRLocation__location_accuracy=utils.to_int_maybe(d.get("OCRLocation__location_accuracy")),
@@ -484,6 +493,13 @@ class OccurrenceReportRow:
             OCRPlantCount__vegetative_state_present=d.get("OCRPlantCount__vegetative_state_present"),
             OCRPlantCount__obs_date=obs_date,
             # OCRAnimalObservation
+            OCRAnimalObservation__secondary_sign=utils.safe_strip(d.get("OCRAnimalObservation__secondary_sign")),
+            OCRAnimalObservation__primary_detection_method=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__primary_detection_method")
+            ),
+            OCRAnimalObservation__reproductive_state=utils.to_int_maybe(
+                d.get("OCRAnimalObservation__reproductive_state")
+            ),
             OCRAnimalObservation__animal_observation_detail_comment=utils.safe_strip(
                 d.get("OCRAnimalObservation__animal_observation_detail_comment")
             ),
@@ -605,6 +621,7 @@ class OccurrenceReportRow:
             "locked": self.processing_status == "approved",
             "customer_status": self.customer_status,
             "observation_date": self.observation_date,
+            "observation_time_id": self.observation_time_id,
             "record_source": self.record_source,
             "comments": self.comments or "",
             "assigned_approver": self.assigned_approver_id,

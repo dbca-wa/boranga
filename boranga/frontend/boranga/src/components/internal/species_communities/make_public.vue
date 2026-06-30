@@ -27,7 +27,7 @@
                                         species_community.publishing_status
                                             .distribution_public
                                     "
-                                    :disabled="!isActive"
+                                    :disabled="publicationRadioDisabled"
                                     type="radio"
                                     :value="false"
                                     class="form-check-input me-2"
@@ -43,7 +43,7 @@
                                         species_community.publishing_status
                                             .distribution_public
                                     "
-                                    :disabled="!isActive"
+                                    :disabled="publicationRadioDisabled"
                                     type="radio"
                                     :value="true"
                                     class="form-check-input"
@@ -66,7 +66,7 @@
                                         species_community.publishing_status
                                             .conservation_status_public
                                     "
-                                    :disabled="!isActive"
+                                    :disabled="publicationRadioDisabled"
                                     type="radio"
                                     :value="false"
                                     class="form-check-input me-2"
@@ -82,7 +82,7 @@
                                         species_community.publishing_status
                                             .conservation_status_public
                                     "
-                                    :disabled="!isActive"
+                                    :disabled="publicationRadioDisabled"
                                     type="radio"
                                     :value="true"
                                     class="form-check-input"
@@ -94,11 +94,11 @@
                                 Attributes: </label>
                             <div class="col-sm-6">
                                 <label for="conservation_attributes_publishing" class="me-2">Private</label>
-                                <input :disabled="!isActive" type="radio" :value="false" class="form-check-input me-2"
+                                <input :disabled="publicationRadioDisabled" type="radio" :value="false" class="form-check-input me-2"
                                     id="conservation_attributes_publishing"
                                     v-model="species_community.publishing_status.conservation_attributes_public">
                                 <label for="conservation_attributes_publishing" class="me-2">Public</label>
-                                <input :disabled="!isActive" type="radio" :value="true" class="form-check-input"
+                                <input :disabled="publicationRadioDisabled" type="radio" :value="true" class="form-check-input"
                                     id="conservation_attributes_publishing"
                                     v-model="species_community.publishing_status.conservation_attributes_public">
                             </div>
@@ -119,7 +119,7 @@
                                         species_community.publishing_status
                                             .threats_public
                                     "
-                                    :disabled="!isActive"
+                                    :disabled="publicationRadioDisabled"
                                     type="radio"
                                     :value="false"
                                     class="form-check-input me-2"
@@ -135,7 +135,7 @@
                                         species_community.publishing_status
                                             .threats_public
                                     "
-                                    :disabled="!isActive"
+                                    :disabled="publicationRadioDisabled"
                                     type="radio"
                                     :value="true"
                                     class="form-check-input"
@@ -243,6 +243,14 @@ export default {
                 ? true
                 : false;
         },
+        isHistorical: function () {
+            return this.species_community.processing_status === 'Historical'
+                ? true
+                : false;
+        },
+        publicationRadioDisabled: function () {
+            return !this.isActive && !this.isHistorical;
+        },
         isPublic: function () {
             return this.isActive &&
                 this.species_community.publishing_status.species_public
@@ -313,8 +321,8 @@ export default {
             let vm = this;
             vm.updatingPublishing = true;
             //if not already public, we make it public (notify user first)
-            //but only if it is active
-            if (!vm.isPublic && vm.isActive) {
+            //but only if it is active or historical
+            if (!vm.isPublic && (vm.isActive || vm.isHistorical)) {
                 swal.fire({
                     title: 'Make Public',
                     text: 'Are you sure you want to make this record public?',

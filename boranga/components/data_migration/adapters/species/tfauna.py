@@ -98,7 +98,7 @@ class SpeciesTfaunaAdapter(SourceAdapter):
         notes_path = os.path.join(os.path.dirname(path), "Species Notes.csv")
         if os.path.isfile(notes_path):
             try:
-                with open(notes_path, encoding="utf-8") as fh:
+                with open(notes_path, encoding="utf-8-sig") as fh:
                     for row in csv.DictReader(fh):
                         sp = (row.get("SpCode") or "").strip()
                         note = (row.get("Notes") or "").strip()

@@ -17,18 +17,20 @@ from boranga.components.data_migration.mappings import get_group_type_id
 from boranga.components.data_migration.registry import (
     TransformContext,
     _result,
+    build_legacy_map_multi_transform,
     build_legacy_map_transform,
     date_from_datetime_iso_local_factory,
     datetime_iso_factory,
     emailuser_by_legacy_username_with_fallback_factory,
     emailuser_object_by_legacy_username_with_fallback_factory,
+    fk_lookup,
     fk_lookup_static,
     geometry_from_coords_factory,
     registry,
     static_value_factory,
     taxonomy_lookup_legacy_id_mapping_species,
 )
-from boranga.components.occurrence.models import OccurrenceReport
+from boranga.components.occurrence.models import ObservationTime, OccurrenceReport
 from boranga.components.species_and_communities.models import GroupType
 from boranga.components.users.models import SubmitterCategory
 from boranga.settings import (
@@ -63,6 +65,11 @@ DATETIME_ISO_PERTH = datetime_iso_factory("Australia/Perth")
 
 # For DateField columns: return the local (Perth) date to avoid day-shift from UTC conversion
 DATE_LOCAL_PERTH = date_from_datetime_iso_local_factory("Australia/Perth")
+
+OBSERVATION_TIME_FK_LOOKUP = fk_lookup(
+    model=ObservationTime,
+    lookup_field="name",
+)
 
 GEOMETRY_FROM_COORDS = geometry_from_coords_factory(
     latitude_field="Lat",
@@ -112,6 +119,42 @@ VEGETATION_TYPE_TRANSFORM = build_legacy_map_transform(
     "VegType",
     required=False,
     return_type="canonical",
+)
+
+OBSERVATION_METHOD_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "ObservMethod",
+    required=False,
+)
+
+SECONDARY_SIGN_TRANSFORM = build_legacy_map_multi_transform(
+    "TFAUNA",
+    "SecSign",
+    required=False,
+)
+
+PRIMARY_DETECTION_METHOD_TRANSFORM = build_legacy_map_multi_transform(
+    "TFAUNA",
+    "ObservType",
+    required=False,
+)
+
+REPRODUCTIVE_STATE_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Breeding",
+    required=False,
+)
+
+IDENTIFICATION_CERTAINTY_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Certainty",
+    required=False,
+)
+
+SAMPLE_TYPE_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Specimen",
+    required=False,
 )
 
 # ── Dead/alive determination helpers ────────────────────────────────
@@ -234,12 +277,14 @@ PIPELINES = {
     "customer_status": [_customer_status],
     "lodgement_date": ["strip", "blank_to_none", DATETIME_ISO_PERTH],
     "observation_date": ["strip", "blank_to_none", DATE_LOCAL_PERTH],
+    "observation_time_id": ["strip", "blank_to_none", OBSERVATION_TIME_FK_LOOKUP],
     "datetime_updated": ["strip", "blank_to_none", DATE_LOCAL_PERTH],
     "comments": ["strip", "blank_to_none"],
     "record_source": ["strip", "blank_to_none"],
     "ocr_for_occ_name": ["strip", "blank_to_none"],
     "submitter": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME],
     "approved_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME],
+    "last_modified_by": ["strip", "blank_to_none", EMAILUSER_BY_LEGACY_USERNAME],
     # SubmitterInformation
     "SubmitterInformation__submitter_category": [SUBMITTER_CATEGORY_DBCA],
     "SubmitterInformation__email_user": [
@@ -263,11 +308,14 @@ PIPELINES = {
     "OCRLocation__location_description": ["strip", "blank_to_none"],
     "OCRLocation__location_accuracy": ["strip", "blank_to_none", LOCATION_ACCURACY_TRANSFORM],
     # OCRObservationDetail
+    "OCRObservationDetail__observation_method": ["strip", "blank_to_none", OBSERVATION_METHOD_TRANSFORM],
     "OCRObservationDetail__comments": ["strip", "blank_to_none"],
     # OCRIdentification
     "OCRIdentification__barcode_number": ["strip", "blank_to_none"],
     "OCRIdentification__id_confirmed_by": ["strip", "blank_to_none"],
     "OCRIdentification__identification_comment": ["strip", "blank_to_none"],
+    "OCRIdentification__identification_certainty": ["strip", "blank_to_none", IDENTIFICATION_CERTAINTY_TRANSFORM],
+    "OCRIdentification__sample_type": ["strip", "blank_to_none", SAMPLE_TYPE_TRANSFORM],
     # OCRHabitatComposition
     "OCRHabitatComposition__land_form": [
         "strip",
@@ -277,6 +325,9 @@ PIPELINES = {
     # OCRVegetationStructure
     "OCRVegetationStructure__vegetation_structure_layer_one": ["strip", "blank_to_none", VEGETATION_TYPE_TRANSFORM],
     # OCRAnimalObservation fields — integers
+    "OCRAnimalObservation__secondary_sign": ["strip", "blank_to_none", SECONDARY_SIGN_TRANSFORM],
+    "OCRAnimalObservation__primary_detection_method": ["strip", "blank_to_none", PRIMARY_DETECTION_METHOD_TRANSFORM],
+    "OCRAnimalObservation__reproductive_state": ["strip", "blank_to_none", REPRODUCTIVE_STATE_TRANSFORM],
     "OCRAnimalObservation__animal_observation_detail_comment": ["strip", "blank_to_none"],
     "OCRAnimalObservation__count_status": ["strip", "blank_to_none"],
     "OCRAnimalObservation__alive_adult_male": ["strip", "blank_to_none", "to_int"],
@@ -302,6 +353,10 @@ PIPELINES = {
     "OccurrenceReportGeometry__geometry": [GEOMETRY_FROM_COORDS],
     "OccurrenceReportGeometry__locked": [GEOMETRY_LOCKED_DEFAULT],
     "OccurrenceReportGeometry__show_on_map": [static_value_factory(True)],  # Task 12781
+    "ChDate": ["strip", "blank_to_none"],
+    "ChName": ["strip", "blank_to_none"],
+    "EnDate": ["strip", "blank_to_none"],
+    "EnName": ["strip", "blank_to_none"],
 }
 
 
@@ -389,11 +444,11 @@ class OccurrenceReportTfaunaAdapter(SourceAdapter):
                 src_parts.append(f"Author: {author}")
             canonical["record_source"] = "; ".join(src_parts) if src_parts else None
 
-            # ── approved_by = ChName (if present), else EnName ──
+            # ── approved_by / last_modified_by = ChName (if present), else EnName ──
             ch_name = (raw.get("ChName") or "").strip()
             en_name = (raw.get("EnName") or "").strip()
             canonical["approved_by"] = ch_name if ch_name else en_name
-            canonical["last_modified_by"] = canonical["approved_by"]
+            canonical["last_modified_by"] = ch_name if ch_name else en_name
 
             # ── submitter information (EnName) ──────────────────
             canonical["SubmitterInformation__email_user"] = en_name if en_name else None

@@ -4922,7 +4922,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
 
                     when_dt = when_dt.replace(tzinfo=zoneinfo.ZoneInfo("Australia/Perth"))
             except Exception:
-                pass
+                logger.exception(f"{mid}: Failed to parse ChDate '{ch_date}'")
 
             action_text = "Edited to improve accuracy"  # Task 12868
             ua = OccurrenceReportUserAction(
@@ -5399,6 +5399,128 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 )
 
             del ocr_loc_full, existing_occ_locs, occ_loc_to_create, occ_loc_to_update
+
+            # -----------------------------------------------------------------
+            # Copy OccurrenceReportDocuments → OccurrenceDocuments
+            # For each approved TFAUNA OCR, mirror its documents onto the
+            # newly-created/updated Occurrence.  We skip documents that have
+            # already been copied (idempotency: match on _file path).
+            # -----------------------------------------------------------------
+            ocr_pks_to_occ: dict[int, Occurrence] = {}
+            for ocr in tfauna_approved_ocrs:
+                occ_mid = occ_mig_id_map[ocr.migrated_from_id]
+                occ = all_occ_by_mid.get(occ_mid)
+                if occ and occ.pk:
+                    ocr_pks_to_occ[ocr.pk] = occ
+
+            if ocr_pks_to_occ:
+                # Fetch existing OccurrenceDocument _file paths per occurrence
+                # to avoid creating duplicates on re-runs.
+                occ_pks_for_docs = [o.pk for o in ocr_pks_to_occ.values()]
+                existing_occ_doc_files: set[tuple[int, str]] = set(
+                    OccurrenceDocument.objects.filter(occurrence_id__in=occ_pks_for_docs).values_list(
+                        "occurrence_id", "_file"
+                    )
+                )
+
+                # Fetch all ORF documents for the relevant OCRs
+                orf_docs = OccurrenceReportDocument.objects.filter(
+                    occurrence_report_id__in=list(ocr_pks_to_occ.keys())
+                ).only(
+                    "pk",
+                    "occurrence_report_id",
+                    "_file",
+                    "name",
+                    "description",
+                    "uploaded_date",
+                    "input_name",
+                    "document_category_id",
+                    "document_sub_category_id",
+                )
+
+                occ_docs_to_create = []
+                for orf_doc in orf_docs:
+                    occ = ocr_pks_to_occ.get(orf_doc.occurrence_report_id)
+                    if not occ:
+                        continue
+                    file_path = str(orf_doc._file)
+                    if (occ.pk, file_path) in existing_occ_doc_files:
+                        continue  # already copied in a previous run
+                    new_doc = OccurrenceDocument(
+                        occurrence=occ,
+                        _file=file_path,
+                        name=orf_doc.name,
+                        description=orf_doc.description or "",
+                        input_name=orf_doc.input_name,
+                        document_category_id=orf_doc.document_category_id,
+                        document_sub_category_id=orf_doc.document_sub_category_id,
+                    )
+                    # Store the source uploaded_date as a temp attr for the
+                    # post-create SQL UPDATE (auto_now_add prevents setting it
+                    # via the constructor).
+                    new_doc._orf_uploaded_date = orf_doc.uploaded_date
+                    occ_docs_to_create.append(new_doc)
+                    existing_occ_doc_files.add((occ.pk, file_path))
+
+                occ_docs_created = 0
+                if occ_docs_to_create:
+                    # OccurrenceDocument.save() performs a double-save to set
+                    # document_number.  Bypass it for bulk performance — we set a
+                    # placeholder and fix via SQL UPDATE (same pattern as OCRs above).
+                    for d in occ_docs_to_create:
+                        d.document_number = "PENDING"
+                    try:
+                        OccurrenceDocument.objects.bulk_create(occ_docs_to_create, batch_size=BATCH)
+                        occ_docs_created = len(occ_docs_to_create)
+                    except Exception:
+                        logger.exception("Failed to bulk_create OccurrenceDocuments; falling back to individual saves")
+                        for d in occ_docs_to_create:
+                            try:
+                                d.document_number = ""
+                                d.save()
+                                occ_docs_created += 1
+                            except Exception as exc:
+                                logger.exception("Failed to create OccurrenceDocument: %s", exc)
+
+                    # Fix document_number and uploaded_date for bulk-created
+                    # rows in SQL UPDATEs.  uploaded_date has auto_now_add=True
+                    # so we must patch it via raw SQL after the INSERT.
+                    created_docs_with_pk = [d for d in occ_docs_to_create if d.pk]
+                    if created_docs_with_pk:
+                        from django.db import connection as _conn
+
+                        pending_doc_ids = [d.pk for d in created_docs_with_pk]
+                        with _conn.cursor() as cursor:
+                            cursor.execute(
+                                "UPDATE boranga_occurrencedocument SET document_number = 'D' || id "
+                                "WHERE id = ANY(%s) AND document_number = 'PENDING'",
+                                [pending_doc_ids],
+                            )
+
+                        # Patch uploaded_date per document using unnest
+                        date_updates = [
+                            (d.pk, d._orf_uploaded_date)
+                            for d in created_docs_with_pk
+                            if getattr(d, "_orf_uploaded_date", None) is not None
+                        ]
+                        if date_updates:
+                            with _conn.cursor() as cursor:
+                                cursor.execute(
+                                    "UPDATE boranga_occurrencedocument AS t "
+                                    "SET uploaded_date = v.uploaded_date "
+                                    "FROM (SELECT unnest(%s::int[]) AS id, "
+                                    "unnest(%s::timestamptz[]) AS uploaded_date) AS v "
+                                    "WHERE t.id = v.id",
+                                    [
+                                        [u[0] for u in date_updates],
+                                        [u[1] for u in date_updates],
+                                    ],
+                                )
+
+                logger.info(
+                    "TFAUNA: copied %d OccurrenceDocuments from OccurrenceReportDocuments",
+                    occ_docs_created,
+                )
 
             logger.info(
                 "TFAUNA Occurrence creation complete: %d created, %d updated, %d geometry copied, %d OCRs linked",

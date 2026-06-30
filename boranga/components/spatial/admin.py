@@ -32,7 +32,7 @@ class TileLayerModelForm(forms.ModelForm):
             "max_zoom": "The maximum zoom level at which the layer is visible",
             "active": "Whether the layer is disabled and won't be used by the map component",
             "invert_xy": "Whether to invert the X and Y coordinates on when querying the layer",
-            "is_tenure_intersects_query_layer": "Whether the layer is used for querying tenure intersects",
+            "is_tenure_intersects_query_layer": "Whether the layer is used for querying tenure intersects (Note: The Cadastre Geoserver Tile Layer will only be used for intersects if the local postgis copy of the Cadastre layer is unavailable)",
             "matrix_set": "The matrix set for the layer (for WMTS layers)",
             "tile_pixel_size": "The tile pixel size for the layer (for WMTS layers)",
             "service": "The service type of the layer: WMS or WMTS",
