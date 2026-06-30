@@ -1558,7 +1558,11 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         )
         serializer.is_valid(raise_exception=True)
         if serializer.is_valid():
-            if instance.processing_status != "active" and serializer.validated_data["species_public"]:
+            if (
+                instance.processing_status
+                not in [Species.PROCESSING_STATUS_ACTIVE, Species.PROCESSING_STATUS_HISTORICAL]
+                and serializer.validated_data["species_public"]
+            ):
                 raise serializers.ValidationError("non-active species record cannot be made public")
             serializer.save()
 
@@ -2591,7 +2595,11 @@ class CommunityViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         )
         serializer.is_valid(raise_exception=True)
         if serializer.is_valid():
-            if instance.processing_status != "active" and serializer.validated_data["community_public"]:
+            if (
+                instance.processing_status
+                not in [Community.PROCESSING_STATUS_ACTIVE, Community.PROCESSING_STATUS_HISTORICAL]
+                and serializer.validated_data["community_public"]
+            ):
                 raise serializers.ValidationError("non-active community record cannot be made public")
             serializer.save()
 

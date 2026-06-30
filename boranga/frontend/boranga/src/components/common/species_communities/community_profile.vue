@@ -978,7 +978,7 @@
                                 species_community.publishing_status
                                     .distribution_public
                             "
-                            :disabled="isReadOnly || !isPublic || !isActive"
+                            :disabled="isPublishingRadioDisabled"
                             type="radio"
                             :value="false"
                             class="form-check-input me-2"
@@ -992,7 +992,7 @@
                                 species_community.publishing_status
                                     .distribution_public
                             "
-                            :disabled="isReadOnly || !isPublic || !isActive"
+                            :disabled="isPublishingRadioDisabled"
                             type="radio"
                             :value="true"
                             class="form-check-input"
@@ -1015,7 +1015,7 @@
                                 species_community.publishing_status
                                     .conservation_status_public
                             "
-                            :disabled="isReadOnly || !isPublic || !isActive"
+                            :disabled="isPublishingRadioDisabled"
                             type="radio"
                             :value="false"
                             class="form-check-input me-2"
@@ -1029,7 +1029,7 @@
                                 species_community.publishing_status
                                     .conservation_status_public
                             "
-                            :disabled="isReadOnly || !isPublic || !isActive"
+                            :disabled="isPublishingRadioDisabled"
                             type="radio"
                             :value="true"
                             class="form-check-input"
@@ -1041,11 +1041,11 @@
                 </label>
                 <div class="col-sm-9">
                     <label for="conservation_attributes_publishing" class="me-2">Private</label>
-                    <input :disabled="isReadOnly || !isPublic || !isActive" type="radio" :value="false"
+                    <input :disabled="isPublishingRadioDisabled" type="radio" :value="false"
                         class="form-check-input me-2" id="conservation_attributes_publishing"
                         v-model="species_community.publishing_status.conservation_attributes_public">
                     <label for="conservation_attributes_publishing" class="me-2">Public</label>
-                    <input :disabled="isReadOnly || !isPublic || !isActive" type="radio" :value="true"
+                    <input :disabled="isPublishingRadioDisabled" type="radio" :value="true"
                         class="form-check-input" id="conservation_attributes_publishing"
                         v-model="species_community.publishing_status.conservation_attributes_public">
                 </div>
@@ -1066,7 +1066,7 @@
                                 species_community.publishing_status
                                     .threats_public
                             "
-                            :disabled="isReadOnly || !isPublic || !isActive"
+                            :disabled="isPublishingRadioDisabled"
                             type="radio"
                             :value="false"
                             class="form-check-input me-2"
@@ -1080,7 +1080,7 @@
                                 species_community.publishing_status
                                     .threats_public
                             "
-                            :disabled="isReadOnly || !isPublic || !isActive"
+                            :disabled="isPublishingRadioDisabled"
                             type="radio"
                             :value="true"
                             class="form-check-input"
@@ -1091,7 +1091,7 @@
                     <div class="col-sm-12">
                         <button
                             v-if="!updatingPublishing"
-                            :disabled="isReadOnly || !isPublic || !isActive"
+                            :disabled="isPublishingRadioDisabled"
                             class="btn btn-primary btn-sm float-end"
                             @click.prevent="updatePublishingDetails()"
                         >
@@ -1226,6 +1226,13 @@ export default {
                 this.species_community.publishing_status.community_public
                 ? true
                 : false;
+        },
+        isPublishingRadioDisabled: function () {
+            return (
+                this.isReadOnly ||
+                !this.isPublic ||
+                !(this.isActive || this.isHistorical)
+            );
         },
         isNOOReadOnly: function () {
             let vm = this;
@@ -1409,8 +1416,8 @@ export default {
             let vm = this;
             vm.updatingPublishing = true;
             //if not already public, we make it public (notify user first)
-            //but only if it is active
-            if (vm.isPublic && vm.isActive) {
+            //but only if it is active or historical
+            if (vm.isPublic && (vm.isActive || vm.isHistorical)) {
                 //send just publishing form data
                 let data = JSON.stringify(
                     vm.species_community.publishing_status
