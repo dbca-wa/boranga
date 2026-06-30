@@ -1,3 +1,8 @@
+{% load users %}
+
+{% is_internal as is_internal_login %}
+
+{% if not is_internal_login %}
 <div class="alert alert-primary" role="alert">
     <div class="d-flex gap-3">
         <i
@@ -14,3 +19,4 @@
         </div>
     </div>
 </div>
+{% endif %}
