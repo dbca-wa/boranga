@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 # sentinel string used to mark intentional ignores (default: "__IGNORE__")
 IGNORE_SENTINEL = getattr(settings, "LEGACY_IGNORE_SENTINEL", "__IGNORE__")
+# sentinel in canonical_name column: map the legacy value to None/NULL
+NULL_SENTINEL = getattr(settings, "LEGACY_NULL_SENTINEL", "__null__")
+# sentinel in legacy_value column: match empty / None input cells
+EMPTY_SENTINEL = getattr(settings, "LEGACY_EMPTY_SENTINEL", "__empty__")
 
 # Cache: (legacy_system, list_name) -> dict[norm_legacy_value] = mapping dict
 _CACHE: dict[tuple[str, str], dict[str, dict]] = {}
@@ -69,21 +73,35 @@ def preload_map(legacy_system: str, list_name: str, active_only: bool = True):
         canon = (row.canonical_name or "").strip()
         value_key = _norm(row.legacy_value)
         if canon.casefold() == IGNORE_SENTINEL.casefold():
-            data[value_key] = {
+            entry = {
                 "target_id": None,
                 "content_type_id": None,
                 "canonical": None,
                 "raw": row.legacy_value,
                 "ignored": True,
             }
+        elif canon.casefold() == NULL_SENTINEL.casefold():
+            # __null__ in canonical_name: the legacy value exists but should
+            # resolve to None (e.g. "Not recorded" → NULL FK).
+            entry = {
+                "target_id": None,
+                "content_type_id": None,
+                "canonical": None,
+                "raw": row.legacy_value,
+                "null_mapped": True,
+            }
         else:
-            data[value_key] = {
+            entry = {
                 "target_id": row.target_object_id,
                 "content_type_id": row.target_content_type_id,
                 "canonical": row.canonical_name,
                 "raw": row.legacy_value,
-                "ignored": False,
             }
+        data[value_key] = entry
+        # __empty__ in legacy_value: also index under "" so that blank/None
+        # inputs (which normalise to "") find this entry directly.
+        if value_key == _norm(EMPTY_SENTINEL):
+            data[""] = entry
     _CACHE[cache_key] = data
 
 

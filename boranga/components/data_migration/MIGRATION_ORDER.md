@@ -184,6 +184,11 @@ echo "PID $! Log: tail -f $LOG"
 # Make sure there are no missing 1 to 1 relations in legacy migrated ORFs and OCCs
 ./manage.py ocr_fix_missing_empty_relations
 
+## Occurrence Tenure
+
+# Generate OccurrenceTenure records for all TFAUNA occurrences via cadastre spatial intersection (DB-driven, no CSV required)
+./manage.py migrate_data run tfauna_occurrence_tenure private-media/legacy_data/TFAUNA/ --sources TFAUNA --wipe-targets --seed-history
+
 # --- Cleanup
 
 # Drop the functional index now that migrations are complete

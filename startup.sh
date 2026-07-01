@@ -1,6 +1,6 @@
 #!/bin/bash
 
-openssl rand -hex 32 > /app/git_hash
+openssl rand -hex 32 > /tmp/random_hash
 
 if [ "$ENABLE_CRON" == "True" ];
     then

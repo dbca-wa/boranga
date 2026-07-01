@@ -45,6 +45,7 @@ from boranga.components.main.models import LegacyTaxonomyMapping
 from boranga.components.occurrence.models import (
     AssociatedSpeciesTaxonomy,
     Intensity,
+    OCCAnimalObservation,
     OCCAssociatedSpecies,
     OCCFireHistory,
     OCCHabitatComposition,
@@ -231,6 +232,40 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "(migrated_from_id prefix 'tfauna-orf-') and their children ...",
                         tfauna_occ_count,
                     )
+                    # Delete OccurrenceTenure for TFAUNA OCCs BEFORE deleting OccurrenceGeometry.
+                    # Deleting OccurrenceGeometry triggers SET_NULL_AND_HISTORICAL which severs
+                    # the occurrence_geometry FK on OccurrenceTenure rows, making subsequent
+                    # source-scoped lookups return 0 rows.  We also catch already-historical
+                    # tenures (occurrence_geometry=NULL) from prior runs via historical_occurrence.
+                    try:
+                        from django.contrib.contenttypes.models import ContentType
+                        from django.db.models import Q
+                        from reversion.models import Version
+
+                        from boranga.components.occurrence.models import OccurrenceTenure
+
+                        _tfauna_occ_ids = list(
+                            Occurrence.objects.filter(**tfauna_occ_filter).values_list("id", flat=True)
+                        )
+                        if _tfauna_occ_ids:
+                            _tenure_qs = OccurrenceTenure.objects.filter(
+                                Q(occurrence_geometry__occurrence_id__in=_tfauna_occ_ids)
+                                | Q(historical_occurrence__in=_tfauna_occ_ids)
+                            )
+                            _tenure_ids = list(_tenure_qs.values_list("id", flat=True))
+                            if _tenure_ids:
+                                _ct = ContentType.objects.get_for_model(OccurrenceTenure)
+                                Version.objects.filter(
+                                    content_type=_ct, object_id__in=[str(i) for i in _tenure_ids]
+                                ).delete()
+                                _deleted_tenure, _ = _tenure_qs.delete()
+                                logger.info(
+                                    "OccurrenceReportImporter: deleted %d OccurrenceTenure records "
+                                    "for TFAUNA OCCs before geometry wipe",
+                                    _deleted_tenure,
+                                )
+                    except Exception:
+                        logger.exception("Failed to delete OccurrenceTenure records for TFAUNA OCCs")
                     # Clean reversion history for TFAUNA Occurrences and OCC child
                     # models before deleting the rows so the seeder won't encounter
                     # stale Version records on the next run.
@@ -5008,6 +5043,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "locked": True,
                     "last_modified_by": ocr.last_modified_by,
                     "datetime_updated": ocr.datetime_updated,
+                    "occurrence_source": Occurrence.OCCURRENCE_CHOICE_OCR,
                 }
                 if getattr(ctx, "migration_run", None) is not None:
                     defaults["migration_run"] = ctx.migration_run
@@ -5520,6 +5556,110 @@ class OccurrenceReportImporter(BaseSheetImporter):
                 logger.info(
                     "TFAUNA: copied %d OccurrenceDocuments from OccurrenceReportDocuments",
                     occ_docs_created,
+                )
+
+            # -----------------------------------------------------------------
+            # Clone 1-to-1 OCR child relations → OCC child relations.
+            # Covers the sections in _OCR_OCC_CHILD_RELATIONS that are not
+            # already handled:
+            #   - "location" handled above as OCCLocation
+            #   - "associated_species" handled by the OCCAssociatedSpecies
+            #     aggregation section later in the pipeline
+            #   - "plant_count" excluded for fauna (_RELATION_GROUP_EXCLUSIONS)
+            # -----------------------------------------------------------------
+            _tfauna_clone_pairs = [
+                (OCRHabitatComposition, OCCHabitatComposition),
+                (OCRHabitatCondition, OCCHabitatCondition),
+                (OCRVegetationStructure, OCCVegetationStructure),
+                (OCRFireHistory, OCCFireHistory),
+                (OCRObservationDetail, OCCObservationDetail),
+                (OCRAnimalObservation, OCCAnimalObservation),
+                (OCRIdentification, OCCIdentification),
+            ]
+            _CLONE_SKIP_FIELDS = frozenset(
+                {
+                    "id",
+                    "occurrence_report",
+                    "occurrence_report_id",
+                    "occurrence",
+                    "occurrence_id",
+                    "migrated_from_id",
+                    "content_type",
+                    "content_type_id",
+                    "object_id",
+                }
+            )
+            _all_occ_pks = [occ.pk for occ in all_occ_by_mid.values() if occ.pk]
+            occ_clone_created_total = 0
+
+            for ocr_model, occ_model in _tfauna_clone_pairs:
+                # Fetch OCR child rows keyed by OCR pk
+                ocr_child_map = {
+                    obj.occurrence_report_id: obj
+                    for obj in ocr_model.objects.filter(occurrence_report_id__in=tfauna_ocr_pks)
+                }
+                if not ocr_child_map:
+                    continue
+
+                # Fetch existing OCC child rows for idempotency
+                existing_occ_child_pks = set(
+                    occ_model.objects.filter(occurrence_id__in=_all_occ_pks).values_list("occurrence_id", flat=True)
+                )
+
+                # Determine common fields to copy (excluding FK/id fields)
+                ocr_field_names = {f.name for f in ocr_model._meta.fields}
+                occ_field_names = {f.name for f in occ_model._meta.fields}
+                copy_fields = (ocr_field_names & occ_field_names) - _CLONE_SKIP_FIELDS
+
+                to_create = []
+                for ocr in tfauna_approved_ocrs:
+                    occ_mid = occ_mig_id_map[ocr.migrated_from_id]
+                    occ = all_occ_by_mid.get(occ_mid)
+                    if not occ or not occ.pk:
+                        continue
+                    if occ.pk in existing_occ_child_pks:
+                        continue  # already exists (idempotent re-run)
+
+                    ocr_child = ocr_child_map.get(ocr.pk)
+                    if not ocr_child:
+                        continue
+
+                    new_child = occ_model(occurrence_id=occ.pk)
+                    for field_name in copy_fields:
+                        setattr(new_child, field_name, getattr(ocr_child, field_name, None))
+                    to_create.append(new_child)
+                    existing_occ_child_pks.add(occ.pk)  # prevent dupes in same batch
+
+                if to_create:
+                    try:
+                        occ_model.objects.bulk_create(to_create, batch_size=BATCH)
+                        occ_clone_created_total += len(to_create)
+                        logger.info(
+                            "TFAUNA: cloned %d %s rows from OCR to OCC",
+                            len(to_create),
+                            occ_model.__name__,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to bulk_create %s for TFAUNA OCCs; falling back to individual saves",
+                            occ_model.__name__,
+                        )
+                        for obj in to_create:
+                            try:
+                                obj.save()
+                                occ_clone_created_total += 1
+                            except Exception as exc:
+                                logger.exception(
+                                    "Failed to create %s for occurrence_id=%s: %s",
+                                    occ_model.__name__,
+                                    obj.occurrence_id,
+                                    exc,
+                                )
+
+            if occ_clone_created_total:
+                logger.info(
+                    "TFAUNA: cloned %d total 1-to-1 child rows from OCRs to OCCs",
+                    occ_clone_created_total,
                 )
 
             logger.info(
