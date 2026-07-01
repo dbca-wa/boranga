@@ -231,6 +231,40 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "(migrated_from_id prefix 'tfauna-orf-') and their children ...",
                         tfauna_occ_count,
                     )
+                    # Delete OccurrenceTenure for TFAUNA OCCs BEFORE deleting OccurrenceGeometry.
+                    # Deleting OccurrenceGeometry triggers SET_NULL_AND_HISTORICAL which severs
+                    # the occurrence_geometry FK on OccurrenceTenure rows, making subsequent
+                    # source-scoped lookups return 0 rows.  We also catch already-historical
+                    # tenures (occurrence_geometry=NULL) from prior runs via historical_occurrence.
+                    try:
+                        from django.contrib.contenttypes.models import ContentType
+                        from django.db.models import Q
+                        from reversion.models import Version
+
+                        from boranga.components.occurrence.models import OccurrenceTenure
+
+                        _tfauna_occ_ids = list(
+                            Occurrence.objects.filter(**tfauna_occ_filter).values_list("id", flat=True)
+                        )
+                        if _tfauna_occ_ids:
+                            _tenure_qs = OccurrenceTenure.objects.filter(
+                                Q(occurrence_geometry__occurrence_id__in=_tfauna_occ_ids)
+                                | Q(historical_occurrence__in=_tfauna_occ_ids)
+                            )
+                            _tenure_ids = list(_tenure_qs.values_list("id", flat=True))
+                            if _tenure_ids:
+                                _ct = ContentType.objects.get_for_model(OccurrenceTenure)
+                                Version.objects.filter(
+                                    content_type=_ct, object_id__in=[str(i) for i in _tenure_ids]
+                                ).delete()
+                                _deleted_tenure, _ = _tenure_qs.delete()
+                                logger.info(
+                                    "OccurrenceReportImporter: deleted %d OccurrenceTenure records "
+                                    "for TFAUNA OCCs before geometry wipe",
+                                    _deleted_tenure,
+                                )
+                    except Exception:
+                        logger.exception("Failed to delete OccurrenceTenure records for TFAUNA OCCs")
                     # Clean reversion history for TFAUNA Occurrences and OCC child
                     # models before deleting the rows so the seeder won't encounter
                     # stale Version records on the next run.
