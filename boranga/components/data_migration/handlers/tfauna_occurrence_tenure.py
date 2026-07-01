@@ -9,11 +9,16 @@ from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 from ledger_api_client.ledger_models import EmailUserRO
 
+from boranga.components.data_migration.adapters.occurrence_report.tfauna import (
+    TEN_CODE_PURPOSE_TRANSFORM,
+)
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.registry import (
     BaseSheetImporter,
     ImportContext,
+    TransformContext,
     register,
+    registry,
 )
 from boranga.components.occurrence.models import Occurrence, OccurrenceGeometry, OccurrenceTenure
 from boranga.components.spatial.models import TileLayer
@@ -34,15 +39,19 @@ class DummyRequest:
 class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
     """
     Create OccurrenceTenure records for all TFAUNA occurrences by spatially intersecting
-    each occurrence's geometry with the cadastre layer.  No purpose, vesting, or
-    significant_to_occurrence values are set — all fields are left at their defaults.
+    each occurrence's geometry with the cadastre layer.  The ``purpose`` field on each
+    tenure record is populated by mapping the legacy ``TenCode`` column through the
+    TFAUNA "Purpose" LegacyValueMap.
 
-    This importer is fully DB-driven: it queries existing TFAUNA Occurrences
-    (migrated_from_id starting with 'tfauna-orf-') rather than reading a legacy CSV.
+    This importer is primarily DB-driven: it queries existing TFAUNA Occurrences
+    (migrated_from_id starting with 'tfauna-orf-') rather than streaming the full CSV.
+    However it does read ``Fauna Records.csv`` once at startup (O(n) pass) to build a
+    SheetNo → TenCode lookup used for purpose resolution.  Pass the TFAUNA legacy data
+    directory as ``path`` (e.g. ``private-media/legacy_data/TFAUNA/``).
+
     Those Occurrences are auto-created by the `occurrence_report_legacy` TFAUNA run from
-    approved OCRs.  The `path` argument accepted by the management command is required by
-    the framework but is not used — pass any existing path (e.g. the TFAUNA legacy data
-    directory) to satisfy the CLI.
+    approved OCRs.  This handler must be run AFTER those chunks complete and the OCCs
+    exist in the database.
 
     Because TFAUNA OCCs are owned by the `occurrence_report_legacy` run (not a standalone
     `occurrence_legacy` run), this handler must be run AFTER the `occurrence_report_legacy`
@@ -102,9 +111,41 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
             logger.info("tfauna_occurrence_tenure.clear_targets: no TFAUNA OccurrenceTenure rows to delete")
 
     def run(self, path: str, ctx: ImportContext, **options):
-        # `path` is accepted for framework compatibility but is not used — all data
-        # comes from the database.
+        # `path` points to the TFAUNA legacy data directory (e.g. private-media/legacy_data/TFAUNA/).
+        # All occurrence/tenure data comes from the database, but we read "Fauna Records.csv"
+        # once up-front to build a migrated_from_id → TenCode lookup for purpose resolution.
         start_time = timezone.now()
+
+        # Build SheetNo → TenCode map from the source CSV (O(n) single pass).
+        import csv as _csv
+
+        _ten_code_map: dict[str, str] = {}  # "tfauna-orf-{SheetNo}" → raw TenCode
+        _fauna_csv = os.path.join(path, "Fauna Records.csv")
+        if os.path.exists(_fauna_csv):
+            try:
+                with open(_fauna_csv, newline="", encoding="utf-8-sig") as _fh:
+                    for _row in _csv.DictReader(_fh):
+                        _sheet_no = (_row.get("SheetNo") or "").strip()
+                        _ten_code = (_row.get("TenCode") or "").strip()
+                        if _sheet_no:
+                            _ten_code_map[f"tfauna-orf-{_sheet_no}"] = _ten_code
+                logger.info(
+                    "TfaunaOccurrenceTenureImporter: loaded TenCode for %d records from %s",
+                    len(_ten_code_map),
+                    _fauna_csv,
+                )
+            except Exception:
+                logger.exception(
+                    "TfaunaOccurrenceTenureImporter: failed to read TenCode map from %s; purpose will not be populated",
+                    _fauna_csv,
+                )
+        else:
+            logger.warning(
+                "TfaunaOccurrenceTenureImporter: '%s' not found; purpose will not be populated",
+                _fauna_csv,
+            )
+
+        _purpose_fn = registry._fns.get(TEN_CODE_PURPOSE_TRANSFORM)
         logger.info(
             "TfaunaOccurrenceTenureImporter (%s) started at %s (dry_run=%s)",
             self.slug,
@@ -214,6 +255,7 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
         errors = 0
         errors_details = []
         warnings_details = []
+        purpose_geom_map: dict[int, list[int]] = {}  # purpose_id → [occurrence_geometry_pks]
 
         # Pre-deduplicate by geom_pk and filter out invalid geometries before
         # submitting to the thread pool.  Keeps worker logic simple and avoids
@@ -287,10 +329,31 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                     if tenure_count_after == 0:
                         return {"status": "skipped", "reason": "No OccurrenceTenure records created after intersection"}
 
+                    # Resolve purpose_id for this geometry; the actual UPDATE is deferred
+                    # to a single batch query per unique purpose value after the thread
+                    # pool completes, avoiding one UPDATE per occurrence.
+                    _purpose_id = None
+                    _ten_code = _ten_code_map.get(mid, "")
+                    if _ten_code and _purpose_fn is not None:
+                        _purpose_res = _purpose_fn(_ten_code, TransformContext(row={}))
+                        _purpose_id = _purpose_res.value
+
                     if not exists_before:
-                        return {"status": "ok", "created": tenure_count_after, "updated": 0}
+                        return {
+                            "status": "ok",
+                            "created": tenure_count_after,
+                            "updated": 0,
+                            "geom_pk": geom_pk,
+                            "purpose_id": _purpose_id,
+                        }
                     num_new = max(0, tenure_count_after - tenure_count_before)
-                    return {"status": "ok", "created": num_new, "updated": tenure_count_before}
+                    return {
+                        "status": "ok",
+                        "created": num_new,
+                        "updated": tenure_count_before,
+                        "geom_pk": geom_pk,
+                        "purpose_id": _purpose_id,
+                    }
 
                 except Exception as e:
                     logger.exception("Error processing tenure for TFAUNA Occurrence %s: %s", mid, e)
@@ -354,6 +417,23 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                     else:
                         created += result["created"]
                         updated += result["updated"]
+                        if result.get("purpose_id") is not None:
+                            purpose_geom_map.setdefault(result["purpose_id"], []).append(result["geom_pk"])
+
+            # Batch-update purpose per unique purpose_id value in chunks to avoid
+            # sending a massive IN list to PostgreSQL in a single query.
+            _PURPOSE_CHUNK = 2000
+            if purpose_geom_map:
+                for _pid, _gpks in purpose_geom_map.items():
+                    for _i in range(0, len(_gpks), _PURPOSE_CHUNK):
+                        OccurrenceTenure.objects.filter(
+                            occurrence_geometry_id__in=_gpks[_i : _i + _PURPOSE_CHUNK]
+                        ).update(purpose_id=_pid)
+                logger.info(
+                    "TfaunaOccurrenceTenureImporter: set purpose on %d geometry group(s) (%d unique purpose value(s))",
+                    sum(len(v) for v in purpose_geom_map.values()),
+                    len(purpose_geom_map),
+                )
 
         # Write error/warning CSV
         if errors_details or warnings_details:
