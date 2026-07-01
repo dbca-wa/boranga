@@ -5043,6 +5043,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "locked": True,
                     "last_modified_by": ocr.last_modified_by,
                     "datetime_updated": ocr.datetime_updated,
+                    "occurrence_source": Occurrence.OCCURRENCE_CHOICE_OCR,
                 }
                 if getattr(ctx, "migration_run", None) is not None:
                     defaults["migration_run"] = ctx.migration_run
