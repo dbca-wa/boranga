@@ -119,16 +119,16 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
         # Build SheetNo → TenCode map from the source CSV (O(n) single pass).
         import csv as _csv
 
-        _ten_code_map: dict[str, str] = {}  # "tfauna-orf-{SheetNo}" → raw TenCode
+        _ten_code_map: dict[str, str] = {}  # "tfauna-orf-{DBNo}" → raw TenCode
         _fauna_csv = os.path.join(path, "Fauna Records.csv")
         if os.path.exists(_fauna_csv):
             try:
                 with open(_fauna_csv, newline="", encoding="utf-8-sig") as _fh:
                     for _row in _csv.DictReader(_fh):
-                        _sheet_no = (_row.get("SheetNo") or "").strip()
+                        _db_no = (_row.get("DBNo") or "").strip()
                         _ten_code = (_row.get("TenCode") or "").strip()
-                        if _sheet_no:
-                            _ten_code_map[f"tfauna-orf-{_sheet_no}"] = _ten_code
+                        if _db_no:
+                            _ten_code_map[f"tfauna-orf-{_db_no}"] = _ten_code
                 logger.info(
                     "TfaunaOccurrenceTenureImporter: loaded TenCode for %d records from %s",
                     len(_ten_code_map),
@@ -333,10 +333,26 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                     # to a single batch query per unique purpose value after the thread
                     # pool completes, avoiding one UPDATE per occurrence.
                     _purpose_id = None
+                    _purpose_issues: list[dict] = []
                     _ten_code = _ten_code_map.get(mid, "")
                     if _ten_code and _purpose_fn is not None:
                         _purpose_res = _purpose_fn(_ten_code, TransformContext(row={}))
                         _purpose_id = _purpose_res.value
+                        for _issue in _purpose_res.issues:
+                            _purpose_issues.append(
+                                {
+                                    "migrated_from_id": mid,
+                                    "column": "TenCode",
+                                    "level": _issue.level,
+                                    "message": _issue.message,
+                                    "raw_value": _ten_code,
+                                    "reason": "Purpose transform issue",
+                                    "row_json": json.dumps(
+                                        {"migrated_from_id": mid, "ten_code": _ten_code}, default=str
+                                    ),
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
 
                     if not exists_before:
                         return {
@@ -345,6 +361,7 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                             "updated": 0,
                             "geom_pk": geom_pk,
                             "purpose_id": _purpose_id,
+                            "purpose_issues": _purpose_issues,
                         }
                     num_new = max(0, tenure_count_after - tenure_count_before)
                     return {
@@ -353,6 +370,7 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                         "updated": tenure_count_before,
                         "geom_pk": geom_pk,
                         "purpose_id": _purpose_id,
+                        "purpose_issues": _purpose_issues,
                     }
 
                 except Exception as e:
@@ -419,6 +437,12 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                         updated += result["updated"]
                         if result.get("purpose_id") is not None:
                             purpose_geom_map.setdefault(result["purpose_id"], []).append(result["geom_pk"])
+                        for _issue in result.get("purpose_issues") or []:
+                            if _issue["level"] == "error":
+                                errors += 1
+                                errors_details.append(_issue)
+                            else:
+                                warnings_details.append(_issue)
 
             # Batch-update purpose per unique purpose_id value in chunks to avoid
             # sending a massive IN list to PostgreSQL in a single query.
