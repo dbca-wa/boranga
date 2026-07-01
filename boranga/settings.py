@@ -311,7 +311,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 GIT_COMMIT_HASH = ""
 GIT_COMMIT_DATE = ""
 if len(GIT_COMMIT_HASH) == 0:
-    GIT_COMMIT_HASH = os.popen("cat /app/git_hash 2>/dev/null").read()
+    GIT_COMMIT_HASH = os.popen("cat /tmp/random_hash 2>/dev/null").read()
     if len(GIT_COMMIT_HASH) == 0:
         if os.path.isdir(BASE_DIR + "/.git/") is True:
             GIT_COMMIT_DATE = os.popen("cd " + BASE_DIR + " ; git log -1 --format=%cd").read()
