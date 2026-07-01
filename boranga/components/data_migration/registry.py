@@ -2717,27 +2717,38 @@ def build_legacy_map_transform(
         return name
 
     def fn(value, ctx):
+        # Load the table first so we can check for the __empty__ sentinel
+        # before short-circuiting on blank input.
+        dm_mappings.preload_map(legacy_system, list_name)
+        table = dm_mappings._CACHE.get((legacy_system, list_name), {})
+
         if value in (None, ""):
-            if required:
+            # Check whether a __empty__ sentinel entry exists (stored under "").
+            if "" in table:
+                entry = table[""]
+            elif required:
                 return TransformResult(
                     value=None,
                     issues=[TransformIssue("error", f"{list_name} required")],
                 )
+            else:
+                return _result(None)
+        else:
+            norm = dm_mappings._norm(value)
+            if norm not in table:
+                return TransformResult(
+                    value=None,
+                    issues=[TransformIssue("error", f"Unmapped {legacy_system}.{list_name} value '{value}'")],
+                )
+            entry = table[norm]
+
+        # __null__ in canonical_name: the entry exists but maps to None.
+        if entry.get("null_mapped"):
             return _result(None)
 
-        # ensure mapping loaded
-        dm_mappings.preload_map(legacy_system, list_name)
-        table = dm_mappings._CACHE.get((legacy_system, list_name), {})
-        norm = dm_mappings._norm(value)
-        if norm not in table:
-            return TransformResult(
-                value=None,
-                issues=[TransformIssue("error", f"Unmapped {legacy_system}.{list_name} value '{value}'")],
-            )
-        entry = table[norm]
         canonical = entry.get("canonical") or entry.get("raw")
         # sentinel ignores
-        canonical_norm = str(canonical).strip().casefold()
+        canonical_norm = str(canonical).strip().casefold() if canonical is not None else ""
         if canonical_norm in {dm_mappings.IGNORE_SENTINEL.casefold(), "ignore"}:
             ctx.stats.setdefault("ignored_legacy_values", []).append(
                 {"system": legacy_system, "list": list_name, "value": value}
