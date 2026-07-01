@@ -115,6 +115,13 @@ TEN_CODE_PURPOSE_TRANSFORM = build_legacy_map_transform(
     required=False,
 )
 
+# TenCode → OccurrenceTenureVesting PK via TFAUNA "Vesting" legacy value map.
+TEN_CODE_VESTING_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Vesting",
+    required=False,
+)
+
 LANDFORM_TRANSFORM = build_legacy_map_transform(
     "TFAUNA",
     "Landform",

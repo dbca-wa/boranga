@@ -11,6 +11,7 @@ from ledger_api_client.ledger_models import EmailUserRO
 
 from boranga.components.data_migration.adapters.occurrence_report.tfauna import (
     TEN_CODE_PURPOSE_TRANSFORM,
+    TEN_CODE_VESTING_TRANSFORM,
 )
 from boranga.components.data_migration.adapters.sources import Source
 from boranga.components.data_migration.registry import (
@@ -146,6 +147,7 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
             )
 
         _purpose_fn = registry._fns.get(TEN_CODE_PURPOSE_TRANSFORM)
+        _vesting_fn = registry._fns.get(TEN_CODE_VESTING_TRANSFORM)
         logger.info(
             "TfaunaOccurrenceTenureImporter (%s) started at %s (dry_run=%s)",
             self.slug,
@@ -256,6 +258,7 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
         errors_details = []
         warnings_details = []
         purpose_geom_map: dict[int, list[int]] = {}  # purpose_id → [occurrence_geometry_pks]
+        vesting_geom_map: dict[int, list[int]] = {}  # vesting_id → [occurrence_geometry_pks]
 
         # Pre-deduplicate by geom_pk and filter out invalid geometries before
         # submitting to the thread pool.  Keeps worker logic simple and avoids
@@ -334,6 +337,8 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                     # pool completes, avoiding one UPDATE per occurrence.
                     _purpose_id = None
                     _purpose_issues: list[dict] = []
+                    _vesting_id = None
+                    _vesting_issues: list[dict] = []
                     _ten_code = _ten_code_map.get(mid, "")
                     if _ten_code and _purpose_fn is not None:
                         _purpose_res = _purpose_fn(_ten_code, TransformContext(row={}))
@@ -353,6 +358,24 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                                     "timestamp": timezone.now().isoformat(),
                                 }
                             )
+                    if _ten_code and _vesting_fn is not None:
+                        _vesting_res = _vesting_fn(_ten_code, TransformContext(row={}))
+                        _vesting_id = _vesting_res.value
+                        for _issue in _vesting_res.issues:
+                            _vesting_issues.append(
+                                {
+                                    "migrated_from_id": mid,
+                                    "column": "TenCode",
+                                    "level": _issue.level,
+                                    "message": _issue.message,
+                                    "raw_value": _ten_code,
+                                    "reason": "Vesting transform issue",
+                                    "row_json": json.dumps(
+                                        {"migrated_from_id": mid, "ten_code": _ten_code}, default=str
+                                    ),
+                                    "timestamp": timezone.now().isoformat(),
+                                }
+                            )
 
                     if not exists_before:
                         return {
@@ -362,6 +385,8 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                             "geom_pk": geom_pk,
                             "purpose_id": _purpose_id,
                             "purpose_issues": _purpose_issues,
+                            "vesting_id": _vesting_id,
+                            "vesting_issues": _vesting_issues,
                         }
                     num_new = max(0, tenure_count_after - tenure_count_before)
                     return {
@@ -371,6 +396,8 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                         "geom_pk": geom_pk,
                         "purpose_id": _purpose_id,
                         "purpose_issues": _purpose_issues,
+                        "vesting_id": _vesting_id,
+                        "vesting_issues": _vesting_issues,
                     }
 
                 except Exception as e:
@@ -443,6 +470,14 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                                 errors_details.append(_issue)
                             else:
                                 warnings_details.append(_issue)
+                        if result.get("vesting_id") is not None:
+                            vesting_geom_map.setdefault(result["vesting_id"], []).append(result["geom_pk"])
+                        for _issue in result.get("vesting_issues") or []:
+                            if _issue["level"] == "error":
+                                errors += 1
+                                errors_details.append(_issue)
+                            else:
+                                warnings_details.append(_issue)
 
             # Batch-update purpose per unique purpose_id value in chunks to avoid
             # sending a massive IN list to PostgreSQL in a single query.
@@ -457,6 +492,17 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                     "TfaunaOccurrenceTenureImporter: set purpose on %d geometry group(s) (%d unique purpose value(s))",
                     sum(len(v) for v in purpose_geom_map.values()),
                     len(purpose_geom_map),
+                )
+            if vesting_geom_map:
+                for _vid, _gpks in vesting_geom_map.items():
+                    for _i in range(0, len(_gpks), _PURPOSE_CHUNK):
+                        OccurrenceTenure.objects.filter(
+                            occurrence_geometry_id__in=_gpks[_i : _i + _PURPOSE_CHUNK]
+                        ).update(vesting_id=_vid)
+                logger.info(
+                    "TfaunaOccurrenceTenureImporter: set vesting on %d geometry group(s) (%d unique vesting value(s))",
+                    sum(len(v) for v in vesting_geom_map.values()),
+                    len(vesting_geom_map),
                 )
 
         # Write error/warning CSV
