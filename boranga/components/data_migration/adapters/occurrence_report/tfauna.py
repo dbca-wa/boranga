@@ -108,6 +108,13 @@ TEN_CODE_CANONICAL = build_legacy_map_transform(
     return_type="canonical",
 )
 
+# TenCode → OccurrenceTenurePurpose PK via TFAUNA "Purpose" legacy value map.
+TEN_CODE_PURPOSE_TRANSFORM = build_legacy_map_transform(
+    "TFAUNA",
+    "Purpose",
+    required=False,
+)
+
 LANDFORM_TRANSFORM = build_legacy_map_transform(
     "TFAUNA",
     "Landform",
