@@ -201,7 +201,9 @@ export default {
     computed: {
         isReadOnly: function () {
             let action = this.$route.query.action;
-            if (
+            if (action === 'view') {
+                return true;
+            } else if (
                 action === 'edit' &&
                 this.meeting_obj &&
                 this.meeting_obj.user_edit_mode

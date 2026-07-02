@@ -377,11 +377,15 @@ export default {
         userCanReinstate: function () {
             return this.meeting_obj.can_user_reinstate;
         },
+        inViewMode: function () {
+            return this.$route.query.action === 'view';
+        },
         showActions: function () {
             return (
-                this.userCanSchedule ||
-                this.userCanComplete ||
-                this.userCanReinstate
+                !this.inViewMode &&
+                (this.userCanSchedule ||
+                    this.userCanComplete ||
+                    this.userCanReinstate)
             );
         },
     },
