@@ -2164,10 +2164,55 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=list(occ_ids))
                         }
 
+                        # Ensure OCCAssociatedSpecies link (traceability) and copy comment
+                        # from OCRAssociatedSpecies for all OCCs that have an OCRAssociatedSpecies.
+                        # This is separate from the HABITAT-specific duplication logic below
+                        # which handles duplicating per-association AST rows.
+                        occ_assoc_to_update = []
+                        for o in occ_reports_with_occ:
+                            occ = getattr(o, "occurrence", None)
+                            if not occ:
+                                continue
+                            ocr_assoc = existing_assoc.get(o.pk)
+                            if not ocr_assoc:
+                                continue
+                            occ_assoc = existing_occ_assoc.get(occ.id)
+                            if not occ_assoc:
+                                continue
+
+                            updated = False
+                            if occ_assoc.copied_ocr_associated_species_id != ocr_assoc.pk:
+                                occ_assoc.copied_ocr_associated_species = ocr_assoc
+                                updated = True
+                            if getattr(occ_assoc, "comment", None) != getattr(ocr_assoc, "comment", ""):
+                                occ_assoc.comment = getattr(ocr_assoc, "comment", "")
+                                updated = True
+                            if updated:
+                                occ_assoc_to_update.append(occ_assoc)
+
+                        if occ_assoc_to_update:
+                            try:
+                                OCCAssociatedSpecies.objects.bulk_update(
+                                    occ_assoc_to_update,
+                                    ["copied_ocr_associated_species", "comment"],
+                                    batch_size=BATCH,
+                                )
+                            except Exception:
+                                logger.exception(
+                                    "Failed to bulk_update OCCAssociatedSpecies (comment/traceability); "
+                                    "falling back to individual saves"
+                                )
+                                for a in occ_assoc_to_update:
+                                    try:
+                                        a.save()
+                                    except Exception:
+                                        logger.exception(
+                                            "Failed to update OCCAssociatedSpecies %s",
+                                            getattr(a, "pk", None),
+                                        )
+
                         # Prepare duplicates to create: list of (occ_assoc_pk, AST instance to create)
                         dup_create_list = []
-
-                        occ_assoc_to_update = []
                         for o in occ_reports_with_occ:
                             occ = getattr(o, "occurrence", None)
                             if not occ:
@@ -2192,19 +2237,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             if not occ_assoc:
                                 continue
 
-                            # Update OCCAssociatedSpecies link (traceability)
-                            # NOTE: Comment copy removed per Task #11604.
-                            # OCCAssociatedSpecies.comment is now populated directly
-                            # in the occurrence_legacy handler from DRF_POPULATION
-                            # ASSOCIATED_SPECIES field.
-                            updated = False
-                            if occ_assoc.copied_ocr_associated_species_id != ocr_assoc.pk:
-                                occ_assoc.copied_ocr_associated_species = ocr_assoc
-                                updated = True
-
-                            if updated:
-                                occ_assoc_to_update.append(occ_assoc)
-
                             for ast in ocr_assoc.related_species.all():
                                 inst = _AST(
                                     taxonomy_id=ast.taxonomy_id,
@@ -2212,26 +2244,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     comments=ast.comments or "",
                                 )
                                 dup_create_list.append((occ_assoc.pk, inst))
-
-                        if occ_assoc_to_update:
-                            try:
-                                OCCAssociatedSpecies.objects.bulk_update(
-                                    occ_assoc_to_update,
-                                    ["copied_ocr_associated_species"],
-                                    batch_size=BATCH,
-                                )
-                            except Exception:
-                                logger.exception(
-                                    "Failed to bulk_update OCCAssociatedSpecies; falling back to individual saves"
-                                )
-                                for a in occ_assoc_to_update:
-                                    try:
-                                        a.save()
-                                    except Exception:
-                                        logger.exception(
-                                            "Failed to update OCCAssociatedSpecies %s",
-                                            getattr(a, "pk", None),
-                                        )
 
                         if dup_create_list:
                             # Bulk create AST duplicates
@@ -5042,6 +5054,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "comment": f"This Occurrence was auto-generated from a migrated Occurrence Report Form: ORF{ocr.pk} (migrated_from_id: {ocr.migrated_from_id})",
                     "locked": True,
                     "last_modified_by": ocr.last_modified_by,
+                    "datetime_created": ocr.datetime_created,
                     "datetime_updated": ocr.datetime_updated,
                     "occurrence_source": Occurrence.OCCURRENCE_CHOICE_OCR,
                 }

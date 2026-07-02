@@ -77,7 +77,10 @@
                                     </span>
                                 </template>
                             </div>
-                            <div class="card-body border-top">
+                            <div
+                                v-if="hasUserEditMode || canUnlock || canReopen"
+                                class="card-body border-top"
+                            >
                                 <div class="col-sm-12">
                                     <template v-if="hasUserEditMode">
                                         <div class="row mb-2">
@@ -398,7 +401,11 @@ export default {
             );
         },
         canUnlock: function () {
-            return this.occurrence && this.occurrence.locked;
+            return (
+                this.occurrence &&
+                this.occurrence.can_user_change_lock &&
+                this.occurrence.locked
+            );
         },
         canClose: function () {
             return this.occurrence &&

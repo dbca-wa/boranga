@@ -88,6 +88,9 @@ RUN touch /app/.env && \
 # --- Runtime: clean image with only runtime packages and built artifacts ---
 FROM ${BASE_IMAGE} AS runtime
 
+ARG IMAGE_TAG
+ARG IMAGE_NAME
+
 LABEL maintainer="asi@dbca.wa.gov.au"
 LABEL org.opencontainers.image.source="https://github.com/dbca-wa/boranga"
 
@@ -101,7 +104,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     OSCAR_SHOP_NAME='Parks & Wildlife' \
     BPAY_ALLOWED=False \
     PROJ_NETWORK=ON \
-    ENABLE_SRI_CHECK=True
+    ENABLE_SRI_CHECK=True \
+    CONTAINER_IMAGE_TAG=${IMAGE_TAG} \
+    CONTAINER_IMAGE_NAME=${IMAGE_NAME}
 
 RUN apt-get update && \
     apt-get upgrade -y && \

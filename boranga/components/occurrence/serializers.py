@@ -340,6 +340,7 @@ class OccurrenceSerializer(BaseModelSerializer):
     can_add_log = serializers.SerializerMethodField()
     occ_geometry = serializers.SerializerMethodField(read_only=True)
     show_locked_indicator = serializers.BooleanField(read_only=True)
+    can_user_change_lock = serializers.SerializerMethodField(read_only=True)
     editing_window_minutes = serializers.IntegerField(read_only=True)
     cs_category_code = serializers.SerializerMethodField(read_only=True)
 
@@ -371,6 +372,10 @@ class OccurrenceSerializer(BaseModelSerializer):
     def get_can_user_reopen(self, obj):
         request = self.context["request"]
         return obj.can_user_reopen(request)
+
+    def get_can_user_change_lock(self, obj):
+        request = self.context["request"]
+        return obj.can_change_lock(request)
 
     def get_submitter(self, obj):
         if obj.submitter:
@@ -3086,10 +3091,16 @@ class BackToAssessorSerializer(BaseSerializer):
 
 class ProposeApproveSerializer(BaseSerializer):
     occurrence_id = serializers.IntegerField(required=False, allow_null=True)
-    new_occurrence_name = serializers.CharField(allow_blank=True)
+    new_occurrence_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     details = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     cc_email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     copy_ocr_comments_to_occ_comments = serializers.BooleanField(required=False, default=True)
+
+    def validate(self, data):
+        # either occurrence_id or new_occurrence_name must be specified
+        if not data.get("occurrence_id") and not data.get("new_occurrence_name"):
+            raise serializers.ValidationError("Either occurrence_id or new_occurrence_name must be specified.")
+        return data
 
 
 class SaveOccurrenceSerializer(BaseModelSerializer):

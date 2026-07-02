@@ -617,7 +617,7 @@ export default {
             return [
                 'ID',
                 'Number',
-                'Occurrence Name',
+                'OCC Name',
                 'Community Name',
                 'Community ID',
                 'Wild Status',
