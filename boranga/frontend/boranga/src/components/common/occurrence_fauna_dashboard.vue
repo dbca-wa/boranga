@@ -587,7 +587,7 @@ export default {
             return [
                 'ID',
                 'Number',
-                'Occurrence Name',
+                'OCC Name',
                 'Scientific Name',
                 'Common Name',
                 'Wild Status',
