@@ -340,6 +340,7 @@ class OccurrenceSerializer(BaseModelSerializer):
     can_add_log = serializers.SerializerMethodField()
     occ_geometry = serializers.SerializerMethodField(read_only=True)
     show_locked_indicator = serializers.BooleanField(read_only=True)
+    can_user_change_lock = serializers.SerializerMethodField(read_only=True)
     editing_window_minutes = serializers.IntegerField(read_only=True)
     cs_category_code = serializers.SerializerMethodField(read_only=True)
 
@@ -371,6 +372,10 @@ class OccurrenceSerializer(BaseModelSerializer):
     def get_can_user_reopen(self, obj):
         request = self.context["request"]
         return obj.can_user_reopen(request)
+
+    def get_can_user_change_lock(self, obj):
+        request = self.context["request"]
+        return obj.can_change_lock(request)
 
     def get_submitter(self, obj):
         if obj.submitter:

@@ -4415,6 +4415,10 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
             request,
         )
 
+    def can_change_lock(self, request):
+        if self.processing_status == Occurrence.PROCESSING_STATUS_ACTIVE:
+            return is_occurrence_assessor(request) or is_occurrence_approver(request)
+
     def lock(self, request):
         if self.locked:
             return
