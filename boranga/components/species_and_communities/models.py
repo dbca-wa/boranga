@@ -838,7 +838,6 @@ class Species(RevisionedMixin):
     def has_user_edit_mode(self, request):
         officer_view_state = [
             Species.PROCESSING_STATUS_DRAFT,
-            Species.PROCESSING_STATUS_HISTORICAL,
         ]
         if self.processing_status in officer_view_state:
             return False
@@ -1751,7 +1750,6 @@ class Community(RevisionedMixin):
     def has_user_edit_mode(self, request):
         officer_view_state = [
             Community.PROCESSING_STATUS_DRAFT,
-            Community.PROCESSING_STATUS_HISTORICAL,
         ]
         if self.processing_status in officer_view_state:
             return False
