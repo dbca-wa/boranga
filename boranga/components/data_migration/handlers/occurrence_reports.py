@@ -5042,6 +5042,7 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     "comment": f"This Occurrence was auto-generated from a migrated Occurrence Report Form: ORF{ocr.pk} (migrated_from_id: {ocr.migrated_from_id})",
                     "locked": True,
                     "last_modified_by": ocr.last_modified_by,
+                    "datetime_created": ocr.datetime_created,
                     "datetime_updated": ocr.datetime_updated,
                     "occurrence_source": Occurrence.OCCURRENCE_CHOICE_OCR,
                 }
