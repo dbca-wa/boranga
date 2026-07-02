@@ -499,38 +499,41 @@
                                                 >
                                                     Save and Exit
                                                 </button>
-
-                                                <button
-                                                    v-if="
-                                                        submitSpeciesCommunity
-                                                    "
-                                                    class="btn btn-primary pull-right"
-                                                    style="margin-top: 5px"
-                                                    disabled
-                                                >
-                                                    Activate
-                                                    <span
-                                                        class="spinner-border spinner-border-sm"
-                                                        role="status"
-                                                        aria-hidden="true"
-                                                    ></span>
-                                                    <span
-                                                        class="visually-hidden"
-                                                        >Loading...</span
+                                                <template v-if="!isHistorical">
+                                                    <button
+                                                        v-if="
+                                                            submitSpeciesCommunity
+                                                        "
+                                                        class="btn btn-primary pull-right"
+                                                        style="margin-top: 5px"
+                                                        disabled
                                                     >
-                                                </button>
-                                                <button
-                                                    v-else
-                                                    class="btn btn-primary pull-right"
-                                                    style="margin-top: 5px"
-                                                    :disabled="
-                                                        saveExitSpeciesCommunity ||
-                                                        savingSpeciesCommunity
-                                                    "
-                                                    @click.prevent="submit()"
-                                                >
-                                                    Activate
-                                                </button>
+                                                        Activate
+                                                        <span
+                                                            class="spinner-border spinner-border-sm"
+                                                            role="status"
+                                                            aria-hidden="true"
+                                                        ></span>
+                                                        <span
+                                                            class="visually-hidden"
+                                                            >Loading...</span
+                                                        >
+                                                    </button>
+                                                    <button
+                                                        v-else
+                                                        class="btn btn-primary pull-right"
+                                                        style="margin-top: 5px"
+                                                        :disabled="
+                                                            saveExitSpeciesCommunity ||
+                                                            savingSpeciesCommunity
+                                                        "
+                                                        @click.prevent="
+                                                            submit()
+                                                        "
+                                                    >
+                                                        Activate
+                                                    </button>
+                                                </template>
                                             </div>
                                             <div
                                                 v-else-if="
