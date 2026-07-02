@@ -142,6 +142,18 @@ import { api_endpoints, constants, helpers } from '@/utils/hooks';
 import datatable from '@/utils/vue/datatable.vue';
 import CollapsibleFilters from '@/components/forms/collapsible_component.vue';
 
+const ACTION_RENDERERS = {
+    reinstate: (id) =>
+        `<a href='#${id}' data-reinstate-meeting='${id}'>Reinstate</a><br/>`,
+    edit: (id) =>
+        `<a href='/internal/meetings/${id}?action=edit'>Edit</a><br/>`,
+    continue: (id) => `<a href='/internal/meetings/${id}'>Continue</a><br/>`,
+    discard: (id) =>
+        `<a href='#${id}' data-discard-meeting='${id}'>Discard</a><br/>`,
+    view: (id) =>
+        `<a href='/internal/meetings/${id}?action=view'>View</a><br/>`,
+};
+
 export default {
     name: 'MeetingsDatatable',
     components: {
@@ -368,30 +380,14 @@ export default {
             };
         },
         column_action: function () {
+            let vm = this;
             return {
                 data: 'id',
                 orderable: false,
                 searchable: false,
                 visible: true,
                 render: function (data, type, full) {
-                    let links = '';
-                    if (full.processing_status == 'Discarded') {
-                        links += `<a href='#${full.id}' data-reinstate-meeting='${full.id}'>Reinstate</a><br/>`;
-                    } else {
-                        if (full.can_user_edit) {
-                            if (full.processing_status == 'Scheduled') {
-                                links += `<a href='/internal/meetings/${full.id}?action=edit'>Edit</a><br/>`;
-                            } else {
-                                links += `<a href='/internal/meetings/${full.id}'>Continue</a><br/>`;
-                            }
-                            if (full.processing_status == 'Draft') {
-                                links += `<a href='#${full.id}' data-discard-meeting='${full.id}'>Discard</a><br/>`;
-                            }
-                        } else {
-                            links += `<a href='/internal/meetings/${full.id}?action=view'>View</a><br/>`;
-                        }
-                    }
-                    return links;
+                    return vm.renderActionLinks(full);
                 },
             };
         },
@@ -587,6 +583,14 @@ export default {
         },
         constructMeetingsTable: function () {
             this.$refs.meetings_datatable.vmDataTable.clear().draw();
+        },
+        renderActionLinks: function (full) {
+            const allowedActions = full.allowed_actions;
+
+            return allowedActions
+                .filter((action) => ACTION_RENDERERS[action]) // Ignore unknown actions defensively
+                .map((action) => ACTION_RENDERERS[action](full.id))
+                .join('');
         },
         createMeeting: async function () {
             swal.fire({
