@@ -3086,10 +3086,16 @@ class BackToAssessorSerializer(BaseSerializer):
 
 class ProposeApproveSerializer(BaseSerializer):
     occurrence_id = serializers.IntegerField(required=False, allow_null=True)
-    new_occurrence_name = serializers.CharField(allow_blank=True)
+    new_occurrence_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     details = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     cc_email = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     copy_ocr_comments_to_occ_comments = serializers.BooleanField(required=False, default=True)
+
+    def validate(self, data):
+        # either occurrence_id or new_occurrence_name must be specified
+        if not data.get("occurrence_id") and not data.get("new_occurrence_name"):
+            raise serializers.ValidationError("Either occurrence_id or new_occurrence_name must be specified.")
+        return data
 
 
 class SaveOccurrenceSerializer(BaseModelSerializer):
