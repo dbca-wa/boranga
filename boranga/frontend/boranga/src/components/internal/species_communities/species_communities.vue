@@ -211,146 +211,13 @@
                             </div>
                         </div>
                     </div>
-                    <div v-if="inViewMode" class="card-body border-top">
-                        <div class="row">
-                            <div class="col-sm-12">
-                                <div class="row mb-2">
-                                    <div class="col-sm-12">
-                                        <strong>Action</strong><br />
-                                    </div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-sm-12">
-                                        <button
-                                            class="btn btn-primary w-100"
-                                            @click.prevent="activateEditMode()"
-                                        >
-                                            Edit</button
-                                        ><br />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div
-                        v-else-if="hasUserEditMode || isHistorical"
-                        class="card-body border-top"
-                    >
-                        <div class="row">
-                            <div class="col-sm-12">
-                                <div class="row mb-2">
-                                    <div class="col-sm-12">
-                                        <strong>Action</strong><br />
-                                    </div>
-                                </div>
-                                <div v-if="isActive" class="row">
-                                    <template v-if="!isCommunity">
-                                        <div class="row mb-2">
-                                            <div class="col-sm-12">
-                                                <button
-                                                    class="btn btn-primary w-100"
-                                                    @click.prevent="
-                                                        splitSpecies()
-                                                    "
-                                                >
-                                                    Split</button
-                                                ><br />
-                                            </div>
-                                        </div>
-                                        <div class="row mb-2">
-                                            <div class="col-sm-12">
-                                                <button
-                                                    class="btn btn-primary w-100"
-                                                    @click.prevent="
-                                                        combineSpecies()
-                                                    "
-                                                >
-                                                    Combine</button
-                                                ><br />
-                                            </div>
-                                        </div>
-                                        <div class="row mb-2">
-                                            <div class="col-sm-12">
-                                                <button
-                                                    class="btn btn-primary w-100"
-                                                    @click.prevent="
-                                                        renameSpecies()
-                                                    "
-                                                >
-                                                    Rename</button
-                                                ><br />
-                                            </div>
-                                        </div>
-                                    </template>
-                                    <template v-else>
-                                        <div class="row mb-2">
-                                            <div class="col-sm-12">
-                                                <button
-                                                    class="btn btn-primary w-100"
-                                                    @click.prevent="
-                                                        renameCommunity()
-                                                    "
-                                                >
-                                                    Rename</button
-                                                ><br />
-                                            </div>
-                                        </div>
-                                        <div class="row mb-2">
-                                            <div class="col-sm-12">
-                                                <button
-                                                    class="btn btn-primary w-100"
-                                                    @click.prevent="
-                                                        deactivateCommunity()
-                                                    "
-                                                >
-                                                    Deactivate</button
-                                                ><br />
-                                            </div>
-                                        </div>
-                                    </template>
-                                </div>
-                                <div v-if="isHistorical" class="row">
-                                    <template v-if="isCommunity">
-                                        <div class="row mb-2">
-                                            <div class="col-sm-12">
-                                                <button
-                                                    class="btn btn-primary w-100"
-                                                    @click.prevent="
-                                                        reactivateCommunity()
-                                                    "
-                                                >
-                                                    Reactivate</button
-                                                ><br />
-                                            </div>
-                                        </div>
-                                    </template>
-                                </div>
-                                <div
-                                    v-if="isActive || isHistorical"
-                                    class="row"
-                                >
-                                    <div v-if="!isPublic" class="row mb-2">
-                                        <div class="col-sm-12">
-                                            <button
-                                                class="btn btn-primary w-100"
-                                                @click.prevent="makePublic()"
-                                            >
-                                                Make Public</button
-                                            ><br />
-                                        </div>
-                                    </div>
-                                    <div v-else class="row mb-2">
-                                        <div class="col-sm-12">
-                                            <button
-                                                class="btn btn-primary w-100"
-                                                @click.prevent="makePrivate()"
-                                            >
-                                                Make Private</button
-                                            ><br />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div v-if="canDiscard">
+                    <template v-if="!inViewMode">
+                        <div
+                            v-if="species_community.hasUserEditMode"
+                            class="card-body border-top"
+                        >
+                            <div class="row">
+                                <div class="col-sm-12">
                                     <div class="row mb-2">
                                         <div class="col-sm-12">
                                             <strong>Action</strong><br />
@@ -361,17 +228,161 @@
                                             <button
                                                 class="btn btn-primary w-100"
                                                 @click.prevent="
-                                                    discardSpeciesProposal()
+                                                    activateEditMode()
                                                 "
                                             >
-                                                Discard</button
+                                                Edit</button
                                             ><br />
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                        <div
+                            v-else-if="hasUserEditMode"
+                            class="card-body border-top"
+                        >
+                            <div class="row">
+                                <div class="col-sm-12">
+                                    <div class="row mb-2">
+                                        <div class="col-sm-12">
+                                            <strong>Action</strong><br />
+                                        </div>
+                                    </div>
+                                    <div v-if="isActive" class="row">
+                                        <template v-if="!isCommunity">
+                                            <div class="row mb-2">
+                                                <div class="col-sm-12">
+                                                    <button
+                                                        class="btn btn-primary w-100"
+                                                        @click.prevent="
+                                                            splitSpecies()
+                                                        "
+                                                    >
+                                                        Split</button
+                                                    ><br />
+                                                </div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-12">
+                                                    <button
+                                                        class="btn btn-primary w-100"
+                                                        @click.prevent="
+                                                            combineSpecies()
+                                                        "
+                                                    >
+                                                        Combine</button
+                                                    ><br />
+                                                </div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-12">
+                                                    <button
+                                                        class="btn btn-primary w-100"
+                                                        @click.prevent="
+                                                            renameSpecies()
+                                                        "
+                                                    >
+                                                        Rename</button
+                                                    ><br />
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <template v-else>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-12">
+                                                    <button
+                                                        class="btn btn-primary w-100"
+                                                        @click.prevent="
+                                                            renameCommunity()
+                                                        "
+                                                    >
+                                                        Rename</button
+                                                    ><br />
+                                                </div>
+                                            </div>
+                                            <div class="row mb-2">
+                                                <div class="col-sm-12">
+                                                    <button
+                                                        class="btn btn-primary w-100"
+                                                        @click.prevent="
+                                                            deactivateCommunity()
+                                                        "
+                                                    >
+                                                        Deactivate</button
+                                                    ><br />
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div v-if="isHistorical" class="row">
+                                        <template v-if="isCommunity">
+                                            <div class="row mb-2">
+                                                <div class="col-sm-12">
+                                                    <button
+                                                        class="btn btn-primary w-100"
+                                                        @click.prevent="
+                                                            reactivateCommunity()
+                                                        "
+                                                    >
+                                                        Reactivate</button
+                                                    ><br />
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div
+                                        v-if="isActive || isHistorical"
+                                        class="row"
+                                    >
+                                        <div v-if="!isPublic" class="row mb-2">
+                                            <div class="col-sm-12">
+                                                <button
+                                                    class="btn btn-primary w-100"
+                                                    @click.prevent="
+                                                        makePublic()
+                                                    "
+                                                >
+                                                    Make Public</button
+                                                ><br />
+                                            </div>
+                                        </div>
+                                        <div v-else class="row mb-2">
+                                            <div class="col-sm-12">
+                                                <button
+                                                    class="btn btn-primary w-100"
+                                                    @click.prevent="
+                                                        makePrivate()
+                                                    "
+                                                >
+                                                    Make Private</button
+                                                ><br />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div v-if="canDiscard">
+                                        <div class="row mb-2">
+                                            <div class="col-sm-12">
+                                                <strong>Action</strong><br />
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-sm-12">
+                                                <button
+                                                    class="btn btn-primary w-100"
+                                                    @click.prevent="
+                                                        discardSpeciesProposal()
+                                                    "
+                                                >
+                                                    Discard</button
+                                                ><br />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </div>
             <div class="col-md-9">
