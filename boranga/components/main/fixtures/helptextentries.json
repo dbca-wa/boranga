@@ -802,5 +802,17 @@
       "authenticated_users_only": true,
       "internal_users_only": false
     }
+  },
+  {
+    "model": "boranga.helptextentry",
+    "pk": 71,
+    "fields": {
+      "archived": false,
+      "section_id": "public_home_panel",
+      "text": "<h5>Public Home Panel</h5><p>Public Home Panel text goes here.</p>",
+      "icon_with_popover": false,
+      "authenticated_users_only": false,
+      "internal_users_only": false
+    }
   }
 ]
