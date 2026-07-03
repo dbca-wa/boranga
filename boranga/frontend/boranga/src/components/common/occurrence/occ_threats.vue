@@ -459,14 +459,16 @@ export default {
                         data: 'id',
                         mRender: function (data, type, full) {
                             let links = '';
+                            links += `<a href='#${full.id}' data-view-threat='${full.id}'>View</a><br/>`;
                             if (full.visible) {
-                                links += `<a href='#${full.id}' data-view-threat='${full.id}'>View</a><br/>`;
                                 if (!vm.isReadOnly) {
                                     links += `<a href='#${full.id}' data-edit-threat='${full.id}'>Edit</a><br/>`;
                                     links += `<a href='#' data-discard-threat='${full.id}'>Discard</a><br>`;
                                 }
                             } else {
-                                links += `<a href='#' data-reinstate-threat='${full.id}'>Reinstate</a><br>`;
+                                if (!vm.isReadOnly) {
+                                    links += `<a href='#' data-reinstate-threat='${full.id}'>Reinstate</a><br>`;
+                                }
                             }
                             links += `<a href='#' data-history-threat='${full.id}'>History</a><br>`;
                             return links;

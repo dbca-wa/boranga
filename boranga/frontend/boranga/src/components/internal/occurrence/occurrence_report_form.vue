@@ -112,6 +112,7 @@
                             <select
                                 ref="contributors"
                                 class="form-select form-select-sm"
+                                :disabled="occurrence_report.readonly"
                             ></select>
                         </div>
                         <button

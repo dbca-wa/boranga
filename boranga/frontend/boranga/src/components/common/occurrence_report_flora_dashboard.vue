@@ -901,24 +901,22 @@ export default {
                 visible: true,
                 render: function (data, type, full) {
                     let links = '';
+                    links += `<a href='/internal/occurrence-report/${full.id}?action=view'>View</a><br/>`;
                     if (full.internal_user_edit) {
                         if (full.processing_status == 'discarded') {
                             links += `<a href='#${full.id}' data-reinstate-ocr-proposal='${full.id}'>Reinstate</a><br/>`;
                         } else {
                             links += `<a href='/internal/occurrence-report/${full.id}?action=edit'>Continue</a><br/>`;
                             links += `<a href='#${full.id}' data-discard-ocr-proposal='${full.id}'>Discard</a><br/>`;
-                            links += `<a href='#' data-history-occurrence-report='${full.id}'>History</a><br>`;
                         }
                     } else {
                         if (full.can_user_assess || full.can_user_approve) {
                             links += `<a href='/internal/occurrence-report/${full.id}?action=edit'>Process</a><br/>`;
                         } else if (full.is_unlocked) {
                             links += `<a href='/internal/occurrence-report/${full.id}?action=edit'>Edit</a><br/>`;
-                        } else {
-                            links += `<a href='/internal/occurrence-report/${full.id}?action=view'>View</a><br/>`;
                         }
-                        links += `<a href='#' data-history-occurrence-report='${full.id}'>History</a><br>`;
                     }
+                    links += `<a href='#' data-history-occurrence-report='${full.id}'>History</a><br>`;
                     return links;
                 },
             };

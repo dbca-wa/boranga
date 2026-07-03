@@ -574,11 +574,11 @@ export default {
         discardThreat: function (id) {
             let vm = this;
             swal.fire({
-                title: 'Remove Threat',
-                text: 'Are you sure you want to remove this Threat?',
+                title: 'Discard Threat',
+                text: 'Are you sure you want to discard this Threat?',
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Remove Threat',
+                confirmButtonText: 'Discard Threat',
                 customClass: {
                     confirmButton: 'btn btn-primary',
                     cancelButton: 'btn btn-secondary me-2',

@@ -184,6 +184,9 @@ export default {
         };
     },
     computed: {
+        inViewMode: function () {
+            return this.$route.query.action === 'view';
+        },
         filterApplied: function () {
             const allFiltersAreAll =
                 this.filterStatus === 'current' &&
@@ -299,7 +302,9 @@ export default {
                         : '';
                     const cadPin = row.cad_pin || row.featureid || '';
                     let html = `<a href="#${vm.hrefContainerId}" data-highlight-on-map-coordinates="${coordinates}" data-highlight-on-map-cad-pin="${cadPin}">Highlight on Map</a>`;
-                    html += `<br><a href="#" data-edit-tenure-details="${data}">Edit Tenure Details</a>`;
+                    if (!vm.inViewMode) {
+                        html += `<br><a href="#" data-edit-tenure-details="${data}">Edit Tenure Details</a>`;
+                    }
                     html += `<br><a href='#' data-history-tenure='${data}'>History</a><br>`;
                     return html;
                 },
