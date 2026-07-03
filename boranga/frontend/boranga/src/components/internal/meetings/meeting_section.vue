@@ -372,8 +372,11 @@ export default {
         isStatusDraft: function () {
             return this.meeting_obj.processing_status == 'draft' ? true : false;
         },
+        inViewMode: function () {
+            return this.$route.query.action === 'view';
+        },
         isReadOnly: function () {
-            return !this.userCanEdit;
+            return this.inViewMode || !this.userCanEdit;
         },
         activeMembers: function () {
             return this.committee_members.filter((member) => !member.archived);

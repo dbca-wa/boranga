@@ -75,6 +75,6 @@ stages:
               dockerfile: "$(Build.SourcesDirectory)/dockerdev/Dockerfile"
               tags: |
                 boranga_dev_latest
-                boranga_dev_$(tagDate)
+                boranga_dev_$(IMAGE_TAG)
               containerRegistry: DockerGitHub
               repository: ghcr.io/dbca-wa/docker_app_dev

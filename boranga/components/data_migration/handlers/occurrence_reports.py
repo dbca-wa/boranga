@@ -5944,12 +5944,14 @@ class OccurrenceReportImporter(BaseSheetImporter):
             ocr_to_occ = {ocr.pk: ocr.occurrence_id for ocr in ocrs_with_occ}
             occ_ids = list(set(ocr_to_occ.values()))
 
-            # Fetch OCRAssociatedSpecies pk keyed by OCR pk
-            ocr_assocs = dict(
-                OCRAssociatedSpecies.objects.filter(occurrence_report_id__in=list(ocr_to_occ.keys())).values_list(
-                    "occurrence_report_id", "pk"
-                )
-            )
+            # Fetch OCRAssociatedSpecies pk and comment keyed by OCR pk
+            ocr_assocs = {}  # ocr_pk -> assoc_pk
+            ocr_assoc_comment = {}  # ocr_pk -> comment
+            for ocr_pk, assoc_pk, comment in OCRAssociatedSpecies.objects.filter(
+                occurrence_report_id__in=list(ocr_to_occ.keys())
+            ).values_list("occurrence_report_id", "pk", "comment"):
+                ocr_assocs[ocr_pk] = assoc_pk
+                ocr_assoc_comment[ocr_pk] = comment or ""
 
             if ocr_assocs:
                 # Determine through-table FK field names
@@ -6009,6 +6011,46 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                 )
                                 for a in OCCAssociatedSpecies.objects.filter(occurrence_id__in=list(missing_occ_ids)):
                                     existing_occ_assoc[a.occurrence_id] = a
+
+                            # Copy comment from OCRAssociatedSpecies → OCCAssociatedSpecies.
+                            # Build occ_id → first non-empty comment across all child OCRs.
+                            occ_comment_map: dict[int, str] = {}
+                            for ocr_pk, assoc_pk in ocr_assocs.items():
+                                occ_id = ocr_to_occ.get(ocr_pk)
+                                if occ_id is None:
+                                    continue
+                                comment = ocr_assoc_comment.get(ocr_pk, "")
+                                if comment and occ_id not in occ_comment_map:
+                                    occ_comment_map[occ_id] = comment
+
+                            occ_assoc_comment_to_update = []
+                            for occ_id, comment in occ_comment_map.items():
+                                occ_assoc = existing_occ_assoc.get(occ_id)
+                                if occ_assoc and occ_assoc.comment != comment:
+                                    occ_assoc.comment = comment
+                                    occ_assoc_comment_to_update.append(occ_assoc)
+
+                            if occ_assoc_comment_to_update:
+                                try:
+                                    OCCAssociatedSpecies.objects.bulk_update(
+                                        occ_assoc_comment_to_update, ["comment"], batch_size=BATCH
+                                    )
+                                    logger.info(
+                                        "Copied comment to %d OCCAssociatedSpecies from OCRAssociatedSpecies",
+                                        len(occ_assoc_comment_to_update),
+                                    )
+                                except Exception:
+                                    logger.exception(
+                                        "Failed to bulk_update OCCAssociatedSpecies comments; "
+                                        "falling back to individual saves"
+                                    )
+                                    for a in occ_assoc_comment_to_update:
+                                        try:
+                                            a.save(update_fields=["comment"])
+                                        except Exception:
+                                            logger.exception(
+                                                "Failed to update comment on OCCAssociatedSpecies %s", a.pk
+                                            )
 
                             # Determine through-table FK names for OCCAssociatedSpecies
                             occ_through_model = OCCAssociatedSpecies.related_species.through

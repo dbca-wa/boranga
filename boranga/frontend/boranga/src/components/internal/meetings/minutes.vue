@@ -10,6 +10,7 @@
                     <div class="text-end">
                         <button
                             type="button"
+                            :disabled="inViewMode"
                             class="btn btn-primary mb-2"
                             @click.prevent="addMinutes"
                         >
@@ -252,6 +253,11 @@ export default {
                 },
             },
         };
+    },
+    computed: {
+        inViewMode: function () {
+            return this.$route.query.action === 'view';
+        },
     },
     mounted: function () {
         let vm = this;

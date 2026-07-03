@@ -165,7 +165,7 @@ python scripts/split_tfauna_csv.py \
     --handler-args '--seed-history'
 
 # For a partitioned sample
-./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/fauna-records-partitioned.csv" --sources TFAUNA --seed-history
+./manage.py migrate_data run occurrence_report_legacy "private-media/legacy_data/TFAUNA/fauna-records-partitioned.csv" --sources TFAUNA --wipe-target --seed-history
 
 # Then run the command it produces (may not be idential to below) — chunk 1 wipes, chunks 2-x append
 LOG=private-media/handler_output/occurrence_report_legacy_$(date +%Y%m%d_%H%M%S).log
@@ -188,6 +188,14 @@ echo "PID $! Log: tail -f $LOG"
 
 # Generate OccurrenceTenure records for all TFAUNA occurrences via cadastre spatial intersection (DB-driven, no CSV required)
 ./manage.py migrate_data run tfauna_occurrence_tenure private-media/legacy_data/TFAUNA/ --sources TFAUNA --wipe-targets --seed-history
+
+## Backfill missing owner_name from Cadastre layer (Make sure to )
+
+# If required, fetch the cadastre layer and overwrite the local table (required if previous layer had no cad_owner_name)
+./manage.py import_cadastre_geojson --overwrite
+
+# Backfill missing names by matching cad_pin
+./manage.py populate_tenure_owner_names
 
 # --- Cleanup
 

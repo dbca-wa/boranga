@@ -240,7 +240,7 @@ class Meeting(BaseModel):
             raise ValidationError("You cannot reinstate a meeting that is not yours")
 
         if not is_conservation_status_approver(request):
-            raise ValidationError("You cannot reinstate a meeting unless you are in the " "meeting approver group")
+            raise ValidationError("You cannot reinstate a meeting unless you are in the meeting approver group")
 
         self.processing_status = ConservationStatus.PROCESSING_STATUS_DRAFT
         self.save()

@@ -36,6 +36,7 @@ class ListMeetingSerializer(BaseModelSerializer):
     meeting_type = serializers.SerializerMethodField()
     committee = serializers.CharField(source="committee.name", allow_null=True, read_only=True)
     can_user_edit = serializers.SerializerMethodField()
+    allowed_actions = serializers.SerializerMethodField()
 
     class Meta:
         model = Meeting
@@ -50,6 +51,7 @@ class ListMeetingSerializer(BaseModelSerializer):
             "committee",
             "processing_status",
             "can_user_edit",
+            "allowed_actions",
         )
         datatables_always_serialize = (
             "id",
@@ -62,6 +64,7 @@ class ListMeetingSerializer(BaseModelSerializer):
             "committee",
             "processing_status",
             "can_user_edit",
+            "allowed_actions",
         )
 
     def get_location(self, obj):
@@ -72,9 +75,33 @@ class ListMeetingSerializer(BaseModelSerializer):
     def get_meeting_type(self, obj):
         return obj.get_meeting_type_display()
 
+    def _user_has_global_edit_clearance(self, request):
+        return is_conservation_status_approver(request)
+
     def get_can_user_edit(self, obj):
         request = self.context["request"]
-        return obj.can_user_edit and is_conservation_status_approver(request)
+        return obj.can_user_edit and self._user_has_global_edit_clearance(request)
+
+    def get_allowed_actions(self, obj):
+        request = self.context["request"]
+        status = obj.processing_status
+        actions = []
+
+        # 1. Base view permission is universally allowed
+        actions.append("view")
+
+        # 2. Check if user has global permission to act on this record type
+        if self._user_has_global_edit_clearance(request):
+            # 3. Map allowed actions safely based on workflow state
+            if status == Meeting.PROCESSING_STATUS_DISCARDED:
+                actions.append("reinstate")
+            elif status == Meeting.PROCESSING_STATUS_SCHEDULED:
+                actions.append("edit")
+            elif status == Meeting.PROCESSING_STATUS_DRAFT:
+                actions.append("continue")
+                actions.append("discard")
+
+        return actions
 
 
 class CreateMeetingSerializer(BaseModelSerializer):

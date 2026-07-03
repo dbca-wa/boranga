@@ -3099,7 +3099,7 @@ class ProposeApproveSerializer(BaseSerializer):
     def validate(self, data):
         # either occurrence_id or new_occurrence_name must be specified
         if not data.get("occurrence_id") and not data.get("new_occurrence_name"):
-            raise serializers.ValidationError("Either occurrence_id or new_occurrence_name must be specified.")
+            raise serializers.ValidationError("Either an existing occurrence or new occurrence name must be specified.")
         return data
 
 
