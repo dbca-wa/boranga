@@ -240,7 +240,16 @@ export default {
                             headers: {
                                 'Content-Type': 'application/json',
                             },
-                            body: JSON.stringify(vm.approval_details),
+                            body: JSON.stringify({
+                                occurrence_id: vm.approval_details.occurrence,
+                                new_occurrence_name:
+                                    vm.approval_details.new_occurrence_name,
+                                details: vm.approval_details.details,
+                                cc_email: vm.approval_details.cc_email,
+                                copy_ocr_comments_to_occ_comments:
+                                    vm.approval_details
+                                        .copy_ocr_comments_to_occ_comments,
+                            }),
                         }
                     ).then(
                         async (response) => {
