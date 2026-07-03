@@ -36,6 +36,10 @@
             @refresh-from-response="refreshFromResponse"
         >
         </DocumentDetail>
+        <ViewDocument
+            ref="view_document"
+            :is_internal="is_internal"
+        ></ViewDocument>
         <div v-if="minutesHistoryId">
             <MinutesHistory
                 ref="minutes_history"
@@ -50,6 +54,7 @@
 import { v4 as uuid } from 'uuid';
 import datatable from '@vue-utils/datatable.vue';
 import DocumentDetail from '@/components/common/add_document.vue';
+import ViewDocument from '@/components/common/view_document.vue';
 import FormSection from '@/components/forms/section_toggle.vue';
 import MinutesHistory from '../../internal/meetings/minutes_history.vue';
 import { constants, api_endpoints, helpers } from '@/utils/hooks';
@@ -60,6 +65,7 @@ export default {
         FormSection,
         datatable,
         DocumentDetail,
+        ViewDocument,
         MinutesHistory,
     },
     props: {
@@ -231,6 +237,7 @@ export default {
                         data: 'id',
                         mRender: function (data, type, full) {
                             let links = '';
+                            links += `<a href='#${full.id}' data-view-document='${full.id}'>View</a><br/>`;
                             if (vm.meeting_obj.can_user_edit) {
                                 if (full.active) {
                                     links += `<a href='#${full.id}' data-edit-document='${full.id}'>Edit</a><br/>`;
@@ -266,6 +273,10 @@ export default {
         });
     },
     methods: {
+        viewDocument: function (document) {
+            this.$refs.view_document.document = document;
+            this.$refs.view_document.isModalOpen = true;
+        },
         addMinutes: function () {
             let vm = this;
             this.$refs.document_detail.document_id = '';
@@ -446,6 +457,17 @@ export default {
         },
         addEventListeners: function () {
             let vm = this;
+            vm.$refs.minutes_datatable.vmDataTable.on(
+                'click',
+                'a[data-view-document]',
+                function (e) {
+                    e.preventDefault();
+                    var document = vm.$refs.minutes_datatable.vmDataTable
+                        .row($(this).parent())
+                        .data();
+                    vm.viewDocument(document);
+                }
+            );
             vm.$refs.minutes_datatable.vmDataTable.on(
                 'click',
                 'a[data-edit-document]',
