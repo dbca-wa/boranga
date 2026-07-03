@@ -127,7 +127,7 @@
                         </div>
                     </div>
                     <div class="col-4">
-                        <div class="card">
+                        <div v-if="profile.user.groups.length > 0" class="card">
                             <div class="card-body">
                                 <h4 class="card-title mb-3">
                                     My Groups<i
