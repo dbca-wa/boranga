@@ -1,257 +1,318 @@
 <template>
-    <div v-if="profile" id="internal-home" class="container pt-4">
-        <h2 class="mb-4">
-            Welcome back {{ profile ? profile.first_name : '' }}
-        </h2>
-        <div>
-            <div class="row">
-                <div class="col-4">
-                    <div class="card">
-                        <div class="card-body">
-                            <h4 class="card-title mb-3">
-                                My Profile<i
-                                    class="bi bi-person-fill ps-2 text-primary"
-                                ></i>
-                            </h4>
-                            <div class="table-responsive">
+    <template v-if="userIsAuthenticated">
+        <div v-if="profile" id="internal-home" class="container pt-4">
+            <h2 class="mb-4">
+                Welcome back {{ profile ? profile.first_name : '' }}
+            </h2>
+            <div>
+                <div class="row">
+                    <div class="col-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h4 class="card-title mb-3">
+                                    My Profile<i
+                                        class="bi bi-person-fill ps-2 text-primary"
+                                    ></i>
+                                </h4>
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <tbody>
+                                            <tr>
+                                                <td scope="row" class="fw-bold">
+                                                    Name
+                                                </td>
+                                                <td>
+                                                    {{ profile.user.full_name }}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td scope="row" class="fw-bold">
+                                                    Email
+                                                </td>
+                                                <td>
+                                                    {{ profile.user.email }}
+                                                </td>
+                                            </tr>
+                                            <tr
+                                                v-if="profile.user.phone_number"
+                                            >
+                                                <td scope="row" class="fw-bold">
+                                                    Phone Number
+                                                </td>
+                                                <td>
+                                                    {{
+                                                        profile.user
+                                                            .phone_number
+                                                    }}
+                                                </td>
+                                            </tr>
+                                            <tr
+                                                v-if="
+                                                    profile.user.mobile_number
+                                                "
+                                            >
+                                                <td scope="row" class="fw-bold">
+                                                    Mobile
+                                                </td>
+                                                <td>
+                                                    {{
+                                                        profile.user
+                                                            .mobile_number
+                                                    }}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <a
+                                        role="button"
+                                        class="btn btn-primary btn-sm"
+                                        href="/ledger-ui/accounts"
+                                    >
+                                        Manage Account
+                                        <i class="bi bi-person-gear"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h4 class="card-title mb-3">
+                                    My Area of Interest<i
+                                        class="bi bi-search-heart ps-2 text-primary"
+                                    ></i>
+                                </h4>
+                                <div class="mb-4">
+                                    <select
+                                        id="area-of-interest"
+                                        v-model="profile.user.area_of_interest"
+                                        class="form-select text-muted"
+                                        name="area-of-interest"
+                                        placeholder="Name"
+                                        @change="updateAreaOfInterest"
+                                    >
+                                        <option :value="null">
+                                            No Specific Area
+                                        </option>
+                                        <option value="flora">Flora</option>
+                                        <option value="fauna">Fauna</option>
+                                        <option value="community">
+                                            Communities
+                                        </option>
+                                    </select>
+                                </div>
+                                <div id="emailHelp" class="form-text">
+                                    <p>
+                                        This setting controls which tab will
+                                        automatically be opened when browsing
+                                        the Species and Communities<template
+                                            v-if="profile.user.is_internal"
+                                            >, Conservation Status and
+                                            Occurrences
+                                        </template>
+                                        page<template
+                                            v-if="profile.user.is_internal"
+                                            >s</template
+                                        >.
+                                    </p>
+                                    <p>
+                                        If you are planning to access more than
+                                        one area regularly it is recommended
+                                        that you leave this set as 'No Specific
+                                        Area'
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h4 class="card-title mb-3">
+                                    My Groups<i
+                                        class="bi bi-people-fill ps-2 text-primary"
+                                    ></i>
+                                </h4>
+                                <p class="card-text text-muted">
+                                    You are a member of the following groups:
+                                </p>
+                                <span
+                                    v-for="group in profile.user.groups"
+                                    :key="group"
+                                    class="badge bg-primary me-2 p-2 mb-2"
+                                    >{{ group }}</span
+                                >
+                                <div
+                                    v-if="profile.user.is_superuser"
+                                    class="mt-3"
+                                >
+                                    <span class="badge bg-success me-2 p-2 mb-2"
+                                        >You are a Superuser</span
+                                    >
+                                </div>
+                                <div v-if="profile.user.is_superuser">
+                                    <small class="text-muted"
+                                        >* Superusers are a member of every
+                                        group by default</small
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div v-if="homeCardLeft || homeCardRight" class="row mt-4">
+                    <div v-if="homeCardLeft" class="col-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <div v-html="homeCardLeft.text"></div>
+                                <a
+                                    v-if="homeCardLeft.user_can_administer"
+                                    :href="`/admin/boranga/helptextentry/${homeCardLeft.id}/change/`"
+                                    role="button"
+                                    class="ms-2"
+                                    target="_blank"
+                                    title="Edit help text"
+                                    ><i class="bi bi-pencil-square"></i
+                                ></a>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="homeCardRight" class="col-6">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <div v-html="homeCardRight.text"></div>
+                                <a
+                                    v-if="homeCardRight.user_can_administer"
+                                    :href="`/admin/boranga/helptextentry/${homeCardRight.id}/change/`"
+                                    role="button"
+                                    class="ms-2"
+                                    target="_blank"
+                                    title="Edit help text"
+                                    ><i class="bi bi-pencil-square"></i
+                                ></a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div
+                    class="row mt-4"
+                    v-if="outstanding_referrals && outstanding_referrals.length"
+                >
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h4 class="card-title">
+                                    My Referrals<i
+                                        class="bi bi-exclamation-circle-fill text-warning ps-2"
+                                    ></i>
+                                </h4>
+                                <div class="border-bottom mb-3"></div>
                                 <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Number</th>
+                                            <th scope="col">Type</th>
+                                            <th scope="col">Name</th>
+                                            <th scope="col">Status</th>
+                                            <th scope="col">
+                                                First Referred to You
+                                            </th>
+                                            <th scope="col">Action</th>
+                                        </tr>
+                                    </thead>
                                     <tbody>
-                                        <tr>
-                                            <td scope="row" class="fw-bold">
-                                                Name
+                                        <tr
+                                            v-for="outstanding_referral in outstanding_referrals"
+                                            :key="outstanding_referral.id"
+                                        >
+                                            <td>
+                                                {{
+                                                    outstanding_referral.number
+                                                }}
+                                            </td>
+                                            <td class="text-capitalize">
+                                                {{
+                                                    outstanding_referral.referral_type
+                                                }}
+                                                {{ outstanding_referral.type }}
                                             </td>
                                             <td>
-                                                {{ profile.user.full_name }}
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td scope="row" class="fw-bold">
-                                                Email
-                                            </td>
-                                            <td>{{ profile.user.email }}</td>
-                                        </tr>
-                                        <tr v-if="profile.user.phone_number">
-                                            <td scope="row" class="fw-bold">
-                                                Phone Number
+                                                {{ outstanding_referral.name }}
                                             </td>
                                             <td>
-                                                {{ profile.user.phone_number }}
-                                            </td>
-                                        </tr>
-                                        <tr v-if="profile.user.mobile_number">
-                                            <td scope="row" class="fw-bold">
-                                                Mobile
+                                                <span class="badge bg-warning"
+                                                    ><i
+                                                        class="bi bi-clock-fill me-2"
+                                                    ></i
+                                                    >{{
+                                                        outstanding_referral.processing_status
+                                                    }}</span
+                                                >
                                             </td>
                                             <td>
-                                                {{ profile.user.mobile_number }}
+                                                <TimeSince
+                                                    :date="
+                                                        outstanding_referral.lodged_on
+                                                    "
+                                                ></TimeSince>
+                                            </td>
+                                            <td>
+                                                <a
+                                                    :href="
+                                                        outstanding_referral.link
+                                                    "
+                                                    >Process</a
+                                                >
                                             </td>
                                         </tr>
                                     </tbody>
                                 </table>
-                                <a
-                                    role="button"
-                                    class="btn btn-primary btn-sm"
-                                    href="/ledger-ui/accounts"
-                                >
-                                    Manage Account
-                                    <i class="bi bi-person-gear"></i>
-                                </a>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-4">
-                    <div class="card">
+            </div>
+        </div>
+        <div v-else class="text-center mt-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    </template>
+    <template v-else>
+        <div class="container px-4 pt-4">
+            <div class="row">
+                <div class="col-md-8">
+                    <div v-if="publicHomePanel" class="card h-100">
                         <div class="card-body">
-                            <h4 class="card-title mb-3">
-                                My Area of Interest<i
-                                    class="bi bi-search-heart ps-2 text-primary"
-                                ></i>
-                            </h4>
-                            <div class="mb-4">
-                                <select
-                                    id="area-of-interest"
-                                    v-model="profile.user.area_of_interest"
-                                    class="form-select text-muted"
-                                    name="area-of-interest"
-                                    placeholder="Name"
-                                    @change="updateAreaOfInterest"
-                                >
-                                    <option :value="null">
-                                        No Specific Area
-                                    </option>
-                                    <option value="flora">Flora</option>
-                                    <option value="fauna">Fauna</option>
-                                    <option value="community">
-                                        Communities
-                                    </option>
-                                </select>
-                            </div>
-                            <div id="emailHelp" class="form-text">
-                                <p>
-                                    This setting controls which tab will
-                                    automatically be opened when browsing the
-                                    Species and Communities<template
-                                        v-if="profile.user.is_internal"
-                                        >, Conservation Status and Occurrences
-                                    </template>
-                                    page<template
-                                        v-if="profile.user.is_internal"
-                                        >s</template
-                                    >.
-                                </p>
-                                <p>
-                                    If you are planning to access more than one
-                                    area regularly it is recommended that you
-                                    leave this set as 'No Specific Area'
-                                </p>
-                            </div>
+                            <div v-html="publicHomePanel.text"></div>
                         </div>
                     </div>
                 </div>
-                <div class="col-4">
+                <div class="col-md-4">
                     <div class="card">
+                        <div class="card-header fw-bold">Access Boranga</div>
                         <div class="card-body">
-                            <h4 class="card-title mb-3">
-                                My Groups<i
-                                    class="bi bi-people-fill ps-2 text-primary"
-                                ></i>
-                            </h4>
-                            <p class="card-text text-muted">
-                                You are a member of the following groups:
+                            <p>
+                                At the Department of Biodiversity, Conservation
+                                and Attractions, we employ a password-less
+                                authentication system, meaning you never need to
+                                remember a password. When you need to login to a
+                                site, such as Boranga, simply enter your email
+                                and an authentication link will be sent to your
+                                registered email address. From there, simply
+                                follow the link to complete the login process.
                             </p>
-                            <span
-                                v-for="group in profile.user.groups"
-                                :key="group"
-                                class="badge bg-primary me-2 p-2 mb-2"
-                                >{{ group }}</span
+                            <a href="/ssologin" class="btn btn-primary"
+                                >Login</a
                             >
-                            <div v-if="profile.user.is_superuser" class="mt-3">
-                                <span class="badge bg-success me-2 p-2 mb-2"
-                                    >You are a Superuser</span
-                                >
-                            </div>
-                            <div v-if="profile.user.is_superuser">
-                                <small class="text-muted"
-                                    >* Superusers are a member of every group by
-                                    default</small
-                                >
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div v-if="homeCardLeft || homeCardRight" class="row mt-4">
-                <div v-if="homeCardLeft" class="col-6">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <div v-html="homeCardLeft.text"></div>
-                            <a
-                                v-if="homeCardLeft.user_can_administer"
-                                :href="`/admin/boranga/helptextentry/${homeCardLeft.id}/change/`"
-                                role="button"
-                                class="ms-2"
-                                target="_blank"
-                                title="Edit help text"
-                                ><i class="bi bi-pencil-square"></i
-                            ></a>
-                        </div>
-                    </div>
-                </div>
-                <div v-if="homeCardRight" class="col-6">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <div v-html="homeCardRight.text"></div>
-                            <a
-                                v-if="homeCardRight.user_can_administer"
-                                :href="`/admin/boranga/helptextentry/${homeCardRight.id}/change/`"
-                                role="button"
-                                class="ms-2"
-                                target="_blank"
-                                title="Edit help text"
-                                ><i class="bi bi-pencil-square"></i
-                            ></a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div
-                class="row mt-4"
-                v-if="outstanding_referrals && outstanding_referrals.length"
-            >
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-body">
-                            <h4 class="card-title">
-                                My Referrals<i
-                                    class="bi bi-exclamation-circle-fill text-warning ps-2"
-                                ></i>
-                            </h4>
-                            <div class="border-bottom mb-3"></div>
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th scope="col">Number</th>
-                                        <th scope="col">Type</th>
-                                        <th scope="col">Name</th>
-                                        <th scope="col">Status</th>
-                                        <th scope="col">
-                                            First Referred to You
-                                        </th>
-                                        <th scope="col">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr
-                                        v-for="outstanding_referral in outstanding_referrals"
-                                        :key="outstanding_referral.id"
-                                    >
-                                        <td>
-                                            {{ outstanding_referral.number }}
-                                        </td>
-                                        <td class="text-capitalize">
-                                            {{
-                                                outstanding_referral.referral_type
-                                            }}
-                                            {{ outstanding_referral.type }}
-                                        </td>
-                                        <td>{{ outstanding_referral.name }}</td>
-                                        <td>
-                                            <span class="badge bg-warning"
-                                                ><i
-                                                    class="bi bi-clock-fill me-2"
-                                                ></i
-                                                >{{
-                                                    outstanding_referral.processing_status
-                                                }}</span
-                                            >
-                                        </td>
-                                        <td>
-                                            <TimeSince
-                                                :date="
-                                                    outstanding_referral.lodged_on
-                                                "
-                                            ></TimeSince>
-                                        </td>
-                                        <td>
-                                            <a :href="outstanding_referral.link"
-                                                >Process</a
-                                            >
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-    <div v-else class="text-center mt-5">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-    </div>
+    </template>
 </template>
 
 <script>
@@ -266,6 +327,9 @@ export default {
             outstanding_referrals: null,
             homeCardLeft: null,
             homeCardRight: null,
+            publicHomePanel: null,
+            userIsAuthenticated:
+                `${env['user_is_authenticated']}`.toString() === 'true',
         };
     },
     components: {
@@ -282,8 +346,7 @@ export default {
     },
     created: async function () {
         // env variable is set in base.html template from django
-        var user_is_authenticated = `${env['user_is_authenticated']}`;
-        if (user_is_authenticated.toString() === 'true') {
+        if (this.userIsAuthenticated) {
             await this.fetchProfile();
             this.fetchOutstandingReferrals();
             this.fetchHomeCards();
@@ -336,14 +399,25 @@ export default {
         fetchHomeCards: function () {
             let vm = this;
             const isInternal = vm.profile?.user?.is_internal === true;
-            const sectionIds = isInternal
-                ? ['internal_home_card_left', 'internal_home_card_right']
-                : ['external_home_card_left', 'external_home_card_right'];
+            var sectionIds = null;
+            if (!this.userIsAuthenticated) {
+                sectionIds = ['public_home_panel'];
+            }
+
+            if (sectionIds === null) {
+                sectionIds = isInternal
+                    ? ['internal_home_card_left', 'internal_home_card_right']
+                    : ['external_home_card_left', 'external_home_card_right'];
+            }
             sectionIds.forEach((sectionId, index) => {
                 fetch(`${api_endpoints.help_text_entries}/${sectionId}/`).then(
                     async (response) => {
                         if (!response.ok) return;
                         const data = await response.json();
+                        if (!this.userIsAuthenticated) {
+                            vm.publicHomePanel = data;
+                            return;
+                        }
                         if (index === 0) {
                             vm.homeCardLeft = data;
                         } else {

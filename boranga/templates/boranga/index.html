@@ -16,39 +16,10 @@
 {% endblock %}
 
 {% block content %}
-{% with system_name=settings.SYSTEM_NAME %}
-    {% if not request.user.is_authenticated %}
-    <div class="container px-4 pt-4">
-        <div class="row">
-            <div class="col-md-8">
-                <h2 class="mb-4">
-                    Welcome to the {{system_name}}
-                </h2>
-                <div>
-                    TODO: Add home content for unauthenticated user here.
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header fw-bold">Access {{system_name}}</div>
-                    <div class="card-body">
-                        <p>
-                            At the {{ settings.DEP_NAME }}, we employ a password-less authentication system, meaning you never need to remember
-                            a password. When you need to login to a site, such as {{ system_name }}, simply enter your email and an
-                            authentication link will be sent to your registered email address. From there, simply follow the link to complete the login process.
-                        </p>
-                        <a href="/ssologin" class="btn btn-primary">Login</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% else %}
+    <!-- See Home.vue for the homepage content -->
     <div class="container-fluid" id="vue-root">
         {% block vue-component %}
         <div id="app"></div>
         {% endblock %}
     </div>
-    {% endif %}
-{% endwith %}
 {% endblock %}
