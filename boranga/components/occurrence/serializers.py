@@ -98,6 +98,7 @@ from boranga.helpers import (
     is_contributor,
     is_django_admin,
     is_internal,
+    is_internal_contributor,
     is_new_external_contributor,
     is_occurrence_approver,
     is_occurrence_assessor,
@@ -744,7 +745,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
 
     def get_internal_user_edit(self, obj):
         request = self.context["request"]
-        if obj.can_user_edit(request):
+        if obj.can_user_edit(request) and is_internal_contributor(request):
             if obj.internal_application is True and obj.submitter == request.user.id:
                 return True
         else:
@@ -766,11 +767,13 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
 
     def get_can_user_edit(self, obj):
         request = self.context["request"]
-        return obj.can_user_edit(request)
+        return obj.can_user_edit(request) and is_contributor(request)
 
     def get_can_user_copy(self, obj):
         request = self.context["request"]
-        return obj.submitter == request.user.id or is_occurrence_assessor(request)
+        if obj.submitter == request.user.id and is_internal_contributor(request):
+            return True
+        return is_occurrence_assessor(request)
 
     def get_is_new_contributor(self, obj):
         return is_new_external_contributor(obj.submitter)
@@ -1763,7 +1766,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
 
     def get_can_user_edit(self, obj):
         request = self.context["request"]
-        return obj.can_user_edit(request)
+        return obj.can_user_edit(request) and is_contributor(request)
 
     def get_cs_category_code(self, obj):
         if obj.species:
@@ -1785,7 +1788,9 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
 
     def get_can_user_copy(self, obj):
         request = self.context["request"]
-        return obj.submitter == request.user.id or is_occurrence_assessor(request)
+        if obj.submitter == request.user.id and is_internal_contributor(request):
+            return True
+        return is_occurrence_assessor(request)
 
     def get_ocr_geometry(self, obj):
         qs = obj.ocr_geometry.filter(visible=True)
@@ -2015,13 +2020,14 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
             return False
 
         # The only other case where an internal user can edit is
-        # if the application is internal, the user is the submitter and
-        # the report is in draft status
+        # if the application is internal, the user is the submitter,
+        # the report is in draft status and the user is an internal contributor
         request = self.context["request"]
         if (
             obj.internal_application
             and request.user.id == obj.submitter
             and obj.processing_status == OccurrenceReport.PROCESSING_STATUS_DRAFT
+            and is_internal_contributor(request)
         ):
             return False
         return True
@@ -2047,7 +2053,9 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
 
     def get_can_user_copy(self, obj):
         request = self.context["request"]
-        return obj.submitter == request.user.id or is_occurrence_assessor(request)
+        if obj.submitter == request.user.id and is_internal_contributor(request):
+            return True
+        return is_occurrence_assessor(request)
 
     def get_can_user_approve(self, obj):
         request = self.context["request"]
