@@ -117,6 +117,10 @@ export default {
             type: Boolean,
             default: false,
         },
+        titleProperty: {
+            type: String,
+            default: 'document_number',
+        },
     },
     data() {
         return {
@@ -127,7 +131,7 @@ export default {
     computed: {
         title() {
             let documentNumber = this.document
-                ? this.document.document_number
+                ? this.document[this.titleProperty]
                 : '';
             return `View Document ${documentNumber}`;
         },

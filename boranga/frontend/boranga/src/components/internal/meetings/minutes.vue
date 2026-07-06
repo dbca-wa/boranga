@@ -39,6 +39,7 @@
         <ViewDocument
             ref="view_document"
             :is_internal="is_internal"
+            title-property="minutes_number"
         ></ViewDocument>
         <div v-if="minutesHistoryId">
             <MinutesHistory
