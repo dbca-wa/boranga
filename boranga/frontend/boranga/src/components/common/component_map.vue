@@ -232,7 +232,7 @@
                                         class="input-group input-group-sm mb-1 text-nowrap"
                                     >
                                         <!-- Select geometry-checkbox -->
-                                        <div class="input-group-text">
+                                        <span class="input-group-text">
                                             <input
                                                 :id="`feature-${feature.ol_uid}-checkbox`"
                                                 type="checkbox"
@@ -267,7 +267,7 @@
                                                 class="form-check-input"
                                                 @change="selectFeature(feature)"
                                             />
-                                        </div>
+                                        </span>
                                         <button
                                             v-if="
                                                 getLayerDefinitionByName(name)
@@ -440,7 +440,13 @@
                                         </button>
                                         <!-- Latitude -->
                                         <div
-                                            class="form-floating flex-grow-1 input-group-text"
+                                            class="form-floating"
+                                            :class="
+                                                getLayerDefinitionByName(name)
+                                                    ?.can_buffer
+                                                    ? 'w-20'
+                                                    : 'w-25'
+                                            "
                                         >
                                             <input
                                                 v-if="
@@ -448,7 +454,7 @@
                                                 "
                                                 :id="`feature-${feature.ol_uid}-latitude-input`"
                                                 :ref="`feature-${feature.ol_uid}-latitude-input`"
-                                                class="form-control min-width-90"
+                                                class="form-control"
                                                 :value="
                                                     userCoordinates(feature)[1]
                                                 "
@@ -508,7 +514,13 @@
                                         </div>
                                         <!-- Longitude -->
                                         <div
-                                            class="form-floating flex-grow-1 input-group-text"
+                                            class="form-floating"
+                                            :class="
+                                                getLayerDefinitionByName(name)
+                                                    ?.can_buffer
+                                                    ? 'w-20'
+                                                    : 'w-25'
+                                            "
                                         >
                                             <input
                                                 v-if="
@@ -516,7 +528,7 @@
                                                 "
                                                 :id="`feature-${feature.ol_uid}-longitude-input`"
                                                 :ref="`feature-${feature.ol_uid}-longitude-input`"
-                                                class="form-control min-width-90 me-1"
+                                                class="form-control me-1"
                                                 :value="
                                                     userCoordinates(feature)[0]
                                                 "
@@ -580,7 +592,7 @@
                                                 getLayerDefinitionByName(name)
                                                     ?.can_buffer
                                             "
-                                            class="form-floating flex-grow-1 input-group-text"
+                                            class="form-floating flex-grow-1"
                                         >
                                             <input
                                                 :id="`feature-${feature.ol_uid}-buffer-radius-input`"
@@ -611,8 +623,8 @@
                                             >
                                         </div>
                                         <!-- CRS Dropdown -->
-                                        <div
-                                            class="input-group-text form-floating flex-grow-1 min-width-210 justify-content-end"
+                                        <span
+                                            class="input-group-text flex-grow-1"
                                         >
                                             <SelectFilter
                                                 :id="`feature-${feature.ol_uid}-crs-select`"
@@ -653,7 +665,7 @@
                                                         )
                                                 "
                                             />
-                                        </div>
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -6904,5 +6916,31 @@ export default {
 }
 .max-vh-50 {
     max-height: 50vh;
+}
+
+.input-group-percent > .form-control,
+.input-group-percent > .form-select {
+    flex: none !important; /* Overrides default flex-grow behavior */
+}
+
+.w-20 {
+    width: 20% !important;
+}
+
+.input-group > .w-20 {
+    flex: 0 0 20% !important;
+}
+
+.input-group > .w-25 {
+    flex: 0 0 25% !important;
+}
+
+/* Ensure the second input expands naturally to fill the remaining 85% */
+.input-group > .flex-grow-1 {
+    flex-grow: 1 !important;
+}
+
+.input-group > .flex-grow-1 {
+    flex: 1 1 0% !important;
 }
 </style>

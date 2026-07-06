@@ -35,65 +35,22 @@
                         <div v-if="showActions" class="card-body border-top">
                             <div class="row">
                                 <div class="col-sm-12">
-                                    <div class="col-sm-12">
-                                        <div class="row">
-                                            <div class="col-sm-12">
-                                                <strong>Action</strong><br />
-                                            </div>
-                                        </div>
-                                        <div v-if="userCanSchedule" class="row">
-                                            <div class="col-sm-12">
-                                                <button
-                                                    style="width: 80%"
-                                                    class="btn btn-primary"
-                                                    @click.prevent="
-                                                        scheduleMeeting()
-                                                    "
-                                                >
-                                                    Schedule</button
-                                                ><br />
-                                            </div>
-                                            <div class="col-sm-12">&nbsp;</div>
-                                            <div class="col-sm-12">
-                                                <button
-                                                    style="width: 80%"
-                                                    class="btn btn-primary"
-                                                    @click.prevent="
-                                                        discardMeeting()
-                                                    "
-                                                >
-                                                    Discard</button
-                                                ><br />
-                                            </div>
-                                        </div>
-                                        <div v-if="userCanComplete" class="row">
-                                            <div class="col-sm-12">
-                                                <button
-                                                    style="width: 80%"
-                                                    class="btn btn-primary"
-                                                    @click.prevent="
-                                                        completeMeeting()
-                                                    "
-                                                >
-                                                    Complete</button
-                                                ><br />
-                                            </div>
-                                        </div>
-                                        <div
-                                            v-if="userCanReinstate"
-                                            class="row"
-                                        >
-                                            <div class="col-sm-12">
-                                                <button
-                                                    style="width: 80%"
-                                                    class="btn btn-primary"
-                                                    @click.prevent="
-                                                        reinstateMeeting()
-                                                    "
-                                                >
-                                                    Reinstate</button
-                                                ><br />
-                                            </div>
+                                    <strong>Action</strong>
+                                    <div
+                                        v-for="action in workflowActions"
+                                        :key="action.name"
+                                        class="row mt-2"
+                                    >
+                                        <div class="col-sm-12">
+                                            <button
+                                                style="width: 80%"
+                                                class="btn btn-primary"
+                                                @click.prevent="
+                                                    action.handler()
+                                                "
+                                            >
+                                                {{ action.label }}</button
+                                            ><br />
                                         </div>
                                     </div>
                                 </div>
@@ -168,7 +125,7 @@
                                                 </div>
                                             </div>
                                             <div
-                                                v-if="meeting_obj.can_user_edit"
+                                                v-if="userCanEdit"
                                                 class="col-md-6 text-end"
                                             >
                                                 <button
@@ -229,36 +186,6 @@
                                                     @click.prevent="save_exit()"
                                                 >
                                                     Save and Exit
-                                                </button>
-                                            </div>
-                                            <div
-                                                v-else-if="userCanEdit"
-                                                class="col-md-6 text-end"
-                                            >
-                                                <button
-                                                    v-if="savingMeeting"
-                                                    class="btn btn-primary pull-right"
-                                                    style="margin-top: 5px"
-                                                    disabled
-                                                >
-                                                    Save Changes
-                                                    <span
-                                                        class="spinner-border spinner-border-sm"
-                                                        role="status"
-                                                        aria-hidden="true"
-                                                    ></span>
-                                                    <span
-                                                        class="visually-hidden"
-                                                        >Loading...</span
-                                                    >
-                                                </button>
-                                                <button
-                                                    v-else
-                                                    class="btn btn-primary pull-right"
-                                                    style="margin-top: 5px"
-                                                    @click.prevent="save_exit()"
-                                                >
-                                                    Save Changes
                                                 </button>
                                             </div>
                                         </div>
@@ -365,28 +292,41 @@ export default {
         canSeeSidePanel: function () {
             return this.meeting_obj && this.meeting_obj.submitter;
         },
+        allowedActions: function () {
+            return this.meeting_obj?.allowed_actions ?? [];
+        },
+        workflowActions: function () {
+            const config = {
+                continue: {
+                    label: 'Schedule',
+                    handler: this.scheduleMeeting,
+                },
+                discard: { label: 'Discard', handler: this.discardMeeting },
+                complete: {
+                    label: 'Complete',
+                    handler: this.completeMeeting,
+                },
+                reinstate: {
+                    label: 'Reinstate',
+                    handler: this.reinstateMeeting,
+                },
+            };
+            return this.allowedActions
+                .filter((a) => !this.inViewMode && a in config)
+                .map((a) => ({ name: a, ...config[a] }));
+        },
         userCanEdit: function () {
-            return this.meeting_obj.can_user_edit;
-        },
-        userCanSchedule: function () {
-            return this.meeting_obj.can_user_schedule;
-        },
-        userCanComplete: function () {
-            return this.meeting_obj.can_user_complete;
-        },
-        userCanReinstate: function () {
-            return this.meeting_obj.can_user_reinstate;
+            return (
+                !this.inViewMode &&
+                (this.allowedActions.includes('continue') ||
+                    this.allowedActions.includes('edit'))
+            );
         },
         inViewMode: function () {
             return this.$route.query.action === 'view';
         },
         showActions: function () {
-            return (
-                !this.inViewMode &&
-                (this.userCanSchedule ||
-                    this.userCanComplete ||
-                    this.userCanReinstate)
-            );
+            return this.workflowActions.length > 0;
         },
     },
     created: function () {
@@ -807,7 +747,7 @@ export default {
         },
         discardMeeting: function () {
             let vm = this;
-            if (vm.userCanSchedule) {
+            if (vm.allowedActions.includes('discard')) {
                 swal.fire({
                     title: 'Discard Meeting',
                     text: 'Are you sure you want to discard this meeting?',
@@ -861,7 +801,7 @@ export default {
         },
         reinstateMeeting: function () {
             let vm = this;
-            if (vm.userCanReinstate) {
+            if (vm.allowedActions.includes('reinstate')) {
                 swal.fire({
                     title: 'Reinstate Meeting',
                     text: 'Are you sure you want to reinstate this meeting?',

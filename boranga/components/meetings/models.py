@@ -110,6 +110,37 @@ class Meeting(BaseModel):
         (PROCESSING_STATUS_DISCARDED, "Discarded"),
     )
 
+    # Actions the user can perform on a meeting used in the serializer to determine what actions to show on the frontend
+    ACTION_VIEW = "view"
+    ACTION_REINSTATE = "reinstate"
+    ACTION_EDIT = "edit"
+    ACTION_CONTINUE = "continue"
+    ACTION_DISCARD = "discard"
+    ACTION_COMPLETE = "complete"
+
+    # Roles the user can have on a meeting used in the serializer to determine what actions to show on the frontend
+    ROLE_OWNER = "owner"
+    ROLE_VIEWER = "viewer"
+
+    ACTION_PERMISSION_MATRIX = {
+        PROCESSING_STATUS_DRAFT: {
+            ROLE_OWNER: [ACTION_VIEW, ACTION_CONTINUE, ACTION_DISCARD],
+            ROLE_VIEWER: [ACTION_VIEW],
+        },
+        PROCESSING_STATUS_SCHEDULED: {
+            ROLE_OWNER: [ACTION_VIEW, ACTION_EDIT, ACTION_COMPLETE],
+            ROLE_VIEWER: [ACTION_VIEW],
+        },
+        PROCESSING_STATUS_COMPLETED: {
+            ROLE_OWNER: [ACTION_VIEW],
+            ROLE_VIEWER: [ACTION_VIEW],
+        },
+        PROCESSING_STATUS_DISCARDED: {
+            ROLE_OWNER: [ACTION_VIEW, ACTION_REINSTATE],
+            ROLE_VIEWER: [ACTION_VIEW],
+        },
+    }
+
     # List of statuses from above that allow a customer to view an application (read-only)
     CUSTOMER_VIEWABLE_STATE = ["completed"]
 
