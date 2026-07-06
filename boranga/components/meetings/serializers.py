@@ -170,6 +170,7 @@ class MeetingSerializer(BaseModelSerializer):
     can_user_complete = serializers.SerializerMethodField()
     can_user_reinstate = serializers.SerializerMethodField()
     can_add_log = serializers.SerializerMethodField()
+    allowed_actions = serializers.SerializerMethodField()
     location = serializers.CharField(source="location.room_name", read_only=True, allow_null=True)
     committee = serializers.CharField(source="committee.name", read_only=True, allow_null=True)
 
@@ -204,6 +205,7 @@ class MeetingSerializer(BaseModelSerializer):
             "can_user_complete",
             "can_user_reinstate",
             "can_add_log",
+            "allowed_actions",
         )
 
     def get_processing_status_display(self, obj):
@@ -277,6 +279,15 @@ class MeetingSerializer(BaseModelSerializer):
             return False
 
         return obj.can_user_reinstate
+
+    def resolve_user_role(self, request):
+        return Meeting.ROLE_OWNER if is_conservation_status_approver(request) else Meeting.ROLE_VIEWER
+
+    def get_allowed_actions(self, obj):
+        request = self.context["request"]
+        status = obj.processing_status
+        role = self.resolve_user_role(request)
+        return Meeting.ACTION_PERMISSION_MATRIX.get(status, {}).get(role, [])
 
 
 class SaveMeetingSerializer(BaseModelSerializer):

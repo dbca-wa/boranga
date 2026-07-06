@@ -116,6 +116,7 @@ class Meeting(BaseModel):
     ACTION_EDIT = "edit"
     ACTION_CONTINUE = "continue"
     ACTION_DISCARD = "discard"
+    ACTION_COMPLETE = "complete"
 
     # Roles the user can have on a meeting used in the serializer to determine what actions to show on the frontend
     ROLE_OWNER = "owner"
@@ -127,7 +128,7 @@ class Meeting(BaseModel):
             ROLE_VIEWER: [ACTION_VIEW],
         },
         PROCESSING_STATUS_SCHEDULED: {
-            ROLE_OWNER: [ACTION_VIEW, ACTION_EDIT],
+            ROLE_OWNER: [ACTION_VIEW, ACTION_EDIT, ACTION_COMPLETE],
             ROLE_VIEWER: [ACTION_VIEW],
         },
         PROCESSING_STATUS_COMPLETED: {
