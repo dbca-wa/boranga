@@ -19,7 +19,7 @@
                         >Document Number</label
                     >
                     <div class="col form-control-plaintext">
-                        {{ document.document_number }}
+                        {{ document[titleProperty] }}
                     </div>
                 </div>
                 <div
