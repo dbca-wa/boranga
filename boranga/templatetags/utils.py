@@ -24,8 +24,8 @@ def help_text_entry(section_id):
 
 
 @register.simple_tag()
-def application_version():
-    return settings.APPLICATION_VERSION
+def container_image_tag():
+    return settings.CONTAINER_IMAGE_TAG
 
 
 @register.simple_tag()

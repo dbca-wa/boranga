@@ -319,7 +319,7 @@ if len(GIT_COMMIT_HASH) == 0:
         if len(GIT_COMMIT_HASH) == 0:
             print("ERROR: No git hash provided")
 
-APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0")
+CONTAINER_IMAGE_TAG = env("CONTAINER_IMAGE_TAG", "CONTAINER_IMAGE_TAG ENV Not Set")
 
 RUNNING_DEVSERVER = len(sys.argv) > 1 and sys.argv[1] == "runserver"
 
@@ -335,7 +335,7 @@ if not RUNNING_DEVSERVER and SENTRY_DSN and EMAIL_INSTANCE:
         sample_rate=SENTRY_SAMPLE_RATE,
         traces_sample_rate=SENTRY_TRANSACTION_SAMPLE_RATE,
         environment=EMAIL_INSTANCE.lower(),
-        release=APPLICATION_VERSION,
+        release=CONTAINER_IMAGE_TAG,
     )
 
 LEDGER_UI_ACCOUNTS_MANAGEMENT = [

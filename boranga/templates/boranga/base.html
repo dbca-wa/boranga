@@ -70,13 +70,13 @@
 {% endblock %}
 
 {% block footer %}
-  {% application_version as application_version %}
+  {% container_image_tag as container_image_tag %}
   {% support_email as support_email %}
   <footer class="footer fixed-bottom mt-3">
     <div class="container-fluid border-top py-2 bg-light text-secondary">
       <div class="row">
         <div class="col">
-          <small class="float-start">Version:{% application_version %}</small>
+          <small class="float-start">Version: {% container_image_tag %}</small>
         </div>
         <div class="col">
           <small>Support: <a href="mailto:{% support_email %}">{% support_email %}</a></small>
