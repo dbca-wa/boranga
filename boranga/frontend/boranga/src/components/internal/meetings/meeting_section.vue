@@ -284,6 +284,7 @@
                         v-model="meeting_obj.location"
                         type="text"
                         readonly
+                        disabled
                         class="form-control"
                         placeholder=""
                     />
