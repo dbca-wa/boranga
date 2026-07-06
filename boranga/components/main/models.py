@@ -495,6 +495,48 @@ class HelpTextEntry(ArchivableModel):
     def __str__(self):
         return self.section_id
 
+    @classmethod
+    def get_helptext_entries(cls, use_cache: bool = True) -> dict:
+        """
+        Return a mapping of `section_id` -> attributes for active help text entries.
+
+        The result is cached using `settings.CACHE_KEY_HELP_TEXT_ENTRIES` and
+        cached for `CACHE_TIMEOUT_24_HOURS` by default.
+        """
+        cache_key = settings.CACHE_KEY_HELP_TEXT_ENTRIES
+        if use_cache:
+            cached = cache.get(cache_key)
+            if cached is not None:
+                return cached
+
+        rows = cls.objects.active().values(
+            "section_id",
+            "text",
+            "icon_with_popover",
+            "authenticated_users_only",
+            "internal_users_only",
+        )
+        result = {
+            r["section_id"]: {
+                "text": r["text"],
+                "icon_with_popover": r["icon_with_popover"],
+                "authenticated_users_only": r["authenticated_users_only"],
+                "internal_users_only": r["internal_users_only"],
+            }
+            for r in rows
+        }
+
+        cache.set(cache_key, result, settings.CACHE_TIMEOUT_NEVER)
+        return result
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        cache.delete(settings.CACHE_KEY_HELP_TEXT_ENTRIES)
+
+    def delete(self, *args, **kwargs):
+        super().delete(*args, **kwargs)
+        cache.delete(settings.CACHE_KEY_HELP_TEXT_ENTRIES)
+
 
 class AbstractOrderedListManager(OrderedModelManager):
     def active(self):

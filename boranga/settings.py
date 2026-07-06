@@ -436,6 +436,7 @@ CACHE_KEY_USER_BELONGS_TO_GROUP = "user-{user_id}-belongs-to-{group_name}"
 CACHE_KEY_USER_IS_REFEREE = "user-{user_id}-is-referee-{model}-{pk}"
 CACHE_KEY_SUPERUSER_IDS = "superuser-ids"
 CACHE_KEY_FILE_EXTENSION_WHITELIST = "file-extension-whitelist"
+CACHE_KEY_HELP_TEXT_ENTRIES = "helptext-entries"
 CACHE_KEY_PLAUSIBILITY_GEOMETRY = "plausibility-geometry-{geometry_model}"
 
 # ---------- Conservation Change Codes ----------
