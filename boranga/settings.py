@@ -245,8 +245,8 @@ MEDIA_APP_DIR = env("MEDIA_APP_DIR", "boranga")
 CRON_RUN_AT_TIMES = env("CRON_RUN_AT_TIMES", "04:05")
 CRON_EMAIL = env("CRON_EMAIL", "cron@" + SITE_DOMAIN).lower()
 EMAIL_FROM = DEFAULT_FROM_EMAIL
-# Time of day to run the import cadastre geojson cron job. Read from env or default to 03:00
-IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY = env("IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY", "03:00")
+# Time of day to run the import cadastre geojson cron job. Read from env or default to 04:00
+IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY = env("IMPORT_CADASTRE_GEOJSON_TIME_OF_DAY", "04:00")
 
 CRON_CLASSES = [
     "appmonitor_client.cron.CronJobAppMonitorClient",
@@ -319,7 +319,7 @@ if len(GIT_COMMIT_HASH) == 0:
         if len(GIT_COMMIT_HASH) == 0:
             print("ERROR: No git hash provided")
 
-APPLICATION_VERSION = env("APPLICATION_VERSION", "1.0.0")
+CONTAINER_IMAGE_TAG = env("CONTAINER_IMAGE_TAG", "CONTAINER_IMAGE_TAG ENV Not Set")
 
 RUNNING_DEVSERVER = len(sys.argv) > 1 and sys.argv[1] == "runserver"
 
@@ -335,7 +335,7 @@ if not RUNNING_DEVSERVER and SENTRY_DSN and EMAIL_INSTANCE:
         sample_rate=SENTRY_SAMPLE_RATE,
         traces_sample_rate=SENTRY_TRANSACTION_SAMPLE_RATE,
         environment=EMAIL_INSTANCE.lower(),
-        release=APPLICATION_VERSION,
+        release=CONTAINER_IMAGE_TAG,
     )
 
 LEDGER_UI_ACCOUNTS_MANAGEMENT = [
@@ -436,6 +436,7 @@ CACHE_KEY_USER_BELONGS_TO_GROUP = "user-{user_id}-belongs-to-{group_name}"
 CACHE_KEY_USER_IS_REFEREE = "user-{user_id}-is-referee-{model}-{pk}"
 CACHE_KEY_SUPERUSER_IDS = "superuser-ids"
 CACHE_KEY_FILE_EXTENSION_WHITELIST = "file-extension-whitelist"
+CACHE_KEY_HELP_TEXT_ENTRIES = "helptext-entries"
 CACHE_KEY_PLAUSIBILITY_GEOMETRY = "plausibility-geometry-{geometry_model}"
 
 # ---------- Conservation Change Codes ----------

@@ -7,14 +7,25 @@ from django.contrib.staticfiles import finders
 from django.template import Library
 from django.utils.safestring import mark_safe
 
+from boranga.components.main.models import HelpTextEntry
+
 logger = logging.getLogger(__name__)
 
 register = Library()
 
 
 @register.simple_tag()
-def application_version():
-    return settings.APPLICATION_VERSION
+def help_text_entry(section_id):
+    """Return the cached help text for a given section_id as safe HTML, or empty string."""
+    entry = HelpTextEntry.get_helptext_entries().get(section_id)
+    if not entry:
+        return ""
+    return mark_safe(entry["text"])
+
+
+@register.simple_tag()
+def container_image_tag():
+    return settings.CONTAINER_IMAGE_TAG
 
 
 @register.simple_tag()
