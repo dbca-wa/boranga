@@ -6060,6 +6060,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
     rows = models.IntegerField(null=True, editable=False)
     rows_processed = models.IntegerField(default=0)
+    column_count = models.IntegerField(null=True, editable=False)
 
     datetime_queued = models.DateTimeField(auto_now_add=True)
     datetime_started = models.DateTimeField(null=True, blank=True)
@@ -6125,11 +6126,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
     def total_time_taken_seconds(self):
         if self.datetime_started and self.datetime_completed:
             delta = self.datetime_completed - self.datetime_started
-            return delta.seconds
+            return int(delta.total_seconds())
         return None
 
     @property
-    def total_time_taken_minues(self):
+    def total_time_taken_minutes(self):
         if self.total_time_taken:
             return round(self.total_time_taken / 60, 2)
         return None
@@ -6161,6 +6162,14 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         return None
 
     @property
+    def time_taken_per_row_column(self):
+        """Seconds per (row × column). None if column_count is not recorded."""
+        if self.datetime_started and self.datetime_completed and self.column_count:
+            value = self.total_time_taken / (self.rows_processed * self.column_count)
+            return round(value, 8)
+        return None
+
+    @property
     def file_size_bytes(self):
         if self._file:
             return self._file.size
@@ -6174,23 +6183,52 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
     @classmethod
     def average_time_taken_per_row(cls):
-        task_count = cls.objects.filter(datetime_completed__isnull=False, rows_processed__gt=0).count()
-        if task_count == 0:
+        """Average seconds per row across all completed tasks, using a single query."""
+        rows = cls.objects.filter(
+            datetime_completed__isnull=False,
+            datetime_started__isnull=False,
+            rows_processed__gt=0,
+        ).values_list("datetime_started", "datetime_completed", "rows_processed")
+        if not rows:
             return None
+        rates = [(completed - started).total_seconds() / rows_processed for started, completed, rows_processed in rows]
+        return sum(rates) / len(rates)
 
-        total_time_taken = 0
-        for task in cls.objects.filter(datetime_completed__isnull=False, rows_processed__gt=0):
-            total_time_taken += task.time_taken_per_row
-
-        return total_time_taken / task_count
+    @classmethod
+    def average_time_taken_per_row_column(cls):
+        """Average seconds per (row × column) for tasks that recorded column_count."""
+        rows = cls.objects.filter(
+            datetime_completed__isnull=False,
+            datetime_started__isnull=False,
+            rows_processed__gt=0,
+            column_count__isnull=False,
+            column_count__gt=0,
+        ).values_list("datetime_started", "datetime_completed", "rows_processed", "column_count")
+        if not rows:
+            return None
+        rates = [
+            (completed - started).total_seconds() / (rows_processed * column_count)
+            for started, completed, rows_processed, column_count in rows
+        ]
+        return sum(rates) / len(rates)
 
     @property
     def estimated_processing_time_seconds(self):
-        average_time_taken_per_row = OccurrenceReportBulkImportTask.average_time_taken_per_row()
+        if not self.rows or not self.datetime_queued:
+            return None
 
-        if self.rows and self.datetime_queued and average_time_taken_per_row:
-            precisely = (self.rows - self.rows_processed) * average_time_taken_per_row
-            return round(precisely)
+        remaining_rows = self.rows - self.rows_processed
+
+        # Prefer column-count-aware estimate when this task has a column_count
+        if self.column_count:
+            avg_per_row_column = OccurrenceReportBulkImportTask.average_time_taken_per_row_column()
+            if avg_per_row_column:
+                return round(remaining_rows * self.column_count * avg_per_row_column)
+
+        # Fall back to plain row-based estimate
+        avg_per_row = OccurrenceReportBulkImportTask.average_time_taken_per_row()
+        if avg_per_row:
+            return round(remaining_rows * avg_per_row)
 
         return None
 
@@ -6328,6 +6366,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             ).update(
                 processing_status=self.PROCESSING_STATUS_STARTED,
                 datetime_started=timezone.now(),
+                column_count=self.schema.columns.count() if self.schema else None,
             )
             if updated != 1:
                 logger.info(f"Bulk import task {self.id} could not be claimed, aborting process()")

@@ -47,6 +47,9 @@ class Command(BaseCommand):
         task.count_rows()
         logger.info(f"OCR Bulk Import Task {task.id} has {task.rows} rows.")
 
+        column_count = task.schema.columns.count() if task.schema else None
+        logger.info(f"OCR Bulk Import Task {task.id} has {column_count} columns.")
+
         # Reset back to QUEUED so ocr_process_bulk_import_queue can pick it up.
         # count_rows() only saves the row count — it never transitions the status — so the
         # task would otherwise remain in STARTED and block all further processing until the
@@ -54,5 +57,6 @@ class Command(BaseCommand):
         OccurrenceReportBulkImportTask.objects.filter(id=task.id).update(
             processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
             datetime_started=None,
+            column_count=column_count,
         )
         return
