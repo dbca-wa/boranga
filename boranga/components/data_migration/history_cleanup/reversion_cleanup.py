@@ -315,6 +315,7 @@ class ReversionHistoryCleaner:
             OCRHabitatComposition,
             OCRHabitatCondition,
             OCRIdentification,
+            OCRLocation,
             OCRObservationDetail,
             OCRObserverDetail,
             OCRPlantCount,
@@ -368,6 +369,7 @@ class ReversionHistoryCleaner:
             (OCRPlantCount, "occurrence_report"),
             (OCRAnimalObservation, "occurrence_report"),
             (OCRIdentification, "occurrence_report"),
+            (OCRLocation, "occurrence_report"),
             (OccurrenceReportDocument, "occurrence_report"),
             (OCRConservationThreat, "occurrence_report"),
         ]
@@ -405,6 +407,7 @@ class ReversionHistoryCleaner:
             OCRHabitatComposition,
             OCRHabitatCondition,
             OCRIdentification,
+            OCRLocation,
             OCRObservationDetail,
             OCRObserverDetail,
             OCRPlantCount,
@@ -429,6 +432,7 @@ class ReversionHistoryCleaner:
             (OCRPlantCount, "occurrence_report"),
             (OCRAnimalObservation, "occurrence_report"),
             (OCRIdentification, "occurrence_report"),
+            (OCRLocation, "occurrence_report"),
             (OccurrenceReportDocument, "occurrence_report"),
             (OCRConservationThreat, "occurrence_report"),
         ]
