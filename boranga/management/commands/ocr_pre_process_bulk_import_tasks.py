@@ -1,7 +1,6 @@
 import logging
 
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
 from boranga.components.occurrence.models import OccurrenceReportBulkImportTask
 
@@ -14,8 +13,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         logger.info(f"Running command {__name__}")
 
-        # Find a candidate (non-blocking)
-        candidate = (
+        # Find the next task that needs pre-processing (rows not yet counted).
+        # Intentionally does NOT claim the task to STARTED — row-counting is
+        # idempotent, so two concurrent runs computing the same value and saving
+        # it is harmless.  Claiming to STARTED would cause ocr_process_bulk_import_queue
+        # to see "a task already running" and bail for up to 5 minutes.
+        task = (
             OccurrenceReportBulkImportTask.objects.filter(
                 processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
                 _file__isnull=False,
@@ -25,38 +28,19 @@ class Command(BaseCommand):
             .first()
         )
 
-        if candidate is None:
-            logger.info("No tasks to process, returning")
+        if task is None:
+            logger.info("No tasks to pre-process, returning")
             return
 
-        # Try to claim it atomically — only one process will succeed
-        updated = OccurrenceReportBulkImportTask.objects.filter(
-            id=candidate.id,
-            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
-        ).update(
-            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_STARTED,
-            datetime_started=timezone.now(),
-        )
-
-        if updated != 1:
-            logger.info("Task already claimed by another worker, returning")
-            return
-
-        # We own the task — reload instance and do pre-processing (long work) outside the claim step
-        task = OccurrenceReportBulkImportTask.objects.get(id=candidate.id)
+        # Count rows without changing status — process queue can still pick up
+        # the task at any time (process() re-counts rows if needed).
         task.count_rows()
         logger.info(f"OCR Bulk Import Task {task.id} has {task.rows} rows.")
 
         column_count = task.schema.columns.count() if task.schema else None
         logger.info(f"OCR Bulk Import Task {task.id} has {column_count} columns.")
 
-        # Reset back to QUEUED so ocr_process_bulk_import_queue can pick it up.
-        # count_rows() only saves the row count — it never transitions the status — so the
-        # task would otherwise remain in STARTED and block all further processing until the
-        # 8-hour timeout fires.
         OccurrenceReportBulkImportTask.objects.filter(id=task.id).update(
-            processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
-            datetime_started=None,
             column_count=column_count,
         )
         return
