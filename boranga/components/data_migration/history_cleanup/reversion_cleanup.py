@@ -290,6 +290,7 @@ class ReversionHistoryCleaner:
             Total versions deleted across all models
         """
         from boranga.components.occurrence.models import (
+            OCCAnimalObservation,
             OCCAssociatedSpecies,
             OCCConservationThreat,
             OCCContactDetail,
@@ -299,6 +300,7 @@ class ReversionHistoryCleaner:
             OCCIdentification,
             OCCLocation,
             OCCObservationDetail,
+            OCCPlantCount,
             Occurrence,
             OccurrenceDocument,
             OccurrenceGeometry,
@@ -315,6 +317,7 @@ class ReversionHistoryCleaner:
             OCRHabitatComposition,
             OCRHabitatCondition,
             OCRIdentification,
+            OCRLocation,
             OCRObservationDetail,
             OCRObserverDetail,
             OCRPlantCount,
@@ -339,6 +342,8 @@ class ReversionHistoryCleaner:
             (OCCLocation, "occurrence"),
             (OccurrenceSite, "occurrence"),
             (OCCObservationDetail, "occurrence"),
+            (OCCPlantCount, "occurrence"),
+            (OCCAnimalObservation, "occurrence"),
             (OCCHabitatComposition, "occurrence"),
             (OCCFireHistory, "occurrence"),
             (OCCAssociatedSpecies, "occurrence"),
@@ -368,6 +373,7 @@ class ReversionHistoryCleaner:
             (OCRPlantCount, "occurrence_report"),
             (OCRAnimalObservation, "occurrence_report"),
             (OCRIdentification, "occurrence_report"),
+            (OCRLocation, "occurrence_report"),
             (OccurrenceReportDocument, "occurrence_report"),
             (OCRConservationThreat, "occurrence_report"),
         ]
@@ -405,6 +411,7 @@ class ReversionHistoryCleaner:
             OCRHabitatComposition,
             OCRHabitatCondition,
             OCRIdentification,
+            OCRLocation,
             OCRObservationDetail,
             OCRObserverDetail,
             OCRPlantCount,
@@ -429,6 +436,7 @@ class ReversionHistoryCleaner:
             (OCRPlantCount, "occurrence_report"),
             (OCRAnimalObservation, "occurrence_report"),
             (OCRIdentification, "occurrence_report"),
+            (OCRLocation, "occurrence_report"),
             (OccurrenceReportDocument, "occurrence_report"),
             (OCRConservationThreat, "occurrence_report"),
         ]
