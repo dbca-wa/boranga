@@ -592,6 +592,78 @@ class MigratedHistorySeeder:
         )
         return set(existing)
 
+    def _clear_stale_migrated_from_id_versions(
+        self,
+        model_class: type[models.Model],
+        versioned_ids: set[str],
+    ) -> set[str]:
+        """
+        Among *versioned_ids*, find PKs where at least one Version's serialised
+        ``migrated_from_id`` differs from the live record's current value — the
+        signature of PK reuse after a wipe that left orphan Versions behind.
+
+        All Version rows for those PKs are deleted so the caller can re-seed
+        them with correct current data.  Returns the set of affected string PKs.
+
+        Implemented as a single Postgres-side JSON comparison; returns an empty
+        set without touching the DB on non-Postgres backends or for models that
+        have no ``migrated_from_id`` column.
+        """
+        from django.db import connection
+
+        if not versioned_ids:
+            return set()
+
+        # Only applicable to models with a direct migrated_from_id column.
+        try:
+            model_class._meta.get_field("migrated_from_id")
+        except Exception:
+            return set()
+
+        # The ::json operator used below is Postgres-specific.
+        if getattr(connection, "vendor", None) != "postgresql":
+            return set()
+
+        ct = ContentType.objects.get_for_model(model_class)
+        table = model_class._meta.db_table
+        id_list = list(versioned_ids)
+
+        # Find PKs where any Version's serialised migrated_from_id doesn't
+        # match the live column value.  IS DISTINCT FROM handles NULLs correctly.
+        sql = f"""
+            SELECT DISTINCT v.object_id
+            FROM   reversion_version v
+            JOIN   {table} m ON m.id = v.object_id::bigint
+            WHERE  v.content_type_id = %s
+              AND  v.object_id = ANY(%s)
+              AND  (v.serialized_data::json -> 0 -> 'fields' ->> 'migrated_from_id')
+                   IS DISTINCT FROM m.migrated_from_id
+        """  # nosec B608 — table name sourced from model._meta.db_table, not user input
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [ct.pk, id_list])
+            stale_ids = {row[0] for row in cursor.fetchall()}
+
+        if not stale_ids:
+            return set()
+
+        logger.warning(
+            "_clear_stale(%s): %d PK(s) have stale migrated_from_id in reversion history "
+            "(PK reuse after a wipe that left orphan Version rows) — deleting stale "
+            "Version rows so they will be re-seeded with correct data.",
+            model_class.__name__,
+            len(stale_ids),
+        )
+        deleted_count, _ = Version.objects.filter(content_type=ct, object_id__in=stale_ids).delete()
+        logger.info(
+            "_clear_stale(%s): deleted %d Version row(s) for %d stale PK(s)",
+            model_class.__name__,
+            deleted_count,
+            len(stale_ids),
+        )
+        self._stats[f"{model_class.__name__}_stale_cleared"] = len(stale_ids)
+        return stale_ids
+
     def _seed_simple_objects(
         self,
         queryset: models.QuerySet,
@@ -720,6 +792,14 @@ class MigratedHistorySeeder:
 
         str_ids = [str(pk) for pk in all_ids]
         already = self._already_versioned_ids(model_class, str_ids)
+
+        # Detect and remove stale versions caused by PK reuse after a wipe that
+        # left orphan Version rows behind.  Stale PKs are re-added to to_seed_pks
+        # so the correct current data is used for the baseline revision.
+        stale = self._clear_stale_migrated_from_id_versions(model_class, already)
+        if stale:
+            already -= stale
+
         to_seed_pks = [pk for pk, s in zip(all_ids, str_ids) if s not in already]
 
         if not to_seed_pks:
