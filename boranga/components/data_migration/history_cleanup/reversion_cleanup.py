@@ -290,6 +290,7 @@ class ReversionHistoryCleaner:
             Total versions deleted across all models
         """
         from boranga.components.occurrence.models import (
+            OCCAnimalObservation,
             OCCAssociatedSpecies,
             OCCConservationThreat,
             OCCContactDetail,
@@ -299,6 +300,7 @@ class ReversionHistoryCleaner:
             OCCIdentification,
             OCCLocation,
             OCCObservationDetail,
+            OCCPlantCount,
             Occurrence,
             OccurrenceDocument,
             OccurrenceGeometry,
@@ -340,6 +342,8 @@ class ReversionHistoryCleaner:
             (OCCLocation, "occurrence"),
             (OccurrenceSite, "occurrence"),
             (OCCObservationDetail, "occurrence"),
+            (OCCPlantCount, "occurrence"),
+            (OCCAnimalObservation, "occurrence"),
             (OCCHabitatComposition, "occurrence"),
             (OCCFireHistory, "occurrence"),
             (OCCAssociatedSpecies, "occurrence"),
