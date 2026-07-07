@@ -30,7 +30,7 @@ class CronJobOCRPreProcessBulkImportTasks(django_cron.CronJobBase):
 
 
 class CronJobOCRProcessBulkImportQueue(django_cron.CronJobBase):
-    schedule = django_cron.Schedule(run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=5)
+    schedule = django_cron.Schedule(run_weekly_on_days=[0, 1, 2, 3, 4, 5, 6], run_every_mins=1)
     code = "boranga.ocr_process_bulk_import_queue"
 
     def do(self) -> None:
