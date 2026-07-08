@@ -7714,8 +7714,15 @@ class OccurrenceReportBulkImportSchema(BaseModel):
     def __str__(self):
         return f"Group type: {self.group_type.name} (Version: {self.version})"
 
+    @staticmethod
+    def bust_cache(schema_pk):
+        """Delete all cached retrieve responses for this schema pk."""
+        cache.delete(f"boranga_bulk_schema_{schema_pk}_admin")
+        cache.delete(f"boranga_bulk_schema_{schema_pk}_user")
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        OccurrenceReportBulkImportSchema.bust_cache(self.pk)
         # Every schema should have a migrated_from_id column regardless if it is used
         # for create new OCR records or updating existing ones
         content_type = ct_models.ContentType.objects.get_for_model(OccurrenceReport)
@@ -7729,6 +7736,10 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 django_import_content_type=content_type,
                 django_import_field_name="migrated_from_id",
             )
+
+    def delete(self, *args, **kwargs):
+        OccurrenceReportBulkImportSchema.bust_cache(self.pk)
+        return super().delete(*args, **kwargs)
 
     @property
     def mandatory_fields(self):
@@ -8599,6 +8610,14 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
     def __str__(self):
         return f"{self.xlsx_column_header_name} - {self.schema}"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        OccurrenceReportBulkImportSchema.bust_cache(self.schema_id)
+
+    def delete(self, *args, **kwargs):
+        OccurrenceReportBulkImportSchema.bust_cache(self.schema_id)
+        return super().delete(*args, **kwargs)
+
     # Helper: try exact lookup, then fallback to nh3.clean(value) if not found
     def _get_related_instance(self, related_model_qs, lookup_field, value):
         # Prefer using filter().first() to avoid MultipleObjectsReturned
@@ -8753,7 +8772,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             qs = self.related_model_qs
             if qs is None:
                 return None
-            count = qs.count()
+            # Re-use the cached foreign_key_count to avoid a second COUNT query
+            count = self.foreign_key_count
             if (
                 count == 0
                 or self.django_import_field_name in ["species", "community"]
@@ -8824,7 +8844,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if self.related_model_qs is None:
             return None
 
-        if not self.lookup_filters.exists():
+        # Evaluate once so that prefetched lookup_filters are used for both the
+        # emptiness check and the iteration below (avoids two cache evaluations).
+        lookup_filters = list(self.lookup_filters.all())
+        if not lookup_filters:
             return self.related_model_qs
 
         related_model_qs = self.related_model_qs
@@ -8836,12 +8859,13 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if hasattr(related_model, "group_type"):
             related_model_qs = related_model_qs.filter(group_type=self.schema.group_type)
 
-        # Apply any lookup filters if they exist
-        for lookup_filter in self.lookup_filters.all():
-            lookup_filter.filter_field_name + "__" + lookup_filter.filter_type
-            lookup_filter_value = lookup_filter.values.first().filter_value
-            if lookup_filter.values.count() > 1:
-                lookup_filter_value = lookup_filter.values.values_list("filter_value", flat=True)
+        # Apply any lookup filters if they exist.  filter.values is prefetched so
+        # list() materialises it without extra queries.
+        for lookup_filter in lookup_filters:
+            values = list(lookup_filter.values.all())
+            lookup_filter_value = values[0].filter_value if values else None
+            if len(values) > 1:
+                lookup_filter_value = [v.filter_value for v in values]
             if lookup_filter.filter_type == "in" and not isinstance(lookup_filter_value, list):
                 lookup_filter_value = [lookup_filter_value]
 
