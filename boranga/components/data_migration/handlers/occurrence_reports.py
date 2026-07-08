@@ -240,7 +240,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     try:
                         from django.contrib.contenttypes.models import ContentType
                         from django.db.models import Q
-                        from reversion.models import Version
 
                         from boranga.components.occurrence.models import OccurrenceTenure
 
@@ -255,9 +254,16 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             _tenure_ids = list(_tenure_qs.values_list("id", flat=True))
                             if _tenure_ids:
                                 _ct = ContentType.objects.get_for_model(OccurrenceTenure)
-                                Version.objects.filter(
-                                    content_type=_ct, object_id__in=[str(i) for i in _tenure_ids]
-                                ).delete()
+                                from django.db import connection as _conn
+                                from django.db import router as _router
+                                from reversion.models import Version as _Version
+
+                                _db = _router.db_for_write(_Version)
+                                with _conn.cursor() as _cur:
+                                    _cur.execute(
+                                        "DELETE FROM reversion_version WHERE db = %s AND content_type_id = %s AND object_id = ANY(%s)",
+                                        [_db, _ct.pk, [str(i) for i in _tenure_ids]],
+                                    )
                                 _deleted_tenure, _ = _tenure_qs.delete()
                                 logger.info(
                                     "OccurrenceReportImporter: deleted %d OccurrenceTenure records "

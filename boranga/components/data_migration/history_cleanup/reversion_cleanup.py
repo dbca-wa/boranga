@@ -20,7 +20,7 @@ import logging
 from typing import Any
 
 from django.contrib.contenttypes.models import ContentType
-from django.db import models
+from django.db import connection, models, router
 from reversion.models import Version
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,51 @@ class ReversionHistoryCleaner:
         """
         self.batch_size = batch_size
         self.stats = {}
+
+    # ------------------------------------------------------------------
+    # Raw SQL helpers
+    # ------------------------------------------------------------------
+
+    def _raw_delete_versions(self, content_type: ContentType, batch_ids: list[str]) -> int:
+        """
+        Delete Version rows via a single raw SQL statement.
+
+        Using raw SQL instead of ORM ``.delete()`` avoids:
+        * Django's ``Collector.collect()`` relationship traversal
+        * ``pre_delete`` / ``post_delete`` signal dispatch (one per object)
+
+        Orphaned ``Revision`` rows (those with no remaining Versions after this
+        deletion) are intentionally left in place.  The NOT EXISTS check needed
+        to find and delete them requires one index lookup per revision ID against
+        the full ``reversion_version`` table; on a large, cold index that cost
+        dominates and makes the overall operation orders of magnitude slower.
+        Orphaned Revisions waste a small amount of space but have no functional
+        impact — they are invisible to the seeder and to the Django history UI.
+        Run ``VACUUM ANALYZE reversion_revision reversion_version`` periodically
+        to reclaim space if needed.
+
+        Returns the number of Version rows deleted.
+        """
+        # The reversion_version table has a UNIQUE index on
+        # (db, content_type_id, object_id, revision_id).  Postgres will only
+        # use that index when ALL leading columns are constrained.  Without
+        # ``db`` in the WHERE clause the planner falls back to a bitmap heap
+        # scan on content_type_id alone — scanning every row for that content
+        # type before filtering by object_id.  For Occurrence (397k rows) that
+        # produced a query cost of ~942,000 vs ~3,090 with db included: 305×
+        # slower.  Adding db = 'default' (the only value in practice) forces
+        # the efficient index scan path.
+        db = router.db_for_write(Version)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM reversion_version WHERE db = %s AND content_type_id = %s AND object_id = ANY(%s)",
+                [db, content_type.pk, batch_ids],
+            )
+            return cursor.rowcount
+
+    # ------------------------------------------------------------------
+    # Public per-model clear methods
+    # ------------------------------------------------------------------
 
     def clear_for_model(self, model_class: type[models.Model], group_type_filter: dict[str, Any]) -> int:
         """
@@ -79,7 +124,7 @@ class ReversionHistoryCleaner:
 
         for i in range(0, len(str_object_ids), self.batch_size):
             batch_ids = str_object_ids[i : i + self.batch_size]
-            deleted_count, _ = Version.objects.filter(content_type=content_type, object_id__in=batch_ids).delete()
+            deleted_count = self._raw_delete_versions(content_type, batch_ids)
 
             total_deleted += deleted_count
 
@@ -136,7 +181,7 @@ class ReversionHistoryCleaner:
 
         for i in range(0, len(str_object_ids), self.batch_size):
             batch_ids = str_object_ids[i : i + self.batch_size]
-            deleted_count, _ = Version.objects.filter(content_type=content_type, object_id__in=batch_ids).delete()
+            deleted_count = self._raw_delete_versions(content_type, batch_ids)
             total_deleted += deleted_count
 
         self.stats[model_name] = total_deleted
@@ -186,7 +231,7 @@ class ReversionHistoryCleaner:
         total_deleted = 0
         for i in range(0, len(orphaned_ids), self.batch_size):
             batch = orphaned_ids[i : i + self.batch_size]
-            deleted_count, _ = Version.objects.filter(content_type=content_type, object_id__in=batch).delete()
+            deleted_count = self._raw_delete_versions(content_type, batch)
             total_deleted += deleted_count
 
         self.stats[f"{model_name}_orphaned"] = total_deleted

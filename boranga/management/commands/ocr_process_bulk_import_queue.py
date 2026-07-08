@@ -22,10 +22,11 @@ class Command(BaseCommand):
             datetime_started__lt=timezone.now()
             - timezone.timedelta(seconds=settings.OCR_BULK_IMPORT_TASK_TIMEOUT_SECONDS),
         )
+        # Preserve datetime_queued so the recovered task keeps its original queue
+        # position rather than being pushed to the back of the queue.
         stuck_qs.update(
             processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
             rows_processed=0,
-            datetime_queued=timezone.now(),
         )
 
         # Check if there are already any tasks running and return if so

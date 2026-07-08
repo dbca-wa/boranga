@@ -97,6 +97,7 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
             return
 
         from django.contrib.contenttypes.models import ContentType
+        from django.db import connection, router
         from reversion.models import Version
 
         qs = OccurrenceTenure.objects.filter(
@@ -105,7 +106,12 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
         ct = ContentType.objects.get_for_model(OccurrenceTenure)
         tenure_ids = list(qs.values_list("id", flat=True))
         if tenure_ids:
-            Version.objects.filter(content_type=ct, object_id__in=[str(i) for i in tenure_ids]).delete()
+            db = router.db_for_write(Version)
+            with connection.cursor() as _cur:
+                _cur.execute(
+                    "DELETE FROM reversion_version WHERE db = %s AND content_type_id = %s AND object_id = ANY(%s)",
+                    [db, ct.pk, [str(i) for i in tenure_ids]],
+                )
             deleted_count, _ = qs.delete()
             logger.info("tfauna_occurrence_tenure.clear_targets: deleted %d OccurrenceTenure rows", deleted_count)
         else:

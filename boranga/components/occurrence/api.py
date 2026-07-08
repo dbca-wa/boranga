@@ -8,7 +8,7 @@ from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.gis.geos.error import GEOSException
 from django.core.cache import cache
 from django.db import NotSupportedError, models, transaction
-from django.db.models import CharField, Q, Value
+from django.db.models import CharField, Prefetch, Q, Value
 from django.db.models.functions import Concat
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
@@ -5803,11 +5803,35 @@ class OccurrenceReportBulkImportSchemaViewSet(
             return OccurrenceReportBulkImportSchemaOccurrenceApproverSerializer
         return super().get_serializer_class()
 
+    def _schema_cache_key(self, pk):
+        is_admin = is_django_admin(self.request) or self.request.user.is_superuser
+        return f"boranga_bulk_schema_{pk}_{'admin' if is_admin else 'user'}"
+
+    def retrieve(self, request, *args, **kwargs):
+        cache_key = self._schema_cache_key(kwargs.get("pk"))
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+        response = super().retrieve(request, *args, **kwargs)
+        cache.set(cache_key, response.data, timeout=None)
+        return response
+
     def get_queryset(self):
         qs = self.queryset
         if not (is_internal(self.request) or self.request.user.is_superuser):
-            qs = OccurrenceReportBulkImportSchema.objects.none()
-        return qs
+            return OccurrenceReportBulkImportSchema.objects.none()
+        if self.action == "retrieve":
+            # For the detail view we serialise every column including its computed
+            # properties (foreign_key_count, filtered_foreign_key_count, choices,
+            # lookup_filters …).  Without eager-loading those relationships the
+            # serialiser fires O(N) queries per column — easily 400+ for a large
+            # schema.  The Prefetch below pulls everything needed in 4 queries.
+            columns_qs = OccurrenceReportBulkImportSchemaColumn.objects.select_related(
+                "django_import_content_type",
+                "schema__group_type",
+            ).prefetch_related("lookup_filters__values")
+            return qs.select_related("group_type").prefetch_related(Prefetch("columns", queryset=columns_qs))
+        return qs.select_related("group_type")
 
     def perform_create(self, serializer):
         if OccurrenceReportBulkImportSchema.objects.filter(group_type=serializer.validated_data["group_type"]).exists():

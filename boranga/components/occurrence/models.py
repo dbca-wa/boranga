@@ -6060,6 +6060,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
     rows = models.IntegerField(null=True, editable=False)
     rows_processed = models.IntegerField(default=0)
+    column_count = models.IntegerField(null=True, editable=False)
 
     datetime_queued = models.DateTimeField(auto_now_add=True)
     datetime_started = models.DateTimeField(null=True, blank=True)
@@ -6125,11 +6126,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
     def total_time_taken_seconds(self):
         if self.datetime_started and self.datetime_completed:
             delta = self.datetime_completed - self.datetime_started
-            return delta.seconds
+            return int(delta.total_seconds())
         return None
 
     @property
-    def total_time_taken_minues(self):
+    def total_time_taken_minutes(self):
         if self.total_time_taken:
             return round(self.total_time_taken / 60, 2)
         return None
@@ -6161,6 +6162,14 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         return None
 
     @property
+    def time_taken_per_row_column(self):
+        """Seconds per (row × column). None if column_count is not recorded."""
+        if self.datetime_started and self.datetime_completed and self.column_count:
+            value = self.total_time_taken / (self.rows_processed * self.column_count)
+            return round(value, 8)
+        return None
+
+    @property
     def file_size_bytes(self):
         if self._file:
             return self._file.size
@@ -6174,23 +6183,52 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
     @classmethod
     def average_time_taken_per_row(cls):
-        task_count = cls.objects.filter(datetime_completed__isnull=False, rows_processed__gt=0).count()
-        if task_count == 0:
+        """Average seconds per row across all completed tasks, using a single query."""
+        rows = cls.objects.filter(
+            datetime_completed__isnull=False,
+            datetime_started__isnull=False,
+            rows_processed__gt=0,
+        ).values_list("datetime_started", "datetime_completed", "rows_processed")
+        if not rows:
             return None
+        rates = [(completed - started).total_seconds() / rows_processed for started, completed, rows_processed in rows]
+        return sum(rates) / len(rates)
 
-        total_time_taken = 0
-        for task in cls.objects.filter(datetime_completed__isnull=False, rows_processed__gt=0):
-            total_time_taken += task.time_taken_per_row
-
-        return total_time_taken / task_count
+    @classmethod
+    def average_time_taken_per_row_column(cls):
+        """Average seconds per (row × column) for tasks that recorded column_count."""
+        rows = cls.objects.filter(
+            datetime_completed__isnull=False,
+            datetime_started__isnull=False,
+            rows_processed__gt=0,
+            column_count__isnull=False,
+            column_count__gt=0,
+        ).values_list("datetime_started", "datetime_completed", "rows_processed", "column_count")
+        if not rows:
+            return None
+        rates = [
+            (completed - started).total_seconds() / (rows_processed * column_count)
+            for started, completed, rows_processed, column_count in rows
+        ]
+        return sum(rates) / len(rates)
 
     @property
     def estimated_processing_time_seconds(self):
-        average_time_taken_per_row = OccurrenceReportBulkImportTask.average_time_taken_per_row()
+        if not self.rows or not self.datetime_queued:
+            return None
 
-        if self.rows and self.datetime_queued and average_time_taken_per_row:
-            precisely = (self.rows - self.rows_processed) * average_time_taken_per_row
-            return round(precisely)
+        remaining_rows = self.rows - self.rows_processed
+
+        # Prefer column-count-aware estimate when this task has a column_count
+        if self.column_count:
+            avg_per_row_column = OccurrenceReportBulkImportTask.average_time_taken_per_row_column()
+            if avg_per_row_column:
+                return round(remaining_rows * self.column_count * avg_per_row_column)
+
+        # Fall back to plain row-based estimate
+        avg_per_row = OccurrenceReportBulkImportTask.average_time_taken_per_row()
+        if avg_per_row:
+            return round(remaining_rows * avg_per_row)
 
         return None
 
@@ -6328,6 +6366,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             ).update(
                 processing_status=self.PROCESSING_STATUS_STARTED,
                 datetime_started=timezone.now(),
+                column_count=self.schema.columns.count() if self.schema else None,
             )
             if updated != 1:
                 logger.info(f"Bulk import task {self.id} could not be claimed, aborting process()")
@@ -7675,8 +7714,15 @@ class OccurrenceReportBulkImportSchema(BaseModel):
     def __str__(self):
         return f"Group type: {self.group_type.name} (Version: {self.version})"
 
+    @staticmethod
+    def bust_cache(schema_pk):
+        """Delete all cached retrieve responses for this schema pk."""
+        cache.delete(f"boranga_bulk_schema_{schema_pk}_admin")
+        cache.delete(f"boranga_bulk_schema_{schema_pk}_user")
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        OccurrenceReportBulkImportSchema.bust_cache(self.pk)
         # Every schema should have a migrated_from_id column regardless if it is used
         # for create new OCR records or updating existing ones
         content_type = ct_models.ContentType.objects.get_for_model(OccurrenceReport)
@@ -7690,6 +7736,10 @@ class OccurrenceReportBulkImportSchema(BaseModel):
                 django_import_content_type=content_type,
                 django_import_field_name="migrated_from_id",
             )
+
+    def delete(self, *args, **kwargs):
+        OccurrenceReportBulkImportSchema.bust_cache(self.pk)
+        return super().delete(*args, **kwargs)
 
     @property
     def mandatory_fields(self):
@@ -8560,6 +8610,14 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
     def __str__(self):
         return f"{self.xlsx_column_header_name} - {self.schema}"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        OccurrenceReportBulkImportSchema.bust_cache(self.schema_id)
+
+    def delete(self, *args, **kwargs):
+        OccurrenceReportBulkImportSchema.bust_cache(self.schema_id)
+        return super().delete(*args, **kwargs)
+
     # Helper: try exact lookup, then fallback to nh3.clean(value) if not found
     def _get_related_instance(self, related_model_qs, lookup_field, value):
         # Prefer using filter().first() to avoid MultipleObjectsReturned
@@ -8714,7 +8772,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
             qs = self.related_model_qs
             if qs is None:
                 return None
-            count = qs.count()
+            # Re-use the cached foreign_key_count to avoid a second COUNT query
+            count = self.foreign_key_count
             if (
                 count == 0
                 or self.django_import_field_name in ["species", "community"]
@@ -8785,7 +8844,10 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if self.related_model_qs is None:
             return None
 
-        if not self.lookup_filters.exists():
+        # Evaluate once so that prefetched lookup_filters are used for both the
+        # emptiness check and the iteration below (avoids two cache evaluations).
+        lookup_filters = list(self.lookup_filters.all())
+        if not lookup_filters:
             return self.related_model_qs
 
         related_model_qs = self.related_model_qs
@@ -8797,12 +8859,13 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
         if hasattr(related_model, "group_type"):
             related_model_qs = related_model_qs.filter(group_type=self.schema.group_type)
 
-        # Apply any lookup filters if they exist
-        for lookup_filter in self.lookup_filters.all():
-            lookup_filter.filter_field_name + "__" + lookup_filter.filter_type
-            lookup_filter_value = lookup_filter.values.first().filter_value
-            if lookup_filter.values.count() > 1:
-                lookup_filter_value = lookup_filter.values.values_list("filter_value", flat=True)
+        # Apply any lookup filters if they exist.  filter.values is prefetched so
+        # list() materialises it without extra queries.
+        for lookup_filter in lookup_filters:
+            values = list(lookup_filter.values.all())
+            lookup_filter_value = values[0].filter_value if values else None
+            if len(values) > 1:
+                lookup_filter_value = [v.filter_value for v in values]
             if lookup_filter.filter_type == "in" and not isinstance(lookup_filter_value, list):
                 lookup_filter_value = [lookup_filter_value]
 

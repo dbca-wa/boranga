@@ -306,10 +306,15 @@ class MigratedHistorySeeder:
 
         return total
 
-    def seed_occurrence_reports(self) -> int:
+    def seed_occurrence_reports(self, group_type_names: list[str] | None = None) -> int:
         """
         Seed OccurrenceReport + followed 1-to-1 relations + Documents +
         OCRConservationThreats + OCRObserverDetails.
+
+        Args:
+            group_type_names: Optional list of group type names to restrict seeding to,
+                              e.g. ``['fauna']``.  Pass ``None`` (default) to seed all
+                              migrated OccurrenceReports regardless of group type.
         """
         from boranga.components.occurrence.models import (
             OccurrenceReport,
@@ -319,21 +324,20 @@ class MigratedHistorySeeder:
         )
 
         total = 0
-        qs = (
-            OccurrenceReport.objects.filter(migrated_from_id__isnull=False)
-            .exclude(migrated_from_id="")
-            .select_related(
-                "location",
-                "habitat_composition",
-                "habitat_condition",
-                "vegetation_structure",
-                "fire_history",
-                "associated_species",
-                "observation_detail",
-                "plant_count",
-                "animal_observation",
-                "identification",
-            )
+        qs = OccurrenceReport.objects.filter(migrated_from_id__isnull=False).exclude(migrated_from_id="")
+        if group_type_names:
+            qs = qs.filter(group_type__name__in=group_type_names)
+        qs = qs.select_related(
+            "location",
+            "habitat_composition",
+            "habitat_condition",
+            "vegetation_structure",
+            "fire_history",
+            "associated_species",
+            "observation_detail",
+            "plant_count",
+            "animal_observation",
+            "identification",
         )
         follow_names = [
             "location",
@@ -355,33 +359,36 @@ class MigratedHistorySeeder:
         )
 
         # Sub-records
-        doc_qs = (
-            OccurrenceReportDocument.objects.filter(occurrence_report__migrated_from_id__isnull=False)
-            .exclude(occurrence_report__migrated_from_id="")
-            .select_related("occurrence_report")
+        doc_qs = OccurrenceReportDocument.objects.filter(occurrence_report__migrated_from_id__isnull=False).exclude(
+            occurrence_report__migrated_from_id=""
         )
+        if group_type_names:
+            doc_qs = doc_qs.filter(occurrence_report__group_type__name__in=group_type_names)
+        doc_qs = doc_qs.select_related("occurrence_report")
         total += self._seed_simple_objects(
             doc_qs,
             lambda d: _source_comment(d.occurrence_report.migrated_from_id),
             "OccurrenceReportDocument",
         )
 
-        threat_qs = (
-            OCRConservationThreat.objects.filter(occurrence_report__migrated_from_id__isnull=False)
-            .exclude(occurrence_report__migrated_from_id="")
-            .select_related("occurrence_report")
+        threat_qs = OCRConservationThreat.objects.filter(occurrence_report__migrated_from_id__isnull=False).exclude(
+            occurrence_report__migrated_from_id=""
         )
+        if group_type_names:
+            threat_qs = threat_qs.filter(occurrence_report__group_type__name__in=group_type_names)
+        threat_qs = threat_qs.select_related("occurrence_report")
         total += self._seed_simple_objects(
             threat_qs,
             lambda t: _source_comment(t.occurrence_report.migrated_from_id),
             "OCRConservationThreat",
         )
 
-        observer_qs = (
-            OCRObserverDetail.objects.filter(occurrence_report__migrated_from_id__isnull=False)
-            .exclude(occurrence_report__migrated_from_id="")
-            .select_related("occurrence_report")
+        observer_qs = OCRObserverDetail.objects.filter(occurrence_report__migrated_from_id__isnull=False).exclude(
+            occurrence_report__migrated_from_id=""
         )
+        if group_type_names:
+            observer_qs = observer_qs.filter(occurrence_report__group_type__name__in=group_type_names)
+        observer_qs = observer_qs.select_related("occurrence_report")
         total += self._seed_simple_objects(
             observer_qs,
             lambda o: _source_comment(o.occurrence_report.migrated_from_id),
@@ -390,10 +397,15 @@ class MigratedHistorySeeder:
 
         return total
 
-    def seed_occurrences(self) -> int:
+    def seed_occurrences(self, group_type_names: list[str] | None = None) -> int:
         """
         Seed Occurrence + followed 1-to-1 relations + Documents +
         OCCConservationThreats + OCCContactDetails + OccurrenceSites + OccurrenceTenures.
+
+        Args:
+            group_type_names: Optional list of group type names to restrict seeding to,
+                              e.g. ``['fauna']``.  Pass ``None`` (default) to seed all
+                              migrated Occurrences regardless of group type.
         """
         from boranga.components.occurrence.models import (
             OCCConservationThreat,
@@ -405,21 +417,20 @@ class MigratedHistorySeeder:
         )
 
         total = 0
-        qs = (
-            Occurrence.objects.filter(migrated_from_id__isnull=False)
-            .exclude(migrated_from_id="")
-            .select_related(
-                "location",
-                "habitat_composition",
-                "habitat_condition",
-                "vegetation_structure",
-                "fire_history",
-                "associated_species",
-                "observation_detail",
-                "plant_count",
-                "animal_observation",
-                "identification",
-            )
+        qs = Occurrence.objects.filter(migrated_from_id__isnull=False).exclude(migrated_from_id="")
+        if group_type_names:
+            qs = qs.filter(group_type__name__in=group_type_names)
+        qs = qs.select_related(
+            "location",
+            "habitat_composition",
+            "habitat_condition",
+            "vegetation_structure",
+            "fire_history",
+            "associated_species",
+            "observation_detail",
+            "plant_count",
+            "animal_observation",
+            "identification",
         )
         follow_names = [
             "location",
@@ -440,44 +451,48 @@ class MigratedHistorySeeder:
             "Occurrence",
         )
 
-        doc_qs = (
-            OccurrenceDocument.objects.filter(occurrence__migrated_from_id__isnull=False)
-            .exclude(occurrence__migrated_from_id="")
-            .select_related("occurrence")
+        doc_qs = OccurrenceDocument.objects.filter(occurrence__migrated_from_id__isnull=False).exclude(
+            occurrence__migrated_from_id=""
         )
+        if group_type_names:
+            doc_qs = doc_qs.filter(occurrence__group_type__name__in=group_type_names)
+        doc_qs = doc_qs.select_related("occurrence")
         total += self._seed_simple_objects(
             doc_qs,
             lambda d: _source_comment(d.occurrence.migrated_from_id),
             "OccurrenceDocument",
         )
 
-        threat_qs = (
-            OCCConservationThreat.objects.filter(occurrence__migrated_from_id__isnull=False)
-            .exclude(occurrence__migrated_from_id="")
-            .select_related("occurrence")
+        threat_qs = OCCConservationThreat.objects.filter(occurrence__migrated_from_id__isnull=False).exclude(
+            occurrence__migrated_from_id=""
         )
+        if group_type_names:
+            threat_qs = threat_qs.filter(occurrence__group_type__name__in=group_type_names)
+        threat_qs = threat_qs.select_related("occurrence")
         total += self._seed_simple_objects(
             threat_qs,
             lambda t: _source_comment(t.occurrence.migrated_from_id),
             "OCCConservationThreat",
         )
 
-        contact_qs = (
-            OCCContactDetail.objects.filter(occurrence__migrated_from_id__isnull=False)
-            .exclude(occurrence__migrated_from_id="")
-            .select_related("occurrence")
+        contact_qs = OCCContactDetail.objects.filter(occurrence__migrated_from_id__isnull=False).exclude(
+            occurrence__migrated_from_id=""
         )
+        if group_type_names:
+            contact_qs = contact_qs.filter(occurrence__group_type__name__in=group_type_names)
+        contact_qs = contact_qs.select_related("occurrence")
         total += self._seed_simple_objects(
             contact_qs,
             lambda c: _source_comment(c.occurrence.migrated_from_id),
             "OCCContactDetail",
         )
 
-        site_qs = (
-            OccurrenceSite.objects.filter(occurrence__migrated_from_id__isnull=False)
-            .exclude(occurrence__migrated_from_id="")
-            .select_related("occurrence")
+        site_qs = OccurrenceSite.objects.filter(occurrence__migrated_from_id__isnull=False).exclude(
+            occurrence__migrated_from_id=""
         )
+        if group_type_names:
+            site_qs = site_qs.filter(occurrence__group_type__name__in=group_type_names)
+        site_qs = site_qs.select_related("occurrence")
         total += self._seed_simple_objects(
             site_qs,
             lambda s: _source_comment(s.occurrence.migrated_from_id),
@@ -485,11 +500,12 @@ class MigratedHistorySeeder:
         )
 
         # OccurrenceTenure links via occurrence_geometry -> occurrence
-        tenure_qs = (
-            OccurrenceTenure.objects.filter(occurrence_geometry__occurrence__migrated_from_id__isnull=False)
-            .exclude(occurrence_geometry__occurrence__migrated_from_id="")
-            .select_related("occurrence_geometry__occurrence")
-        )
+        tenure_qs = OccurrenceTenure.objects.filter(
+            occurrence_geometry__occurrence__migrated_from_id__isnull=False
+        ).exclude(occurrence_geometry__occurrence__migrated_from_id="")
+        if group_type_names:
+            tenure_qs = tenure_qs.filter(occurrence_geometry__occurrence__group_type__name__in=group_type_names)
+        tenure_qs = tenure_qs.select_related("occurrence_geometry__occurrence")
         total += self._seed_simple_objects(
             tenure_qs,
             lambda t: _source_comment(t.occurrence_geometry.occurrence.migrated_from_id),
@@ -580,10 +596,17 @@ class MigratedHistorySeeder:
     # ------------------------------------------------------------------
 
     def _already_versioned_ids(self, model_class: type[models.Model], object_ids: list[str]) -> set[str]:
-        """Return the string PKs of objects that already have at least one Version."""
+        """Return the string PKs of objects that already have at least one Version.
+
+        ``db`` is included in the filter so Postgres can use the unique index
+        ``(db, content_type_id, object_id, revision_id)`` rather than falling
+        back to a bitmap heap scan over all rows for this content type.
+        """
         ct = ContentType.objects.get_for_model(model_class)
+        db = router.db_for_write(Version)
         existing = (
             Version.objects.filter(
+                db=db,
                 content_type=ct,
                 object_id__in=object_ids,
             )
@@ -630,18 +653,23 @@ class MigratedHistorySeeder:
 
         # Find PKs where any Version's serialised migrated_from_id doesn't
         # match the live column value.  IS DISTINCT FROM handles NULLs correctly.
+        # ``v.db = %s`` is included so Postgres uses the unique index
+        # (db, content_type_id, object_id, revision_id) instead of a full
+        # bitmap heap scan over all rows for this content type.
+        db = router.db_for_write(Version)
         sql = f"""
             SELECT DISTINCT v.object_id
             FROM   reversion_version v
             JOIN   {table} m ON m.id = v.object_id::bigint
-            WHERE  v.content_type_id = %s
+            WHERE  v.db = %s
+              AND  v.content_type_id = %s
               AND  v.object_id = ANY(%s)
               AND  (v.serialized_data::json -> 0 -> 'fields' ->> 'migrated_from_id')
                    IS DISTINCT FROM m.migrated_from_id
         """  # nosec B608 — table name sourced from model._meta.db_table, not user input
 
         with connection.cursor() as cursor:
-            cursor.execute(sql, [ct.pk, id_list])
+            cursor.execute(sql, [db, ct.pk, id_list])
             stale_ids = {row[0] for row in cursor.fetchall()}
 
         if not stale_ids:
@@ -654,7 +682,13 @@ class MigratedHistorySeeder:
             model_class.__name__,
             len(stale_ids),
         )
-        deleted_count, _ = Version.objects.filter(content_type=ct, object_id__in=stale_ids).delete()
+        stale_list = list(stale_ids)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM reversion_version WHERE db = %s AND content_type_id = %s AND object_id = ANY(%s)",
+                [db, ct.pk, stale_list],
+            )
+            deleted_count = cursor.rowcount
         logger.info(
             "_clear_stale(%s): deleted %d Version row(s) for %d stale PK(s)",
             model_class.__name__,
