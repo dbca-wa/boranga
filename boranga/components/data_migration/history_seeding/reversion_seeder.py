@@ -759,13 +759,25 @@ class MigratedHistorySeeder:
                 pass
 
         total_created = 0
+        total_batches = (len(all_ids) + self.batch_size - 1) // self.batch_size
+        batch_num = 0
 
         for i in range(0, len(all_ids), self.batch_size):
+            batch_num += 1
             batch_pks = all_ids[i : i + self.batch_size]
             batch_str = [str(pk) for pk in batch_pks]
             to_seed_pks = [pk for pk, s in zip(batch_pks, batch_str) if s not in already]
             if not to_seed_pks:
                 continue
+
+            logger.info(
+                "seed_simple(%s): batch %d/%d — seeding %d object(s) (%d done so far)",
+                label,
+                batch_num,
+                total_batches,
+                len(to_seed_pks),
+                total_created,
+            )
 
             objects = list(queryset.filter(pk__in=to_seed_pks))
             if not objects:
