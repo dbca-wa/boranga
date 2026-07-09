@@ -36,11 +36,14 @@ class Command(BaseCommand):
             logger.info("There is already a task running, returning")
             return
 
-        # Get the next task to process (non-blocking) and try to claim it atomically
+        # Get the next task to process (non-blocking) and try to claim it atomically.
+        # Only pick up tasks that have already been pre-processed (rows counted) so
+        # that progress tracking and time estimation work correctly.
         candidate = (
             OccurrenceReportBulkImportTask.objects.filter(
                 processing_status=OccurrenceReportBulkImportTask.PROCESSING_STATUS_QUEUED,
                 _file__isnull=False,
+                rows__isnull=False,
             )
             .order_by("datetime_queued")
             .first()
