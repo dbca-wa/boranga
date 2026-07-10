@@ -3679,8 +3679,18 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     ).ewkb
                                 else:
                                     geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
+                            elif _merged.get("_source") == Source.TFAUNA.value:
+                                # TFAUNA: store raw GDA94 point (EPSG:4283) as original
+                                _lat = _merged.get("Lat")
+                                _lon = _merged.get("Long")
+                                if _lat and _lon:
+                                    geom_create_kwargs["original_geometry_ewkb"] = GEOSPoint(
+                                        float(_lon), float(_lat), srid=4283
+                                    ).ewkb
+                                else:
+                                    geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
                             else:
-                                # TFAUNA (already a Point) or TEC (actual polygon): store geometry directly
+                                # TEC (actual polygon): store geometry directly
                                 geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
                     except Exception:
                         pass
@@ -4090,8 +4100,18 @@ class OccurrenceReportImporter(BaseSheetImporter):
                                     ).ewkb
                                 else:
                                     geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
+                            elif _merged.get("_source") == Source.TFAUNA.value:
+                                # TFAUNA: store raw GDA94 point (EPSG:4283) as original
+                                _lat = _merged.get("Lat")
+                                _lon = _merged.get("Long")
+                                if _lat and _lon:
+                                    geom_create_kwargs["original_geometry_ewkb"] = GEOSPoint(
+                                        float(_lon), float(_lat), srid=4283
+                                    ).ewkb
+                                else:
+                                    geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
                             else:
-                                # TFAUNA (already a Point) or TEC (actual polygon): store geometry directly
+                                # TEC (actual polygon): store geometry directly
                                 geom_create_kwargs["original_geometry_ewkb"] = buffered_geom.ewkb
                     except Exception:
                         pass
