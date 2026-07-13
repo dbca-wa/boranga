@@ -3313,6 +3313,7 @@ def geometry_from_coords_factory(
     datum_field: str | None = None,
     radius_m: float = 1.0,
     point_only: bool = False,
+    source_epsg: str | None = None,
 ):
     """
     Factory that returns a registered transform name for creating WGS84 geometries from lat/lon coordinates.
@@ -3336,8 +3337,13 @@ def geometry_from_coords_factory(
             Only consulted when the datum cannot be inferred from the field name prefix
             (e.g. ``GDA94LAT`` already implies GDA94 / EPSG:4283, so ``datum_field`` is
             ignored for that field regardless of what the DATUM column contains).
+            Ignored entirely when ``source_epsg`` is set.
         radius_m: Buffer radius in meters (default: 1.0m)
         point_only: If True, return a Point instead of a buffered Polygon (default: False)
+        source_epsg: When provided, always use this EPSG string (e.g. ``"EPSG:4283"`` for GDA94)
+            as the source CRS for every row, ignoring ``datum_field`` and any datum encoded
+            in ``latitude_field``. Use this when the source dataset has a known fixed datum
+            that should never be overridden by per-row DATUM column values.
 
     Returns:
         A registered transform name that converts point coordinates to WGS84 geometry
@@ -3364,7 +3370,7 @@ def geometry_from_coords_factory(
             _field_implied_epsg = _datum_epsg
             break
 
-    key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}_{point_only}"
+    key = f"geometry_from_coords_{latitude_field}_{longitude_field}_{datum_field}_{radius_m}_{point_only}_{source_epsg}"
     name = "geometry_from_coords_" + hashlib.sha1(key.encode()).hexdigest()[:8]
 
     if name in registry._fns:
@@ -3384,30 +3390,32 @@ def geometry_from_coords_factory(
             lat = float(lat_str)
             lng = float(lng_str)
 
-            # Determine source CRS:
-            # 1. If the field name encodes the datum (e.g. GDA94LAT), use that
-            #    datum directly — ignore datum_field entirely.
-            # 2. Otherwise fall back to datum_field if provided.
-            # 3. Default to WGS84 (EPSG:4326).
-            if _field_implied_epsg is not None:
-                source_epsg = _field_implied_epsg
+            # Determine source CRS (highest to lowest priority):
+            # 1. source_epsg factory parameter — forces a fixed datum for all rows.
+            # 2. If the field name encodes the datum (e.g. GDA94LAT), use that datum directly.
+            # 3. Fall back to datum_field column value if provided.
+            # 4. Default to WGS84 (EPSG:4326).
+            if source_epsg is not None:
+                row_source_epsg = source_epsg
+            elif _field_implied_epsg is not None:
+                row_source_epsg = _field_implied_epsg
             elif datum_field:
                 datum_str = ctx.row.get(datum_field, "").strip().upper()
-                source_epsg = DATUM_TO_EPSG.get(datum_str, "EPSG:4326")
+                row_source_epsg = DATUM_TO_EPSG.get(datum_str, "EPSG:4326")
             else:
-                source_epsg = "EPSG:4326"
+                row_source_epsg = "EPSG:4326"
 
             target_epsg = f"EPSG:{settings.DEFAULT_SRID}"
 
             # Transform coordinates to target CRS if necessary
-            if source_epsg != target_epsg:
+            if row_source_epsg != target_epsg:
                 try:
-                    transformer = Transformer.from_crs(source_epsg, target_epsg, always_xy=True)
+                    transformer = Transformer.from_crs(row_source_epsg, target_epsg, always_xy=True)
                     lng, lat = transformer.transform(lng, lat)
                 except Exception as e:
                     logger.warning(
                         "Failed to transform coordinates from %s to %s: %s. Using as-is.",
-                        source_epsg,
+                        row_source_epsg,
                         target_epsg,
                         e,
                     )

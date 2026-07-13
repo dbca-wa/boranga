@@ -74,7 +74,7 @@ OBSERVATION_TIME_FK_LOOKUP = fk_lookup(
 GEOMETRY_FROM_COORDS = geometry_from_coords_factory(
     latitude_field="Lat",
     longitude_field="Long",
-    datum_field="DATUM",
+    source_epsg="EPSG:4283",  # TFAUNA coords are always GDA94; ignore per-row DATUM column
     radius_m=1.0,
     point_only=True,  # Fauna OCRs only accept Point geometry, not Polygon
 )
