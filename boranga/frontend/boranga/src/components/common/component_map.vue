@@ -1762,7 +1762,7 @@ export default {
             default: () => {
                 return {
                     // typeName
-                    'kaartdijin-boodja-private:CPT_CADASTRE_SCDB': {
+                    'kaartdijin-boodja-private:CPT_CADASTRE_SCDB_Ownership': {
                         version: '2.0.0', // WFS version
                         srsName: `EPSG:${getDefaultSrid()}`,
                         propertyName: 'SHAPE', // Default to query for feature geometries only
