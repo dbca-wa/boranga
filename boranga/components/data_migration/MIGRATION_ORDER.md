@@ -192,6 +192,48 @@ echo "PID $! Log: tail -f $LOG"
 # Generate OccurrenceTenure records for all TFAUNA occurrences via cadastre spatial intersection (DB-driven, no CSV required)
 ./manage.py migrate_data run tfauna_occurrence_tenure private-media/legacy_data/TFAUNA/ --sources TFAUNA --wipe-targets --seed-history
 
+# Rerunning the OccurrenceTenure run for any false skips (On AKS there is something causing intersect misses that should be hits)
+
+# Run this to generate a list of migrated_from_id for Occurrence records that dont have any tenures
+
+from django.db import connection
+with connection.cursor() as cursor:
+    cursor.execute("""
+        SELECT DISTINCT o.migrated_from_id
+        FROM boranga_occurrence o
+        JOIN boranga_occurrencegeometry og ON og.occurrence_id = o.id
+            AND og.geometry IS NOT NULL
+            AND og.id = (
+                SELECT id FROM boranga_occurrencegeometry
+                WHERE occurrence_id = o.id AND geometry IS NOT NULL
+                ORDER BY id DESC LIMIT 1
+            )
+        LEFT JOIN boranga_occurrencetenure ot ON ot.occurrence_geometry_id = og.id
+        WHERE o.migrated_from_id LIKE 'tfauna-orf-%%'
+          AND ot.id IS NULL
+    """)
+    ids = [r[0] for r in cursor.fetchall()]
+
+with open("private-media/tfauna_no_tenure_ids.txt", "w") as f:
+    f.write("\n".join(ids))
+print(f"Written {len(ids)} IDs")
+
+# Then run this from the shell to try them all again:
+
+LOG=private-media/handler_output/tfauna_occurrence_tenure_$(date +%Y%m%d_%H%M%S).log
+nohup python - >"$LOG" 2>&1 <<'EOF' &
+import subprocess, os
+ids = open("private-media/tfauna_no_tenure_ids.txt").read().split()
+env = {**os.environ, "TFAUNA_TENURE_WORKERS": "4"}
+subprocess.run([
+    "./manage.py", "migrate_data", "run", "tfauna_occurrence_tenure",
+    "private-media/legacy_data/TFAUNA/",
+    "--sources", "TFAUNA", "--seed-history",
+    "--filter-ids", *ids,
+], check=True, env=env)
+EOF
+echo "PID $! Log: tail -f $LOG"
+
 ## Backfill missing owner_name from Cadastre layer (Make sure to )
 
 # Backfill missing names by matching cad_pin
