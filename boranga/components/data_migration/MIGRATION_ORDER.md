@@ -160,7 +160,7 @@ The command will output a list of migration runs to process each of the chunks a
 # Generate chunks (adjust target-rows if needed) - required due to memory efficiency for ~250k records (and children plus duplicating to create OCCs)
 python scripts/split_tfauna_csv.py \
     "private-media/legacy_data/TFAUNA/Fauna Records.csv" \
-    --target-rows 50000 \
+    --target-rows 30000 \
     --output-dir private-media/legacy_data/TFAUNA/chunks \
     --handler-args '--seed-history'
 
@@ -186,13 +186,13 @@ echo "PID $! Log: tail -f $LOG"
 
 ## Occurrence Tenure
 
+# If required, fetch the cadastre layer and overwrite the local table (required if previous layer had no cad_owner_name)
+./manage.py import_cadastre_geojson --overwrite
+
 # Generate OccurrenceTenure records for all TFAUNA occurrences via cadastre spatial intersection (DB-driven, no CSV required)
 ./manage.py migrate_data run tfauna_occurrence_tenure private-media/legacy_data/TFAUNA/ --sources TFAUNA --wipe-targets --seed-history
 
 ## Backfill missing owner_name from Cadastre layer (Make sure to )
-
-# If required, fetch the cadastre layer and overwrite the local table (required if previous layer had no cad_owner_name)
-./manage.py import_cadastre_geojson --overwrite
 
 # Backfill missing names by matching cad_pin
 ./manage.py populate_tenure_owner_names
