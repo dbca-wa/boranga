@@ -61,7 +61,9 @@ def invert_xy_coordinates(geometries):
     return geometries
 
 
-def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAPE", result_type="results"):
+def intersect_geometry_with_layer(
+    geometry, intersect_layer, geometry_name="SHAPE", result_type="results", raise_on_local_error=False
+):
     """Query a geoserver WFS layer with a geometry and return the intersecting features as JSON."""
 
     if result_type not in ["hits", "results"]:
@@ -250,7 +252,21 @@ def intersect_geometry_with_layer(geometry, intersect_layer, geometry_name="SHAP
                 "features": features,
             }
         except Exception as e:
-            logger.exception("Local cadastre intersection skipped/fallback: %s", e)
+            exc_str = str(e)
+            local_available = exc_str not in ("local-cadastre-missing", "local-cadastre-empty")
+            if local_available and raise_on_local_error:
+                # Local table exists but query had a transient failure.  Re-raise so
+                # the caller receives a visible error rather than silently getting WFS
+                # results that may differ from the local cadastre snapshot.
+                raise
+            if local_available:
+                logger.warning(
+                    "Local cadastre query failed; falling back to WFS "
+                    "(results may differ from local data snapshot): %s",
+                    e,
+                )
+            else:
+                logger.warning("Local cadastre unavailable (%s); falling back to WFS", exc_str)
 
     if request_path:
         try:

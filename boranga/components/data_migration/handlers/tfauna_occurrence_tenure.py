@@ -221,6 +221,30 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
             except Exception:
                 pass
 
+        # Filter to specific migrated_from_ids when --filter-ids is supplied.
+        # Accepts both full IDs (e.g. "tfauna-orf-100009") and bare numeric
+        # suffixes (e.g. "100009") for convenience.
+        filter_ids = options.get("filter_ids") or []
+        if filter_ids:
+            filter_set = set()
+            for fid in filter_ids:
+                fid = str(fid).strip().casefold()
+                filter_set.add(fid)
+                if "-" in fid:
+                    filter_set.add(fid.split("-", 1)[-1])
+            original_count = len(occ_list)
+            occ_list = [
+                item
+                for item in occ_list
+                if str(item[0]).strip().casefold() in filter_set
+                or str(item[0]).strip().split("-", 1)[-1].casefold() in filter_set
+            ]
+            logger.info(
+                "TfaunaOccurrenceTenureImporter: --filter-ids applied; kept %d of %d occurrences",
+                len(occ_list),
+                original_count,
+            )
+
         logger.info("TfaunaOccurrenceTenureImporter: found %d TFAUNA occurrences with geometry", len(occ_list))
 
         # Preload all OccurrenceGeometry instances in one query to avoid N+1 selects in the loop.
@@ -320,7 +344,9 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                 try:
                     exists_before = not options.get("wipe_targets") and geometry_instance.id in geometry_has_tenure
 
-                    intersect_data = intersect_geometry_with_layer(geometry_instance.geometry, intersect_layer)
+                    intersect_data = intersect_geometry_with_layer(
+                        geometry_instance.geometry, intersect_layer, raise_on_local_error=True
+                    )
                     features = intersect_data.get("features", [])
 
                     if not features:
@@ -440,9 +466,10 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                     completed_count += 1
                     if completed_count % 500 == 0:
                         logger.info(
-                            "TfaunaOccurrenceTenureImporter: completed %d / %d",
+                            "TfaunaOccurrenceTenureImporter: completed %d / %d (skipped so far: %d)",
                             completed_count,
                             len(work_items),
+                            skipped,
                         )
                     result = future.result()
                     if result["status"] == "skipped":
