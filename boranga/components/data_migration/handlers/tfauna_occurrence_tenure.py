@@ -449,10 +449,11 @@ class TfaunaOccurrenceTenureImporter(BaseSheetImporter):
                     }
 
             # Number of parallel workers.  Each worker holds one DB connection.
-            # 8 is the empirically determined optimum — beyond this PostGIS becomes
-            # CPU-bound and throughput degrades.  Override via TFAUNA_TENURE_WORKERS
-            # if the target DB has more/fewer cores available.
-            num_workers = int(os.environ.get("TFAUNA_TENURE_WORKERS", "8"))
+            # 4 is the safe default for Azure-hosted PostgreSQL where higher concurrency
+            # can cause the DB to return empty result sets under CPU throttling, silently
+            # producing missed intersections.  Override via TFAUNA_TENURE_WORKERS
+            # if the target DB has more cores/headroom available.
+            num_workers = int(os.environ.get("TFAUNA_TENURE_WORKERS", "4"))
             logger.info(
                 "TfaunaOccurrenceTenureImporter: processing %d occurrences with %d worker thread(s)",
                 len(work_items),
