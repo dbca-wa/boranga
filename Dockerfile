@@ -77,9 +77,9 @@ COPY --chown=oim:oim scripts/combine_csvs.py \
                       ./scripts/
 
 # Build Vue frontend, then discard node_modules so they aren't copied to runtime.
-RUN cd /app/boranga/frontend/boranga && npm ci --omit=dev
-RUN cd /app/boranga/frontend/boranga && npm run build && \
-    rm -rf /app/boranga/frontend/boranga/node_modules
+# RUN cd /app/boranga/frontend/boranga && npm ci --omit=dev
+# RUN cd /app/boranga/frontend/boranga && npm run build && \
+#     rm -rf /app/boranga/frontend/boranga/node_modules
 
 RUN touch /app/.env && \
     $VIRTUAL_ENV/bin/python manage.py collectstatic --noinput && \
