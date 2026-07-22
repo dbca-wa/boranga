@@ -77,9 +77,9 @@ COPY --chown=oim:oim scripts/combine_csvs.py \
                       ./scripts/
 
 # Build Vue frontend, then discard node_modules so they aren't copied to runtime.
-# RUN cd /app/boranga/frontend/boranga && npm ci --omit=dev
-# RUN cd /app/boranga/frontend/boranga && npm run build && \
-#     rm -rf /app/boranga/frontend/boranga/node_modules
+RUN cd /app/boranga/frontend/boranga && npm ci --omit=dev
+RUN cd /app/boranga/frontend/boranga && npm run build && \
+    rm -rf /app/boranga/frontend/boranga/node_modules
 
 RUN touch /app/.env && \
     $VIRTUAL_ENV/bin/python manage.py collectstatic --noinput && \
@@ -121,10 +121,10 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Keep runtime Node tooling exactly aligned with builder without reinstalling.
-COPY --from=builder /usr/bin/node /usr/bin/node
-COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
-RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/bin/npm && \
-    ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/bin/npx
+# COPY --from=builder /usr/bin/node /usr/bin/node
+# COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
+# RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/bin/npm && \
+#     ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/bin/npx
 
 RUN groupadd -g 5000 oim && \
     useradd -g 5000 -u 5000 oim -s /bin/bash -d /app && \
