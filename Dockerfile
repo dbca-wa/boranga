@@ -122,9 +122,9 @@ RUN apt-get update && \
 
 # Keep runtime Node tooling exactly aligned with builder without reinstalling.
 COPY --from=builder /usr/bin/node /usr/bin/node
-COPY --from=builder /usr/bin/npm /usr/bin/npm
-COPY --from=builder /usr/bin/npx /usr/bin/npx
 COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/bin/npm && \
+    ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/bin/npx
 
 RUN groupadd -g 5000 oim && \
     useradd -g 5000 -u 5000 oim -s /bin/bash -d /app && \
