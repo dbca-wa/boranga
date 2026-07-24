@@ -189,10 +189,99 @@ class OccurrenceReportImporter(BaseSheetImporter):
                     ).delete()
                 else:
                     SubmitterInformation.objects.filter(occurrence_report__isnull=False).delete()
+
+                # Django's ORM queryset.delete() traverses all 20+ CASCADE FK tables
+                # before issuing any DELETE (the "collector" phase), causing a 40-minute
+                # silent hang on 260k+ OccurrenceReports.  Django FK constraints do NOT
+                # include ON DELETE CASCADE at the database level — all cascade behaviour
+                # is implemented in Python.  Fix: delete each child model individually so
+                # each collector only touches 0–2 tables rather than 20+, then delete
+                # the now-childless parent (also fast — nothing left to collect).
+                from boranga.components.occurrence.models import (
+                    OCCConservationThreat,
+                    OccurrenceReportAmendmentRequestDocument,
+                    OccurrenceReportLogDocument,
+                    OccurrenceReportLogEntry,
+                    OccurrenceReportProposalRequest,
+                    OccurrenceReportReferral,
+                    OccurrenceReportShapefileDocument,
+                    OCRConservationThreat,
+                    OCRExternalRefereeInvite,
+                )
+
+                def _ocr_qs(manager):
+                    """Apply the group_type filter to a manager whose model has a direct 'occurrence_report' FK."""
+                    if is_filtered:
+                        return manager.filter(occurrence_report__group_type__name__in=target_group_types)
+                    return manager.all()
+
+                # Depth 3 — deepest grandchild first
+                # OccurrenceReportAmendmentRequestDocument
+                #   → OccurrenceReportAmendmentRequest → OccurrenceReportProposalRequest → OCR
                 if is_filtered:
-                    OccurrenceReport.objects.filter(**report_filter).delete()
+                    OccurrenceReportAmendmentRequestDocument.objects.filter(
+                        occurrence_report_amendment_request__occurrence_report__group_type__name__in=target_group_types
+                    ).delete()
                 else:
-                    OccurrenceReport.objects.all().delete()
+                    OccurrenceReportAmendmentRequestDocument.objects.all().delete()
+
+                # Depth 2 — grandchildren
+                # OccurrenceReportLogDocument → OccurrenceReportLogEntry → OCR
+                if is_filtered:
+                    OccurrenceReportLogDocument.objects.filter(
+                        log_entry__occurrence_report__group_type__name__in=target_group_types
+                    ).delete()
+                else:
+                    OccurrenceReportLogDocument.objects.all().delete()
+
+                # OCCConservationThreat → OCRConservationThreat → OCR
+                # (OCCConservationThreat also has a separate FK to Occurrence; only
+                # delete rows linked via occurrence_report_threat to avoid touching
+                # Occurrence-side threats that are unrelated to this wipe.)
+                if is_filtered:
+                    OCCConservationThreat.objects.filter(
+                        occurrence_report_threat__occurrence_report__group_type__name__in=target_group_types
+                    ).delete()
+                else:
+                    OCCConservationThreat.objects.filter(occurrence_report_threat__isnull=False).delete()
+
+                # Depth 1 — all direct children of OccurrenceReport.
+                # Notes on MTI models:
+                #   OccurrenceReportLogEntry.delete() also removes the CommunicationsLogEntry
+                #   parent row (MTI) — handled automatically by the ORM.
+                #   OccurrenceReportProposalRequest.delete() also removes
+                #   OccurrenceReportAmendmentRequest (MTI child) — collector follows
+                #   the reverse OneToOneField parent_link.
+                for child_qs in [
+                    _ocr_qs(OccurrenceReportLogEntry.objects),
+                    _ocr_qs(OccurrenceReportUserAction.objects),
+                    _ocr_qs(OccurrenceReportProposalRequest.objects),
+                    _ocr_qs(OccurrenceReportReferral.objects),
+                    _ocr_qs(OccurrenceReportGeometry.objects),
+                    _ocr_qs(OCRObserverDetail.objects),
+                    _ocr_qs(OccurrenceReportDocument.objects),
+                    _ocr_qs(OccurrenceReportShapefileDocument.objects),
+                    _ocr_qs(OCRConservationThreat.objects),
+                    _ocr_qs(OCRExternalRefereeInvite.objects),
+                    _ocr_qs(OCRHabitatComposition.objects),
+                    _ocr_qs(OCRHabitatCondition.objects),
+                    _ocr_qs(OCRVegetationStructure.objects),
+                    _ocr_qs(OCRFireHistory.objects),
+                    _ocr_qs(OCRAssociatedSpecies.objects),
+                    _ocr_qs(OCRObservationDetail.objects),
+                    _ocr_qs(OCRPlantCount.objects),
+                    _ocr_qs(OCRAnimalObservation.objects),
+                    _ocr_qs(OCRIdentification.objects),
+                    _ocr_qs(OCRLocation.objects),
+                ]:
+                    child_qs.delete()
+
+                # Delete the parent — now childless so collector finds nothing to traverse
+                if is_filtered:
+                    deleted_count, _ = OccurrenceReport.objects.filter(**report_filter).delete()
+                else:
+                    deleted_count, _ = OccurrenceReport.objects.all().delete()
+                logger.info("Deleted %d OccurrenceReport rows", deleted_count)
             except Exception:
                 logger.exception("Failed to delete OccurrenceReport")
 
@@ -294,8 +383,51 @@ class OccurrenceReportImporter(BaseSheetImporter):
                             logger.exception("Failed to clear reversion history for %s", _occ_child_model.__name__)
                     logger.info("TFAUNA Occurrence reversion cleanup stats: %s", occ_cleaner.get_stats())
                     try:
-                        Occurrence.objects.filter(**tfauna_occ_filter).delete()
-                        logger.info("Deleted TFAUNA Occurrence records.")
+                        from boranga.components.occurrence.models import (
+                            OCCConservationThreat,
+                            OCCContactDetail,
+                            OccurrenceLogDocument,
+                            OccurrenceLogEntry,
+                            OccurrenceShapefileDocument,
+                            OccurrenceUserAction,
+                        )
+
+                        def _occ_child_qs(manager):
+                            """Filter child rows belonging to TFAUNA Occurrences via the 'occurrence' FK."""
+                            return manager.filter(occurrence__migrated_from_id__startswith="tfauna-orf-")
+
+                        # Depth 2: OccurrenceLogDocument → OccurrenceLogEntry → Occurrence
+                        OccurrenceLogDocument.objects.filter(
+                            log_entry__occurrence__migrated_from_id__startswith="tfauna-orf-"
+                        ).delete()
+
+                        # Depth 1: all direct children of Occurrence
+                        # (OccurrenceTenure already deleted above)
+                        # OccurrenceLogEntry.delete() also removes the CommunicationsLogEntry parent (MTI).
+                        for _child_qs in [
+                            _occ_child_qs(OccurrenceLogEntry.objects),
+                            _occ_child_qs(OccurrenceUserAction.objects),
+                            _occ_child_qs(OccurrenceDocument.objects),
+                            _occ_child_qs(OccurrenceGeometry.objects),
+                            _occ_child_qs(OCCContactDetail.objects),
+                            _occ_child_qs(OCCConservationThreat.objects),
+                            _occ_child_qs(OccurrenceSite.objects),
+                            _occ_child_qs(OccurrenceShapefileDocument.objects),
+                            _occ_child_qs(OCCLocation.objects),
+                            _occ_child_qs(OCCHabitatComposition.objects),
+                            _occ_child_qs(OCCHabitatCondition.objects),
+                            _occ_child_qs(OCCIdentification.objects),
+                            _occ_child_qs(OCCObservationDetail.objects),
+                            _occ_child_qs(OCCFireHistory.objects),
+                            _occ_child_qs(OCCAssociatedSpecies.objects),
+                            _occ_child_qs(OCCPlantCount.objects),
+                            _occ_child_qs(OCCAnimalObservation.objects),
+                            _occ_child_qs(OCCVegetationStructure.objects),
+                        ]:
+                            _child_qs.delete()
+
+                        deleted_occ_count, _ = Occurrence.objects.filter(**tfauna_occ_filter).delete()
+                        logger.info("Deleted %d TFAUNA Occurrence records.", deleted_occ_count)
                     except Exception:
                         logger.exception("Failed to delete TFAUNA Occurrence records")
                     # Reset the Occurrence PK sequence too.
