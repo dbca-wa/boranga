@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import logging
 import os
 from abc import ABCMeta, abstractmethod
@@ -36,9 +37,10 @@ def neutralise_html(value: str) -> str:
     """
     if not value:
         return value
-    cleaned = nh3.clean(value)
-    cleaned = cleaned.replace("&amp;", "&").replace("&quot;", '"').replace("&#39;", "'")
-    return cleaned
+
+    cleaned = nh3.clean_text(value)
+
+    return html.unescape(cleaned)
 
 
 def _sanitise_json_value(value):

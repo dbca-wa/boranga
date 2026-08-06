@@ -23,6 +23,8 @@
     </div>
 </template>
 <script>
+import { helpers } from '@/utils/hooks.js';
+
 export default {
     name: 'DataTable',
     props: {
@@ -56,6 +58,21 @@ export default {
         initEvents: function () {
             let vm = this;
             let options = vm.dtOptions; // Use the original options
+
+            options.columnDefs = [
+                {
+                    // Targets ALL columns globally across the table
+                    targets: '_all',
+                    // Intercepts the data right before DataTables renders it into the <tbody>
+                    render: function (data, type) {
+                        // Only escape when rendering for the visual display (not sorting or filtering)
+                        if (type === 'display') {
+                            return helpers.escapeHtml(data);
+                        }
+                        return data;
+                    },
+                },
+            ];
 
             // Expand responsive: true into the default horizontal child-row
             // renderer so that all tables share the same layout. To change the
