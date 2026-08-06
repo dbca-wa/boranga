@@ -4,10 +4,13 @@ import mimetypes
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
+from django.core import serializers as dj_serializers
 from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import mixins, serializers, status, views, viewsets
 from rest_framework.decorators import action as detail_route
 from rest_framework.decorators import action as list_route
@@ -17,6 +20,7 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework_datatables.filters import DatatablesFilterBackend
 from rest_framework_datatables.pagination import DatatablesPageNumberPagination
+from reversion.models import Revision, Version
 
 from boranga.components.conservation_status.models import (
     CommonwealthConservationList,
@@ -36,6 +40,8 @@ from boranga.components.occurrence.api import OCCConservationThreatFilterBackend
 from boranga.components.occurrence.models import (
     OCCConservationThreat,
     Occurrence,
+    OccurrenceReport,
+    OccurrenceReportUserAction,
     OccurrenceUserAction,
 )
 from boranga.components.occurrence.serializers import OCCConservationThreatSerializer
@@ -1729,54 +1735,219 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             if original_taxonomy_occurrence_count != len(occurrence_assignments_dict):
                 raise serializers.ValidationError("Invalid number of occurrence assignments.")
 
+            user_id = request.user.id if hasattr(request.user, "id") else int(request.user)
+            now = timezone.now()
+
+            # Phase 1: validate all assignments and build a mapping of occurrences
+            # that actually need to move (excluding same-species no-ops).
+            moving = {}  # occurrence_id (int) -> target taxonomy_id
             for occurrence_id, taxonomy_id in occurrence_assignments_dict.items():
-                # Process each assignment
                 if not occurrence_id:
                     raise serializers.ValidationError("Occurrence ID is missing in the assignment")
                 if not occurrence_id.isdigit():
                     raise serializers.ValidationError(f"Occurrence ID {occurrence_id} must be an integer")
-                occurrence = Occurrence.objects.filter(id=occurrence_id).first()
-                if not occurrence:
-                    raise serializers.ValidationError(f"Occurrence with ID {occurrence_id} does not exist")
-                # Get the taxonomy id from the assignment
                 if not taxonomy_id:
                     raise serializers.ValidationError(f"Taxonomy ID is missing for occurrence {occurrence_id}")
                 if not isinstance(taxonomy_id, int):
                     raise serializers.ValidationError(f"Taxonomy ID for occurrence {occurrence_id} must be an integer")
                 if taxonomy_id == instance.taxonomy_id:
-                    # No need to reassign the occurrence to the same species
-                    continue
+                    continue  # No change needed
+                moving[int(occurrence_id)] = taxonomy_id
 
-                taxonomy = Taxonomy.objects.filter(id=taxonomy_id).first()
-                if not taxonomy:
-                    raise serializers.ValidationError(f"Taxonomy with ID {taxonomy_id} does not exist")
-                species = Species.objects.filter(taxonomy_id=taxonomy_id).first()
-                if not species:
-                    raise serializers.ValidationError(f"Species with taxonomy ID {taxonomy_id} does not exist")
-                current_scientific_name = occurrence.species.taxonomy.scientific_name
-                # Assign the occurrence to the new species
-                occurrence.species = species
-                # When the occurrence is saved, the custom save method will
-                # reassign all OCRs to also point to the new species as well
-                occurrence.save(version_user=request.user)
+            if moving:
+                # Batch-validate occurrence existence (1 query instead of N)
+                existing_ids = set(Occurrence.objects.filter(id__in=moving.keys()).values_list("id", flat=True))
+                for occ_id in moving:
+                    if occ_id not in existing_ids:
+                        raise serializers.ValidationError(f"Occurrence with ID {occ_id} does not exist")
 
-                # Log the action
-                occurrence.log_user_action(
-                    OccurrenceUserAction.ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_SPLIT.format(
-                        occurrence.occurrence_number,
-                        current_scientific_name,
-                        species.taxonomy.scientific_name,
-                    ),
-                    request,
-                )
-                request.user.log_user_action(
-                    OccurrenceUserAction.ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_SPLIT.format(
-                        occurrence.occurrence_number,
-                        current_scientific_name,
-                        species.taxonomy.scientific_name,
-                    ),
-                    request,
-                )
+                # Batch-validate species existence (1 query per unique taxonomy)
+                unique_tids = set(moving.values())
+                species_map = {
+                    s.taxonomy_id: s
+                    for s in Species.objects.filter(taxonomy_id__in=unique_tids).select_related("taxonomy")
+                }
+                for tid in unique_tids:
+                    if tid not in species_map:
+                        raise serializers.ValidationError(f"Species with taxonomy ID {tid} does not exist")
+
+                # Phase 2: bulk UPDATE grouped by target species.
+                # Bulk UPDATE instead of per-occurrence .save() loop — same reasoning as rename_species.
+                occurrence_ct = ContentType.objects.get_for_model(Occurrence)
+
+                by_species = {}
+                for occ_id, tid in moving.items():
+                    by_species.setdefault(tid, []).append(occ_id)
+
+                for tid, occ_ids in by_species.items():
+                    target_species = species_map[tid]
+
+                    # Capture OCR IDs before update for version/log creation.
+                    updated_ocr_ids = list(
+                        OccurrenceReport.objects.filter(
+                            occurrence_id__in=occ_ids,
+                        )
+                        .exclude(species=target_species)
+                        .values_list("id", flat=True)
+                    )
+
+                    # Update OCRs first (before occurrence update, to match update_child_ocrs logic)
+                    OccurrenceReport.objects.filter(
+                        occurrence_id__in=occ_ids,
+                    ).exclude(species=target_species).update(
+                        species=target_species,
+                        datetime_updated=now,
+                        last_modified_by=user_id,
+                    )
+
+                    # Bulk update occurrences
+                    Occurrence.objects.filter(id__in=occ_ids).update(
+                        species=target_species,
+                        datetime_updated=now,
+                        last_modified_by=user_id,
+                    )
+
+                    # One Revision per occurrence — see rename_species for explanation.
+                    revision_list = Revision.objects.bulk_create(
+                        [
+                            Revision(
+                                date_created=now,
+                                user=request.user,
+                                comment=f"Split from {instance}",
+                            )
+                            for _ in occ_ids
+                        ]
+                    )
+
+                    # Bulk-create reversion versions and per-occurrence action logs.
+                    old_name = instance.taxonomy.scientific_name if instance.taxonomy else str(instance)
+                    new_name = target_species.taxonomy.scientific_name
+                    occ_number_map = dict(
+                        Occurrence.objects.filter(id__in=occ_ids).values_list("id", "occurrence_number")
+                    )
+                    # Pre-compute taxonomy version data for this target species.
+                    new_taxonomy = target_species.taxonomy
+                    taxonomy_ct = ContentType.objects.get_for_model(Taxonomy) if new_taxonomy else None
+                    taxonomy_data = dj_serializers.serialize("json", [new_taxonomy]) if new_taxonomy else None
+                    taxonomy_repr = str(new_taxonomy) if new_taxonomy else ""
+                    version_batch, log_batch = [], []
+                    for occ, revision in zip(Occurrence.objects.filter(id__in=occ_ids).iterator(), revision_list):
+                        version_batch.append(
+                            Version(
+                                revision=revision,
+                                object_id=str(occ.pk),
+                                content_type=occurrence_ct,
+                                db="default",
+                                format="json",
+                                serialized_data=dj_serializers.serialize("json", [occ]),
+                                object_repr=str(occ),
+                            )
+                        )
+                        log_batch.append(
+                            OccurrenceUserAction(
+                                occurrence=occ,
+                                who=user_id,
+                                what=OccurrenceUserAction.ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_SPLIT.format(
+                                    occ.occurrence_number,
+                                    old_name,
+                                    new_name,
+                                ),
+                                when=now,
+                            )
+                        )
+                        if len(version_batch) >= 500:
+                            Version.objects.bulk_create(version_batch)
+                            OccurrenceUserAction.objects.bulk_create(log_batch)
+                            version_batch.clear()
+                            log_batch.clear()
+                    if version_batch:
+                        Version.objects.bulk_create(version_batch)
+                        OccurrenceUserAction.objects.bulk_create(log_batch)
+
+                    # Add taxonomy version to each occurrence revision.
+                    if taxonomy_ct and revision_list:
+                        Version.objects.bulk_create(
+                            [
+                                Version(
+                                    revision=rev,
+                                    object_id=str(new_taxonomy.pk),
+                                    content_type=taxonomy_ct,
+                                    db="default",
+                                    format="json",
+                                    serialized_data=taxonomy_data,
+                                    object_repr=taxonomy_repr,
+                                )
+                                for rev in revision_list
+                            ],
+                            batch_size=500,
+                        )
+
+                    # Bulk-create reversion versions and action logs for the updated OCRs.
+                    if updated_ocr_ids:
+                        ocr_ct = ContentType.objects.get_for_model(OccurrenceReport)
+                        ocr_revision_list = Revision.objects.bulk_create(
+                            [
+                                Revision(
+                                    date_created=now,
+                                    user=request.user,
+                                    comment=f"Split from {instance}",
+                                )
+                                for _ in updated_ocr_ids
+                            ]
+                        )
+                        version_batch, log_batch = [], []
+                        for ocr, revision in zip(
+                            OccurrenceReport.objects.filter(id__in=updated_ocr_ids).iterator(), ocr_revision_list
+                        ):
+                            version_batch.append(
+                                Version(
+                                    revision=revision,
+                                    object_id=str(ocr.pk),
+                                    content_type=ocr_ct,
+                                    db="default",
+                                    format="json",
+                                    serialized_data=dj_serializers.serialize("json", [ocr]),
+                                    object_repr=str(ocr),
+                                )
+                            )
+                            log_batch.append(
+                                OccurrenceReportUserAction(
+                                    occurrence_report=ocr,
+                                    who=user_id,
+                                    what=OccurrenceReportUserAction.ACTION_UPDATE_SPECIES_FROM_OCCURRENCE.format(
+                                        old_name,
+                                        new_name,
+                                        occ_number_map.get(ocr.occurrence_id, ocr.occurrence_id),
+                                    ),
+                                    when=now,
+                                )
+                            )
+                            if len(version_batch) >= 500:
+                                Version.objects.bulk_create(version_batch)
+                                OccurrenceReportUserAction.objects.bulk_create(log_batch)
+                                version_batch.clear()
+                                log_batch.clear()
+                        if version_batch:
+                            Version.objects.bulk_create(version_batch)
+                            OccurrenceReportUserAction.objects.bulk_create(log_batch)
+
+                        # Add taxonomy version to each OCR revision.
+                        if taxonomy_ct and ocr_revision_list:
+                            Version.objects.bulk_create(
+                                [
+                                    Version(
+                                        revision=rev,
+                                        object_id=str(new_taxonomy.pk),
+                                        content_type=taxonomy_ct,
+                                        db="default",
+                                        format="json",
+                                        serialized_data=taxonomy_data,
+                                        object_repr=taxonomy_repr,
+                                    )
+                                    for rev in ocr_revision_list
+                                ],
+                                batch_size=500,
+                            )
 
         if not split_of_species_retains_original:
             # Set the original species from the split to historical and its conservation status to 'closed'
@@ -2013,34 +2184,187 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
                 request,
             )
 
-        # Reassign all occurrences for all the species being combined to the resulting species
-        occurrences = Occurrence.objects.filter(species__in=combine_species_qs)
+        # Reassign all occurrences for all the species being combined to the resulting species.
+        # Bulk UPDATE instead of a per-occurrence .save() loop — same reasoning as rename_species.
+        user_id = request.user.id if hasattr(request.user, "id") else int(request.user)
+        now = timezone.now()
+        occurrence_ct = ContentType.objects.get_for_model(Occurrence)
+        # Pre-compute taxonomy version data for the resulting species.
+        new_taxonomy = resulting_species_instance.taxonomy
+        taxonomy_ct = ContentType.objects.get_for_model(Taxonomy) if new_taxonomy else None
+        taxonomy_data = dj_serializers.serialize("json", [new_taxonomy]) if new_taxonomy else None
+        taxonomy_repr = str(new_taxonomy) if new_taxonomy else ""
 
-        # Deliberately using a loop with .save here instead of a single .update
-        # so that custom code runs that reassigns all related OCRs to also point to the new species
-        for occurrence in occurrences:
-            current_scientific_name = occurrence.species.taxonomy.scientific_name
-            new_scientific_name = resulting_species_instance.taxonomy.scientific_name
-            occurrence.species = resulting_species_instance
-            occurrence.save(version_user=request.user)
+        # Capture pre-update data (IDs and old species names) for action log creation.
+        occ_pre_update = list(
+            Occurrence.objects.filter(species__in=combine_species_qs).values(
+                "id", "occurrence_number", "species__taxonomy__scientific_name"
+            )
+        )
+        moved_occ_ids = [row["id"] for row in occ_pre_update]
+        occ_number_map = {row["id"]: row["occurrence_number"] for row in occ_pre_update}
+        occ_old_species_map = {row["id"]: (row["species__taxonomy__scientific_name"] or "") for row in occ_pre_update}
+        new_combine_species_name = (
+            resulting_species_instance.taxonomy.scientific_name
+            if resulting_species_instance.taxonomy
+            else str(resulting_species_instance)
+        )
 
-            # Log the action
-            occurrence.log_user_action(
-                OccurrenceUserAction.ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_COMBINE.format(
-                    occurrence.occurrence_number,
-                    current_scientific_name,
-                    new_scientific_name,
-                ),
-                request,
+        if moved_occ_ids:
+            # 1. Update OCRs first (occurrences still point to old species — enables clean filter).
+            # Capture OCR IDs before update for version/log creation.
+            updated_ocr_ids = list(
+                OccurrenceReport.objects.filter(
+                    occurrence_id__in=moved_occ_ids,
+                )
+                .exclude(species=resulting_species_instance)
+                .values_list("id", flat=True)
             )
-            request.user.log_user_action(
-                OccurrenceUserAction.ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_COMBINE.format(
-                    occurrence.occurrence_number,
-                    current_scientific_name,
-                    new_scientific_name,
-                ),
-                request,
+            OccurrenceReport.objects.filter(
+                occurrence_id__in=moved_occ_ids,
+            ).exclude(species=resulting_species_instance).update(
+                species=resulting_species_instance,
+                datetime_updated=now,
+                last_modified_by=user_id,
             )
+
+            # 2. Bulk update occurrences.
+            Occurrence.objects.filter(id__in=moved_occ_ids).update(
+                species=resulting_species_instance,
+                datetime_updated=now,
+                last_modified_by=user_id,
+            )
+
+            # 3. Bulk-create reversion versions and per-occurrence action logs.
+            # One Revision per occurrence — see rename_species for explanation.
+            revision_list = Revision.objects.bulk_create(
+                [
+                    Revision(
+                        date_created=now,
+                        user=request.user,
+                        comment=f"Combine into {resulting_species_instance}",
+                    )
+                    for _ in moved_occ_ids
+                ]
+            )
+            version_batch, log_batch = [], []
+            for occ, revision in zip(Occurrence.objects.filter(id__in=moved_occ_ids).iterator(), revision_list):
+                version_batch.append(
+                    Version(
+                        revision=revision,
+                        object_id=str(occ.pk),
+                        content_type=occurrence_ct,
+                        db="default",
+                        format="json",
+                        serialized_data=dj_serializers.serialize("json", [occ]),
+                        object_repr=str(occ),
+                    )
+                )
+                log_batch.append(
+                    OccurrenceUserAction(
+                        occurrence=occ,
+                        who=user_id,
+                        what=OccurrenceUserAction.ACTION_CHANGE_OCCURRENCE_SPECIES_DUE_TO_COMBINE.format(
+                            occ.occurrence_number,
+                            occ_old_species_map.get(occ.pk, ""),
+                            new_combine_species_name,
+                        ),
+                        when=now,
+                    )
+                )
+                if len(version_batch) >= 500:
+                    Version.objects.bulk_create(version_batch)
+                    OccurrenceUserAction.objects.bulk_create(log_batch)
+                    version_batch.clear()
+                    log_batch.clear()
+            if version_batch:
+                Version.objects.bulk_create(version_batch)
+                OccurrenceUserAction.objects.bulk_create(log_batch)
+
+            # Add taxonomy version to each occurrence revision.
+            if taxonomy_ct and revision_list:
+                Version.objects.bulk_create(
+                    [
+                        Version(
+                            revision=rev,
+                            object_id=str(new_taxonomy.pk),
+                            content_type=taxonomy_ct,
+                            db="default",
+                            format="json",
+                            serialized_data=taxonomy_data,
+                            object_repr=taxonomy_repr,
+                        )
+                        for rev in revision_list
+                    ],
+                    batch_size=500,
+                )
+
+            # 4. Bulk-create reversion versions and action logs for the updated OCRs.
+            if updated_ocr_ids:
+                ocr_ct = ContentType.objects.get_for_model(OccurrenceReport)
+                ocr_revision_list = Revision.objects.bulk_create(
+                    [
+                        Revision(
+                            date_created=now,
+                            user=request.user,
+                            comment=f"Combine into {resulting_species_instance}",
+                        )
+                        for _ in updated_ocr_ids
+                    ]
+                )
+                version_batch, log_batch = [], []
+                for ocr, revision in zip(
+                    OccurrenceReport.objects.filter(id__in=updated_ocr_ids).iterator(), ocr_revision_list
+                ):
+                    version_batch.append(
+                        Version(
+                            revision=revision,
+                            object_id=str(ocr.pk),
+                            content_type=ocr_ct,
+                            db="default",
+                            format="json",
+                            serialized_data=dj_serializers.serialize("json", [ocr]),
+                            object_repr=str(ocr),
+                        )
+                    )
+                    log_batch.append(
+                        OccurrenceReportUserAction(
+                            occurrence_report=ocr,
+                            who=user_id,
+                            what=OccurrenceReportUserAction.ACTION_UPDATE_SPECIES_FROM_OCCURRENCE.format(
+                                occ_old_species_map.get(ocr.occurrence_id, ""),
+                                new_combine_species_name,
+                                occ_number_map.get(ocr.occurrence_id, ocr.occurrence_id),
+                            ),
+                            when=now,
+                        )
+                    )
+                    if len(version_batch) >= 500:
+                        Version.objects.bulk_create(version_batch)
+                        OccurrenceReportUserAction.objects.bulk_create(log_batch)
+                        version_batch.clear()
+                        log_batch.clear()
+                if version_batch:
+                    Version.objects.bulk_create(version_batch)
+                    OccurrenceReportUserAction.objects.bulk_create(log_batch)
+
+                # Add taxonomy version to each OCR revision.
+                if taxonomy_ct and ocr_revision_list:
+                    Version.objects.bulk_create(
+                        [
+                            Version(
+                                revision=rev,
+                                object_id=str(new_taxonomy.pk),
+                                content_type=taxonomy_ct,
+                                db="default",
+                                format="json",
+                                serialized_data=taxonomy_data,
+                                object_repr=taxonomy_repr,
+                            )
+                            for rev in ocr_revision_list
+                        ],
+                        batch_size=500,
+                    )
 
         #  send the combine species email notification
         send_species_combine_email_notification(request, combine_species_qs, resulting_species_instance, actions)
@@ -2110,13 +2434,188 @@ class SpeciesViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         # set the original species from the rename to historical
         rename_species_original_submit(instance, rename_instance, request)
 
-        # Change all occurrence records to point to the new species
-        occurrences = Occurrence.objects.filter(species=instance)
-        # Using a loop with .save here instead of a single .update so custom code runs that reassigns all
-        # OCRs to also point to the new species
-        for occurrence in occurrences:
-            occurrence.species = rename_instance
-            occurrence.save(version_user=request.user)
+        # Change all occurrence records to point to the new species.
+        # Bulk UPDATE instead of a per-object save loop — at scale (10k+ occurrences)
+        # the loop causes gunicorn worker timeouts.
+        user_id = request.user.id if hasattr(request.user, "id") else int(request.user)
+        now = timezone.now()
+
+        # Capture occurrence data before update for precise version/log creation.
+        occ_log_data = list(Occurrence.objects.filter(species=instance).values_list("id", "occurrence_number"))
+        moved_occ_ids = [occ_id for occ_id, _ in occ_log_data]
+        occ_number_map = dict(occ_log_data)
+        old_species_name = instance.taxonomy.scientific_name if instance.taxonomy else str(instance)
+        new_species_name = (
+            rename_instance.taxonomy.scientific_name if rename_instance.taxonomy else str(rename_instance)
+        )
+
+        # 1. Update OCRs first, while occurrences still point to `instance` (enables clean JOIN filter).
+        # Capture OCR IDs before the update for version/log creation.
+        updated_ocr_ids = list(
+            OccurrenceReport.objects.filter(
+                occurrence__species=instance,
+                species=instance,
+            ).values_list("id", flat=True)
+        )
+        OccurrenceReport.objects.filter(
+            occurrence__species=instance,
+            species=instance,
+        ).update(
+            species=rename_instance,
+            datetime_updated=now,
+            last_modified_by=user_id,
+        )
+
+        # 2. Bulk update occurrences.
+        Occurrence.objects.filter(species=instance).update(
+            species=rename_instance,
+            datetime_updated=now,
+            last_modified_by=user_id,
+        )
+
+        # 3. Bulk-create reversion Version rows and per-occurrence action logs.
+        #    We bypass add_to_revision() to avoid _follow_relations fetching all
+        #    child objects per occurrence (which is what caused the original timeout).
+        #    Only the occurrence's own fields changed, so child versions are not needed.
+        #    One Revision per occurrence — a shared Revision causes GetRevisionVersionsView
+        #    to return all N occurrences when viewing any single occurrence's history entry.
+        occurrence_ct = ContentType.objects.get_for_model(Occurrence)
+        # Pre-compute taxonomy version data (same for all occurrences in this rename).
+        # Adding a taxonomy Version to each revision populates data.data.taxonomy.fields.scientific_name
+        # in the history datatable without running _follow_relations per occurrence.
+        new_taxonomy = rename_instance.taxonomy
+        taxonomy_ct = ContentType.objects.get_for_model(Taxonomy) if new_taxonomy else None
+        taxonomy_data = dj_serializers.serialize("json", [new_taxonomy]) if new_taxonomy else None
+        taxonomy_repr = str(new_taxonomy) if new_taxonomy else ""
+        revision_list = Revision.objects.bulk_create(
+            [
+                Revision(
+                    date_created=now,
+                    user=request.user,
+                    comment=f"Rename: species changed from {instance} to {rename_instance}",
+                )
+                for _ in moved_occ_ids
+            ]
+        )
+        version_batch, log_batch, BATCH_SIZE = [], [], 500
+        for occ, revision in zip(Occurrence.objects.filter(id__in=moved_occ_ids).iterator(), revision_list):
+            version_batch.append(
+                Version(
+                    revision=revision,
+                    object_id=str(occ.pk),
+                    content_type=occurrence_ct,
+                    db="default",
+                    format="json",
+                    serialized_data=dj_serializers.serialize("json", [occ]),
+                    object_repr=str(occ),
+                )
+            )
+            log_batch.append(
+                OccurrenceUserAction(
+                    occurrence=occ,
+                    who=user_id,
+                    what=OccurrenceUserAction.ACTION_CHANGE_SPECIES_COMMUNITY.format(
+                        occ.occurrence_number,
+                        "species",
+                        old_species_name,
+                        new_species_name,
+                    ),
+                    when=now,
+                )
+            )
+            if len(version_batch) >= BATCH_SIZE:
+                Version.objects.bulk_create(version_batch)
+                OccurrenceUserAction.objects.bulk_create(log_batch)
+                version_batch.clear()
+                log_batch.clear()
+        if version_batch:
+            Version.objects.bulk_create(version_batch)
+            OccurrenceUserAction.objects.bulk_create(log_batch)
+
+        # Add taxonomy version to each occurrence revision (needed for scientific_name column in history).
+        if taxonomy_ct and revision_list:
+            Version.objects.bulk_create(
+                [
+                    Version(
+                        revision=rev,
+                        object_id=str(new_taxonomy.pk),
+                        content_type=taxonomy_ct,
+                        db="default",
+                        format="json",
+                        serialized_data=taxonomy_data,
+                        object_repr=taxonomy_repr,
+                    )
+                    for rev in revision_list
+                ],
+                batch_size=500,
+            )
+
+        # 4. Bulk-create reversion Version rows and action logs for the updated OCRs.
+        if updated_ocr_ids:
+            ocr_ct = ContentType.objects.get_for_model(OccurrenceReport)
+            ocr_revision_list = Revision.objects.bulk_create(
+                [
+                    Revision(
+                        date_created=now,
+                        user=request.user,
+                        comment=f"Rename: species changed from {instance} to {rename_instance}",
+                    )
+                    for _ in updated_ocr_ids
+                ]
+            )
+            version_batch, log_batch = [], []
+            for ocr, revision in zip(
+                OccurrenceReport.objects.filter(id__in=updated_ocr_ids).iterator(), ocr_revision_list
+            ):
+                version_batch.append(
+                    Version(
+                        revision=revision,
+                        object_id=str(ocr.pk),
+                        content_type=ocr_ct,
+                        db="default",
+                        format="json",
+                        serialized_data=dj_serializers.serialize("json", [ocr]),
+                        object_repr=str(ocr),
+                    )
+                )
+                log_batch.append(
+                    OccurrenceReportUserAction(
+                        occurrence_report=ocr,
+                        who=user_id,
+                        what=OccurrenceReportUserAction.ACTION_UPDATE_SPECIES_FROM_OCCURRENCE.format(
+                            old_species_name,
+                            new_species_name,
+                            occ_number_map.get(ocr.occurrence_id, ocr.occurrence_id),
+                        ),
+                        when=now,
+                    )
+                )
+                if len(version_batch) >= BATCH_SIZE:
+                    Version.objects.bulk_create(version_batch)
+                    OccurrenceReportUserAction.objects.bulk_create(log_batch)
+                    version_batch.clear()
+                    log_batch.clear()
+            if version_batch:
+                Version.objects.bulk_create(version_batch)
+                OccurrenceReportUserAction.objects.bulk_create(log_batch)
+
+            # Add taxonomy version to each OCR revision.
+            if taxonomy_ct and ocr_revision_list:
+                Version.objects.bulk_create(
+                    [
+                        Version(
+                            revision=rev,
+                            object_id=str(new_taxonomy.pk),
+                            content_type=taxonomy_ct,
+                            db="default",
+                            format="json",
+                            serialized_data=taxonomy_data,
+                            object_repr=taxonomy_repr,
+                        )
+                        for rev in ocr_revision_list
+                    ],
+                    batch_size=500,
+                )
 
         # Log action
         instance.log_user_action(

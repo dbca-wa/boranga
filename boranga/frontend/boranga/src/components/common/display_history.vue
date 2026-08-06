@@ -44,7 +44,16 @@
                 <div>
                     <strong>Data:</strong>
                 </div>
+                <div v-if="loading" class="text-center py-4">
+                    <span
+                        class="spinner-border spinner-border-sm text-primary me-2"
+                        role="status"
+                        aria-hidden="true"
+                    ></span>
+                    Loading…
+                </div>
                 <textarea
+                    v-else
                     disabled
                     class="form-control"
                     rows="25"
@@ -87,6 +96,7 @@ export default {
         return {
             isModalOpen: false,
             errorString: '',
+            loading: false,
             version_data: [],
             version_data_formatted: [],
             revision_date: '',
@@ -147,6 +157,7 @@ export default {
         },
         fetchHistoryData: function () {
             let vm = this;
+            vm.loading = true;
             fetch(
                 api_endpoints.lookup_revision_versions(
                     vm.primary_model,
@@ -159,8 +170,10 @@ export default {
                     vm.revision_user = data['revision_user'];
                     vm.version_data = data['version_data'];
                     vm.formatHistoryData();
+                    vm.loading = false;
                 },
                 (error) => {
+                    vm.loading = false;
                     console.log(error);
                 }
             );

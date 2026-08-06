@@ -277,6 +277,7 @@
                     <button
                         type="button"
                         class="btn btn-secondary me-2"
+                        :disabled="submittingSpeciesCombine"
                         @click="cancel"
                     >
                         Cancel
@@ -464,7 +465,7 @@ export default {
             this.pruneSelection();
             const confirm = await swal.fire({
                 title: 'Combine Species',
-                text: 'Are you sure you want to combine those species?',
+                html: '<p>Are you sure you want to combine these species?</p><p class="small text-muted">Note: Combining species that have many occurrences can take up to a minute</p>',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Combine Species',

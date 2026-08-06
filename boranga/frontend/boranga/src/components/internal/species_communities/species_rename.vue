@@ -43,6 +43,7 @@
                     <button
                         type="button"
                         class="btn btn-secondary me-2"
+                        :disabled="submitSpeciesRename"
                         @click="cancel"
                     >
                         Cancel
@@ -53,7 +54,7 @@
                         style="margin-top: 5px"
                         disabled
                     >
-                        Submit
+                        Rename Species
                         <span
                             class="spinner-border spinner-border-sm"
                             role="status"
@@ -236,10 +237,9 @@ export default {
                 return false;
             }
 
-            vm.submitSpeciesRename = true;
-            swal.fire({
+            const swalresult = await swal.fire({
                 title: 'Rename Species',
-                text: 'Are you sure you want to rename this species?',
+                html: '<p>Are you sure you want to rename this species?</p><p class="small text-muted">Note: Renaming a species that has many occurrences can take up to a minute</p>',
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonText: 'Rename Species',
@@ -248,61 +248,59 @@ export default {
                     cancelButton: 'btn btn-secondary',
                 },
                 reverseButtons: true,
-            })
-                .then(async (swalresult) => {
-                    if (swalresult.isConfirmed) {
-                        fetch(
-                            helpers.add_endpoint_json(
-                                api_endpoints.species,
-                                vm.species_community_original.id +
-                                    '/rename_species'
-                            ),
-                            {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify(
-                                    vm.species_community_original_copy
-                                ),
-                            }
-                        ).then(
-                            async (response) => {
-                                const data = await response.json();
-                                if (!response.ok) {
-                                    swal.fire({
-                                        title: 'Submit Error',
-                                        text: JSON.stringify(data),
-                                        icon: 'error',
-                                        customClass: {
-                                            confirmButton: 'btn btn-primary',
-                                        },
-                                    });
-                                    vm.saveError = true;
-                                    return;
-                                }
-                                vm.new_species = data;
-                                vm.$router.push({
-                                    name: 'internal-species-communities-dash',
-                                });
-                            },
-                            (err) => {
-                                swal.fire({
-                                    title: 'Submit Error',
-                                    text: helpers.apiVueResourceError(err),
-                                    icon: 'error',
-                                    customClass: {
-                                        confirmButton: 'btn btn-primary',
-                                    },
-                                });
-                                vm.saveError = true;
-                            }
-                        );
+            });
+
+            if (!swalresult.isConfirmed) {
+                return;
+            }
+
+            vm.submitSpeciesRename = true;
+            try {
+                const response = await fetch(
+                    helpers.add_endpoint_json(
+                        api_endpoints.species,
+                        vm.species_community_original.id + '/rename_species'
+                    ),
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(
+                            vm.species_community_original_copy
+                        ),
                     }
-                })
-                .finally(() => {
-                    vm.submitSpeciesRename = false;
+                );
+                const data = await response.json();
+                if (!response.ok) {
+                    swal.fire({
+                        title: 'Submit Error',
+                        text: JSON.stringify(data),
+                        icon: 'error',
+                        customClass: {
+                            confirmButton: 'btn btn-primary',
+                        },
+                    });
+                    vm.saveError = true;
+                    return;
+                }
+                vm.new_species = data;
+                vm.$router.push({
+                    name: 'internal-species-communities-dash',
                 });
+            } catch (err) {
+                swal.fire({
+                    title: 'Submit Error',
+                    text: helpers.apiVueResourceError(err),
+                    icon: 'error',
+                    customClass: {
+                        confirmButton: 'btn btn-primary',
+                    },
+                });
+                vm.saveError = true;
+            } finally {
+                vm.submitSpeciesRename = false;
+            }
         },
     },
 };

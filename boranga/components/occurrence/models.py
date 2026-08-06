@@ -2559,16 +2559,18 @@ class OCRHabitatComposition(BaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._meta.get_field("land_form").choices = tuple(
-            LandForm.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
-        self._meta.get_field("soil_type").choices = tuple(
-            SoilType.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
+        if not self._meta.get_field("land_form").choices:
+            self._meta.get_field("land_form").choices = tuple(
+                LandForm.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
+        if not self._meta.get_field("soil_type").choices:
+            self._meta.get_field("soil_type").choices = tuple(
+                SoilType.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
 
 
 class OCRHabitatCondition(BaseModel):
@@ -3448,21 +3450,24 @@ class OCRAnimalObservation(BaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._meta.get_field("primary_detection_method").choices = tuple(
-            PrimaryDetectionMethod.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
-        self._meta.get_field("secondary_sign").choices = tuple(
-            SecondarySign.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
-        self._meta.get_field("reproductive_state").choices = tuple(
-            ReproductiveState.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
+        if not self._meta.get_field("primary_detection_method").choices:
+            self._meta.get_field("primary_detection_method").choices = tuple(
+                PrimaryDetectionMethod.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
+        if not self._meta.get_field("secondary_sign").choices:
+            self._meta.get_field("secondary_sign").choices = tuple(
+                SecondarySign.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
+        if not self._meta.get_field("reproductive_state").choices:
+            self._meta.get_field("reproductive_state").choices = tuple(
+                ReproductiveState.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
 
     def save(self, *args, **kwargs):
         if self.occurrence_report.migrated_from_id:
@@ -3950,8 +3955,6 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         app_label = "boranga"
 
     def save(self, *args, version_user=None, **kwargs):
-        # Clear the cache
-        cache.delete(settings.CACHE_KEY_MAP_OCCURRENCES)
         if version_user is not None:
             user_id = version_user.id if hasattr(version_user, "id") else int(version_user)
             self.last_modified_by = user_id
@@ -5150,16 +5153,18 @@ class OCCHabitatComposition(BaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._meta.get_field("land_form").choices = tuple(
-            LandForm.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
-        self._meta.get_field("soil_type").choices = tuple(
-            SoilType.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
+        if not self._meta.get_field("land_form").choices:
+            self._meta.get_field("land_form").choices = tuple(
+                LandForm.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
+        if not self._meta.get_field("soil_type").choices:
+            self._meta.get_field("soil_type").choices = tuple(
+                SoilType.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
 
 
 class OCCHabitatCondition(BaseModel):
@@ -5590,21 +5595,24 @@ class OCCAnimalObservation(BaseModel):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._meta.get_field("primary_detection_method").choices = tuple(
-            PrimaryDetectionMethod.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
-        self._meta.get_field("secondary_sign").choices = tuple(
-            SecondarySign.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
-        self._meta.get_field("reproductive_state").choices = tuple(
-            ReproductiveState.objects.annotate(
-                id_str=Cast("id", CharField()),
-            ).values_list("id_str", "name")
-        )
+        if not self._meta.get_field("primary_detection_method").choices:
+            self._meta.get_field("primary_detection_method").choices = tuple(
+                PrimaryDetectionMethod.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
+        if not self._meta.get_field("secondary_sign").choices:
+            self._meta.get_field("secondary_sign").choices = tuple(
+                SecondarySign.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
+        if not self._meta.get_field("reproductive_state").choices:
+            self._meta.get_field("reproductive_state").choices = tuple(
+                ReproductiveState.objects.annotate(
+                    id_str=Cast("id", CharField()),
+                ).values_list("id_str", "name")
+            )
 
     def save(self, *args, **kwargs):
         if self.occurrence.migrated_from_id:

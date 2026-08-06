@@ -10,7 +10,6 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry, Polygon
-from django.core.cache import cache
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models as dj_models
 from django.db import transaction
@@ -5317,8 +5316,6 @@ class OccurrenceReportImporter(BaseSheetImporter):
                         "Fixed ocr_for_occ_number for OCRs linked to %d new Occurrences",
                         len(pending_ids),
                     )
-                    # Also clear the cache once (not per-row)
-                    cache.delete(settings.CACHE_KEY_MAP_OCCURRENCES)
 
             # Bulk-update changed Occurrences
             occ_updated = 0
