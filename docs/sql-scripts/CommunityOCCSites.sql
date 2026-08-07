@@ -139,7 +139,7 @@ SELECT
     -- Site Geometry (ST_Transform to SRID 7844 is a no-op — Boranga is already GDA2020 throughout)
     ST_Transform(site.geometry, 7844)              AS GEOMETRY,
     site.latitude                                  AS LAT,
-    site.longitude                                 AS LON,
+    site.longitude                                 AS LONG,
     site.site_id                                   AS GEOM_ID,
 
     -- Conservation Status

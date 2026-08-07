@@ -10,7 +10,7 @@
                     <div class="text-end">
                         <button
                             type="button"
-                            :disabled="inViewMode"
+                            :disabled="!meeting_obj.can_user_add_minutes"
                             class="btn btn-primary mb-2"
                             @click.prevent="addMinutes"
                         >
