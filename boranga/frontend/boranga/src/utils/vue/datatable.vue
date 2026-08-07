@@ -59,20 +59,16 @@ export default {
             let vm = this;
             let options = vm.dtOptions; // Use the original options
 
-            options.columnDefs = [
-                {
-                    // Targets ALL columns globally across the table
-                    targets: '_all',
-                    // Intercepts the data right before DataTables renders it into the <tbody>
-                    render: function (data, type) {
-                        // Only escape when rendering for the visual display (not sorting or filtering)
-                        if (type === 'display') {
-                            return helpers.escapeHtml(data);
-                        }
-                        return data;
-                    },
-                },
-            ];
+            if ($.fn.DataTable && $.fn.DataTable.type) {
+                $.fn.DataTable.type('string', 'render', function (data, type) {
+                    // Only escape if it's for visual display and is a string
+                    if (type === 'display' && typeof data === 'string') {
+                        // Use your existing helpers
+                        return helpers.escapeHtml(data);
+                    }
+                    return data;
+                });
+            }
 
             // Expand responsive: true into the default horizontal child-row
             // renderer so that all tables share the same layout. To change the
