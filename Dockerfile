@@ -62,6 +62,10 @@ COPY --chown=oim:oim open_reporting_db /
 RUN chmod 755 /open_reporting_db
 RUN chmod 755 /reporting_database_rebuild.sh
 
+USER root
+RUN apt purge -y linux-libc-dev
+USER oim
+
 EXPOSE 80
 HEALTHCHECK CMD service cron status | grep "cron is running" || exit 1
 CMD ["/startup.sh"]
