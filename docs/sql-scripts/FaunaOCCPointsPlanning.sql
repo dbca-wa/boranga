@@ -26,7 +26,8 @@ occ AS (
         o.species_id,
         o.processing_status,
         ws.name AS wild_status_name,        
-        o.group_type_id
+        o.group_type_id,
+        o.occurrence_source
     FROM boranga_occurrence o
     INNER JOIN gt ON o.group_type_id = gt.id
     LEFT JOIN boranga_wildstatus ws ON o.wild_status_id = ws.id
@@ -150,6 +151,16 @@ SELECT
     loc.location_accuracy AS LOC_ACC,
     identification.identification_certainty AS IDENT_CRTY,
     obs_detail.observation_method AS DET_METHOD,
+
+    -- Report metadata
+    CASE
+        WHEN occ.occurrence_source IS NULL OR occ.occurrence_source = '' THEN NULL
+        WHEN occ.occurrence_source = 'ocr' THEN 'ORF'
+        WHEN occ.occurrence_source = 'non-ocr' THEN 'No ORF'
+        WHEN occ.occurrence_source = 'ocr,non-ocr' THEN 'ORF; No ORF'
+        ELSE NULL
+    END AS OCC_SOURCE,
+
     gt.name AS GROUP_TYPE
 FROM occ
 INNER JOIN gt ON occ.group_type_id = gt.id
