@@ -122,7 +122,6 @@ INNER JOIN gt ON occ.group_type_id = gt.id
 INNER JOIN buf ON occ.id = buf.occurrence_id
 LEFT JOIN active_cs ON occ.community_id = active_cs.community_id
 LEFT JOIN approved_cs ON occ.community_id = approved_cs.community_id
-LEFT JOIN loc ON occ.id = loc.occurrence_id
 LEFT JOIN identification ON occ.id = identification.occurrence_id
 LEFT JOIN habitat ON occ.id = habitat.occurrence_id
 ORDER BY occ.occurrence_number, buf.buffer_geom_id;
