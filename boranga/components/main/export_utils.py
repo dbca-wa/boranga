@@ -45,7 +45,7 @@ def _csv_file(model_label, header, rows, group_type_label=""):
     writer.writerow(header)
     for row in rows:
         writer.writerow(row)
-    data = text_buf.getvalue().encode("utf-8")
+    data = text_buf.getvalue().encode("utf-8-sig")
     display = _build_display_name(model_label, group_type_label, "csv")
     return (display, data, "text/csv")
 
@@ -60,7 +60,7 @@ def _excel_file(model_label, header, rows, group_type_label=""):
     for cell in ws[1]:
         cell.font = bold
     for row in rows:
-        ws.append([str(v) if v is not None else "" for v in row])
+        ws.append(list(row))
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
