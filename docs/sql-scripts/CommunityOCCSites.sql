@@ -6,7 +6,6 @@
 -- One row per OccurrenceSite for Community Occurrences.
 -- Returns ALL processing statuses.
 --
--- NOTE: OBS_DATE (observation_date) is not available on the Occurrence model
 -- and has been excluded from all OCC reports pending further review.
 --
 -- IMPORTANT — KB does not allow comments in SQL queries. Before pasting this

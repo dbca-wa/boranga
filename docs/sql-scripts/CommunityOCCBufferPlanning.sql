@@ -60,15 +60,6 @@ approved_cs AS (
     AND cs.community_id IS NOT NULL
 ),
 
--- -- OCC Location Accuracy --------------------------------------------------
-loc AS (
-    SELECT
-        l.occurrence_id,
-        la.name AS location_accuracy
-    FROM boranga_occlocation l
-    LEFT JOIN boranga_locationaccuracy la ON l.location_accuracy_id = la.id
-),
-
 -- -- Identification Certainty -----------------------------------------------
 identification AS (
     SELECT
@@ -124,7 +115,6 @@ SELECT
     
     -- Administrative metadata
     habitat.obs_date AS OBS_DATE,
-    loc.location_accuracy AS LOC_ACC,
     identification.identification_certainty AS IDENT_CRTY,
     gt.name AS GROUP_TYPE
 FROM occ
@@ -132,7 +122,6 @@ INNER JOIN gt ON occ.group_type_id = gt.id
 INNER JOIN buf ON occ.id = buf.occurrence_id
 LEFT JOIN active_cs ON occ.community_id = active_cs.community_id
 LEFT JOIN approved_cs ON occ.community_id = approved_cs.community_id
-LEFT JOIN loc ON occ.id = loc.occurrence_id
 LEFT JOIN identification ON occ.id = identification.occurrence_id
 LEFT JOIN habitat ON occ.id = habitat.occurrence_id
 ORDER BY occ.occurrence_number, buf.buffer_geom_id;

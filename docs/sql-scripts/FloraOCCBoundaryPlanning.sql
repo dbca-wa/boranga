@@ -26,9 +26,11 @@ occ AS (
         o.occurrence_number,
         o.species_id,
         o.processing_status,
-        o.group_type_id
+        ws.name AS wild_status_name
+        o.group_type_id,
     FROM boranga_occurrence o
     INNER JOIN gt ON o.group_type_id = gt.id
+    LEFT JOIN boranga_wildstatus ws ON o.wild_status_id = ws.id
 ),
 
 -- -- Species ID Lookup -------------------------------------------------------
@@ -66,6 +68,14 @@ approved_cs AS (
     LEFT JOIN boranga_waprioritycategory wapc ON cs.wa_priority_category_id = wapc.id
     WHERE cs.processing_status = 'approved'
     AND cs.species_id IS NOT NULL
+),
+
+-- -- Plant Count (Flora-specific) --------------------------------------------
+plant_count AS (
+    SELECT
+        pc.occurrence_id,
+        pc.obs_date
+    FROM boranga_occplantcount pc
 ),
 
 -- -- OCC Location Accuracy --------------------------------------------------
@@ -106,7 +116,7 @@ geom AS (
 SELECT
     -- Identifier mapping
     occ.occurrence_number AS OCC_NUM,
-    occ.processing_status AS WLD_STATUS,
+    occ.wild_status_name AS WLD_STATUS,
     
     -- Spatial layers (ST_Transform to 7844 is a supervisor mandated no-op)
     ST_Transform(geom.geometry, 7844) AS GEOMETRY,
@@ -120,7 +130,7 @@ SELECT
     active_cs.commonwealth_conservation_code AS COMWLTH_CS,
     
     -- Administrative metadata (Null placeholders used if OCC tracks date via reports only)
-    NULL::date AS OBS_DATE, 
+    plant_count.obs_date AS OBS_DATE,
     loc.location_accuracy AS LOC_ACC,
     identification.identification_certainty AS IDENT_CRTY,
     gt.name AS GROUP_TYPE
@@ -130,6 +140,7 @@ INNER JOIN geom ON occ.id = geom.occurrence_id
 LEFT JOIN species ON occ.species_id = species.id
 LEFT JOIN active_cs ON species.id = active_cs.species_id
 LEFT JOIN approved_cs ON species.id = approved_cs.species_id
+LEFT JOIN plant_count ON occ.id = plant_count.occurrence_id
 LEFT JOIN loc ON occ.id = loc.occurrence_id
 LEFT JOIN identification ON occ.id = identification.occurrence_id
 ORDER BY occ.occurrence_number, geom.geom_id;

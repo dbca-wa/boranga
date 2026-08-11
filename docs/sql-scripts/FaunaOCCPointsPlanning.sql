@@ -25,9 +25,12 @@ occ AS (
         o.occurrence_number,
         o.species_id,
         o.processing_status,
-        o.group_type_id
+        ws.name AS wild_status_name,        
+        o.group_type_id,
+        o.occurrence_source
     FROM boranga_occurrence o
     INNER JOIN gt ON o.group_type_id = gt.id
+    LEFT JOIN boranga_wildstatus ws ON o.wild_status_id = ws.id
 ),
 
 -- -- Species + Fauna Taxonomic Groups ----------------------------------------
@@ -71,6 +74,15 @@ approved_cs AS (
     AND cs.species_id IS NOT NULL
 ),
 
+-- -- Animal Observation (Fauna-specific) -------------------------------------
+animal_obs AS (
+    SELECT
+        ao.occurrence_id,
+        ao.obs_date
+    FROM boranga_occanimalobservation ao
+),
+
+
 -- -- OCC Location Accuracy --------------------------------------------------
 loc AS (
     SELECT
@@ -104,6 +116,8 @@ geom AS (
         g.id AS geom_id,
         g.occurrence_id,
         g.geometry,
+        ST_X(g.geometry)  AS longitude,
+        ST_Y(g.geometry)  AS latitude,        
         g.updated_date
     FROM boranga_occurrencegeometry g
     WHERE ST_GeometryType(g.geometry) IN ('ST_Point')
@@ -116,13 +130,15 @@ geom AS (
 SELECT
     -- Identifier mapping
     occ.occurrence_number AS OCC_NUM,
-    occ.processing_status AS WLD_STATUS,
+    occ.wild_status_name AS WLD_STATUS,
     
     -- Taxonomic grouping
     species.fauna_group AS FA_GROUP,
     
     -- Spatial layers (ST_Transform to 7844 is a supervisor mandated no-op)
     ST_Transform(geom.geometry, 7844) AS GEOMETRY,
+    geom.latitude AS LAT,
+    geom.longitude AS LONG,
     TO_CHAR(geom.updated_date, 'YYYY-MM-DD HH24:MI:SS') AS GEO_MODIFY,
     
     -- Legislative tracking
@@ -131,10 +147,20 @@ SELECT
     active_cs.commonwealth_conservation_code AS COMWLTH_CS,
     
     -- Administrative metadata
-    NULL::date AS OBS_DATE,
+    animal_obs.obs_date AS OBS_DATE,
     loc.location_accuracy AS LOC_ACC,
     identification.identification_certainty AS IDENT_CRTY,
     obs_detail.observation_method AS DET_METHOD,
+
+    -- Report metadata
+    CASE
+        WHEN occ.occurrence_source IS NULL OR occ.occurrence_source = '' THEN NULL
+        WHEN occ.occurrence_source = 'ocr' THEN 'ORF'
+        WHEN occ.occurrence_source = 'non-ocr' THEN 'No ORF'
+        WHEN occ.occurrence_source = 'ocr,non-ocr' THEN 'ORF; No ORF'
+        ELSE NULL
+    END AS OCC_SOURCE,
+
     gt.name AS GROUP_TYPE
 FROM occ
 INNER JOIN gt ON occ.group_type_id = gt.id
@@ -142,6 +168,7 @@ INNER JOIN geom ON occ.id = geom.occurrence_id
 LEFT JOIN species ON occ.species_id = species.id
 LEFT JOIN active_cs ON species.id = active_cs.species_id
 LEFT JOIN approved_cs ON species.id = approved_cs.species_id
+LEFT JOIN animal_obs ON occ.id = animal_obs.occurrence_id
 LEFT JOIN loc ON occ.id = loc.occurrence_id
 LEFT JOIN identification ON occ.id = identification.occurrence_id
 LEFT JOIN obs_detail ON occ.id = obs_detail.occurrence_id
