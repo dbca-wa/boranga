@@ -239,7 +239,7 @@ export default {
                         mRender: function (data, type, full) {
                             let links = '';
                             links += `<a href='#${full.id}' data-view-document='${full.id}'>View</a><br/>`;
-                            if (vm.meeting_obj.can_user_edit) {
+                            if (vm.meeting_obj.can_user_add_minutes) {
                                 if (full.active) {
                                     links += `<a href='#${full.id}' data-edit-document='${full.id}'>Edit</a><br/>`;
                                     links += `<a href='#' data-discard-document='${full.id}'>Discard</a><br>`;
