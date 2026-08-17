@@ -28,6 +28,12 @@ occ AS (
         o.group_type_id
     FROM boranga_occurrence o
     INNER JOIN gt ON o.group_type_id = gt.id
+    WHERE o.processing_status = 'active'
+      AND EXISTS (
+          SELECT 1 FROM boranga_conservationstatus cs
+          WHERE cs.community_id = o.community_id
+            AND cs.processing_status = 'approved'
+      )    
 ),
 
 -- -- Active Conservation Status (approved + delisted) -----------------------
