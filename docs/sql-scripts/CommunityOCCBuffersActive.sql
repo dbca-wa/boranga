@@ -133,6 +133,26 @@ identification AS (
     LEFT JOIN boranga_identificationcertainty ic ON i.identification_certainty_id = ic.id
 ),
 
+-- -- Habitat Composition -------------------------------------------------------
+habitat_composition AS (
+    SELECT
+        hc.occurrence_id,
+        hc.land_form,
+        rt.name AS rock_type,
+        hc.loose_rock_percent,
+        hc.soil_type,
+        sc.name AS soil_colour,
+        scond.name AS soil_condition,
+        dr.name AS drainage,
+        hc.water_quality,
+        hc.habitat_notes
+    FROM boranga_occhabitatcomposition hc
+    LEFT JOIN boranga_rocktype rt ON hc.rock_type_id = rt.id
+    LEFT JOIN boranga_soilcolour sc ON hc.soil_colour_id = sc.id
+    LEFT JOIN boranga_soilcondition scond ON hc.soil_condition_id = scond.id
+    LEFT JOIN boranga_drainage dr ON hc.drainage_id = dr.id
+),
+
 -- -- Habitat Condition -------------------------------------------------------
 habitat AS (
     SELECT
@@ -145,6 +165,32 @@ habitat AS (
         hc.pristine,
         hc.obs_date
     FROM boranga_occhabitatcondition hc
+),
+
+-- -- Vegetation Structure -------------------------------------------------------
+vegetation_structure AS (
+    SELECT
+        vs.occurrence_id,
+        vs.vegetation_structure_layer_one,
+        vs.vegetation_structure_layer_two,
+        vs.vegetation_structure_layer_three,
+        vs.vegetation_structure_layer_four
+    FROM boranga_occvegetationstructure vs
+),
+
+-- -- Associated Species -------------------------------------------------------
+associated_species AS (
+    SELECT
+        assoc.occurrence_id,
+        STRING_AGG(t.scientific_name, ', ' ORDER BY t.scientific_name) AS scientific_names
+    FROM boranga_occassociatedspecies assoc
+    INNER JOIN boranga_occassociatedspecies_related_species m2m 
+        ON assoc.id = m2m.occassociatedspecies_id
+    INNER JOIN boranga_associatedspeciestaxonomy ast 
+        ON m2m.associatedspeciestaxonomy_id = ast.id
+    INNER JOIN boranga_taxonomy t 
+        ON ast.taxonomy_id = t.id
+    GROUP BY assoc.occurrence_id
 ),
 
 -- -- Buffer Geometry (via OccurrenceGeometry) --------------------------------
@@ -222,6 +268,17 @@ SELECT
     loc.region_name                                AS REGION,
     loc.district_name                              AS DISTRICT,
 
+    -- Habitat Composition
+    habitat_composition.land_form                  AS LANDFORM,
+    habitat_composition.rock_type                  AS ROCK_TYPE,
+    habitat_composition.loose_rock_percent         AS GRAVEL,
+    habitat_composition.soil_type                  AS SOIL_TYPE,
+    habitat_composition.soil_colour                AS SOIL_COLOR,
+    habitat_composition.soil_condition             AS SOIL_COND,
+    habitat_composition.drainage                   AS DRAINAGE,
+    habitat_composition.water_quality              AS WATER_QUAL,
+    habitat_composition.habitat_notes              AS HAB_NOTES,
+
     -- Habitat Condition
     habitat.completely_degraded                    AS COMP_DEGRD,
     habitat.degraded                               AS DEGRADED,
@@ -229,6 +286,15 @@ SELECT
     habitat.very_good                              AS VERY_GOOD,
     habitat.excellent                              AS EXCELLENT,
     habitat.pristine                               AS PRISTINE,
+
+    -- Vegetation Structure
+    vegetation_structure.vegetation_structure_layer_one   AS VEG_STRU_1,
+    vegetation_structure.vegetation_structure_layer_two   AS VEG_STRU_2,
+    vegetation_structure.vegetation_structure_layer_three AS VEG_STRU_3,
+    vegetation_structure.vegetation_structure_layer_four  AS VEG_STRU_4,
+
+    -- Associated Species
+    associated_species.scientific_names            AS ASSOC_SPECIES,
 
     -- WISH fields
     'Buffer Geometry'                              AS G_DATATYPE,
@@ -245,5 +311,8 @@ LEFT JOIN sites_concat   ON occ.id = sites_concat.occurrence_id
 LEFT JOIN loc            ON occ.id = loc.occurrence_id
 LEFT JOIN obs_detail     ON occ.id = obs_detail.occurrence_id
 LEFT JOIN identification ON occ.id = identification.occurrence_id
+LEFT JOIN habitat_composition   ON occ.id = habitat_composition.occurrence_id
 LEFT JOIN habitat        ON occ.id = habitat.occurrence_id
+LEFT JOIN vegetation_structure ON occ.id = vegetation_structure.occurrence_id
+LEFT JOIN associated_species ON occ.id = associated_species.occurrence_id
 ORDER BY occ.occurrence_number, buf.occ_geom_id;
