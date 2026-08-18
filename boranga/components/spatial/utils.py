@@ -920,12 +920,15 @@ def save_geometry(
             for geom_id in discarded_geometry_ids:
                 OccurrenceUserAction.log_action(
                     instance,
-                    OccurrenceUserAction.ACTION_DELETE_GEOMETRY.format(
+                    OccurrenceUserAction.ACTION_DISCARD_GEOMETRY.format(
                         geom_id,
                         instance.occurrence_number,
                     ),
                     request.user.id,
                 )
+
+    if instance_fk_field_name == "occurrence":
+        sync_occurrence_tenures(instance, geometry_id_intersect_data)
 
     return geometry_id_intersect_data
 
