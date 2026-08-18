@@ -933,6 +933,59 @@ def save_geometry(
     return geometry_id_intersect_data
 
 
+def reinstate_geometry(instance, geometry, user=None):
+    """Reinstates a discarded geometry.
+
+    For OccurrenceGeometry, it re-intersects cadastre layers, syncs tenures,
+    recreates buffers, and logs actions.
+    """
+    # 1. Flip visibility
+    geometry.visible = True
+    geometry.save()
+
+    # 2. Handle Occurrence-specific logic (Tenures, Buffers, Logs)
+    if isinstance(geometry, OccurrenceGeometry):
+        intersect_data = {}
+        try:
+            intersect_layer = TileLayer.objects.get(is_tenure_intersects_query_layer=True)
+            intersect_data = intersect_geometry_with_layer(geometry.geometry, intersect_layer)
+        except TileLayer.DoesNotExist:
+            logger.warning("No tenure intersects query layer specified")
+        except Exception as e:
+            logger.error(f"Error intersecting reinstated geometry {geometry.id}: {e}")
+
+        # Sync Tenures
+        geometry_id_intersect_data = {geometry.id: intersect_data}
+        sync_occurrence_tenures(instance, geometry_id_intersect_data)
+
+        # Recreate Buffer Geometry if buffer_radius existed
+        buffer_radius = getattr(geometry, "buffer_radius", None)
+        if buffer_radius:
+            content_type_object = ct_models.ContentType.objects.get_for_model(geometry)
+            BufferGeometry.objects.update_or_create(
+                buffered_from_geometry=geometry,
+                defaults={
+                    "geometry": buffer_geos_geometry(geometry.geometry, buffer_radius),
+                    "object_id": geometry.id,
+                    "content_type": content_type_object,
+                    "opacity": 0.5,
+                },
+            )
+
+        # Log User Action
+        if user:
+            OccurrenceUserAction.log_action(
+                instance,
+                OccurrenceUserAction.ACTION_REINSTATE_GEOMETRY.format(
+                    geometry.id,
+                    instance.occurrence_number,
+                ),
+                user.id,
+            )
+
+    return geometry
+
+
 def wkb_to_geojson(wkb):
     from shapely.wkt import loads
 
