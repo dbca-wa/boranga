@@ -1150,6 +1150,7 @@ export default {
                 if (response.ok) {
                     await vm.fetchDiscardedGeometries();
                     await vm.$refs.component_map.reloadQueryLayer();
+                    vm.$refs.occurrence_tenure_datatable.updatedTenureArea();
                 } else {
                     const data = await response.json();
                     swal.fire({
