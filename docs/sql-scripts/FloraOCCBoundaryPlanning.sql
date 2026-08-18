@@ -26,8 +26,8 @@ occ AS (
         o.occurrence_number,
         o.species_id,
         o.processing_status,
-        ws.name AS wild_status_name
-        o.group_type_id,
+        ws.name AS wild_status_name,
+        o.group_type_id
     FROM boranga_occurrence o
     INNER JOIN gt ON o.group_type_id = gt.id
     LEFT JOIN boranga_wildstatus ws ON o.wild_status_id = ws.id
