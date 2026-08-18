@@ -16,7 +16,7 @@ from django.contrib.contenttypes import models as ct_models
 from django.contrib.gis.geos import GEOSGeometry, Polygon
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, connection
+from django.db import connection
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.utils import timezone
@@ -309,103 +309,6 @@ def intersect_geometry_with_layer(
         return res.text
 
     return res.json()
-
-
-def populate_occurrence_tenure_data(geometry_instance, features, request, skip_revision=False):
-    # Get existing occurrence tenures for this geometry
-    occurrence_tenures_before = OccurrenceTenure.objects.filter(occurrence_geometry=geometry_instance)
-    # Keep a track of the occurrence tenure IDs that are created or updated
-    occurrence_tenure_ids = []
-    # Process each feature in the geometry
-    for feature in features:
-        feature_id = feature.get("id", None)
-        owner_name = feature.get("properties", {}).get("CAD_OWNER_NAME", None)
-        owner_count = feature.get("properties", {}).get("CAD_OWNER_COUNT", None)
-        cad_pin = feature.get("properties", {}).get("CAD_PIN", None)
-        if cad_pin is not None:
-            cad_pin = str(cad_pin)
-        tenure_area_ewkb = feature_json_to_geosgeometry(feature).ewkb
-
-        if not feature_id:
-            logger.warning(f"Feature does not have an ID: {feature}")
-            continue
-        # Check if an occurrence tenure entry already exists for this feature ID
-        occurrence_tenure_before = OccurrenceTenure.objects.filter(tenure_area_id=feature_id)
-        created = False
-        if not occurrence_tenure_before.exists():
-            # No tenure entry exists yet for this occurrence geometry
-            try:
-                occurrence_tenure = OccurrenceTenure(
-                    occurrence_geometry=geometry_instance,
-                    tenure_area_id=feature_id,
-                    cad_pin=cad_pin,
-                    owner_name=owner_name,
-                    owner_count=owner_count,
-                    tenure_area_ewkb=tenure_area_ewkb,
-                )
-                occurrence_tenure.save(no_revision=skip_revision, version_user=request.user)
-            except IntegrityError as e:
-                logger.error(f"Error creating OccurrenceTenure: {e}")
-                continue
-        else:
-            occurrence_tenures = OccurrenceTenure.objects.filter(tenure_area_id=feature_id).exclude(
-                occurrence_geometry=None, tenure_area_id=None
-            )
-
-            occurrence_tenures_current = occurrence_tenures.filter(
-                occurrence_geometry=geometry_instance,
-                status=OccurrenceTenure.STATUS_CURRENT,
-            )
-
-            occurrence_tenures_historical = occurrence_tenures.filter(
-                historical_occurrence=geometry_instance.occurrence.id,
-                status=OccurrenceTenure.STATUS_HISTORICAL,
-            )
-
-            if occurrence_tenures_current.exists():
-                occurrence_tenure = occurrence_tenures_current.first()
-                occurrence_tenure.owner_name = owner_name
-                occurrence_tenure.owner_count = owner_count
-                occurrence_tenure.cad_pin = cad_pin
-                occurrence_tenure.tenure_area_ewkb = tenure_area_ewkb
-                occurrence_tenure.save(no_revision=skip_revision, version_user=request.user)
-            else:
-                created = True
-                # Restore historical tenure details to current one if applicable
-                historical = occurrence_tenures_historical.order_by("-datetime_updated").first()
-                occurrence_tenure = OccurrenceTenure(
-                    occurrence_geometry=geometry_instance,
-                    tenure_area_id=feature_id,
-                    cad_pin=cad_pin,
-                    owner_name=owner_name,
-                    owner_count=owner_count,
-                    tenure_area_ewkb=tenure_area_ewkb,
-                    purpose=historical.purpose if historical else None,
-                    vesting=historical.vesting if historical else None,
-                    significant_to_occurrence=(historical.significant_to_occurrence if historical else None),
-                    comments=historical.comments if historical else None,
-                )
-                occurrence_tenure.save(no_revision=skip_revision, version_user=request.user)
-
-        if created:
-            logger.info(f"Created OccurrenceTenure: {occurrence_tenure}")
-        else:
-            logger.info(f"Updated OccurrenceTenure: {occurrence_tenure}")
-        # Add the occurrence tenure ID to the list
-        occurrence_tenure_ids.append(occurrence_tenure.id)
-
-    # Remaining tenures that where not handled up to this point
-    remaining_tenures = occurrence_tenures_before.filter(~Q(id__in=occurrence_tenure_ids))
-    for tenure_area in remaining_tenures:
-        logger.info(f"Setting OccurrenceTenure {tenure_area} to historical")
-        # Set the status of occurrence tenures that existed before, but were not created or updated to historical
-        tenure_area.status = tenure_area.STATUS_HISTORICAL
-        # Also populate the historical_ fields for back reference
-        tenure_area.historical_occurrence = tenure_area.occurrence_geometry.occurrence.id
-        tenure_area.historical_occurrence_geometry_ewkb = tenure_area.occurrence_geometry.geometry.ewkb
-        # Remove the reference to the occurrence geometry
-        tenure_area.occurrence_geometry = None
-        tenure_area.save()
 
 
 def tenure_has_user_data(tenure):
