@@ -19,6 +19,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection
 from django.db.models import Q
 from django.http import Http404, HttpResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import serializers
 from shapely import wkt
@@ -405,6 +406,173 @@ def populate_occurrence_tenure_data(geometry_instance, features, request, skip_r
         # Remove the reference to the occurrence geometry
         tenure_area.occurrence_geometry = None
         tenure_area.save()
+
+
+def tenure_has_user_data(tenure):
+    """Returns True if the user has entered data in any of the editable fields."""
+    return any(
+        [
+            tenure.purpose_id is not None,
+            tenure.vesting_id is not None,
+            bool(tenure.comments and tenure.comments.strip()),
+            tenure.significant_to_occurrence is not None,
+        ]
+    )
+
+
+def sync_occurrence_tenures(occurrence, geometry_id_intersect_data, user=None, skip_revision=False):
+    """Reconciles OccurrenceTenure records against active geometry intersections.
+
+    Keyed strictly by `cad_pin`.
+    - Removes empty duplicates.
+    - Preserves records with notes (promoting the most recent to Current).
+    - Flips un-intersected records to Historical.
+    """
+
+    save_kwargs = {"no_revision": skip_revision}
+    if user:
+        save_kwargs["version_user"] = user
+
+    # -------------------------------------------------------------------------
+    # 1. Parse Incoming Active Intersections from Local Cadastre
+    # -------------------------------------------------------------------------
+    target_intersections = {}
+
+    for geom_id, intersect_data in geometry_id_intersect_data.items():
+        if not intersect_data:
+            continue
+
+        try:
+            occ_geom = OccurrenceGeometry.objects.get(id=geom_id, visible=True)
+        except OccurrenceGeometry.DoesNotExist:
+            continue
+
+        for feat in intersect_data.get("features", []):
+            props = feat.get("properties", {})
+            feat_geom = feat.get("geometry", {})
+
+            # cad_pin is our sole reliable unique identifier
+            raw_pin = props.get("cad_pin") or props.get("CAD_PIN")
+            if not raw_pin:
+                continue
+
+            cad_pin = str(raw_pin).strip()
+
+            tenure_ewkb = None
+            if feat_geom:
+                try:
+                    tenure_ewkb = GEOSGeometry(json.dumps(feat_geom)).ewkb
+                except Exception:
+                    pass
+
+            target_intersections[cad_pin] = {
+                "occurrence_geometry": occ_geom,
+                "cad_pin": cad_pin,
+                "tenure_area_id": str(feat.get("id") or props.get("id") or ""),
+                "tenure_area_ewkb": tenure_ewkb,
+                "owner_name": props.get("owner_name") or props.get("OWNER_NAME"),
+                "owner_count": props.get("owner_count") or props.get("OWNER_COUNT"),
+            }
+
+    # -------------------------------------------------------------------------
+    # 2. Action 1: Consolidate Duplicates per cad_pin
+    # -------------------------------------------------------------------------
+    existing_tenures = list(
+        OccurrenceTenure.objects.filter(
+            Q(occurrence_geometry__occurrence=occurrence) | Q(historical_occurrence=occurrence.id)
+        ).filter(cad_pin__isnull=False)
+    )
+
+    # Group records by cad_pin
+    grouped_by_pin = {}
+    for tenure in existing_tenures:
+        pin = str(tenure.cad_pin).strip()
+        if pin:
+            grouped_by_pin.setdefault(pin, []).append(tenure)
+
+    surviving_tenures_by_pin = {}
+
+    for pin, records in grouped_by_pin.items():
+        # Sort newest updated first
+        records.sort(key=lambda r: r.datetime_updated or r.datetime_created, reverse=True)
+
+        if len(records) == 1:
+            surviving_tenures_by_pin[pin] = records[0]
+        else:
+            records_with_data = [r for r in records if tenure_has_user_data(r)]
+            records_without_data = [r for r in records if not tenure_has_user_data(r)]
+
+            if records_with_data:
+                # The newest record with data becomes the primary candidate for Current
+                surviving_tenures_by_pin[pin] = records_with_data[0]
+
+                # Hard delete all duplicate records that have NO user data
+                for empty_rec in records_without_data:
+                    empty_rec.delete()
+
+                # Any older records WITH data are kept (they will remain Historical)
+            else:
+                # None have data: keep the newest empty one, delete the rest
+                surviving_tenures_by_pin[pin] = records_without_data[0]
+                for extra_empty_rec in records_without_data[1:]:
+                    extra_empty_rec.delete()
+
+    # -------------------------------------------------------------------------
+    # 3. Action 2: Promote to CURRENT or Create New
+    # -------------------------------------------------------------------------
+    seen_tenure_ids = set()
+
+    for cad_pin, target_data in target_intersections.items():
+        occ_geom = target_data["occurrence_geometry"]
+
+        if cad_pin in surviving_tenures_by_pin:
+            # MATCH FOUND: Resurrect/Update spatial fields, PRESERVE user notes
+            tenure = surviving_tenures_by_pin[cad_pin]
+            tenure.status = OccurrenceTenure.STATUS_CURRENT
+            tenure.occurrence_geometry = occ_geom
+            tenure.historical_occurrence_geometry_ewkb = None
+            tenure.historical_occurrence = None
+
+            # Refresh spatial/cadastre fields
+            tenure.tenure_area_id = target_data["tenure_area_id"] or tenure.tenure_area_id
+            tenure.tenure_area_ewkb = target_data["tenure_area_ewkb"] or tenure.tenure_area_ewkb
+            tenure.owner_name = target_data["owner_name"]
+            tenure.owner_count = target_data["owner_count"]
+            tenure.datetime_updated = timezone.now()
+            tenure.save(**save_kwargs)
+
+            seen_tenure_ids.add(tenure.id)
+        else:
+            # NEW PARCEL: Create as CURRENT
+            new_tenure = OccurrenceTenure(
+                status=OccurrenceTenure.STATUS_CURRENT,
+                occurrence_geometry=occ_geom,
+                cad_pin=cad_pin,
+                tenure_area_id=target_data["tenure_area_id"],
+                tenure_area_ewkb=target_data["tenure_area_ewkb"],
+                owner_name=target_data["owner_name"],
+                owner_count=target_data["owner_count"],
+            )
+            new_tenure.save(**save_kwargs)
+            seen_tenure_ids.add(new_tenure.id)
+
+    # -------------------------------------------------------------------------
+    # 4. Demote Obsolete Tenures to HISTORICAL
+    # (Any tenure that does not intersect an active geometry)
+    # -------------------------------------------------------------------------
+    obsolete_tenures = OccurrenceTenure.objects.filter(
+        Q(occurrence_geometry__occurrence=occurrence) | Q(historical_occurrence=occurrence.id),
+        status=OccurrenceTenure.STATUS_CURRENT,
+    ).exclude(id__in=seen_tenure_ids)
+
+    for tenure in obsolete_tenures:
+        tenure.status = OccurrenceTenure.STATUS_HISTORICAL
+        tenure.historical_occurrence = occurrence.id
+        if tenure.occurrence_geometry and tenure.occurrence_geometry.geometry:
+            tenure.historical_occurrence_geometry_ewkb = tenure.occurrence_geometry.geometry.ewkb
+        tenure.occurrence_geometry = None
+        tenure.datetime_updated = timezone.now()
+        tenure.save(**save_kwargs)
 
 
 def save_geometry(
