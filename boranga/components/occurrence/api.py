@@ -239,7 +239,7 @@ from boranga.components.occurrence.utils import (
 from boranga.components.spatial.models import PlausibilityGeometry
 from boranga.components.spatial.serializers import PlausibilityGeometrySerializer
 from boranga.components.spatial.utils import (
-    populate_occurrence_tenure_data,
+    reinstate_geometry,
     save_geometry,
     spatially_process_geometry,
     transform_json_geometry,
@@ -4315,13 +4315,7 @@ class OccurrenceViewSet(
         # occ geometry data to save seperately
         geometry_data = request_data.get("occ_geometry", None)
         if geometry_data:
-            intersect_data = save_geometry(request, instance, geometry_data, "occurrence")
-            instance.occ_geometry.all()
-
-            if intersect_data:
-                for key, value in intersect_data.items():
-                    occurrence_geometry = OccurrenceGeometry.objects.get(id=key)
-                    populate_occurrence_tenure_data(occurrence_geometry, value.get("features", []), request)
+            save_geometry(request, instance, geometry_data, "occurrence")
 
         occ_sites = OccurrenceSite.objects
         site_geometry_data = parse_request_json(request.data, "site_geometry", required=False)
@@ -4437,11 +4431,7 @@ class OccurrenceViewSet(
         # occ geometry data to save seperately
         geometry_data = request.data.get("occ_geometry")
         if geometry_data:
-            intersect_data = save_geometry(request, occ_instance, geometry_data, "occurrence")
-            if intersect_data:
-                for key, value in intersect_data.items():
-                    occurrence_geometry = OccurrenceGeometry.objects.get(id=key)
-                    populate_occurrence_tenure_data(occurrence_geometry, value.get("features", []), request)
+            save_geometry(request, occ_instance, geometry_data, "occurrence")
 
         occ_sites = OccurrenceSite.objects
         site_geometry_data = parse_request_json(request.data, "site_geometry", required=False)
@@ -4522,8 +4512,9 @@ class OccurrenceViewSet(
             geometry = occ_instance.occ_geometry.get(id=geometry_id, visible=False)
         except OccurrenceGeometry.DoesNotExist:
             raise serializers.ValidationError("Discarded geometry not found for this occurrence")
-        geometry.visible = True
-        geometry.save()
+
+        reinstate_geometry(occ_instance, geometry, user=request.user)
+
         return Response({"reinstated": True, "geometry_id": geometry.id})
 
     @list_route(

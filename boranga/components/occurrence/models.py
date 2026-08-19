@@ -4883,7 +4883,8 @@ class OccurrenceUserAction(UserAction):
     # Geometry
     ACTION_ADD_GEOMETRY = "Occurrence Geometry {} Created for occurrence {}"
     ACTION_UPDATE_GEOMETRY = "Occurrence Geometry {} Updated for occurrence {}"
-    ACTION_DELETE_GEOMETRY = "Occurrence Geometry {} Deleted for occurrence {}"
+    ACTION_DISCARD_GEOMETRY = "Occurrence Geometry {} Discarded for occurrence {}"
+    ACTION_REINSTATE_GEOMETRY = "Occurrence Geometry {} Reinstated for occurrence {}"
 
     class Meta:
         app_label = "boranga"
