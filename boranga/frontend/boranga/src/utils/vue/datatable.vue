@@ -60,14 +60,26 @@ export default {
             let options = vm.dtOptions; // Use the original options
 
             if ($.fn.DataTable && $.fn.DataTable.type) {
-                $.fn.DataTable.type('string', 'render', function (data, type) {
-                    // Only escape if it's for visual display and is a string
-                    if (type === 'display' && typeof data === 'string') {
-                        // Use your existing helpers
-                        return helpers.escapeHtml(data);
+                $.fn.DataTable.type(
+                    'string',
+                    'render',
+                    function (data, type, row, meta) {
+                        const colConfig = meta.settings.aoColumns[meta.col];
+                        const dataProperty = colConfig ? colConfig.data : null;
+
+                        // Exclude action_url from escaping as the related items table uses this to render the action links in html)
+                        if (dataProperty == 'action_url') {
+                            return data;
+                        }
+
+                        // Only escape if it's for visual display and is a string
+                        if (type === 'display' && typeof data === 'string') {
+                            // Use your existing helpers
+                            return helpers.escapeHtml(data);
+                        }
+                        return data;
                     }
-                    return data;
-                });
+                );
             }
 
             // Expand responsive: true into the default horizontal child-row
