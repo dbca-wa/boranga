@@ -712,10 +712,10 @@ export default {
         },
         column_number_of_reports: function () {
             return {
+                name: 'occurrence_report_count',
                 data: 'number_of_reports',
                 orderable: true,
                 searchable: false,
-                visible: true,
             };
         },
         column_migrated_from_id: function () {

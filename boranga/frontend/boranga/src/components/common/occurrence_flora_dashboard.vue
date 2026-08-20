@@ -644,8 +644,9 @@ export default {
         },
         column_number_of_reports: function () {
             return {
+                name: 'occurrence_report_count',
                 data: 'number_of_reports',
-                orderable: false,
+                orderable: true,
                 searchable: false,
             };
         },
