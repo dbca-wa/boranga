@@ -128,17 +128,35 @@ class EmailUserAdmin(admin.ModelAdmin):
 class CustomSystemGroupPermissionInlineForm(SystemGroupPermissionInline.form):
     def clean(self):
         cleaned_data = super().clean()
+
+        # If the inline row is marked for deletion in the admin, don't validate it
+        if cleaned_data.get("DELETE"):
+            return cleaned_data
+
         system_group = cleaned_data.get("system_group")
         emailuser = cleaned_data.get("emailuser")
         if not system_group or not emailuser:
             return cleaned_data
 
+        # Internal groups: require is_staff
+        # Note: The post_save signal auto-removes them from external contributor group if they are in there
         if system_group.name in settings.GROUPS_THAT_ALLOW_INTERNAL_MEMBERS_ONLY:
             if not emailuser.is_staff:
                 raise ValidationError("Only internal users can be added to this group.")
+
+        # External group: prevent adding someone who already has internal groups
         else:
-            if emailuser.is_staff:
-                raise ValidationError("Only external users can be added to this group.")
+            is_internal = (
+                boranga_helpers.is_internal_by_user_id(emailuser.id)
+                or boranga_helpers.belongs_to_groups_by_user_id(
+                    emailuser.id, [settings.GROUP_NAME_INTERNAL_CONTRIBUTOR]
+                )
+            )
+            if is_internal:
+                raise ValidationError(
+                    f"User {emailuser.email} already belongs to an internal group "
+                    "and cannot be added to the external group."
+                )
 
         if system_group.name != settings.GROUP_NAME_EXTERNAL_CONTRIBUTOR:
             return cleaned_data
@@ -148,8 +166,7 @@ class CustomSystemGroupPermissionInlineForm(SystemGroupPermissionInline.form):
 
         raise ValidationError(
             f"The email address {emailuser.email} is blacklisted. "
-            "Please remove the email from the blacklist and the user will be automatically "
-            "added back into the external contributor group."
+            "Please remove the email from the blacklist first."
         )
 
 
