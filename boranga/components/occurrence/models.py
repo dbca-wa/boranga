@@ -4667,7 +4667,9 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
     @classmethod
     @transaction.atomic
-    def clone_from_occurrence_report(cls, occurrence_report, occurrence_name=None, migrated_from_id=None, extra_fields=None):
+    def clone_from_occurrence_report(
+        cls, occurrence_report, occurrence_name=None, migrated_from_id=None, extra_fields=None
+    ):
         occurrence = cls()
 
         occurrence.group_type = occurrence_report.group_type
@@ -4676,7 +4678,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         occurrence.species = occurrence_report.species
         occurrence.community = occurrence_report.community
         occurrence.comment = occurrence_report.comments
-        
+
         if occurrence_name:
             occurrence.occurrence_name = occurrence_name
 
@@ -4691,132 +4693,89 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
         occurrence.save(no_revision=True)
 
-        # Clone all the associated models
+        group_type_name = getattr(occurrence_report.group_type, "name", None)
 
-        location = clone_model(
-            OCRLocation,
-            OCCLocation,
-            occurrence_report.location,
-        )
-        if location:
-            location.occurrence = occurrence
-            location.copied_ocr_location = occurrence_report.location
-            location.save()
+        # List of 1-to-1 child relations to clone:
+        # (rel_name, source_model, target_model, allowed_group_type)
+        one_to_one_relations = [
+            ("location", OCRLocation, OCCLocation, None),
+            ("habitat_composition", OCRHabitatComposition, OCCHabitatComposition, None),
+            ("habitat_condition", OCRHabitatCondition, OCCHabitatCondition, None),
+            ("vegetation_structure", OCRVegetationStructure, OCCVegetationStructure, None),
+            ("fire_history", OCRFireHistory, OCCFireHistory, None),
+            ("associated_species", OCRAssociatedSpecies, OCCAssociatedSpecies, None),
+            ("observation_detail", OCRObservationDetail, OCCObservationDetail, None),
+            ("identification", OCRIdentification, OCCIdentification, None),
+            ("plant_count", OCRPlantCount, OCCPlantCount, GroupType.GROUP_TYPE_FLORA),
+            ("animal_observation", OCRAnimalObservation, OCCAnimalObservation, GroupType.GROUP_TYPE_FAUNA),
+        ]
 
-        habitat_composition = clone_model(
-            OCRHabitatComposition,
-            OCCHabitatComposition,
-            occurrence_report.habitat_composition,
-        )
-        if habitat_composition:
-            habitat_composition.occurrence = occurrence
-            habitat_composition.copied_ocr_habitat_composition = occurrence_report.habitat_composition
-            habitat_composition.save()
+        # ---------------------------------------------------------------------
+        # 1. Clone 1-to-1 Child Models
+        # ---------------------------------------------------------------------
+        for rel_name, source_cls, target_cls, required_group_type in one_to_one_relations:
+            # Skip if restricted to another group type
+            if required_group_type and group_type_name != required_group_type:
+                continue
 
-        habitat_condition = clone_model(
-            OCRHabitatCondition,
-            OCCHabitatCondition,
-            occurrence_report.habitat_condition,
-        )
-        if habitat_condition:
-            habitat_condition.occurrence = occurrence
-            habitat_condition.copied_ocr_habitat_condition = occurrence_report.habitat_condition
-            habitat_condition.save()
+            # getattr safely handles reverse OneToOne without raising RelatedObjectDoesNotExist
+            try:
+                ocr_child = getattr(occurrence_report, rel_name, None)
+            except Exception:
+                ocr_child = None
 
-        vegetation_structure = clone_model(
-            OCRVegetationStructure,
-            OCCVegetationStructure,
-            occurrence_report.vegetation_structure,
-        )
-        if vegetation_structure:
-            vegetation_structure.occurrence = occurrence
-            vegetation_structure.copied_ocr_vegetation_structure = occurrence_report.vegetation_structure
-            vegetation_structure.save()
+            if not ocr_child:
+                continue
 
-        fire_history = clone_model(OCRFireHistory, OCCFireHistory, occurrence_report.fire_history)
-        if fire_history:
-            fire_history.occurrence = occurrence
-            fire_history.copied_ocr_fire_history = occurrence_report.fire_history
-            fire_history.save()
+            occ_child = clone_model(source_cls, target_cls, ocr_child)
+            if not occ_child:
+                continue
 
-        associated_species = clone_model(
-            OCRAssociatedSpecies,
-            OCCAssociatedSpecies,
-            occurrence_report.associated_species,
-        )
-        if associated_species:
-            associated_species.occurrence = occurrence
-            associated_species.copied_ocr_associated_species = occurrence_report.associated_species
-            associated_species.save()
-            # copy over related species separately
-            # Duplicate each AssociatedSpeciesTaxonomy so the OCC has its own
-            # association records (preserving per-association metadata).
-            for ast in occurrence_report.associated_species.related_species.all():
-                new_ast = AssociatedSpeciesTaxonomy.objects.create(
-                    taxonomy=ast.taxonomy,
-                    species_role=ast.species_role,
-                    comments=ast.comments,
-                )
-                associated_species.related_species.add(new_ast)
+            occ_child.occurrence = occurrence
+            copied_attr = f"copied_ocr_{rel_name}"
+            if hasattr(occ_child, copied_attr):
+                setattr(occ_child, copied_attr, ocr_child)
 
-        observation_detail = clone_model(
-            OCRObservationDetail,
-            OCCObservationDetail,
-            occurrence_report.observation_detail,
-        )
-        if observation_detail:
-            observation_detail.occurrence = occurrence
-            observation_detail.copied_ocr_observation_detail = occurrence_report.observation_detail
-            observation_detail.save()
+            occ_child.save()
 
-        # Only attempt to access `plant_count` for flora reports. Many reports
-        # (fauna/community) won't have a plant_count OneToOne relation and
-        # accessing it raises RelatedObjectDoesNotExist. Restricting by
-        # group_type avoids unnecessary exceptions and makes intent clear.
-        source_plant_count = None
-        try:
-            if occurrence_report.group_type and occurrence_report.group_type.name == GroupType.GROUP_TYPE_FLORA:
-                source_plant_count = occurrence_report.plant_count
-        except Exception:
-            source_plant_count = None
+            # Special case: Geometries belong to the Location component
+            if rel_name == "location":
+                ocr_geoms = getattr(occurrence_report, "ocr_geometries", None)
+                if ocr_geoms is None and hasattr(ocr_child, "ocr_geometries"):
+                    ocr_geoms = ocr_child.ocr_geometries
 
-        plant_count = clone_model(OCRPlantCount, OCCPlantCount, source_plant_count)
-        if plant_count:
-            plant_count.occurrence = occurrence
-            # Use the guarded source_plant_count variable (may be None)
-            plant_count.copied_ocr_plant_count = source_plant_count
-            plant_count.save()
+                if ocr_geoms is not None:
+                    for ocr_geom in ocr_geoms.all():
+                        occ_geom = OccurrenceGeometry(
+                            occurrence=occurrence,
+                            geometry=ocr_geom.geometry,
+                        )
+                        if hasattr(occ_geom, "location"):
+                            occ_geom.location = occ_child
+                        if hasattr(occ_geom, "copied_ocr_geometry"):
+                            occ_geom.copied_ocr_geometry = ocr_geom
+                        occ_geom.save()
 
-        try:
-            source_animal_observation = None
-            if occurrence_report.group_type and occurrence_report.group_type.name == GroupType.GROUP_TYPE_FAUNA:
-                source_animal_observation = occurrence_report.animal_observation
-        except Exception:
-            source_animal_observation = None
+            # Special case: AssociatedSpecies has nested taxonomy links
+            elif rel_name == "associated_species" and hasattr(ocr_child, "related_species"):
+                for ast in ocr_child.related_species.all():
+                    new_ast = AssociatedSpeciesTaxonomy.objects.create(
+                        taxonomy=ast.taxonomy,
+                        species_role=ast.species_role,
+                        comments=ast.comments,
+                    )
+                    occ_child.related_species.add(new_ast)
 
-        animal_observation = clone_model(
-            OCRAnimalObservation,
-            OCCAnimalObservation,
-            source_animal_observation,
-        )
-        if animal_observation:
-            animal_observation.occurrence = occurrence
-            animal_observation.copied_ocr_animal_observation = source_animal_observation
-            animal_observation.save()
-
-        identification = clone_model(OCRIdentification, OCCIdentification, occurrence_report.identification)
-        if identification:
-            identification.occurrence = occurrence
-            identification.copied_ocr_identification = occurrence_report.identification
-            identification.save()
-
-        # Clone the threats
-        for threat in occurrence_report.ocr_threats.all():
-            occ_threat = clone_model(OCRConservationThreat, OCCConservationThreat, threat)
-            if occ_threat:
-                occ_threat.occurrence = occurrence
-                occ_threat.occurrence_report_threat = threat
-                occ_threat.save()
+        # ---------------------------------------------------------------------
+        # 2. Clone 1-to-Many Threats
+        # ---------------------------------------------------------------------
+        if hasattr(occurrence_report, "ocr_threats"):
+            for threat in occurrence_report.ocr_threats.all():
+                occ_threat = clone_model(OCRConservationThreat, OCCConservationThreat, threat)
+                if occ_threat:
+                    occ_threat.occurrence = occurrence
+                    occ_threat.occurrence_report_threat = threat
+                    occ_threat.save()
 
         return occurrence
 
@@ -6574,11 +6533,21 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                                 error_lines.append(f"{prefix}Error: {msg}")
                             else:
                                 error_lines.append(str(e))
-                        self.error_message = "Errors occurred during processing:\n" + "\n".join(error_lines)
+
+                        # Retrieve schema name safely (fallback to string representation or 'Unknown' if missing)
+                        schema_name = getattr(self.schema, "name", None) or str(self.schema) if self.schema else "Unknown Schema"
+                        
+                        self.error_message = (
+                            f"Errors occurred during processing using schema '{schema_name}':\n\n" 
+                            + "\n".join(error_lines)
+                        )
+
                     except Exception:
                         # Fallback to concise message if building the string fails
+                        schema_name = getattr(self.schema, "name", None) or str(self.schema) if self.schema else "Unknown Schema"
                         self.error_message = (
-                            failure_summary.get("error_message") if failure_summary else f"{len(errors)} rows failed"
+                            f"Errors occurred during processing using schema '{schema_name}':\n\n"
+                            + (failure_summary.get("error_message") if failure_summary else f"{len(errors)} rows failed")
                         )
                 else:
                     self.error_message = (
@@ -6673,6 +6642,32 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         if prefixed_migrated_from_id in ocr_migrated_from_ids or prefixed_migrated_from_id in existing_ocr_mids:
             mode = "update"
 
+        # Universal Check: If this row has NO OccurrenceReport fields populated in the spreadsheet,
+        # it is a child-only row. If the parent doesn't exist yet, it's an error because 
+        # a child cannot exist without a parent row preceding it!
+        has_ocr_fields = False
+        orc_ct = ct_models.ContentType.objects.get_for_model(OccurrenceReport)
+        for column_index, column in enumerate(schema_columns):
+            if column.django_import_content_type == orc_ct and column.django_import_field_name != "migrated_from_id":
+                if row[column_index] is not None:
+                    has_ocr_fields = True
+                    break
+
+        if not has_ocr_fields and mode == "create":
+            errors.append(
+                {
+                    "row_index": row_index,
+                    "error_type": "missing_parent_row",
+                    "data": row,
+                    "error_message": (
+                        f"Row {row_index} attempts to add child records for migrated_from_id "
+                        f"'{ocr_migrated_from_id}', but no parent OccurrenceReport row preceded it "
+                        "to create the parent record. Ensure a parent row with full details appears first."
+                    ),
+                }
+            )
+            return
+
         if prefixed_migrated_from_id not in ocr_migrated_from_ids:
             # Because this is happening in a transaction we need to keep track of
             # the ocr_migrated_from_ids that have been processed in this transaction
@@ -6717,11 +6712,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         if cell_value is not None and column.django_import_field_name != "migrated_from_id":
                             ocr_fields_populated.append(column.django_import_field_name)
 
-                # If no OCR fields (other than migrated_from_id) are populated, this is a
-                # child-only row. Exclude OCR from validation to allow child records to be
-                # appended without requiring full OCR field population.
-                if len(ocr_fields_populated) == 0:
-                    required_content_types = [ct for ct in required_content_types if ct != orc_ct]
         except Exception:
             # Non-fatal: if anything goes wrong, fall back to existing behaviour.
             pass
@@ -7046,6 +7036,23 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 except Exception:
                     # Non-fatal: let later logic surface an appropriate error.
                     pass
+
+        # Pop Occurrence data before the loop so all OccurrenceReport child models
+        # (1-to-1s like habitat_composition, location, etc.) are validated and saved
+        # to the database BEFORE we clone or link the Occurrence.
+        occ_model_raw = models.pop(Occurrence._meta.model_name, None)
+        occ_model_data = {}
+        if occ_model_raw:
+            occ_model_data = dict(
+                zip(
+                    occ_model_raw["field_names"],
+                    occ_model_raw["values"],
+                )
+            )
+            occ_model_data = self._coerce_non_nullable_string_fields(Occurrence, occ_model_data)
+            if mode == "update":
+                occ_model_data = {k: v for k, v in occ_model_data.items() if v is not None}
+
         for current_model_name in models:
             model_data = dict(
                 zip(
@@ -7128,153 +7135,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 ):
                     current_model_instance.locked = True
 
-            elif current_model_name == Occurrence._meta.model_name:
-                occ_migrated_from_id = model_data.pop("migrated_from_id", None)
-                occurrence_number = model_data.pop("occurrence_number", None)
-
-                # Prefix the occ_migrated_from_id to avoid clashes with existing records,
-                # using the same approach as OccurrenceReport.migrated_from_id prefixing.
-                if occ_migrated_from_id:
-                    _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
-                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
-                    _task_pk = self.pk if self.pk is not None else 0
-                    occ_migrated_from_id = f"{_occ_prefix}-{_task_pk:0{_pad}d}-{occ_migrated_from_id}"
-
-                if occ_migrated_from_id and occurrence_number:
-                    error_message = (
-                        "Both migrated_from_id and occurrence_number were provided. "
-                        "Please provide only one of these fields."
-                    )
-                    errors.append(
-                        {
-                            "row_index": row_index,
-                            "error_type": "ambiguous_occurrence_idenfitier",
-                            "data": model_data,
-                            "error_message": error_message,
-                        }
-                    )
-                    return
-
-                if occurrence_number:
-                    try:
-                        current_model_instance = Occurrence.objects.get(occurrence_number=occurrence_number)
-                    except Occurrence.DoesNotExist:
-                        error_message = "The occurrence number provided does not exist in the database"
-                        errors.append(
-                            {
-                                "row_index": row_index,
-                                "error_type": "invalid_occurrence_number",
-                                "data": model_data,
-                                "error_message": error_message,
-                            }
-                        )
-                        return
-                else:
-                    if (
-                        model_data.get("occurrence_name", None)
-                        and Occurrence.objects.filter(occurrence_name=model_data["occurrence_name"]).exists()
-                    ):
-                        error_message = (
-                            f"An occurrence with the name '{model_data['occurrence_name']}' "
-                            "already exists in the database. Please populate the Occurrence "
-                            "Number or OCC Occurrence Migrated From ID field instead."
-                        )
-                        errors.append(
-                            {
-                                "row_index": row_index,
-                                "error_type": "duplicate_occurrence_name",
-                                "data": model_data,
-                                "error_message": error_message,
-                            }
-                        )
-                        return
-
-                    if not occ_migrated_from_id:
-                        ocr_instance = model_instances[OccurrenceReport._meta.model_name]
-                        occ_name_from_cols = model_data.pop("occurrence_name", None)
-                        
-                        current_model_instance = Occurrence.clone_from_occurrence_report(
-                            ocr_instance,
-                            occurrence_name=occ_name_from_cols,
-                            extra_fields=model_data
-                        )
-                    else:
-                        occ_is_new = not Occurrence.objects.filter(migrated_from_id=occ_migrated_from_id).exists()
-                        if not occ_is_new:
-                            current_model_instance = Occurrence.objects.get(migrated_from_id=occ_migrated_from_id)
-                        else:
-                            ocr_instance = model_instances[OccurrenceReport._meta.model_name]
-                            occ_name_from_cols = model_data.pop("occurrence_name", None)
-                            
-                            # Check for new_occurrence_name from approval details if present
-                            _orfapp_data_for_name = dict(
-                                zip(
-                                    models.get(OccurrenceReportApprovalDetails._meta.model_name, {}).get(
-                                        "field_names", []
-                                    ),
-                                    models.get(OccurrenceReportApprovalDetails._meta.model_name, {}).get("values", []),
-                                )
-                            )
-                            _new_name = _orfapp_data_for_name.get("new_occurrence_name")
-                            if _new_name:
-                                occ_name_from_cols = _new_name
-
-                            current_model_instance = Occurrence.clone_from_occurrence_report(
-                                ocr_instance,
-                                occurrence_name=occ_name_from_cols,
-                                migrated_from_id=occ_migrated_from_id,
-                                extra_fields=model_data
-                            )
-
-                        if not current_model_instance.group_type == self.schema.group_type:
-                            error_message = (
-                                "The group type of the occurrence does not match the group type of the schema"
-                            )
-                            errors.append(
-                                {
-                                    "row_index": row_index,
-                                    "error_type": "invalid_occurrence_group_type",
-                                    "data": model_data,
-                                    "error_message": error_message,
-                                }
-                            )
-                            return
-
-                        occurrence_report = model_instances[OccurrenceReport._meta.model_name]
-                        if (
-                            current_model_instance.species
-                            and not current_model_instance.species == occurrence_report.species
-                        ):
-                            error_message = (
-                                "The species of the occurrence does not match the species of the occurrence report"
-                            )
-                            errors.append(
-                                {
-                                    "row_index": row_index,
-                                    "error_type": "invalid_occurrence_species",
-                                    "data": model_data,
-                                    "error_message": error_message,
-                                }
-                            )
-                            return
-
-                        if (
-                            current_model_instance.community
-                            and not current_model_instance.community == occurrence_report.community
-                        ):
-                            error_message = (
-                                "The community of the occurrence does not match the community of the occurrence report"
-                            )
-                            errors.append(
-                                {
-                                    "row_index": row_index,
-                                    "error_type": "invalid_occurrence_community",
-                                    "data": model_data,
-                                    "error_message": error_message,
-                                }
-                            )
-                            return
-
             elif current_model_name == SubmitterInformation._meta.model_name:
                 # Submitter information is created automatically when an OccurrenceReport is created
                 occurrence_report = model_instances[OccurrenceReport._meta.model_name]
@@ -7308,7 +7168,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             # TODO: Optimize this relationships finder to minimise looping and move to a separate function
             if current_model_name not in [
                 OccurrenceReport._meta.model_name,
-                Occurrence._meta.model_name,
                 SubmitterInformation._meta.model_name,
             ]:
                 # Relate this model to it's parent instance
@@ -7481,11 +7340,20 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 )
                 return
 
+        # Ensure ocr_instance is valid and exists in the database before running post-processing
+        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
+        if ocr_instance and ocr_instance.pk:
+            try:
+                ocr_instance.refresh_from_db()
+            except OccurrenceReport.DoesNotExist:
+                return
+        else:
+            return
+
         # Post-processing: propagate OccurrenceReport.observation_date -> obs_date on
         # any child model instance that has an obs_date field and was not given an
         # explicit value via the import schema (i.e. obs_date is still None).
         # Group by class so we issue one UPDATE per model rather than one per instance.
-        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
         if ocr_instance and ocr_instance.observation_date:
             _obs_date_pks_by_class: dict[type, list] = {}
             for _child_instance in model_instances.values():
@@ -7560,7 +7428,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         # Post-processing: auto-fill SubmitterInformation for bulk imports.
         # The record is auto-created (name + contact_details from Ledger) when the OCR is
         # saved; here we additionally assign the "DBCA S&C" submitter category.
-        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
         if ocr_instance and ocr_instance.submitter_information_id:
             try:
                 _dbca_sc_category = SubmitterCategory.objects.get(name="DBCA S&C")
@@ -7581,39 +7448,211 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 )
                 return
 
-        # Post-processing: auto-link OccurrenceReport.occurrence for approved OCRs
-        # from OccurrenceReportApprovalDetails when it hasn't already been set
-        # (e.g. by an Occurrence model row linking via occurrence_reports.add()).
-        ocr_instance = model_instances.get(OccurrenceReport._meta.model_name)
-        approval_instance = model_instances.get(OccurrenceReportApprovalDetails._meta.model_name)
+        # Post-processing: Ensure OccurrenceReportApprovalDetails exists for
+        # OCRs at the approver stage (with_approver or approved) even if all
+        # ORFAPP columns were left blank in the spreadsheet.
         if (
             ocr_instance
-            and approval_instance
+            and ocr_instance.processing_status in (
+                OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
+                OccurrenceReport.PROCESSING_STATUS_APPROVED,
+            )
+        ):
+            approval_instance = model_instances.get(OccurrenceReportApprovalDetails._meta.model_name)
+            if not approval_instance:
+                # Check if it already exists (e.g. in update mode) or create a fresh record
+                approval_instance = getattr(ocr_instance, "approval_details", None)
+                if not approval_instance:
+                    approval_instance = OccurrenceReportApprovalDetails.objects.create(
+                        occurrence_report=ocr_instance
+                    )
+                model_instances[OccurrenceReportApprovalDetails._meta.model_name] = approval_instance
+
+            # If new_occurrence_name was not provided in ORFAPP columns, but the submitter
+            # populated `ocr_for_occ_name` on the OccurrenceReport, sync it across.
+            if not approval_instance.new_occurrence_name and not approval_instance.occurrence and getattr(ocr_instance, "ocr_for_occ_name", None):
+                approval_instance.new_occurrence_name = ocr_instance.ocr_for_occ_name
+                approval_instance.save()
+
+            # If occurrence was not provided in ORFAPP columns, but `ocr_for_occ_number`
+            # was specified on the OccurrenceReport, resolve and link it.
+            if not approval_instance.occurrence_id and getattr(ocr_instance, "ocr_for_occ_number", None):
+                try:
+                    existing_occ = Occurrence.objects.get(occurrence_number=ocr_instance.ocr_for_occ_number)
+                    approval_instance.occurrence = existing_occ
+                    approval_instance.save()
+                except Occurrence.DoesNotExist:
+                    pass
+
+        # Post-processing: Occurrence resolution, cloning, and linking
+        approval_instance = model_instances.get(OccurrenceReportApprovalDetails._meta.model_name)
+
+        if (
+            ocr_instance
             and ocr_instance.processing_status == OccurrenceReport.PROCESSING_STATUS_APPROVED
             and not ocr_instance.occurrence_id
         ):
-            if approval_instance.occurrence_id:
-                # Case 1: existing OCC assigned via the "ORFAPP Occurrence" column.
-                # If OCC columns also populated additional fields on this OCC, those are
-                # already applied via the OCC model loop; just set the FK on the OCR.
-                ocr_instance.occurrence = approval_instance.occurrence
-                ocr_instance.save()
-            elif approval_instance.new_occurrence_name:
-                existing_occ_from_occ_columns = model_instances.get(Occurrence._meta.model_name)
-                if existing_occ_from_occ_columns:
-                    # Case 2a: OCC was created via OCC columns (migrated_from_id path).
-                    # The occurrence_name was already applied in the model loop; just link it.
-                    ocr_instance.occurrence = existing_occ_from_occ_columns
-                    ocr_instance.save()
+            # Refresh from DB so all freshly saved 1-to-1 reverse relations
+            # (habitat_composition, habitat_condition, location, etc.) are available.
+            ocr_instance.refresh_from_db()
+
+            target_occ = None
+            occ_mode = "create"
+
+            try:
+                # -------------------------------------------------------------
+                # 1. Resolve existing Occurrence if specified
+                # -------------------------------------------------------------
+                occ_migrated_from_id = occ_model_data.pop("migrated_from_id", None)
+                occurrence_number = occ_model_data.pop("occurrence_number", None)
+
+                if occ_migrated_from_id and occurrence_number:
+                    errors.append({
+                        "row_index": row_index,
+                        "error_type": "ambiguous_occurrence_identifier",
+                        "data": occ_model_data,
+                        "error_message": "Both migrated_from_id and occurrence_number were provided. Please provide only one.",
+                    })
+                    return
+
+                if occ_migrated_from_id:
+                    _occ_prefix = settings.OCC_BULK_IMPORT_MIGRATED_FROM_ID_PREFIX
+                    _pad = settings.OCR_BULK_IMPORT_TASK_ID_PAD_LENGTH
+                    _task_pk = self.pk if self.pk is not None else 0
+                    occ_migrated_from_id = f"{_occ_prefix}-{_task_pk:0{_pad}d}-{occ_migrated_from_id}"
+
+                if occurrence_number:
+                    try:
+                        target_occ = Occurrence.objects.get(occurrence_number=occurrence_number)
+                        occ_mode = "update"
+                    except Occurrence.DoesNotExist:
+                        errors.append({
+                            "row_index": row_index,
+                            "error_type": "invalid_occurrence_number",
+                            "data": occ_model_data,
+                            "error_message": "The occurrence number provided does not exist in the database.",
+                        })
+                        return
+                elif occ_migrated_from_id and Occurrence.objects.filter(migrated_from_id=occ_migrated_from_id).exists():
+                    target_occ = Occurrence.objects.get(migrated_from_id=occ_migrated_from_id)
+                    occ_mode = "update"
+                elif approval_instance and approval_instance.occurrence_id:
+                    target_occ = approval_instance.occurrence
+                    occ_mode = "update"
+
+                # -------------------------------------------------------------
+                # 2. If existing OCC found, apply any extra fields from OCC columns
+                # -------------------------------------------------------------
+                if target_occ:
+                    occ_name = occ_model_data.pop("occurrence_name", None)
+                    if occ_name and occ_name != target_occ.occurrence_name:
+                        target_occ.occurrence_name = occ_name
+                    for field, value in occ_model_data.items():
+                        setattr(target_occ, field, value)
+                    target_occ.save()
+
+                # -------------------------------------------------------------
+                # 3. Otherwise, create and clone new Occurrence
+                # -------------------------------------------------------------
                 else:
-                    # Case 2b: pure ORFAPP path — create a new Occurrence from new_occurrence_name
-                    # and clone all sub-models using the helper method.
-                    new_occ = Occurrence.clone_from_occurrence_report(
-                        ocr_instance, 
-                        occurrence_name=approval_instance.new_occurrence_name
+                    occ_name_from_cols = occ_model_data.pop("occurrence_name", None)
+                    if approval_instance and approval_instance.new_occurrence_name:
+                        occ_name_from_cols = approval_instance.new_occurrence_name
+
+                    if occ_name_from_cols and Occurrence.objects.filter(occurrence_name=occ_name_from_cols).exists():
+                        errors.append({
+                            "row_index": row_index,
+                            "error_type": "duplicate_occurrence_name",
+                            "data": occ_model_data,
+                            "error_message": (
+                                f"An occurrence with the name '{occ_name_from_cols}' already exists in the database. "
+                                "Please populate the Occurrence Number or OCC Migrated From ID field instead."
+                            ),
+                        })
+                        return
+
+                    # All 1-to-1s exist on ocr_instance now — clone safely:
+                    clone_kwargs = {
+                        "occurrence_name": occ_name_from_cols,
+                        "extra_fields": occ_model_data,
+                    }
+                    if occ_migrated_from_id:
+                        clone_kwargs["migrated_from_id"] = occ_migrated_from_id
+
+                    target_occ = Occurrence.clone_from_occurrence_report(
+                        ocr_instance,
+                        **clone_kwargs
                     )
-                    ocr_instance.occurrence = new_occ
-                    ocr_instance.save()
+
+            except IntegrityError as e:
+                error_str = str(e)
+                if "unique_occurrence_name_per_species" in error_str:
+                    friendly_message = (
+                        f"An occurrence with the name '{target_occ.occurrence_name if target_occ else ''}' "
+                        "already exists for this species. Please link to the existing occurrence instead."
+                    )
+                elif "unique_occurrence_name_per_community" in error_str:
+                    friendly_message = (
+                        f"An occurrence with the name '{target_occ.occurrence_name if target_occ else ''}' "
+                        "already exists for this community. Please link to the existing occurrence instead."
+                    )
+                else:
+                    friendly_message = f"Error creating/updating occurrence: {e}"
+                errors.append({
+                    "row_index": row_index,
+                    "error_type": "integrity",
+                    "data": occ_model_data,
+                    "error_message": friendly_message,
+                })
+                return
+            except ValidationError as e:
+                errors.append({
+                    "row_index": row_index,
+                    "error_type": "validation",
+                    "data": occ_model_data,
+                    "error_message": str(e.message if hasattr(e, "message") else e),
+                })
+                return
+
+            # -------------------------------------------------------------
+            # 4. Validate species, community, group_type matches
+            # -------------------------------------------------------------
+            if target_occ:
+                if target_occ.group_type != self.schema.group_type:
+                    errors.append({
+                        "row_index": row_index,
+                        "error_type": "invalid_occurrence_group_type",
+                        "data": occ_model_data,
+                        "error_message": "The group type of the occurrence does not match the group type of the schema.",
+                    })
+                    return
+
+                if target_occ.species and target_occ.species != ocr_instance.species:
+                    errors.append({
+                        "row_index": row_index,
+                        "error_type": "invalid_occurrence_species",
+                        "data": occ_model_data,
+                        "error_message": "The species of the occurrence does not match the species of the occurrence report.",
+                    })
+                    return
+
+                if target_occ.community and target_occ.community != ocr_instance.community:
+                    errors.append({
+                        "row_index": row_index,
+                        "error_type": "invalid_occurrence_community",
+                        "data": occ_model_data,
+                        "error_message": "The community of the occurrence does not match the community of the occurrence report.",
+                    })
+                    return
+
+                # Link bidirectional relationship
+                target_occ.occurrence_reports.add(ocr_instance)
+                ocr_instance.occurrence = target_occ
+                ocr_instance.save()
+
+                self.ocr_bulk_import_generate_action_logs(occ_mode, target_occ)
+                model_instances[Occurrence._meta.model_name] = target_occ
+
         return
 
     def ocr_bulk_import_generate_action_logs(self, mode, model_instance):

@@ -963,7 +963,7 @@ export default {
                 cancelButtonText: 'Cancel',
                 customClass: {
                     confirmButton: 'btn btn-primary',
-                    cancelButton: 'btn btn-secondary',
+                    cancelButton: 'btn btn-secondary me-2',
                 },
                 buttonsStyling: false,
                 reverseButtons: true,

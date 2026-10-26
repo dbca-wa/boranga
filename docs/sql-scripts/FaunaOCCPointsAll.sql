@@ -221,8 +221,8 @@ animal_obs AS (
     FROM boranga_occanimalobservation ao
     LEFT JOIN boranga_animalbehaviour ab ON ao.animal_behaviour_id = ab.id
     
-    INNER JOIN boranga_ocrplantcount ocr_pc ON ao.copied_ocr_animal_observation_id = ocr_pc.id
-    INNER JOIN boranga_occurrencereport ocr ON ocr_pc.occurrence_report_id = ocr.id
+    INNER JOIN boranga_ocranimalobservation ocr_ao ON ao.copied_ocr_animal_observation_id = ocr_ao.id
+    INNER JOIN boranga_occurrencereport ocr ON ocr_ao.occurrence_report_id = ocr.id
     INNER JOIN boranga_observationtime ot ON ocr.observation_time_id = ot.id
     INNER JOIN boranga_submitterinformation si ON ocr.submitter_information_id = si.id
     INNER JOIN boranga_animalhealth ah ON ao.animal_health_id = ah.id
