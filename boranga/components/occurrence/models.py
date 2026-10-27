@@ -6535,19 +6535,22 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                                 error_lines.append(str(e))
 
                         # Retrieve schema name safely (fallback to string representation or 'Unknown' if missing)
-                        schema_name = getattr(self.schema, "name", None) or str(self.schema) if self.schema else "Unknown Schema"
-                        
+                        schema_name = (
+                            getattr(self.schema, "name", None) or str(self.schema) if self.schema else "Unknown Schema"
+                        )
+
                         self.error_message = (
-                            f"Errors occurred during processing using schema '{schema_name}':\n\n" 
+                            f"Errors occurred during processing using schema '{schema_name}':\n\n"
                             + "\n".join(error_lines)
                         )
 
                     except Exception:
                         # Fallback to concise message if building the string fails
-                        schema_name = getattr(self.schema, "name", None) or str(self.schema) if self.schema else "Unknown Schema"
-                        self.error_message = (
-                            f"Errors occurred during processing using schema '{schema_name}':\n\n"
-                            + (failure_summary.get("error_message") if failure_summary else f"{len(errors)} rows failed")
+                        schema_name = (
+                            getattr(self.schema, "name", None) or str(self.schema) if self.schema else "Unknown Schema"
+                        )
+                        self.error_message = f"Errors occurred during processing using schema '{schema_name}':\n\n" + (
+                            failure_summary.get("error_message") if failure_summary else f"{len(errors)} rows failed"
                         )
                 else:
                     self.error_message = (
@@ -6643,7 +6646,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             mode = "update"
 
         # Universal Check: If this row has NO OccurrenceReport fields populated in the spreadsheet,
-        # it is a child-only row. If the parent doesn't exist yet, it's an error because 
+        # it is a child-only row. If the parent doesn't exist yet, it's an error because
         # a child cannot exist without a parent row preceding it!
         has_ocr_fields = False
         orc_ct = ct_models.ContentType.objects.get_for_model(OccurrenceReport)
@@ -6661,8 +6664,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     "data": row,
                     "error_message": (
                         f"Row {row_index} attempts to add child records for migrated_from_id "
-                        f"'{ocr_migrated_from_id}', but no parent OccurrenceReport row preceded it "
-                        "to create the parent record. Ensure a parent row with full details appears first."
+                        f"'{ocr_migrated_from_id}', but its parent OccurrenceReport record is missing. "
+                        f"This usually happens if the parent row failed validation, was skipped as a duplicate, "
+                        f"or was omitted from the spreadsheet. Please ensure a valid parent row appears first."
                     ),
                 }
             )
@@ -7451,26 +7455,25 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         # Post-processing: Ensure OccurrenceReportApprovalDetails exists for
         # OCRs at the approver stage (with_approver or approved) even if all
         # ORFAPP columns were left blank in the spreadsheet.
-        if (
-            ocr_instance
-            and ocr_instance.processing_status in (
-                OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
-                OccurrenceReport.PROCESSING_STATUS_APPROVED,
-            )
+        if ocr_instance and ocr_instance.processing_status in (
+            OccurrenceReport.PROCESSING_STATUS_WITH_APPROVER,
+            OccurrenceReport.PROCESSING_STATUS_APPROVED,
         ):
             approval_instance = model_instances.get(OccurrenceReportApprovalDetails._meta.model_name)
             if not approval_instance:
                 # Check if it already exists (e.g. in update mode) or create a fresh record
                 approval_instance = getattr(ocr_instance, "approval_details", None)
                 if not approval_instance:
-                    approval_instance = OccurrenceReportApprovalDetails.objects.create(
-                        occurrence_report=ocr_instance
-                    )
+                    approval_instance = OccurrenceReportApprovalDetails.objects.create(occurrence_report=ocr_instance)
                 model_instances[OccurrenceReportApprovalDetails._meta.model_name] = approval_instance
 
             # If new_occurrence_name was not provided in ORFAPP columns, but the submitter
             # populated `ocr_for_occ_name` on the OccurrenceReport, sync it across.
-            if not approval_instance.new_occurrence_name and not approval_instance.occurrence and getattr(ocr_instance, "ocr_for_occ_name", None):
+            if (
+                not approval_instance.new_occurrence_name
+                and not approval_instance.occurrence
+                and getattr(ocr_instance, "ocr_for_occ_name", None)
+            ):
                 approval_instance.new_occurrence_name = ocr_instance.ocr_for_occ_name
                 approval_instance.save()
 
@@ -7507,12 +7510,14 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 occurrence_number = occ_model_data.pop("occurrence_number", None)
 
                 if occ_migrated_from_id and occurrence_number:
-                    errors.append({
-                        "row_index": row_index,
-                        "error_type": "ambiguous_occurrence_identifier",
-                        "data": occ_model_data,
-                        "error_message": "Both migrated_from_id and occurrence_number were provided. Please provide only one.",
-                    })
+                    errors.append(
+                        {
+                            "row_index": row_index,
+                            "error_type": "ambiguous_occurrence_identifier",
+                            "data": occ_model_data,
+                            "error_message": "Both migrated_from_id and occurrence_number were provided. Please provide only one.",
+                        }
+                    )
                     return
 
                 if occ_migrated_from_id:
@@ -7526,12 +7531,14 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         target_occ = Occurrence.objects.get(occurrence_number=occurrence_number)
                         occ_mode = "update"
                     except Occurrence.DoesNotExist:
-                        errors.append({
-                            "row_index": row_index,
-                            "error_type": "invalid_occurrence_number",
-                            "data": occ_model_data,
-                            "error_message": "The occurrence number provided does not exist in the database.",
-                        })
+                        errors.append(
+                            {
+                                "row_index": row_index,
+                                "error_type": "invalid_occurrence_number",
+                                "data": occ_model_data,
+                                "error_message": "The occurrence number provided does not exist in the database.",
+                            }
+                        )
                         return
                 elif occ_migrated_from_id and Occurrence.objects.filter(migrated_from_id=occ_migrated_from_id).exists():
                     target_occ = Occurrence.objects.get(migrated_from_id=occ_migrated_from_id)
@@ -7560,15 +7567,17 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         occ_name_from_cols = approval_instance.new_occurrence_name
 
                     if occ_name_from_cols and Occurrence.objects.filter(occurrence_name=occ_name_from_cols).exists():
-                        errors.append({
-                            "row_index": row_index,
-                            "error_type": "duplicate_occurrence_name",
-                            "data": occ_model_data,
-                            "error_message": (
-                                f"An occurrence with the name '{occ_name_from_cols}' already exists in the database. "
-                                "Please populate the Occurrence Number or OCC Migrated From ID field instead."
-                            ),
-                        })
+                        errors.append(
+                            {
+                                "row_index": row_index,
+                                "error_type": "duplicate_occurrence_name",
+                                "data": occ_model_data,
+                                "error_message": (
+                                    f"An occurrence with the name '{occ_name_from_cols}' already exists in the database. "
+                                    "Please populate the Occurrence Number or OCC Migrated From ID field instead."
+                                ),
+                            }
+                        )
                         return
 
                     # All 1-to-1s exist on ocr_instance now — clone safely:
@@ -7579,10 +7588,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     if occ_migrated_from_id:
                         clone_kwargs["migrated_from_id"] = occ_migrated_from_id
 
-                    target_occ = Occurrence.clone_from_occurrence_report(
-                        ocr_instance,
-                        **clone_kwargs
-                    )
+                    target_occ = Occurrence.clone_from_occurrence_report(ocr_instance, **clone_kwargs)
 
             except IntegrityError as e:
                 error_str = str(e)
@@ -7598,20 +7604,24 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                     )
                 else:
                     friendly_message = f"Error creating/updating occurrence: {e}"
-                errors.append({
-                    "row_index": row_index,
-                    "error_type": "integrity",
-                    "data": occ_model_data,
-                    "error_message": friendly_message,
-                })
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "integrity",
+                        "data": occ_model_data,
+                        "error_message": friendly_message,
+                    }
+                )
                 return
             except ValidationError as e:
-                errors.append({
-                    "row_index": row_index,
-                    "error_type": "validation",
-                    "data": occ_model_data,
-                    "error_message": str(e.message if hasattr(e, "message") else e),
-                })
+                errors.append(
+                    {
+                        "row_index": row_index,
+                        "error_type": "validation",
+                        "data": occ_model_data,
+                        "error_message": str(e.message if hasattr(e, "message") else e),
+                    }
+                )
                 return
 
             # -------------------------------------------------------------
@@ -7619,30 +7629,36 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             # -------------------------------------------------------------
             if target_occ:
                 if target_occ.group_type != self.schema.group_type:
-                    errors.append({
-                        "row_index": row_index,
-                        "error_type": "invalid_occurrence_group_type",
-                        "data": occ_model_data,
-                        "error_message": "The group type of the occurrence does not match the group type of the schema.",
-                    })
+                    errors.append(
+                        {
+                            "row_index": row_index,
+                            "error_type": "invalid_occurrence_group_type",
+                            "data": occ_model_data,
+                            "error_message": "The group type of the occurrence does not match the group type of the schema.",
+                        }
+                    )
                     return
 
                 if target_occ.species and target_occ.species != ocr_instance.species:
-                    errors.append({
-                        "row_index": row_index,
-                        "error_type": "invalid_occurrence_species",
-                        "data": occ_model_data,
-                        "error_message": "The species of the occurrence does not match the species of the occurrence report.",
-                    })
+                    errors.append(
+                        {
+                            "row_index": row_index,
+                            "error_type": "invalid_occurrence_species",
+                            "data": occ_model_data,
+                            "error_message": "The species of the occurrence does not match the species of the occurrence report.",
+                        }
+                    )
                     return
 
                 if target_occ.community and target_occ.community != ocr_instance.community:
-                    errors.append({
-                        "row_index": row_index,
-                        "error_type": "invalid_occurrence_community",
-                        "data": occ_model_data,
-                        "error_message": "The community of the occurrence does not match the community of the occurrence report.",
-                    })
+                    errors.append(
+                        {
+                            "row_index": row_index,
+                            "error_type": "invalid_occurrence_community",
+                            "data": occ_model_data,
+                            "error_message": "The community of the occurrence does not match the community of the occurrence report.",
+                        }
+                    )
                     return
 
                 # Link bidirectional relationship
