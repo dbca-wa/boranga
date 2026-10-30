@@ -45,7 +45,8 @@ ocr AS (
         o.last_modified_by,
         o.approved_by,
         si.name as submitter,
-        si.organisation
+        si.organisation,
+        o.comments
     FROM boranga_occurrencereport o
     INNER JOIN gt ON o.group_type_id = gt.id
     INNER JOIN boranga_submitterinformation si ON o.submitter_information_id = si.id
@@ -340,6 +341,7 @@ SELECT
     loc.district_name                              AS DISTRICT,
 
     -- Report metadata
+    ocr.comments                                            AS ORF_COMM,
     ocr.record_source                                       AS ORF_SOURCE,
     ocr.processing_status                                   AS ORF_STATUS,
     ocr.submitter                                           AS SUBMITTER,
