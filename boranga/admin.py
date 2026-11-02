@@ -259,7 +259,7 @@ def export_system_group_permissions(modeladmin, request, queryset):
     return response
 
 
-class CustomSystemGroupAdmin(SystemGroupAdmin):
+class CustomSystemGroupAdmin(DeleteProtectedModelAdminMixin, SystemGroupAdmin):
     """
     Overriding the SystemGroupAdmin from ledger.accounts.admin,
     to remove ledger_permissions selection field for DjangoAdmin SystemGroup on Admin page
