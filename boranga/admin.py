@@ -155,12 +155,9 @@ class CustomSystemGroupPermissionInlineForm(SystemGroupPermissionInline.form):
 
         # External group: prevent adding someone who already has internal groups
         else:
-            is_internal = (
-                boranga_helpers.is_internal_by_user_id(emailuser.id)
-                or boranga_helpers.belongs_to_groups_by_user_id(
-                    emailuser.id, [settings.GROUP_NAME_INTERNAL_CONTRIBUTOR]
-                )
-            )
+            is_internal = boranga_helpers.is_internal_by_user_id(
+                emailuser.id
+            ) or boranga_helpers.belongs_to_groups_by_user_id(emailuser.id, [settings.GROUP_NAME_INTERNAL_CONTRIBUTOR])
             if is_internal:
                 raise ValidationError(
                     f"User {emailuser.email} already belongs to an internal group "
@@ -174,8 +171,7 @@ class CustomSystemGroupPermissionInlineForm(SystemGroupPermissionInline.form):
             return cleaned_data
 
         raise ValidationError(
-            f"The email address {emailuser.email} is blacklisted. "
-            "Please remove the email from the blacklist first."
+            f"The email address {emailuser.email} is blacklisted. Please remove the email from the blacklist first."
         )
 
 
