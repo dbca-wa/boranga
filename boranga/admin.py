@@ -310,21 +310,11 @@ class CustomSystemGroupAdmin(DeleteProtectedModelAdminMixin, SystemGroupAdmin):
         return actions
 
     def get_fieldsets(self, request, obj=None):
-        """Remove the ledger_permissions checkbox from the Admin page, if user is DjangoAdmin and NOT superuser"""
-        fieldsets = super(SystemGroupAdmin, self).get_fieldsets(request, obj)
-        if not obj:
-            return fieldsets
-        if request.user.is_superuser:
-            return fieldsets
-        elif boranga_helpers.is_django_admin(request):
-            fieldsets = deepcopy(fieldsets)
-            for fieldset in fieldsets:
-                if "permissions" in fieldset[1]["fields"]:
-                    if type(fieldset[1]["fields"]) is tuple:
-                        fieldset[1]["fields"] = list(fieldset[1]["fields"])
-                    fieldset[1]["fields"].remove("permissions")
-
-        return fieldsets
+        """Remove the ledger_permissions checkbox from the Admin page, if user is not a superuser"""
+        exclude = list(super().get_exclude(request, obj) or [])
+        if not request.user.is_superuser:
+            exclude.append("permissions")
+        return exclude
 
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
