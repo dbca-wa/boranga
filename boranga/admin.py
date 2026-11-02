@@ -309,7 +309,7 @@ class CustomSystemGroupAdmin(DeleteProtectedModelAdminMixin, SystemGroupAdmin):
         )
         return actions
 
-    def get_fieldsets(self, request, obj=None):
+    def get_exclude(self, request, obj=None):
         """Remove the ledger_permissions checkbox from the Admin page, if user is not a superuser"""
         exclude = list(super().get_exclude(request, obj) or [])
         if not request.user.is_superuser:
