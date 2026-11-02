@@ -3,6 +3,7 @@ from copy import deepcopy
 
 from csvexport.actions import csvexport
 from django.conf import settings
+from django.contrib.admin import AdminSite
 from django.contrib.auth.models import Group
 from django.contrib.gis import admin
 from django.forms import ValidationError
@@ -15,6 +16,14 @@ from ledger_api_client.managed_models import SystemGroup, SystemGroupPermission
 from boranga import helpers as boranga_helpers
 from boranga.components.main.models import ArchivableModel
 from boranga.components.users.models import ExternalContributorBlacklist
+
+
+class BorangaAdminSite(AdminSite):
+    def has_permission(self, request):
+        return (
+            super().has_permission(request)  # Checks is_active and is_staff
+            and (request.user.is_superuser or boranga_helpers.is_django_admin(request))
+        )
 
 
 class DeleteProtectedModelAdmin(admin.ModelAdmin):
