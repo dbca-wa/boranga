@@ -65,7 +65,7 @@
         "prettier": "^3.3"
     },
     "overrides": {
-        "minimatch": "^10.2.2",
+        "minimatch": "^11.0.4",
         "svgo": "^4.0.0"
     },
     "allowScripts": {
