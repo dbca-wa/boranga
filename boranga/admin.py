@@ -1,5 +1,4 @@
 import csv
-from copy import deepcopy
 
 from csvexport.actions import csvexport
 from django.conf import settings
