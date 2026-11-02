@@ -102,6 +102,8 @@ if SHOW_DEBUG_TOOLBAR:
 
 STATIC_URL = "/static/"
 
+INSTALLED_APPS = ["boranga.apps.BorangaAdminConfig" if app == "django.contrib.admin" else app for app in INSTALLED_APPS]
+
 INSTALLED_APPS += [
     "webtemplate_dbca",
     "boranga",

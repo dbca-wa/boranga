@@ -1,5 +1,4 @@
 import csv
-from copy import deepcopy
 
 from csvexport.actions import csvexport
 from django.conf import settings
@@ -17,8 +16,11 @@ from boranga.components.main.models import ArchivableModel
 from boranga.components.users.models import ExternalContributorBlacklist
 
 
-class DeleteProtectedModelAdmin(admin.ModelAdmin):
-    """Stops regular users from deleting objects in the admin but still allow superusers to do so."""
+class DeleteProtectedModelAdminMixin:
+    """Stops regular users from deleting objects in the admin but still allow superusers to do so.
+
+    Mixin version for use when we need to also inherit from an external source e.g. ledger api client
+    """
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -28,6 +30,15 @@ class DeleteProtectedModelAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+
+class DeleteProtectedModelAdmin(DeleteProtectedModelAdminMixin, admin.ModelAdmin):
+    """
+    Backwards-compatible base class.
+    Existing admins inheriting from this continue to work unchanged.
+    """
+
+    pass
 
 
 @admin.action(description="Mark as archived")
@@ -146,12 +157,9 @@ class CustomSystemGroupPermissionInlineForm(SystemGroupPermissionInline.form):
 
         # External group: prevent adding someone who already has internal groups
         else:
-            is_internal = (
-                boranga_helpers.is_internal_by_user_id(emailuser.id)
-                or boranga_helpers.belongs_to_groups_by_user_id(
-                    emailuser.id, [settings.GROUP_NAME_INTERNAL_CONTRIBUTOR]
-                )
-            )
+            is_internal = boranga_helpers.is_internal_by_user_id(
+                emailuser.id
+            ) or boranga_helpers.belongs_to_groups_by_user_id(emailuser.id, [settings.GROUP_NAME_INTERNAL_CONTRIBUTOR])
             if is_internal:
                 raise ValidationError(
                     f"User {emailuser.email} already belongs to an internal group "
@@ -165,8 +173,7 @@ class CustomSystemGroupPermissionInlineForm(SystemGroupPermissionInline.form):
             return cleaned_data
 
         raise ValidationError(
-            f"The email address {emailuser.email} is blacklisted. "
-            "Please remove the email from the blacklist first."
+            f"The email address {emailuser.email} is blacklisted. Please remove the email from the blacklist first."
         )
 
 
@@ -241,7 +248,7 @@ def export_system_group_permissions(modeladmin, request, queryset):
     return response
 
 
-class CustomSystemGroupAdmin(SystemGroupAdmin):
+class CustomSystemGroupAdmin(DeleteProtectedModelAdminMixin, SystemGroupAdmin):
     """
     Overriding the SystemGroupAdmin from ledger.accounts.admin,
     to remove ledger_permissions selection field for DjangoAdmin SystemGroup on Admin page
@@ -291,28 +298,20 @@ class CustomSystemGroupAdmin(SystemGroupAdmin):
         )
         return actions
 
-    def get_fieldsets(self, request, obj=None):
-        """Remove the ledger_permissions checkbox from the Admin page, if user is DjangoAdmin and NOT superuser"""
-        fieldsets = super(SystemGroupAdmin, self).get_fieldsets(request, obj)
-        if not obj:
-            return fieldsets
-        if request.user.is_superuser:
-            return fieldsets
-        elif boranga_helpers.is_django_admin(request):
-            fieldsets = deepcopy(fieldsets)
-            for fieldset in fieldsets:
-                if "permissions" in fieldset[1]["fields"]:
-                    if type(fieldset[1]["fields"]) is tuple:
-                        fieldset[1]["fields"] = list(fieldset[1]["fields"])
-                    fieldset[1]["fields"].remove("permissions")
-
-        return fieldsets
+    def get_exclude(self, request, obj=None):
+        """Remove the ledger_permissions checkbox from the Admin page, if user is not a superuser"""
+        exclude = list(super().get_exclude(request, obj) or [])
+        if not request.user.is_superuser:
+            exclude.append("permissions")
+        return exclude
 
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
             return []
-        elif boranga_helpers.is_django_admin(request):
-            return ["name"]  # make fields readonly when editing an existing object
+        return ["name"]  # make fields readonly when editing an existing object
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
 
 
 admin.site.unregister(Group)
