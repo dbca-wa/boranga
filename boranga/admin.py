@@ -30,7 +30,7 @@ class BorangaAdminSite(AdminSite):
 class DeleteProtectedModelAdminMixin:
     """Stops regular users from deleting objects in the admin but still allow superusers to do so.
 
-    Mixin version for use when we nee do also inherit from an external source e.g. ledger api client
+    Mixin version for use when we need to also inherit from an external source e.g. ledger api client
     """
 
     def get_actions(self, request):
