@@ -1,9 +1,10 @@
+import django.contrib.admin.apps as admin_apps
 from django.apps import AppConfig
 from django.conf import settings
-from django.contrib.admin.apps import AdminConfig
 
 
 class BorangaConfig(AppConfig):
+    default = True
     name = "boranga"
     verbose_name = settings.SYSTEM_NAME
 
@@ -11,5 +12,6 @@ class BorangaConfig(AppConfig):
         from boranga.components.users import signals  # noqa
 
 
-class BorangaAdminConfig(AdminConfig):
-    default_site = "boranga.admin.BorangaAdminSite"
+class BorangaAdminConfig(admin_apps.AdminConfig):
+    default = False
+    default_site = "boranga.admin_site.BorangaAdminSite"
