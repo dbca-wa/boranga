@@ -331,6 +331,9 @@ class CustomSystemGroupAdmin(DeleteProtectedModelAdminMixin, SystemGroupAdmin):
             return []
         return ["name"]  # make fields readonly when editing an existing object
 
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
 
 admin.site.unregister(Group)
 admin.site.unregister(SystemGroup)
