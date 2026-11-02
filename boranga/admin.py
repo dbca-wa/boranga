@@ -27,8 +27,11 @@ class BorangaAdminSite(AdminSite):
         )
 
 
-class DeleteProtectedModelAdmin(admin.ModelAdmin):
-    """Stops regular users from deleting objects in the admin but still allow superusers to do so."""
+class DeleteProtectedModelAdminMixin:
+    """Stops regular users from deleting objects in the admin but still allow superusers to do so.
+
+    Mixin version for use when we nee do also inherit from an external source e.g. ledger api client
+    """
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -38,6 +41,15 @@ class DeleteProtectedModelAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+
+class DeleteProtectedModelAdmin(DeleteProtectedModelAdminMixin, admin.ModelAdmin):
+    """
+    Backwards-compatible base class.
+    Existing admins inheriting from this continue to work unchanged.
+    """
+
+    pass
 
 
 @admin.action(description="Mark as archived")
