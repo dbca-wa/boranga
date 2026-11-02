@@ -320,8 +320,7 @@ class CustomSystemGroupAdmin(SystemGroupAdmin):
     def get_readonly_fields(self, request, obj=None):
         if request.user.is_superuser:
             return []
-        elif boranga_helpers.is_django_admin(request):
-            return ["name"]  # make fields readonly when editing an existing object
+        return ["name"]  # make fields readonly when editing an existing object
 
 
 admin.site.unregister(Group)
