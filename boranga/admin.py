@@ -18,7 +18,8 @@ from boranga.components.users.models import ExternalContributorBlacklist
 
 
 class BorangaAdminSite(AdminSite):
-    """ Enforce the rule that only superusers and members of the django admin system group can access the admin """
+    """Enforce the rule that only superusers and members of the django admin system group can access the admin"""
+
     def has_permission(self, request):
         return (
             super().has_permission(request)  # Checks is_active and is_staff
