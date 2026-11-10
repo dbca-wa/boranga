@@ -4,6 +4,7 @@ import os
 from zipfile import ZipFile
 
 import geopandas as gpd
+import shapely
 from django.apps import apps
 from django.conf import settings
 from django.contrib.gis.gdal import SpatialReference
@@ -325,12 +326,12 @@ def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, 
     """
     if gdf.empty:
         if archive_files_qs:
-            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+            instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
         raise ValidationError(f"Geometry is empty in {file_name}")
 
     if gdf.geometry.crs is None:
         if archive_files_qs:
-            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+            instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
         raise ValidationError(f"Geometry in {file_name} has no coordinate reference system (CRS)")
 
     # Determine the SRID of the original uploaded geometry
@@ -353,13 +354,13 @@ def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, 
         gdf_transform = _to_default_crs(gdf)
     except Exception as e:
         if archive_files_qs:
-            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+            instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
         raise ValidationError(
             f"Unable to transform coordinates in {file_name} "
             f"from SRID {original_srid} to EPSG:{settings.DEFAULT_SRID}: {e}"
         )
 
-    # Drop rows with null/missing geometry before any further processing
+    # Drop rows with null/missing geometry
     null_mask = gdf_transform.geometry.isna()
     if null_mask.any():
         null_count = int(null_mask.sum())
@@ -367,65 +368,68 @@ def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, 
         gdf_transform = gdf_transform[~null_mask]
         if gdf_transform.empty:
             if archive_files_qs:
-                instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+                instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
             raise ValidationError(f"No valid geometries found in {file_name}")
 
-    geometries = gdf_transform.geometry  # GeoSeries
+    geometries = gdf_transform.geometry
 
-    # Only accept points or polygons
-    geom_type = geometries.geom_type.values[0]
-    if geom_type not in ("Point", "MultiPoint", "Polygon", "MultiPolygon"):
-        raise ValidationError(f"Geometry of type {geom_type} not allowed")
+    # 1. Validate ALL geometry types in the layer, not just the first row
+    allowed_types = {"Point", "MultiPoint", "Polygon", "MultiPolygon"}
+    disallowed_types = set(geometries.geom_type.unique()) - allowed_types
+    if disallowed_types:
+        if archive_files_qs:
+            instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
+        raise ValidationError(f"Geometry type(s) {', '.join(disallowed_types)} in {file_name} are not allowed")
 
-    gdf_transform["valid"] = False
-    for idx, row in gdf_transform.iterrows():
-        srid = settings.DEFAULT_SRID  # We transformed to DEFAULT_SRID above
+    instance_name = instance._meta.model.__name__
+    fk_field = foreign_key_field if foreign_key_field else instance_name.lower()
+    geometry_model = apps.get_model("boranga", f"{instance_name}Geometry")
 
-        geometry = GEOSGeometry(row.geometry.wkt, srid=srid)
-        original_geometry = GEOSGeometry(gdf.loc[idx, "geometry"].wkt, srid=original_srid)
+    # 2. Use transaction to prevent partial inserts if one feature fails
+    with transaction.atomic():
+        for idx, row in gdf_transform.iterrows():
+            srid = settings.DEFAULT_SRID
 
-        if "source_" not in gdf_transform:
-            gdf_transform["source_"] = file_name
+            # Ensure 2D geometries to prevent PostGIS dim mismatch if shapefile had 3D/Z values
+            geom_2d = shapely.force_2d(row.geometry)
+            orig_geom_2d = shapely.force_2d(gdf.loc[idx, "geometry"])
 
-        gdf_transform["valid"] = True
+            geometry = GEOSGeometry(geom_2d.wkt, srid=srid)
+            original_geometry = GEOSGeometry(orig_geom_2d.wkt, srid=original_srid)
 
-        instance_name = instance._meta.model.__name__
-        fk_field = foreign_key_field if foreign_key_field else instance_name.lower()
+            # Validate topology before hitting the database
+            if not geometry.valid:
+                raise ValidationError(f"Feature {idx} in {file_name} has invalid geometry: {geometry.valid_reason}")
 
-        geometry_model = apps.get_model("boranga", f"{instance_name}Geometry")
-        geometry_model.objects.create(
-            **{
-                fk_field: instance,
-                "geometry": geometry,
-                "original_geometry_ewkb": original_geometry.ewkb,
-                "drawn_by": request.user.id,
-            }
-        )
+            geometry_model.objects.create(
+                **{
+                    fk_field: instance,
+                    "geometry": geometry,
+                    "original_geometry_ewkb": original_geometry.ewkb,
+                    "drawn_by": request.user.id,
+                }
+            )
 
-    instance.save(version_user=request.user, no_revision=True)
+        instance.save(version_user=request.user, no_revision=True)
+
     return True
 
 
 def validate_map_files(request, instance, foreign_key_field=None):
-    # Validates shapefiles and GeoJSON files uploaded via the proposal map or the competitive process map.
-    # Shapefiles are valid when the shp, shx, and dbf extensions are provided.
-    # GeoJSON files (.geojson, .json) are also accepted.
-
     valid_geometry_saved = False
 
     if not instance.shapefile_documents.exists():
         raise ValidationError(
             "Please attach at least a .shp, .shx, and .dbf file, a .geojson/.json file, "
-            "or a .zip archive (the .prj file is optional but recommended for shapefiles)"
+            "or a .zip archive (a .prj file is required for shapefiles)"
         )
 
-    # Check for GeoJSON files first
-    geojson_file_qs = instance.shapefile_documents.filter(Q(name__endswith=".geojson") | Q(name__endswith=".json"))
+    # 1. Check for GeoJSON files first (case-insensitive)
+    geojson_file_qs = instance.shapefile_documents.filter(Q(name__iendswith=".geojson") | Q(name__iendswith=".json"))
 
     if geojson_file_qs.exists():
-        # Process GeoJSON files
         for geojson_file_obj in geojson_file_qs:
-            gdf = gpd.read_file(geojson_file_obj.path)
+            gdf = gpd.read_file(geojson_file_obj.path, engine="pyogrio", columns=[])
 
             # GeoJSON spec (RFC 7946) mandates WGS84; geopandas may not set CRS
             if gdf.crs is None:
@@ -434,64 +438,61 @@ def validate_map_files(request, instance, foreign_key_field=None):
             if _process_geodataframe(gdf, geojson_file_obj.name, instance, request, foreign_key_field):
                 valid_geometry_saved = True
 
-        # Delete all documents so the user can upload another one if they wish.
         instance.shapefile_documents.all().delete()
         return valid_geometry_saved
 
+    # 2. Extract any archives
     archive_files_qs = extract_attached_archives(instance, foreign_key_field)
 
-    # Shapefile extensions shp (geometry), shx (index between shp and dbf), dbf (data) are essential
+    # 3. Filter shapefile components (case-insensitive)
     shp_file_qs = instance.shapefile_documents.filter(
-        Q(name__endswith=".shp") | Q(name__endswith=".shx") | Q(name__endswith=".dbf") | Q(name__endswith=".prj")
+        Q(name__iendswith=".shp") | Q(name__iendswith=".shx") | Q(name__iendswith=".dbf") | Q(name__iendswith=".prj")
     )
 
-    # Validate shapefile and all the other related files are present
     if not shp_file_qs and not archive_files_qs:
         raise ValidationError(
-            "You can only attach files with the following extensions: .shp, .shx, and .dbf, .geojson, .json or .zip"
+            "You can only attach files with the following extensions: .shp, .shx, .dbf, .prj, .geojson, .json or .zip"
         )
 
-    shp_files = shp_file_qs.filter(name__endswith=".shp").distinct()
-    shp_file_basenames = [s[:-4] for s in shp_files.values_list("name", flat=True)]
+    shp_files = shp_file_qs.filter(name__iendswith=".shp").distinct()
+    shp_file_basenames = [os.path.splitext(s)[0] for s in shp_files.values_list("name", flat=True)]
 
-    shx_files = shp_file_qs.filter(name__in=[f"{b}.shx" for b in shp_file_basenames])
-    dbf_files = shp_file_qs.filter(name__in=[f"{b}.dbf" for b in shp_file_basenames])
-
-    # Check if no required files are missing
-    if any(f == 0 for f in [shp_files.count(), shx_files.count(), dbf_files.count()]):
-        raise ValidationError(
-            "Please attach at least a .shp, .shx, and .dbf file (the .prj file is optional but recommended)"
-        )
-    # Check if all files have the same count
-    if not (shp_files.count() == shx_files.count() == dbf_files.count()):
-        raise ValidationError(
-            "Please attach at least a .shp, .shx, and .dbf file "
-            "(the .prj file is optional but recommended) for every shapefile"
-        )
-
-    # Add the shapefiles to a zip file for archiving purposes
-    # (as they are deleted after being converted to proposal geometry)
-    shapefile_archive_name = (
-        os.path.splitext(instance.shapefile_documents.first().path)[0]
-        + "-"
-        + timezone.now().strftime("%Y%m%d%H%M%S")
-        + ".zip"
+    shx_files = (
+        shp_file_qs.filter(name__iregex=r"(" + "|".join(shp_file_basenames) + r")\.shx$") if shp_file_basenames else []
     )
-    shapefile_archive = ZipFile(shapefile_archive_name, "w")
-    for shp_file_obj in shp_file_qs:
-        shapefile_archive.write(shp_file_obj.path, shp_file_obj.name)
-    shapefile_archive.close()
+    dbf_files = (
+        shp_file_qs.filter(name__iregex=r"(" + "|".join(shp_file_basenames) + r")\.dbf$") if shp_file_basenames else []
+    )
 
-    # A list of all uploaded shapefiles
-    shp_file_objs = shp_file_qs.filter(Q(name__endswith=".shp"))
+    # Check that each .shp has a corresponding .shx and .dbf
+    if any(len(f) == 0 for f in [shp_files, shx_files, dbf_files]):
+        raise ValidationError("Please attach at least a .shp, .shx, and .dbf file (and .prj) for your shapefile")
+    if not (len(shp_files) == len(shx_files) == len(dbf_files)):
+        raise ValidationError("Please attach matching .shp, .shx, and .dbf files for every shapefile uploaded")
 
-    for shp_file_obj in shp_file_objs:
-        gdf = gpd.read_file(shp_file_obj.path)  # Shapefile to GeoDataFrame
+    # Archive the original components into a zip
+    first_doc = instance.shapefile_documents.first()
+    if first_doc:
+        shapefile_archive_name = (
+            os.path.splitext(first_doc.path)[0] + "-" + timezone.now().strftime("%Y%m%d%H%M%S") + ".zip"
+        )
+        with ZipFile(shapefile_archive_name, "w") as shapefile_archive:
+            for shp_file_obj in shp_file_qs:
+                shapefile_archive.write(shp_file_obj.path, shp_file_obj.name)
+
+    # 4. Process shapefiles
+    for shp_file_obj in shp_files:
+        gdf = gpd.read_file(shp_file_obj.path, engine="pyogrio", columns=[])
+
+        # Fallback to default GDA2020 (EPSG:7844) if no .prj file was provided
+        if gdf.crs is None:
+            logger.info("No .prj file found for %s, falling back to assumed CRS EPSG:7844", shp_file_obj.name)
+            gdf = gdf.set_crs("EPSG:7844")
 
         if _process_geodataframe(gdf, shp_file_obj.name, instance, request, foreign_key_field, archive_files_qs):
             valid_geometry_saved = True
 
-    # Delete all shapefile documents so the user can upload another one if they wish.
+    # Cleanup documents after conversion
     instance.shapefile_documents.all().delete()
 
     return valid_geometry_saved
