@@ -6,7 +6,9 @@ from boranga.helpers import (
     can_view_reports,
     is_conservation_status_approver,
     is_conservation_status_assessor,
+    is_external_contributor,
     is_internal,
+    is_internal_contributor,
     is_occurrence_approver,
     is_occurrence_assessor,
     is_species_communities_approver,
@@ -55,6 +57,17 @@ class IsApprover(BasePermission):
             or is_conservation_status_approver(request)
             or is_occurrence_approver(request)
         )
+
+
+class IsContributor(BasePermission):
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        return is_internal_contributor(request) or is_external_contributor(request)
 
 
 class CanViewReports(BasePermission):
