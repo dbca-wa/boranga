@@ -32,7 +32,7 @@ from boranga.components.users.serializers import (
     UserSerializer,
 )
 from boranga.helpers import is_internal, is_internal_contributor
-from boranga.permissions import IsApprover, IsAssessor
+from boranga.permissions import IsApprover, IsAssessor, IsInternalContributor
 
 logger = logging.getLogger(__name__)
 
@@ -340,6 +340,7 @@ class UserViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
             "GET",
         ],
         detail=False,
+        permission_classes=[IsInternalContributor | IsAssessor | IsApprover],
     )
     def get_contributors(self, request, *args, **kwargs):
         search_term = request.GET.get("term", "")
