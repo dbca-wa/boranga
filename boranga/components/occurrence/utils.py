@@ -325,12 +325,12 @@ def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, 
     """
     if gdf.empty:
         if archive_files_qs:
-            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+            instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
         raise ValidationError(f"Geometry is empty in {file_name}")
 
     if gdf.geometry.crs is None:
         if archive_files_qs:
-            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+            instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
         raise ValidationError(f"Geometry in {file_name} has no coordinate reference system (CRS)")
 
     # Determine the SRID of the original uploaded geometry
@@ -353,13 +353,13 @@ def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, 
         gdf_transform = _to_default_crs(gdf)
     except Exception as e:
         if archive_files_qs:
-            instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+            instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
         raise ValidationError(
             f"Unable to transform coordinates in {file_name} "
             f"from SRID {original_srid} to EPSG:{settings.DEFAULT_SRID}: {e}"
         )
 
-    # Drop rows with null/missing geometry before any further processing
+    # Drop rows with null/missing geometry
     null_mask = gdf_transform.geometry.isna()
     if null_mask.any():
         null_count = int(null_mask.sum())
@@ -367,42 +367,50 @@ def _process_geodataframe(gdf, file_name, instance, request, foreign_key_field, 
         gdf_transform = gdf_transform[~null_mask]
         if gdf_transform.empty:
             if archive_files_qs:
-                instance.shapefile_documents.exclude(name__endswith=".zip").delete()
+                instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
             raise ValidationError(f"No valid geometries found in {file_name}")
 
-    geometries = gdf_transform.geometry  # GeoSeries
+    geometries = gdf_transform.geometry
 
-    # Only accept points or polygons
-    geom_type = geometries.geom_type.values[0]
-    if geom_type not in ("Point", "MultiPoint", "Polygon", "MultiPolygon"):
-        raise ValidationError(f"Geometry of type {geom_type} not allowed")
+    # 1. Validate ALL geometry types in the layer, not just the first row
+    allowed_types = {"Point", "MultiPoint", "Polygon", "MultiPolygon"}
+    disallowed_types = set(geometries.geom_type.unique()) - allowed_types
+    if disallowed_types:
+        if archive_files_qs:
+            instance.shapefile_documents.exclude(name__iendswith=".zip").delete()
+        raise ValidationError(f"Geometry type(s) {', '.join(disallowed_types)} in {file_name} are not allowed")
 
-    gdf_transform["valid"] = False
-    for idx, row in gdf_transform.iterrows():
-        srid = settings.DEFAULT_SRID  # We transformed to DEFAULT_SRID above
+    instance_name = instance._meta.model.__name__
+    fk_field = foreign_key_field if foreign_key_field else instance_name.lower()
+    geometry_model = apps.get_model("boranga", f"{instance_name}Geometry")
 
-        geometry = GEOSGeometry(row.geometry.wkt, srid=srid)
-        original_geometry = GEOSGeometry(gdf.loc[idx, "geometry"].wkt, srid=original_srid)
+    # 2. Use transaction to prevent partial inserts if one feature fails
+    with transaction.atomic():
+        for idx, row in gdf_transform.iterrows():
+            srid = settings.DEFAULT_SRID
 
-        if "source_" not in gdf_transform:
-            gdf_transform["source_"] = file_name
+            # Ensure 2D geometries to prevent PostGIS dim mismatch if shapefile had 3D/Z values
+            geom_2d = shapely.force_2d(row.geometry)
+            orig_geom_2d = shapely.force_2d(gdf.loc[idx, "geometry"])
 
-        gdf_transform["valid"] = True
+            geometry = GEOSGeometry(geom_2d.wkt, srid=srid)
+            original_geometry = GEOSGeometry(orig_geom_2d.wkt, srid=original_srid)
 
-        instance_name = instance._meta.model.__name__
-        fk_field = foreign_key_field if foreign_key_field else instance_name.lower()
+            # Validate topology before hitting the database
+            if not geometry.valid:
+                raise ValidationError(f"Feature {idx} in {file_name} has invalid geometry: {geometry.valid_reason}")
 
-        geometry_model = apps.get_model("boranga", f"{instance_name}Geometry")
-        geometry_model.objects.create(
-            **{
-                fk_field: instance,
-                "geometry": geometry,
-                "original_geometry_ewkb": original_geometry.ewkb,
-                "drawn_by": request.user.id,
-            }
-        )
+            geometry_model.objects.create(
+                **{
+                    fk_field: instance,
+                    "geometry": geometry,
+                    "original_geometry_ewkb": original_geometry.ewkb,
+                    "drawn_by": request.user.id,
+                }
+            )
 
-    instance.save(version_user=request.user, no_revision=True)
+        instance.save(version_user=request.user, no_revision=True)
+
     return True
 
 
