@@ -486,7 +486,7 @@ def validate_map_files(request, instance, foreign_key_field=None):
     shp_file_objs = shp_file_qs.filter(Q(name__endswith=".shp"))
 
     for shp_file_obj in shp_file_objs:
-        gdf = gpd.read_file(shp_file_obj.path)  # Shapefile to GeoDataFrame
+        gdf = gpd.read_file(shp_file_obj.path, engine="pyogrio", datetime_as_string=True)  # Shapefile to GeoDataFrame
 
         if _process_geodataframe(gdf, shp_file_obj.name, instance, request, foreign_key_field, archive_files_qs):
             valid_geometry_saved = True
