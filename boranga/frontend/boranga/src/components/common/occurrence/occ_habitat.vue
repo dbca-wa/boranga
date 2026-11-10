@@ -1378,7 +1378,15 @@ export default {
                 ),
                 {
                     method: 'POST',
-                    body: JSON.stringify(vm.occurrence_obj.habitat_composition),
+                    body: JSON.stringify(
+                        vm.occurrence_obj.habitat_composition,
+                        (key, value) => {
+                            if (key === 'loose_rock_percent' && value === '') {
+                                return null;
+                            }
+                            return value;
+                        }
+                    ),
                     headers: {
                         'Content-Type': 'application/json',
                     },

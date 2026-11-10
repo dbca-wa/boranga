@@ -1421,7 +1421,13 @@ export default {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(
-                        vm.occurrence_report_obj.habitat_composition
+                        vm.occurrence_report_obj.habitat_composition,
+                        (key, value) => {
+                            if (key === 'loose_rock_percent' && value === '') {
+                                return null;
+                            }
+                            return value;
+                        }
                     ),
                 }
             ).then(async (response) => {
