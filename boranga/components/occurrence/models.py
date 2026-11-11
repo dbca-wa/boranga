@@ -7641,6 +7641,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         clone_kwargs["migrated_from_id"] = occ_migrated_from_id
 
                     target_occ = Occurrence.clone_from_occurrence_report(ocr_instance, **clone_kwargs)
+                    target_occ.ocr_bulk_import_task = self
+                    target_occ.save()
 
             except IntegrityError as e:
                 error_str = str(e)
