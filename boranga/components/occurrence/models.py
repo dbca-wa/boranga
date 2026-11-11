@@ -6751,6 +6751,10 @@ def _copy_ocr_geometries_to_occurrence(self, ocr_instance, occ_instance):
                         if cell_value is not None and column.django_import_field_name != "migrated_from_id":
                             ocr_fields_populated.append(column.django_import_field_name)
 
+                # Remove OccurrenceReport content type if only migrated_from_id was present
+                if not ocr_fields_populated:
+                    required_content_types.remove(orc_ct)
+
         except Exception:
             # Non-fatal: if anything goes wrong, fall back to existing behaviour.
             pass
