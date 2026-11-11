@@ -6620,7 +6620,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             # Avoid creating duplicate geometries on the Occurrence
             existing = OccurrenceGeometry.objects.filter(
                 occurrence=occ_instance,
-                copied_from=ocr_geom,
+                geometry=ocr_geom.geometry,
             ).exists()
 
             if not existing:
