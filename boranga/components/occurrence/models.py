@@ -7705,6 +7705,9 @@ def _copy_ocr_geometries_to_occurrence(self, ocr_instance, occ_instance):
                 ocr_instance.occurrence = target_occ
                 ocr_instance.save()
 
+                # Ensure ORF geometries are copied over to target_occ (both new and existing)
+                self._copy_ocr_geometries_to_occurrence(ocr_instance, target_occ)
+
                 self.ocr_bulk_import_generate_action_logs(occ_mode, target_occ)
                 model_instances[Occurrence._meta.model_name] = target_occ
 
