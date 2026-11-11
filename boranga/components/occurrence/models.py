@@ -7110,9 +7110,6 @@ def _copy_ocr_geometries_to_occurrence(self, ocr_instance, occ_instance):
                 current_model_name,
             )
 
-            # Coerce None -> "" for non-nullable string fields so Django won't error when saving
-            model_data = self._coerce_non_nullable_string_fields(model_class, model_data)
-
             if mode == "update":
                 # Remove empty values from the model data
                 model_data = {k: v for k, v in model_data.items() if v is not None}
@@ -7120,6 +7117,9 @@ def _copy_ocr_geometries_to_occurrence(self, ocr_instance, occ_instance):
                 if current_model_name == OccurrenceReport._meta.model_name:
                     # Remove the migrated_from_id field as we don't want to update it
                     model_data.pop("migrated_from_id", None)
+
+            # Coerce None -> "" only for fields that will actually be written
+            model_data = self._coerce_non_nullable_string_fields(model_class, model_data)
 
             # For OccurrenceReport check if we are creating or updating
             # and set appropriate fields if so
