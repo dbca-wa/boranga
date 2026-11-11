@@ -7801,9 +7801,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
         # 2. Delete geometries ONLY off those specific pre-existing occurrences
         task_ocr_geoms = list(
-            OccurrenceReportGeometry.objects.filter(
-                occurrence_report__bulk_import_task=self
-            ).values_list("geometry", flat=True)
+            OccurrenceReportGeometry.objects.filter(occurrence_report__bulk_import_task=self).values_list(
+                "geometry", flat=True
+            )
         )
         if task_ocr_geoms and pre_existing_occs.exists():
             OccurrenceGeometry.objects.filter(
@@ -7811,10 +7811,13 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 geometry__in=task_ocr_geoms,
             ).delete()
 
-        # 3. Delete Occurrences created by this task (cascades to their geometries)
+        # 3. Unlink protected foreign keys so deletions don't trigger ProtectedError
+        OccurrenceReport.objects.filter(bulk_import_task=self).update(occurrence=None)
+
+        # 4. Delete Occurrences created by this task (cascades to their geometries and 1-to-1s)
         Occurrence.objects.filter(ocr_bulk_import_task=self).delete()
 
-        # 4. Delete the Occurrence Reports created by this task
+        # 5. Delete the Occurrence Reports created by this task
         OccurrenceReport.objects.filter(bulk_import_task=self).delete()
 
         self.processing_status = self.PROCESSING_STATUS_ARCHIVED
