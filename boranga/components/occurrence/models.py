@@ -4749,21 +4749,18 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
             # Special case: Geometries belong to the Location component
             if rel_name == "location":
-                ocr_geoms = getattr(occurrence_report, "ocr_geometries", None)
-                if ocr_geoms is None and hasattr(ocr_child, "ocr_geometries"):
-                    ocr_geoms = ocr_child.ocr_geometries
+                # Look for singular ocr_geometry (with plural fallback just in case)
+                ocr_geoms = getattr(occurrence_report, "ocr_geometry", None) or getattr(
+                    occurrence_report, "ocr_geometries", None
+                )
 
                 if ocr_geoms is not None:
                     for ocr_geom in ocr_geoms.all():
-                        occ_geom = OccurrenceGeometry(
+                        OccurrenceGeometry.objects.create(
                             occurrence=occurrence,
                             geometry=ocr_geom.geometry,
+                            copied_from=ocr_geom,
                         )
-                        if hasattr(occ_geom, "location"):
-                            occ_geom.location = occ_child
-                        if hasattr(occ_geom, "copied_ocr_geometry"):
-                            occ_geom.copied_ocr_geometry = ocr_geom
-                        occ_geom.save()
 
             # Special case: AssociatedSpecies has nested taxonomy links
             elif rel_name == "associated_species" and hasattr(ocr_child, "related_species"):
@@ -6619,27 +6616,19 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
         ocr_geoms = OccurrenceReportGeometry.objects.filter(occurrence_report=ocr_instance)
 
-        if not ocr_geoms.exists():
-            return
-
-        occ_location = getattr(occ_instance, "location", None)
-
         for ocr_geom in ocr_geoms.all():
             # Avoid creating duplicate geometries on the Occurrence
             existing = OccurrenceGeometry.objects.filter(
                 occurrence=occ_instance,
-                copied_ocr_geometry=ocr_geom,
+                copied_from=ocr_geom,
             ).exists()
 
             if not existing:
                 occ_geom = OccurrenceGeometry(
                     occurrence=occ_instance,
                     geometry=ocr_geom.geometry,
+                    copied_from=ocr_geom,
                 )
-                if hasattr(occ_geom, "location") and occ_location:
-                    occ_geom.location = occ_location
-                if hasattr(occ_geom, "copied_ocr_geometry"):
-                    occ_geom.copied_ocr_geometry = ocr_geom
                 occ_geom.save()
 
     def process_row(
@@ -7805,7 +7794,7 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         OccurrenceReport = apps.get_model("boranga", "OccurrenceReport")
 
         # 1. Clean up geometries copied to any pre-existing Occurrences by this task
-        OccurrenceGeometry.objects.filter(copied_ocr_geometry__occurrence_report__bulk_import_task=self).delete()
+        OccurrenceGeometry.objects.filter(copied_from__occurrence_report__bulk_import_task=self).delete()
 
         # 2. Delete Occurrences created by this task (cascades to their geometries and 1-to-1s)
         Occurrence.objects.filter(ocr_bulk_import_task=self).delete()
