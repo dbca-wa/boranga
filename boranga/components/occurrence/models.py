@@ -7798,8 +7798,19 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         self.archived = True
         self.save()
 
+    @transaction.atomic
     def revert(self):
-        # Note: Using delete here due to the sheer number of records that could be created
+        Occurrence = apps.get_model("boranga", "Occurrence")
+        OccurrenceGeometry = apps.get_model("boranga", "OccurrenceGeometry")
+        OccurrenceReport = apps.get_model("boranga", "OccurrenceReport")
+
+        # 1. Clean up geometries copied to any pre-existing Occurrences by this task
+        OccurrenceGeometry.objects.filter(copied_ocr_geometry__occurrence_report__bulk_import_task=self).delete()
+
+        # 2. Delete Occurrences created by this task (cascades to their geometries and 1-to-1s)
+        Occurrence.objects.filter(ocr_bulk_import_task=self).delete()
+
+        # 3. Delete the Occurrence Reports created by this task
         OccurrenceReport.objects.filter(bulk_import_task=self).delete()
 
         self.processing_status = self.PROCESSING_STATUS_ARCHIVED
