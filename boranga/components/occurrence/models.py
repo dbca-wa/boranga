@@ -6605,14 +6605,12 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         Copies all geometries from an OccurrenceReport to an Occurrence,
         mirroring Occurrence.clone_from_occurrence_report.
         """
+        OccurrenceReportGeometry = apps.get_model("boranga", "OccurrenceReportGeometry")
         OccurrenceGeometry = apps.get_model("boranga", "OccurrenceGeometry")
 
-        # Resolve OCR geometries either directly from report or via OCRLocation
-        ocr_geoms = getattr(ocr_instance, "ocr_geometries", None)
-        if ocr_geoms is None and hasattr(ocr_instance, "location") and hasattr(ocr_instance.location, "ocr_geometries"):
-            ocr_geoms = ocr_instance.location.ocr_geometries
+        ocr_geoms = OccurrenceReportGeometry.objects.filter(occurrence_report=ocr_instance)
 
-        if not ocr_geoms:
+        if not ocr_geoms.exists():
             return
 
         occ_location = getattr(occ_instance, "location", None)
