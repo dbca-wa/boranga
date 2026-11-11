@@ -3872,6 +3872,15 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         db_index=True,
     )
 
+    # If this occurrence was created during a bulk import run, needed so we can delete when revert and archive is called
+    ocr_bulk_import_task = models.ForeignKey(
+        "boranga.OccurrenceReportBulkImportTask",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="occurrences",
+    )
+
     occurrence_name = models.CharField(max_length=250, blank=True, null=True)
     group_type = models.ForeignKey(GroupType, on_delete=models.PROTECT, null=True, blank=True)
 
