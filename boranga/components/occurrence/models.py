@@ -6600,40 +6600,40 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
             return []
 
-def _copy_ocr_geometries_to_occurrence(self, ocr_instance, occ_instance):
-    """
-    Copies all geometries from an OccurrenceReport to an Occurrence,
-    mirroring Occurrence.clone_from_occurrence_report.
-    """
-    OccurrenceGeometry = apps.get_model("boranga", "OccurrenceGeometry")
+    def _copy_ocr_geometries_to_occurrence(self, ocr_instance, occ_instance):
+        """
+        Copies all geometries from an OccurrenceReport to an Occurrence,
+        mirroring Occurrence.clone_from_occurrence_report.
+        """
+        OccurrenceGeometry = apps.get_model("boranga", "OccurrenceGeometry")
 
-    # Resolve OCR geometries either directly from report or via OCRLocation
-    ocr_geoms = getattr(ocr_instance, "ocr_geometries", None)
-    if ocr_geoms is None and hasattr(ocr_instance, "location") and hasattr(ocr_instance.location, "ocr_geometries"):
-        ocr_geoms = ocr_instance.location.ocr_geometries
+        # Resolve OCR geometries either directly from report or via OCRLocation
+        ocr_geoms = getattr(ocr_instance, "ocr_geometries", None)
+        if ocr_geoms is None and hasattr(ocr_instance, "location") and hasattr(ocr_instance.location, "ocr_geometries"):
+            ocr_geoms = ocr_instance.location.ocr_geometries
 
-    if not ocr_geoms:
-        return
+        if not ocr_geoms:
+            return
 
-    occ_location = getattr(occ_instance, "location", None)
+        occ_location = getattr(occ_instance, "location", None)
 
-    for ocr_geom in ocr_geoms.all():
-        # Avoid creating duplicate geometries on the Occurrence
-        existing = OccurrenceGeometry.objects.filter(
-            occurrence=occ_instance,
-            copied_ocr_geometry=ocr_geom,
-        ).exists()
-
-        if not existing:
-            occ_geom = OccurrenceGeometry(
+        for ocr_geom in ocr_geoms.all():
+            # Avoid creating duplicate geometries on the Occurrence
+            existing = OccurrenceGeometry.objects.filter(
                 occurrence=occ_instance,
-                geometry=ocr_geom.geometry,
-            )
-            if hasattr(occ_geom, "location") and occ_location:
-                occ_geom.location = occ_location
-            if hasattr(occ_geom, "copied_ocr_geometry"):
-                occ_geom.copied_ocr_geometry = ocr_geom
-            occ_geom.save()
+                copied_ocr_geometry=ocr_geom,
+            ).exists()
+
+            if not existing:
+                occ_geom = OccurrenceGeometry(
+                    occurrence=occ_instance,
+                    geometry=ocr_geom.geometry,
+                )
+                if hasattr(occ_geom, "location") and occ_location:
+                    occ_geom.location = occ_location
+                if hasattr(occ_geom, "copied_ocr_geometry"):
+                    occ_geom.copied_ocr_geometry = ocr_geom
+                occ_geom.save()
 
     def process_row(
         self, ocr_migrated_from_ids, ocr_instances, index, headers, row, schema_columns, col_header_cache, errors
