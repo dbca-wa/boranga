@@ -7318,6 +7318,12 @@ def _copy_ocr_geometries_to_occurrence(self, ocr_instance, occ_instance):
                         current_model_instance.geometry = geometry
                         current_model_instance.save()
 
+                # If this row added/updated geometry for an already linked Occurrence,
+                # immediately sync geometries to the Occurrence:
+                ocr_parent = model_instances.get(OccurrenceReport._meta.model_name)
+                if ocr_parent and getattr(ocr_parent, "occurrence_id", None):
+                    self._copy_ocr_geometries_to_occurrence(ocr_parent, ocr_parent.occurrence)
+
                 # Deal with special case of many to many fields
                 if current_model_instance._meta.model_name in many_to_many_fields:
                     logger.info(f"Adding many to many fields for {current_model_instance}")
