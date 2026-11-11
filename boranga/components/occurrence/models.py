@@ -4759,7 +4759,7 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
                         OccurrenceGeometry.objects.create(
                             occurrence=occurrence,
                             geometry=ocr_geom.geometry,
-                            copied_from=ocr_geom,
+                            original_geometry_ewkb=getattr(ocr_geom, "original_geometry_ewkb", None),
                         )
 
             # Special case: AssociatedSpecies has nested taxonomy links
