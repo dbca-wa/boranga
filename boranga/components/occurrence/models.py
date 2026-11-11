@@ -7791,14 +7791,30 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         Occurrence = apps.get_model("boranga", "Occurrence")
         OccurrenceGeometry = apps.get_model("boranga", "OccurrenceGeometry")
         OccurrenceReport = apps.get_model("boranga", "OccurrenceReport")
+        OccurrenceReportGeometry = apps.get_model("boranga", "OccurrenceReportGeometry")
 
-        # 1. Clean up geometries copied to any pre-existing Occurrences by this task
-        OccurrenceGeometry.objects.filter(copied_from__occurrence_report__bulk_import_task=self).delete()
+        # 1. Find only the pre-existing Occurrences linked to this task's reports
+        pre_existing_occs = Occurrence.objects.filter(
+            occurrence_reports__bulk_import_task=self,
+            ocr_bulk_import_task__isnull=True,  # Exclude newly created ones (handled in step 2)
+        ).distinct()
 
-        # 2. Delete Occurrences created by this task (cascades to their geometries and 1-to-1s)
+        # 2. Delete geometries ONLY off those specific pre-existing occurrences
+        task_ocr_geoms = list(
+            OccurrenceReportGeometry.objects.filter(
+                occurrence_report__bulk_import_task=self
+            ).values_list("geometry", flat=True)
+        )
+        if task_ocr_geoms and pre_existing_occs.exists():
+            OccurrenceGeometry.objects.filter(
+                occurrence__in=pre_existing_occs,
+                geometry__in=task_ocr_geoms,
+            ).delete()
+
+        # 3. Delete Occurrences created by this task (cascades to their geometries)
         Occurrence.objects.filter(ocr_bulk_import_task=self).delete()
 
-        # 3. Delete the Occurrence Reports created by this task
+        # 4. Delete the Occurrence Reports created by this task
         OccurrenceReport.objects.filter(bulk_import_task=self).delete()
 
         self.processing_status = self.PROCESSING_STATUS_ARCHIVED
