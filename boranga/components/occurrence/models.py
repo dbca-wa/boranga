@@ -6624,12 +6624,11 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
             ).exists()
 
             if not existing:
-                occ_geom = OccurrenceGeometry(
+                OccurrenceGeometry.objects.create(
                     occurrence=occ_instance,
                     geometry=ocr_geom.geometry,
-                    copied_from=ocr_geom,
+                    original_geometry_ewkb=getattr(ocr_geom, "original_geometry_ewkb", None),
                 )
-                occ_geom.save()
 
     def process_row(
         self, ocr_migrated_from_ids, ocr_instances, index, headers, row, schema_columns, col_header_cache, errors
