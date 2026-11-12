@@ -15,6 +15,7 @@ from boranga.helpers import (
     is_conservation_status_assessor,
     is_contributor,
     is_django_admin,
+    is_internal_contributor,
     is_occurrence_approver,
     is_occurrence_assessor,
     is_occurrence_report_referee,
@@ -353,7 +354,7 @@ class OccurrenceReportCopyPermission(BasePermission):
         if request.user.is_superuser:
             return True
 
-        return obj.submitter == request.user.id or is_occurrence_assessor(request)
+        return is_internal_contributor(request) or is_occurrence_assessor(request)
 
 
 class OccurrenceReportReassignDraftPermission(BasePermission):

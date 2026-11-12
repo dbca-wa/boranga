@@ -771,9 +771,7 @@ class ListInternalOccurrenceReportSerializer(BaseModelSerializer):
 
     def get_can_user_copy(self, obj):
         request = self.context["request"]
-        if obj.submitter == request.user.id and is_internal_contributor(request):
-            return True
-        return is_occurrence_assessor(request)
+        return is_internal_contributor(request) or is_occurrence_assessor(request)
 
     def get_is_new_contributor(self, obj):
         return is_new_external_contributor(obj.submitter)
@@ -1788,9 +1786,7 @@ class BaseOccurrenceReportSerializer(BaseModelSerializer):
 
     def get_can_user_copy(self, obj):
         request = self.context["request"]
-        if obj.submitter == request.user.id and is_internal_contributor(request):
-            return True
-        return is_occurrence_assessor(request)
+        return is_internal_contributor(request) or is_occurrence_assessor(request)
 
     def get_ocr_geometry(self, obj):
         qs = obj.ocr_geometry.filter(visible=True)
@@ -2053,9 +2049,7 @@ class InternalOccurrenceReportSerializer(OccurrenceReportSerializer):
 
     def get_can_user_copy(self, obj):
         request = self.context["request"]
-        if obj.submitter == request.user.id and is_internal_contributor(request):
-            return True
-        return is_occurrence_assessor(request)
+        return is_internal_contributor(request) or is_occurrence_assessor(request)
 
     def get_can_user_approve(self, obj):
         request = self.context["request"]
