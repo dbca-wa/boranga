@@ -3872,6 +3872,15 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
         db_index=True,
     )
 
+    # If this occurrence was created during a bulk import run, needed so we can delete when revert and archive is called
+    ocr_bulk_import_task = models.ForeignKey(
+        "boranga.OccurrenceReportBulkImportTask",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="occurrences",
+    )
+
     occurrence_name = models.CharField(max_length=250, blank=True, null=True)
     group_type = models.ForeignKey(GroupType, on_delete=models.PROTECT, null=True, blank=True)
 
@@ -4740,21 +4749,18 @@ class Occurrence(DirtyFieldsMixin, LockableModel, RevisionedMixin):
 
             # Special case: Geometries belong to the Location component
             if rel_name == "location":
-                ocr_geoms = getattr(occurrence_report, "ocr_geometries", None)
-                if ocr_geoms is None and hasattr(ocr_child, "ocr_geometries"):
-                    ocr_geoms = ocr_child.ocr_geometries
+                # Look for singular ocr_geometry (with plural fallback just in case)
+                ocr_geoms = getattr(occurrence_report, "ocr_geometry", None) or getattr(
+                    occurrence_report, "ocr_geometries", None
+                )
 
                 if ocr_geoms is not None:
                     for ocr_geom in ocr_geoms.all():
-                        occ_geom = OccurrenceGeometry(
+                        OccurrenceGeometry.objects.create(
                             occurrence=occurrence,
                             geometry=ocr_geom.geometry,
+                            original_geometry_ewkb=getattr(ocr_geom, "original_geometry_ewkb", None),
                         )
-                        if hasattr(occ_geom, "location"):
-                            occ_geom.location = occ_child
-                        if hasattr(occ_geom, "copied_ocr_geometry"):
-                            occ_geom.copied_ocr_geometry = ocr_geom
-                        occ_geom.save()
 
             # Special case: AssociatedSpecies has nested taxonomy links
             elif rel_name == "associated_species" and hasattr(ocr_child, "related_species"):
@@ -6600,6 +6606,30 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
             return []
 
+    def _copy_ocr_geometries_to_occurrence(self, ocr_instance, occ_instance):
+        """
+        Copies all geometries from an OccurrenceReport to an Occurrence,
+        mirroring Occurrence.clone_from_occurrence_report.
+        """
+        OccurrenceReportGeometry = apps.get_model("boranga", "OccurrenceReportGeometry")
+        OccurrenceGeometry = apps.get_model("boranga", "OccurrenceGeometry")
+
+        ocr_geoms = OccurrenceReportGeometry.objects.filter(occurrence_report=ocr_instance)
+
+        for ocr_geom in ocr_geoms.all():
+            # Avoid creating duplicate geometries on the Occurrence
+            existing = OccurrenceGeometry.objects.filter(
+                occurrence=occ_instance,
+                geometry=ocr_geom.geometry,
+            ).exists()
+
+            if not existing:
+                OccurrenceGeometry.objects.create(
+                    occurrence=occ_instance,
+                    geometry=ocr_geom.geometry,
+                    original_geometry_ewkb=getattr(ocr_geom, "original_geometry_ewkb", None),
+                )
+
     def process_row(
         self, ocr_migrated_from_ids, ocr_instances, index, headers, row, schema_columns, col_header_cache, errors
     ):
@@ -6715,6 +6745,10 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         # Skip the migrated_from_id column itself
                         if cell_value is not None and column.django_import_field_name != "migrated_from_id":
                             ocr_fields_populated.append(column.django_import_field_name)
+
+                # Remove OccurrenceReport content type if only migrated_from_id was present
+                if not ocr_fields_populated:
+                    required_content_types.remove(orc_ct)
 
         except Exception:
             # Non-fatal: if anything goes wrong, fall back to existing behaviour.
@@ -7071,9 +7105,6 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 current_model_name,
             )
 
-            # Coerce None -> "" for non-nullable string fields so Django won't error when saving
-            model_data = self._coerce_non_nullable_string_fields(model_class, model_data)
-
             if mode == "update":
                 # Remove empty values from the model data
                 model_data = {k: v for k, v in model_data.items() if v is not None}
@@ -7081,6 +7112,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 if current_model_name == OccurrenceReport._meta.model_name:
                     # Remove the migrated_from_id field as we don't want to update it
                     model_data.pop("migrated_from_id", None)
+
+            # Coerce None -> "" only for fields that will actually be written
+            model_data = self._coerce_non_nullable_string_fields(model_class, model_data)
 
             # For OccurrenceReport check if we are creating or updating
             # and set appropriate fields if so
@@ -7278,6 +7312,12 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         current_model_instance.pk = None
                         current_model_instance.geometry = geometry
                         current_model_instance.save()
+
+                # If this row added/updated geometry for an already linked Occurrence,
+                # immediately sync geometries to the Occurrence:
+                ocr_parent = model_instances.get(OccurrenceReport._meta.model_name)
+                if ocr_parent and getattr(ocr_parent, "occurrence_id", None):
+                    self._copy_ocr_geometries_to_occurrence(ocr_parent, ocr_parent.occurrence)
 
                 # Deal with special case of many to many fields
                 if current_model_instance._meta.model_name in many_to_many_fields:
@@ -7589,6 +7629,8 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                         clone_kwargs["migrated_from_id"] = occ_migrated_from_id
 
                     target_occ = Occurrence.clone_from_occurrence_report(ocr_instance, **clone_kwargs)
+                    target_occ.ocr_bulk_import_task = self
+                    target_occ.save()
 
             except IntegrityError as e:
                 error_str = str(e)
@@ -7666,6 +7708,9 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
                 ocr_instance.occurrence = target_occ
                 ocr_instance.save()
 
+                # Ensure ORF geometries are copied over to target_occ (both new and existing)
+                self._copy_ocr_geometries_to_occurrence(ocr_instance, target_occ)
+
                 self.ocr_bulk_import_generate_action_logs(occ_mode, target_occ)
                 model_instances[Occurrence._meta.model_name] = target_occ
 
@@ -7741,8 +7786,38 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
         self.archived = True
         self.save()
 
+    @transaction.atomic
     def revert(self):
-        # Note: Using delete here due to the sheer number of records that could be created
+        Occurrence = apps.get_model("boranga", "Occurrence")
+        OccurrenceGeometry = apps.get_model("boranga", "OccurrenceGeometry")
+        OccurrenceReport = apps.get_model("boranga", "OccurrenceReport")
+        OccurrenceReportGeometry = apps.get_model("boranga", "OccurrenceReportGeometry")
+
+        # 1. Find only the pre-existing Occurrences linked to this task's reports
+        pre_existing_occs = Occurrence.objects.filter(
+            occurrence_reports__bulk_import_task=self,
+            ocr_bulk_import_task__isnull=True,  # Exclude newly created ones (handled in step 2)
+        ).distinct()
+
+        # 2. Delete geometries ONLY off those specific pre-existing occurrences
+        task_ocr_geoms = list(
+            OccurrenceReportGeometry.objects.filter(occurrence_report__bulk_import_task=self).values_list(
+                "geometry", flat=True
+            )
+        )
+        if task_ocr_geoms and pre_existing_occs.exists():
+            OccurrenceGeometry.objects.filter(
+                occurrence__in=pre_existing_occs,
+                geometry__in=task_ocr_geoms,
+            ).delete()
+
+        # 3. Unlink protected foreign keys so deletions don't trigger ProtectedError
+        OccurrenceReport.objects.filter(bulk_import_task=self).update(occurrence=None)
+
+        # 4. Delete Occurrences created by this task (cascades to their geometries and 1-to-1s)
+        Occurrence.objects.filter(ocr_bulk_import_task=self).delete()
+
+        # 5. Delete the Occurrence Reports created by this task
         OccurrenceReport.objects.filter(bulk_import_task=self).delete()
 
         self.processing_status = self.PROCESSING_STATUS_ARCHIVED
