@@ -7,9 +7,15 @@ from collections import Counter
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_KEY, get_user_model
+from django.contrib.sessions.backends.db import SessionStore
 from django.core.management.base import BaseCommand
-from django.test import Client
+from django.test import Client, RequestFactory
 from django.urls import URLPattern, URLResolver, get_resolver
+
+try:
+    from rest_framework.request import Request as DRFRequest
+except ImportError:
+    DRFRequest = None
 
 try:
     import openpyxl
@@ -23,7 +29,6 @@ IGNORE_PREFIXES = [
     "/api/docs",
     "/swagger",
     "/redoc",
-    # Media and proxy routes that don't serve HTML/API views
     "/media/",
     "/private-media/",
     "/geoproxy/",
@@ -41,6 +46,7 @@ IGNORE_PATTERNS = [
     r"/move-[^/]+/?$",
     r"^/admin/1/?$",
     r"^/api/history/",
+    r"^/api/get_list_items/.+/",
 ]
 
 EXPECTED_FAILURES = [
@@ -76,7 +82,6 @@ class Command(BaseCommand):
         parser.add_argument("--log-file", default="crawl_errors.log", help="Error log filename")
 
     def build_model_lookup(self):
-        """Indexes all models by normalized names and tables."""
         lookup = {}
         for model in apps.get_models():
             cls_norm = normalize_name(model.__name__)
@@ -91,8 +96,7 @@ class Command(BaseCommand):
 
         return lookup
 
-    def get_model_and_lookup_field(self, callback, prev_segment=None):
-        """Discovers the model and lookup field from the callback ViewSet or URL segment."""
+    def get_model_and_lookup_field(self, callback, prev_segment=None, user=None):
         view_cls = getattr(callback, "cls", None) or getattr(callback, "view_class", None)
         model = None
         lookup_field = "pk"
@@ -105,9 +109,14 @@ class Command(BaseCommand):
             if qs is not None and hasattr(qs, "model"):
                 model = qs.model
 
-            # 2. Direct model attribute
-            if not model and hasattr(view_cls, "model") and view_cls.model:
-                model = view_cls.model
+            # 2. ViewSet class name
+            if not model:
+                cleaned_name = re.sub(
+                    r"(ViewSet|PaginatedViewSet|FilterViewSet|DetailView|UpdateView|DeleteView|View|APIView|ListCreateAPIView)$",
+                    "",
+                    view_cls.__name__,
+                )
+                model = self.model_lookup.get(normalize_name(cleaned_name))
 
             # 3. Serializer class Meta.model
             if not model:
@@ -115,16 +124,11 @@ class Command(BaseCommand):
                 if serializer_cls and hasattr(serializer_cls, "Meta"):
                     model = getattr(serializer_cls.Meta, "model", None)
 
-            # 4. ViewSet class name (e.g. SpeciesViewSet -> Species)
-            if not model:
-                cleaned_name = re.sub(
-                    r"(ViewSet|DetailView|UpdateView|DeleteView|View|APIView|ListCreateAPIView)$",
-                    "",
-                    view_cls.__name__,
-                )
-                model = self.model_lookup.get(normalize_name(cleaned_name))
+            # 4. Direct model attribute
+            if not model and hasattr(view_cls, "model") and view_cls.model:
+                model = view_cls.model
 
-        # 5. Fallback: match preceding URL path segment (e.g. /species/<id>/)
+        # 5. Preceding URL segment
         if not model and prev_segment:
             norm_seg = normalize_name(prev_segment)
             model = self.model_lookup.get(norm_seg)
@@ -133,19 +137,58 @@ class Command(BaseCommand):
 
         return model, lookup_field
 
-    def get_real_id(self, model, lookup_field, cache):
+    def get_real_id(self, callback, model, lookup_field, prev_segment, user, cache):
         """
-        Queries the database for an actual record and extracts its lookup value.
-        Prefers active/non-discarded records.
+        Queries the database for an actual record.
+        Prioritizes the ViewSet's own get_queryset() to respect visibility/publishing filters.
+        Returns: (real_id_or_None, is_empty_flag)
         """
-        if not model:
-            return None, False
+        view_cls = getattr(callback, "cls", None) or getattr(callback, "view_class", None)
+        cache_key = (view_cls or prev_segment, model)
 
-        if model not in cache:
+        if cache_key in cache:
+            return cache[cache_key]
+
+        real_id = None
+        is_empty = False
+
+        # Strategy 1: Evaluate the ViewSet's own get_queryset() with simulated request
+        if view_cls and hasattr(view_cls, "get_queryset"):
+            try:
+                view_inst = view_cls()
+                rf = RequestFactory()
+                wsgi_req = rf.get("/")
+                wsgi_req.user = user
+                wsgi_req.session = SessionStore()
+
+                if DRFRequest:
+                    drf_req = DRFRequest(wsgi_req)
+                    drf_req._user = user
+                    drf_req._authenticator = None
+                else:
+                    drf_req = wsgi_req
+
+                view_inst.request = drf_req
+                view_inst.args = ()
+                view_inst.kwargs = {}
+                view_inst.action = getattr(callback, "actions", {}).get("get", "retrieve")
+                view_inst.format_kwarg = None
+
+                qs = view_inst.get_queryset()
+                if qs is not None:
+                    obj = qs.first()
+                    if obj:
+                        val = getattr(obj, lookup_field, None) or obj.pk
+                        real_id = str(val)
+                    else:
+                        is_empty = True
+            except Exception:
+                pass
+
+        # Strategy 2: Direct model query fallback
+        if not real_id and not is_empty and model:
             try:
                 qs = model.objects.all()
-
-                # Filter out discarded/archived states if the field exists
                 field_names = [f.name for f in model._meta.fields]
                 if "processing_status" in field_names:
                     qs = qs.exclude(
@@ -159,21 +202,17 @@ class Command(BaseCommand):
                 if "is_deleted" in field_names:
                     qs = qs.filter(is_deleted=False)
 
-                # Fetch first valid record
                 obj = qs.first() or model.objects.first()
-
                 if obj:
                     val = getattr(obj, lookup_field, None) or obj.pk
-                    cache[model] = (str(val), False)
+                    real_id = str(val)
                 else:
-                    cache[model] = (None, True)  # Table has 0 records
-            except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(f"ERROR resolving ID for {model.__name__} (lookup: {lookup_field}): {e}")
-                )
-                cache[model] = (None, False)
+                    is_empty = True
+            except Exception:
+                pass
 
-        return cache[model]
+        cache[cache_key] = (real_id, is_empty)
+        return cache[cache_key]
 
     def handle(self, *args, **options):
         output_file = options["output"]
@@ -201,7 +240,7 @@ class Command(BaseCommand):
             session.save()
             self.stdout.write(self.style.SUCCESS(f"Logged in as {user}"))
 
-        # 1. Extract all URL routes with callbacks
+        # Extract URLs
         raw_routes = []
 
         def extract_urls(url_list, prefix=""):
@@ -213,7 +252,6 @@ class Command(BaseCommand):
 
         extract_urls(get_resolver().url_patterns)
 
-        # 2. Parameter replacement via direct model inspection
         model_id_cache = {}
         cleaned_endpoints = {}
 
@@ -221,7 +259,6 @@ class Command(BaseCommand):
             if "format>" in route or "<format>" in route:
                 continue
 
-            # Extract preceding segment safely
             simplified = re.sub(r"\(\?P<[^>]+>.*?\)", "__PARAM__", route)
             simplified = re.sub(r"<.*?>", "__PARAM__", simplified)
             segments = [s.strip("^$/\\") for s in simplified.split("/") if s.strip("^$/\\")]
@@ -229,10 +266,20 @@ class Command(BaseCommand):
             param_indices = [i for i, s in enumerate(segments) if "__PARAM__" in s]
             prev_segment = segments[param_indices[0] - 1] if param_indices and param_indices[0] > 0 else None
 
-            model, lookup_field = self.get_model_and_lookup_field(callback, prev_segment=prev_segment)
-            real_id, is_empty_table = self.get_real_id(model, lookup_field, model_id_cache)
+            model, lookup_field = self.get_model_and_lookup_field(callback, prev_segment=prev_segment, user=user)
+            real_id, is_empty_table = self.get_real_id(
+                callback, model, lookup_field, prev_segment, user, model_id_cache
+            )
 
-            replacement_val = real_id if real_id else ("NO_DATA" if is_empty_table else "1")
+            # Detect if parameter represents a model_name string rather than an ID
+            is_model_name_param = bool(
+                re.search(r"<(?:str:)?model(?:_name)?>|\?P<model(?:_name)?>", route) or "get_list_items" in route
+            )
+
+            if is_model_name_param:
+                replacement_val = "species"
+            else:
+                replacement_val = real_id if real_id else ("NO_DATA" if is_empty_table else "1")
 
             cleaned = re.sub(r"<.*?>", replacement_val, route)
             cleaned = re.sub(r"\(\?P<.*?>.*?\)", replacement_val, cleaned)
@@ -268,11 +315,11 @@ class Command(BaseCommand):
                 results.append([path, "N/A", "SKIPPED", "Matched ignore pattern"])
                 continue
 
-            # Safely skip when the database table has 0 records
+            # Safely skip when the queryset has 0 matching records for this endpoint
             if meta["is_empty"]:
                 m_name = model.__name__ if model else "Model"
-                self.stdout.write(self.style.WARNING(f"SKIP : {path} [Table '{m_name}' has 0 rows in DB]"))
-                results.append([path, "N/A", "SKIPPED", f"Table {m_name} has 0 records in database"])
+                self.stdout.write(self.style.WARNING(f"SKIP : {path} [0 records in {m_name} queryset]"))
+                results.append([path, "N/A", "SKIPPED", f"Queryset for {m_name} has 0 records"])
                 continue
 
             is_expected_fail = any(path.startswith(prefix) for prefix in EXPECTED_FAILURES)
@@ -320,7 +367,7 @@ class Command(BaseCommand):
                         f"{'=' * 80}\nURL: {path} [UNCAUGHT EXCEPTION]\n{'=' * 80}\n{captured_traceback or err_msg}\n\n"
                     )
 
-        # 3. Write crawl_errors.log
+        # Write crawl_errors.log
         if error_log_entries:
             with open(error_log_file, "w") as f:
                 f.writelines(error_log_entries)
@@ -330,7 +377,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS("\nNo errors recorded!"))
 
-        # 4. Export to XLSX
+        # Export to XLSX
         if openpyxl:
             wb = openpyxl.Workbook()
             ws = wb.active
@@ -374,7 +421,7 @@ class Command(BaseCommand):
             wb.save(output_file)
             self.stdout.write(self.style.SUCCESS(f"Spreadsheet saved to: {output_file}"))
 
-        # 5. Print Crawl Summary
+        # Print Crawl Summary
         counts = Counter(row[2] for row in results)
         total = len(results)
         fail_count = counts.get("FAIL", 0)
