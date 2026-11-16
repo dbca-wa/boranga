@@ -160,7 +160,7 @@ class MeetingPaginatedViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Default to csv or excel if not provided, or handle it explicitly
         if export_format is None:
-            export_format = "csv" # or handle as a bad request / default export
+            export_format = "csv"  # or handle as a bad request / default export
 
         if export_format == "excel":
             buffer = BytesIO()
@@ -353,6 +353,7 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         serializer = ListAgendaItemSerializer(qs, many=True)
         return Response(serializer.data)
 
+
     @detail_route(
         methods=[
             "GET",
@@ -364,62 +365,62 @@ class MeetingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin):
         qs = instance.agenda_items.all()
         serializer = ListAgendaItemSerializer(qs, many=True)
         export_format = request.GET.get("export_format")
-        allowed_fields = ["group_type", "scientific_name", "conservation_status_number"]
         serialized_data = serializer.data
 
-        filtered_data = []
-        for i, obj in enumerate(serialized_data):
-            filtered_obj = {key: value for key, value in obj.items() if key in allowed_fields}
-            filtered_obj["Number"] = i + 1  # Assign sequential numbers starting from 1
-            filtered_data.append(filtered_obj)
-
-        df = pd.DataFrame(filtered_data)
-        new_headings = [
-            "Group Type",
-            "Conservation Status Number",
-            "Scientific Name",
-            "Number",
-        ]
-        df.columns = new_headings
         column_order = [
             "Number",
             "Group Type",
             "Scientific Name",
             "Conservation Status Number",
         ]
-        df = df[column_order]
 
-        if export_format is not None:
-            if export_format == "excel":
-                buffer = BytesIO()
-                workbook = Workbook()
-                sheet_name = "Sheet1"
-                sheet = workbook.active
-                sheet.title = sheet_name
+        filtered_data = []
+        for i, obj in enumerate(serialized_data, start=1):
+            filtered_data.append(
+                {
+                    "Number": i,
+                    "Group Type": obj.get("group_type"),
+                    "Scientific Name": obj.get("scientific_name"),
+                    "Conservation Status Number": obj.get("conservation_status_number"),
+                }
+            )
 
-                for row in dataframe_to_rows(df, index=False, header=True):
-                    sheet.append(row)
-                for cell in sheet[1]:
-                    cell.font = Font(bold=True)
+        # Passing columns=column_order ensures that even when filtered_data is [] (0 records),
+        # the DataFrame is initialized with the 4 columns instead of 0 columns.
+        df = pd.DataFrame(filtered_data, columns=column_order)
 
-                workbook.save(buffer)
+        if export_format == "excel":
+            buffer = BytesIO()
+            workbook = Workbook()
+            sheet_name = "Sheet1"
+            sheet = workbook.active
+            sheet.title = sheet_name
 
-                buffer.seek(0)
-                response = HttpResponse(buffer.read(), content_type="application/vnd.ms-excel")
-                response["Content-Disposition"] = "attachment; filename=DBCA_Meeting_AgendaItems.xlsx"
-                final_response = response
-                buffer.close()
-                return final_response
+            for row in dataframe_to_rows(df, index=False, header=True):
+                sheet.append(row)
+            for cell in sheet[1]:
+                cell.font = Font(bold=True)
 
-            elif export_format == "csv":
-                csv_data = df.to_csv(index=False)
-                response = HttpResponse(content_type="text/csv")
-                response["Content-Disposition"] = "attachment; filename=DBCA_Meeting_AgendaItems.csv"
-                response.write(csv_data)
-                return response
+            workbook.save(buffer)
 
-            else:
-                return Response(status=400, data="Format not valid")
+            buffer.seek(0)
+            response = HttpResponse(
+                buffer.read(),
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response["Content-Disposition"] = "attachment; filename=DBCA_Meeting_AgendaItems.xlsx"
+            buffer.close()
+            return response
+
+        elif export_format == "csv":
+            csv_data = df.to_csv(index=False)
+            response = HttpResponse(content_type="text/csv")
+            response["Content-Disposition"] = "attachment; filename=DBCA_Meeting_AgendaItems.csv"
+            response.write(csv_data)
+            return response
+
+        else:
+            return Response(status=400, data="Format not valid")
 
     # used to add the conservation status to the meeting agenda  items
     @detail_route(methods=["post"], detail=True)
