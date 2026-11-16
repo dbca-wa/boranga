@@ -2,7 +2,9 @@
 import logging
 import re
 import warnings
+from collections import Counter
 
+from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import BACKEND_SESSION_KEY, HASH_SESSION_KEY, SESSION_KEY, get_user_model
 from django.core.management.base import BaseCommand
@@ -27,12 +29,22 @@ IGNORE_PATTERNS = [
     r"/\d+/history/$",
     r"/\d+/delete/$",
     r"/\d+/change/$",
-    r"/admin/.+/\d+/$",  # <-- Add this line to catch /admin/<app>/<model>/<id>/
+    r"/admin/.+/\d+/$",
+    r"/admin/.+/\d+/$",
+    r"/admin/.+/\d+/$",
+    r"/ledger-api/.+/",
+    r"/ledger-toolkit-api/.+/",
+    r"/ledger-ui/.+/",
+    r"/admin/ledger_api_client/.+/",
 ]
 
 EXPECTED_FAILURES = [
     "/sentry-debug/",
 ]
+
+
+def normalize_name(name):
+    return re.sub(r"[^a-zA-Z0-9]", "", str(name)).lower()
 
 
 class MemoryLogHandler(logging.Handler):
@@ -58,15 +70,93 @@ class Command(BaseCommand):
         parser.add_argument("--output", default="crawl_results.xlsx", help="XLSX report filename")
         parser.add_argument("--log-file", default="crawl_errors.log", help="Error log filename")
 
+    def build_model_lookup(self):
+        """Indexes all models by normalized names and tables."""
+        lookup = {}
+        for model in apps.get_models():
+            cls_norm = normalize_name(model.__name__)
+            model_norm = normalize_name(model._meta.model_name)
+            table_norm = normalize_name(model._meta.db_table)
+
+            lookup[cls_norm] = model
+            lookup[model_norm] = model
+            lookup[table_norm] = model
+            lookup[cls_norm + "s"] = model
+            lookup[model_norm + "s"] = model
+
+        return lookup
+
+    def get_model_and_lookup_field(self, callback, prev_segment=None):
+        """Discovers the model and lookup field from the callback ViewSet or URL segment."""
+        view_cls = getattr(callback, "cls", None) or getattr(callback, "view_class", None)
+        model = None
+        lookup_field = "pk"
+
+        if view_cls:
+            lookup_field = getattr(view_cls, "lookup_field", "pk")
+
+            # 1. Direct class queryset
+            qs = getattr(view_cls, "queryset", None)
+            if qs is not None and hasattr(qs, "model"):
+                model = qs.model
+
+            # 2. Direct model attribute
+            if not model and hasattr(view_cls, "model") and view_cls.model:
+                model = view_cls.model
+
+            # 3. Serializer class Meta.model
+            if not model:
+                serializer_cls = getattr(view_cls, "serializer_class", None)
+                if serializer_cls and hasattr(serializer_cls, "Meta"):
+                    model = getattr(serializer_cls.Meta, "model", None)
+
+            # 4. ViewSet class name (e.g. SpeciesViewSet -> Species)
+            if not model:
+                cleaned_name = re.sub(
+                    r"(ViewSet|DetailView|UpdateView|DeleteView|View|APIView|ListCreateAPIView)$",
+                    "",
+                    view_cls.__name__,
+                )
+                model = self.model_lookup.get(normalize_name(cleaned_name))
+
+        # 5. Fallback: match preceding URL path segment (e.g. /species/<id>/)
+        if not model and prev_segment:
+            norm_seg = normalize_name(prev_segment)
+            model = self.model_lookup.get(norm_seg)
+            if not model and norm_seg.endswith("s"):
+                model = self.model_lookup.get(norm_seg[:-1])
+
+        return model, lookup_field
+
+    def get_real_id(self, model, lookup_field, cache):
+        """
+        Queries the database for an actual record and extracts its lookup value.
+        Returns: (real_id_or_None, is_empty_table)
+        """
+        if not model:
+            return None, False
+
+        if model not in cache:
+            try:
+                # Query only the required field to keep it fast
+                obj = model.objects.only(lookup_field).first()
+                if obj:
+                    val = getattr(obj, lookup_field, None) or obj.pk
+                    cache[model] = (str(val), False)
+                else:
+                    cache[model] = (None, True)  # Table has 0 records
+            except Exception:
+                cache[model] = (None, False)
+
+        return cache[model]
+
     def handle(self, *args, **options):
         output_file = options["output"]
         error_log_file = options["log_file"]
 
-        # 1. Silence WARNING, INFO, DEBUG logs and stdlib warnings
         logging.disable(logging.WARNING)
         warnings.filterwarnings("ignore")
 
-        # 2. Attach in-memory logger to capture stack traces from DRF custom_exception_handler
         memory_handler = MemoryLogHandler()
         memory_handler.setLevel(logging.ERROR)
         memory_handler.setFormatter(logging.Formatter("%(levelname)s [%(name)s]: %(message)s"))
@@ -74,8 +164,8 @@ class Command(BaseCommand):
         root_logger.addHandler(memory_handler)
 
         client = Client()
+        self.model_lookup = self.build_model_lookup()
 
-        # Log in via session directly to bypass signals
         User = get_user_model()
         user = User.objects.filter(is_superuser=True).first()
         if user:
@@ -86,54 +176,63 @@ class Command(BaseCommand):
             session.save()
             self.stdout.write(self.style.SUCCESS(f"Logged in as {user}"))
 
-        # 3. Extract & Clean URLs
+        # 1. Extract all URL routes with callbacks
         raw_routes = []
 
         def extract_urls(url_list, prefix=""):
             for entry in url_list:
                 if isinstance(entry, URLPattern):
-                    raw_routes.append(prefix + str(entry.pattern))
+                    raw_routes.append((prefix + str(entry.pattern), entry.callback))
                 elif isinstance(entry, URLResolver):
                     extract_urls(entry.url_patterns, prefix + str(entry.pattern))
 
         extract_urls(get_resolver().url_patterns)
 
-        cleaned_patterns = set()
-        for route in raw_routes:
+        # 2. Parameter replacement via direct model inspection
+        model_id_cache = {}
+        cleaned_endpoints = {}
+
+        for route, callback in raw_routes:
             if "format>" in route or "<format>" in route:
                 continue
 
-            # Clean raw regex chars
-            cleaned = route.replace("^", "").replace("$", "").replace("\\", "")
+            # Extract preceding segment safely
+            simplified = re.sub(r"\(\?P<[^>]+>.*?\)", "__PARAM__", route)
+            simplified = re.sub(r"<.*?>", "__PARAM__", simplified)
+            segments = [s.strip("^$/\\") for s in simplified.split("/") if s.strip("^$/\\")]
+
+            param_indices = [i for i, s in enumerate(segments) if "__PARAM__" in s]
+            prev_segment = segments[param_indices[0] - 1] if param_indices and param_indices[0] > 0 else None
+
+            model, lookup_field = self.get_model_and_lookup_field(callback, prev_segment=prev_segment)
+            real_id, is_empty_table = self.get_real_id(model, lookup_field, model_id_cache)
+
+            replacement_val = real_id if real_id else ("NO_DATA" if is_empty_table else "1")
+
+            cleaned = re.sub(r"<.*?>", replacement_val, route)
+            cleaned = re.sub(r"\(\?P<.*?>.*?\)", replacement_val, cleaned)
+            cleaned = re.sub(r"\([^)]*?\)", replacement_val, cleaned)
+            cleaned = cleaned.replace("^", "").replace("$", "").replace("\\", "")
             cleaned = re.sub(r"/\?", "/", cleaned)
             cleaned = re.sub(r"\[[^\]]+\]\+?", "", cleaned)
-
-            # --- ROBUST PARAMETER REPLACEMENT ---
-            # 1. Catch Django named groups like (?P<pk>[0-9]+) or (?P<id>\w+) and replace with '1'
-            cleaned = re.sub(r"\(\?P<.*?>.*?\)", "1", cleaned)
-            # 2. Catch standard Django path converters like <int:pk> or <slug:slug> or <id> and replace with '1'
-            cleaned = re.sub(r"<.*?>", "1", cleaned)
-            # 3. Catch any remaining unnamed groups like ([0-9]+) and replace with '1'
-            cleaned = re.sub(r"\([^)]*?\)", "1", cleaned)
-            # ------------------------------------
-
             cleaned = "/" + re.sub(r"/+", "/", cleaned).lstrip("/")
 
-            # Final sanity check: if any stray malformed groups survived, skip or clean them
-            if "(?P" in cleaned or "<" in cleaned:
-                # Fallback sweep to completely remove broken artifact text
-                cleaned = re.sub(r"\(.*?\)", "1", cleaned)
-                cleaned = "/" + re.sub(r"/+", "/", cleaned).lstrip("/")
+            cleaned_endpoints[cleaned] = {
+                "model": model,
+                "is_empty": is_empty_table,
+                "used_id": real_id,
+            }
 
-            cleaned_patterns.add(cleaned)
-
-        patterns = sorted(list(cleaned_patterns))
+        patterns = sorted(list(cleaned_endpoints.keys()))
         self.stdout.write(f"Crawling {len(patterns)} endpoints...\n")
 
         results = []
         error_log_entries = []
 
         for path in patterns:
+            meta = cleaned_endpoints[path]
+            model = meta["model"]
+
             if any(path.startswith(prefix) for prefix in IGNORE_PREFIXES):
                 self.stdout.write(self.style.WARNING(f"SKIP : {path}"))
                 results.append([path, "N/A", "SKIPPED", "In IGNORE_PREFIXES"])
@@ -144,9 +243,14 @@ class Command(BaseCommand):
                 results.append([path, "N/A", "SKIPPED", "Matched ignore pattern"])
                 continue
 
-            is_expected_fail = any(path.startswith(prefix) for prefix in EXPECTED_FAILURES)
+            # Safely skip when the database table has 0 records
+            if meta["is_empty"]:
+                m_name = model.__name__ if model else "Model"
+                self.stdout.write(self.style.WARNING(f"SKIP : {path} [Table '{m_name}' has 0 rows in DB]"))
+                results.append([path, "N/A", "SKIPPED", f"Table {m_name} has 0 records in database"])
+                continue
 
-            # Clear memory buffer before making request
+            is_expected_fail = any(path.startswith(prefix) for prefix in EXPECTED_FAILURES)
             memory_handler.get_and_clear()
 
             try:
@@ -161,15 +265,16 @@ class Command(BaseCommand):
                     else:
                         self.stdout.write(self.style.ERROR(f"FAIL [{status}]: {path}"))
                         results.append([path, status, "FAIL", captured_traceback[:150] or "HTTP 500"])
-
-                        # Save full traceback for error log file
                         error_log_entries.append(
                             f"{'=' * 80}\nURL: {path} [HTTP {status}]\n{'=' * 80}\n"
                             f"{captured_traceback or 'No traceback captured.'}\n\n"
                         )
                 elif status == 404:
                     self.stdout.write(self.style.WARNING(f"404  [{status}]: {path}"))
-                    results.append([path, status, "NOT_FOUND", "404 with dummy parameter"])
+                    results.append([path, status, "NOT_FOUND", "404 Not Found"])
+                elif status == 405:
+                    self.stdout.write(self.style.NOTICE(f"POST [{status}]: {path} (POST-only action)"))
+                    results.append([path, status, "METHOD_NOT_ALLOWED", "405 Method Not Allowed (POST only)"])
                 elif 300 <= status < 400:
                     self.stdout.write(self.style.SUCCESS(f"REDIR[{status}]: {path}"))
                     results.append([path, status, "REDIRECT", response.headers.get("Location", "")])
@@ -190,7 +295,7 @@ class Command(BaseCommand):
                         f"{'=' * 80}\nURL: {path} [UNCAUGHT EXCEPTION]\n{'=' * 80}\n{captured_traceback or err_msg}\n\n"
                     )
 
-        # 4. Write crawl_errors.log
+        # 3. Write crawl_errors.log
         if error_log_entries:
             with open(error_log_file, "w") as f:
                 f.writelines(error_log_entries)
@@ -200,7 +305,7 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS("\nNo errors recorded!"))
 
-        # 5. Export to XLSX
+        # 4. Export to XLSX
         if openpyxl:
             wb = openpyxl.Workbook()
             ws = wb.active
@@ -220,6 +325,7 @@ class Command(BaseCommand):
             fills = {
                 "OK": PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid"),
                 "REDIRECT": PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid"),
+                "METHOD_NOT_ALLOWED": PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid"),
                 "FAIL": PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid"),
                 "EXPECTED_FAIL": PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"),
                 "NOT_FOUND": PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid"),
@@ -242,3 +348,23 @@ class Command(BaseCommand):
 
             wb.save(output_file)
             self.stdout.write(self.style.SUCCESS(f"Spreadsheet saved to: {output_file}"))
+
+        # 5. Print Crawl Summary
+        counts = Counter(row[2] for row in results)
+        total = len(results)
+        fail_count = counts.get("FAIL", 0)
+
+        self.stdout.write("\n" + "=" * 45)
+        self.stdout.write(self.style.HTTP_INFO("               CRAWL SUMMARY"))
+        self.stdout.write("=" * 45)
+        self.stdout.write(f"Total Endpoints Processed : {total}")
+        self.stdout.write(self.style.SUCCESS(f"  OK (2xx)               : {counts.get('OK', 0)}"))
+        self.stdout.write(self.style.SUCCESS(f"  Redirects (3xx)        : {counts.get('REDIRECT', 0)}"))
+        self.stdout.write(self.style.NOTICE(f"  POST-only Actions (405): {counts.get('METHOD_NOT_ALLOWED', 0)}"))
+        self.stdout.write(self.style.WARNING(f"  Not Found (404)        : {counts.get('NOT_FOUND', 0)}"))
+        self.stdout.write(self.style.WARNING(f"  Expected Failures      : {counts.get('EXPECTED_FAIL', 0)}"))
+        self.stdout.write(self.style.WARNING(f"  Skipped                : {counts.get('SKIPPED', 0)}"))
+
+        fail_style = self.style.ERROR if fail_count > 0 else self.style.SUCCESS
+        self.stdout.write(fail_style(f"  Failures (5xx / Errors): {fail_count}"))
+        self.stdout.write("=" * 45 + "\n")
