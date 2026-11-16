@@ -971,6 +971,9 @@ class OccurrenceReportViewSet(
         ocr = self.get_object()
         res_json = {}
 
+        if section is None:
+            return Response({"error": "Section parameter is required"}, status=400)
+
         if hasattr(ocr, section):
             section_value = getattr(ocr, section)
             section_fields = section_value._meta.get_fields()
@@ -3714,6 +3717,9 @@ class OccurrenceViewSet(
         section = request.GET.get("section")
         occ = self.get_object()
         res_json = {}
+
+        if section is None:
+            return Response({"error": "Section parameter is required"}, status=400)
 
         if hasattr(occ, section):
             section_value = getattr(occ, section)
