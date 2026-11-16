@@ -131,21 +131,41 @@ class Command(BaseCommand):
     def get_real_id(self, model, lookup_field, cache):
         """
         Queries the database for an actual record and extracts its lookup value.
-        Returns: (real_id_or_None, is_empty_table)
+        Prefers active/non-discarded records.
         """
         if not model:
             return None, False
 
         if model not in cache:
             try:
-                # Query only the required field to keep it fast
-                obj = model.objects.only(lookup_field).first()
+                qs = model.objects.all()
+
+                # Filter out discarded/archived states if the field exists
+                field_names = [f.name for f in model._meta.fields]
+                if "processing_status" in field_names:
+                    qs = qs.exclude(
+                        processing_status__in=[
+                            "discarded",
+                            "recalled",
+                            "historical",
+                            "closed",
+                        ]
+                    )
+                if "is_deleted" in field_names:
+                    qs = qs.filter(is_deleted=False)
+
+                # Fetch first valid record
+                obj = qs.first() or model.objects.first()
+
                 if obj:
                     val = getattr(obj, lookup_field, None) or obj.pk
                     cache[model] = (str(val), False)
                 else:
                     cache[model] = (None, True)  # Table has 0 records
-            except Exception:
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f"ERROR resolving ID for {model.__name__} (lookup: {lookup_field}): {e}")
+                )
                 cache[model] = (None, False)
 
         return cache[model]
