@@ -212,3 +212,19 @@ def log_user_action(self, action, request):
 
 
 setattr(EmailUser, "log_user_action", log_user_action)
+
+
+@property
+def action_logs(self):
+    return EmailUserAction.objects.filter(email_user=self.id)
+
+
+setattr(EmailUser, "action_logs", action_logs)
+
+
+@property
+def comms_logs(self):
+    return EmailUserLogEntry.objects.filter(email_user=self.id)
+
+
+setattr(EmailUser, "comms_logs", comms_logs)
