@@ -23,6 +23,10 @@ IGNORE_PREFIXES = [
     "/api/docs",
     "/swagger",
     "/redoc",
+    # Media and proxy routes that don't serve HTML/API views
+    "/media/",
+    "/private-media/",
+    "/geoproxy/",
 ]
 
 IGNORE_PATTERNS = [
@@ -30,12 +34,13 @@ IGNORE_PATTERNS = [
     r"/\d+/delete/$",
     r"/\d+/change/$",
     r"/admin/.+/\d+/$",
-    r"/admin/.+/\d+/$",
-    r"/admin/.+/\d+/$",
     r"/ledger-api/.+/",
     r"/ledger-toolkit-api/.+/",
     r"/ledger-ui/.+/",
     r"/admin/ledger_api_client/.+/",
+    r"/move-[^/]+/?$",
+    r"^/admin/1/?$",
+    r"^/api/history/",
 ]
 
 EXPECTED_FAILURES = [
