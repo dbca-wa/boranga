@@ -1070,15 +1070,6 @@
   },
   {
     "model": "boranga.fileextensionwhitelist",
-    "pk": 138,
-    "fields": {
-      "name": "qmd",
-      "model": "occurrencereportshapefiledocument",
-      "compressed": false
-    }
-  },
-  {
-    "model": "boranga.fileextensionwhitelist",
     "pk": 140,
     "fields": {
       "name": "aih",
