@@ -450,3 +450,20 @@ class ListMultipleChoiceField(serializers.MultipleChoiceField):
 
     def to_representation(self, value):
         return [self.choice_strings_to_values.get(str(item), item) for item in value]
+
+
+class NullableFloatField(serializers.FloatField):
+    def to_internal_value(self, data):
+        if data == "" or data is None:
+            if self.allow_null:
+                return None
+        return super().to_internal_value(data)
+
+
+class NullableIntegerField(serializers.IntegerField):
+    def to_internal_value(self, data):
+        if data == "" or data is None:
+            if self.allow_null:
+                return None
+            self.fail("null")
+        return super().to_internal_value(data)

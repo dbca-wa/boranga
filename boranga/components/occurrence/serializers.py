@@ -20,6 +20,7 @@ from boranga.components.main.serializers import (
     IntegerFieldEmptytoNullSerializerMixin,
     LimitedEmailUserSerializer,
     ListMultipleChoiceField,
+    NullableIntegerField,
     SafeFileUrlField,
     YesNoBooleanField,
     get_relative_url,
@@ -2205,6 +2206,7 @@ class SaveOCRHabitatCompositionSerializer(BaseModelSerializer):
     occurrence_report_id = serializers.IntegerField(required=False, allow_null=True)
     land_form = ListMultipleChoiceField(choices=[], allow_null=True, allow_blank=True, required=False)
     rock_type_id = serializers.IntegerField(required=False, allow_null=True)
+    loose_rock_percent = NullableIntegerField(allow_null=True, default=None)
     soil_type = ListMultipleChoiceField(choices=[], allow_null=True, allow_blank=True, required=False)
     soil_colour_id = serializers.IntegerField(required=False, allow_null=True)
     soil_condition_id = serializers.IntegerField(required=False, allow_null=True)
@@ -3585,6 +3587,7 @@ class SaveOCCHabitatCompositionSerializer(BaseModelSerializer):
     occurrence_id = serializers.IntegerField(required=False, allow_null=True)
     land_form = ListMultipleChoiceField(choices=[], allow_null=True, allow_blank=True, required=False)
     rock_type_id = serializers.IntegerField(required=False, allow_null=True)
+    loose_rock_percent = NullableIntegerField(allow_null=True, default=None)
     soil_type = ListMultipleChoiceField(choices=[], allow_null=True, allow_blank=True, required=False)
     soil_colour_id = serializers.IntegerField(required=False, allow_null=True)
     soil_condition_id = serializers.IntegerField(required=False, allow_null=True)
