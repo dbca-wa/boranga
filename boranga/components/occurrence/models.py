@@ -6158,14 +6158,18 @@ class OccurrenceReportBulkImportTask(ArchivableModel):
 
     @property
     def file_size_bytes(self):
-        if self._file:
-            return self._file.size
+        try:
+            # Check if the field has a file assigned and if it actually exists on disk/storage
+            if self._file and self._file.storage.exists(self._file.name):
+                return self._file.size
+        except (FileNotFoundError, OSError, ValueError):
+            pass
         return None
 
     @property
     def file_size_megabytes(self):
         if self.file_size_bytes:
-            return round(self.file_size_bytes / 1024 / 1024, 2)
+            return round(self.file_size_bytes / (1024 * 1024), 2)
         return None
 
     @classmethod
@@ -8957,6 +8961,9 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
     def related_model_qs(self):
         display_field = self.display_field
 
+        if not self.related_model:
+            return None
+
         try:
             filter_dict = {f"{display_field}__isnull": False}
             related_model_qs = self.related_model.objects.filter(**filter_dict)
@@ -9430,8 +9437,8 @@ class OccurrenceReportBulkImportSchemaColumn(OrderedModel):
 
         related_model_qs = self.filtered_related_model_qs
 
-        if not related_model_qs:
-            raise ValueError("No related model queryset found")
+        if related_model_qs is None:
+            raise ValidationError(f"No related model queryset found for column '{self.xlsx_column_header_name}'.")
 
         workbook = openpyxl.Workbook()
         worksheet = workbook.active

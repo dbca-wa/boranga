@@ -802,11 +802,17 @@ class OccurrenceReportViewSet(
         qs = self.get_queryset()
         datum_list = []
 
-        id = request.GET.get("id", None)
+        occurrence_report_id = request.GET.get("id", None)
+
+        # Guard clause: return early if no id is provided
+        if not occurrence_report_id:
+            res_json = json.dumps({"crs": []})
+            return HttpResponse(res_json, content_type="application/json")
+
         try:
-            qs = qs.get(id=id)
+            qs = qs.get(id=occurrence_report_id)
         except OccurrenceReport.DoesNotExist:
-            logger.error(f"Occurrence Report with id {id} not found")
+            logger.error(f"Occurrence Report with id {occurrence_report_id} not found")
         else:
             ocr_geometries = qs.ocr_geometry.all().exclude(**{"geometry": None})
             epsg_codes = [str(g.srid) for g in ocr_geometries.values_list("geometry", flat=True).distinct()]
@@ -964,6 +970,9 @@ class OccurrenceReportViewSet(
         section = request.GET.get("section")
         ocr = self.get_object()
         res_json = {}
+
+        if section is None:
+            return Response({"error": "Section parameter is required"}, status=400)
 
         if hasattr(ocr, section):
             section_value = getattr(ocr, section)
@@ -3709,6 +3718,9 @@ class OccurrenceViewSet(
         occ = self.get_object()
         res_json = {}
 
+        if section is None:
+            return Response({"error": "Section parameter is required"}, status=400)
+
         if hasattr(occ, section):
             section_value = getattr(occ, section)
             section_fields = section_value._meta.get_fields()
@@ -4185,11 +4197,17 @@ class OccurrenceViewSet(
         qs = self.get_queryset()
         datum_list = []
 
-        id = request.GET.get("id", None)
+        occurrence_id = request.GET.get("id", None)
+
+        # Guard clause: return early if no id is provided
+        if not occurrence_id:
+            res_json = json.dumps({"crs": []})
+            return HttpResponse(res_json, content_type="application/json")
+
         try:
-            qs = qs.get(id=id)
+            qs = qs.get(id=occurrence_id)
         except Occurrence.DoesNotExist:
-            logger.error(f"Occurrence with id {id} not found")
+            logger.error(f"Occurrence with id {occurrence_id} not found")
         else:
             pass
             occ_geometries = qs.occ_geometry.all().exclude(**{"geometry": None})
@@ -4945,11 +4963,17 @@ class OccurrenceViewSet(
         qs = self.get_queryset()
         crs = []
 
-        id = request.GET.get("id", None)
+        occurrence_id = request.GET.get("id", None)
+
+        # Guard clause: return early if no id is provided
+        if not occurrence_id:
+            res_json = json.dumps({"crs": []})
+            return HttpResponse(res_json, content_type="application/json")
+
         try:
-            qs = qs.get(id=id)
+            qs = qs.get(id=occurrence_id)
         except Occurrence.DoesNotExist:
-            logger.error(f"Occurrence with id {id} not found")
+            logger.error(f"Occurrence with id {occurrence_id} not found")
         else:
             # Occurrence Geometries
             occ_geometries = qs.occ_geometry.all().exclude(**{"geometry": None})
@@ -5354,14 +5378,16 @@ class OccurrenceTenurePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         if occurrence_id:
             queryset = self.current_and_historical_tenures(queryset, occurrence_id)
 
-        results = []
+        # 1. Always annotate the label so it's ready if a search term exists
+        queryset = queryset.annotate(vesting_code_label=Concat("vesting__code", Value(" - "), "vesting__label"))
+
+        # 2. Apply search filter only if a search term is provided
         if search_term:
-            queryset = (
-                queryset.annotate(vesting_code_label=Concat("vesting__code", Value(" - "), "vesting__label"))
-                .filter(vesting_code_label__icontains=search_term)
-                .values("vesting__id", "vesting__code", "vesting__label")
-                .distinct()[:10]
-            )
+            queryset = queryset.filter(vesting_code_label__icontains=search_term)
+
+        # 3. Always apply .values() and .distinct() so 'row' is always a dictionary
+        queryset = queryset.values("vesting__id", "vesting__code", "vesting__label").distinct()[:10]
+
         results = [
             {
                 "id": row["vesting__id"],
@@ -5387,13 +5413,16 @@ class OccurrenceTenurePaginatedViewSet(viewsets.ReadOnlyModelViewSet):
         if occurrence_id:
             queryset = self.current_and_historical_tenures(queryset, occurrence_id)
 
+        # 1. Always annotate the combined label so we can filter or use it consistently
+        queryset = queryset.annotate(purpose_code_label=Concat("purpose__code", Value(" - "), "purpose__label"))
+
+        # 2. Apply search filter if present
         if search_term:
-            queryset = (
-                queryset.annotate(purpose_code_label=Concat("purpose__code", Value(" - "), "purpose__label"))
-                .filter(purpose_code_label__icontains=search_term)
-                .values("purpose__id", "purpose__code", "purpose__label")
-                .distinct()[:10]
-            )
+            queryset = queryset.filter(purpose_code_label__icontains=search_term)
+
+        # 3. Project down to distinct values/fields consistently for both paths
+        queryset = queryset.values("purpose__id", "purpose__code", "purpose__label").distinct()[:10]
+
         results = [
             {
                 "id": row["purpose__id"],
