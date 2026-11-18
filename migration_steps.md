@@ -19,8 +19,10 @@ GRANT ALL ON SCHEMA public TO boranga_dev;
 
 ## Step 2: Apply the admin migration patch
 
+### Make sure to update this to match the path to your specific virtual environment and python version
+
 ```
-patch venv/lib/python3.12/site-packages/django/contrib/admin/migrations/0001_initial.py 0001_intial.py.patch
+patch /app/venv/lib/python3.15/site-packages/django/contrib/admin/migrations/0001_initial.py 0001_initial.py.patch
 ```
 
 _Note: The path to the virtual environment may vary on your local system_
@@ -33,14 +35,18 @@ _Note: The path to the virtual environment may vary on your local system_
 
 ## Step 4: Reverse the admin migration patch
 
+### Make sure to update this to match the path to your specific virtual environment and python version
+
 ```
-patch -R venv/lib/python3.12/site-packages/django/contrib/admin/migrations/0001_initial.py 0001_intial.py.patch
+patch -R /app/venv/lib/python3.15/site-packages/django/contrib/admin/migrations/0001_initial.py 0001_initial.py.patch
 ```
 
 ## Step 5: Apply the reversion migration patch
 
+### Make sure to update this to match the path to your specific virtual environment and python version
+
 ```
-patch venv/lib/python3.12/site-packages/reversion/migrations/0001_squashed_0004_auto_20160611_1202.py 0001_squashed_0004_auto_20160611_1202.py.patch
+patch /app/venv/lib/python3.15/site-packages/reversion/migrations/0001_squashed_0004_auto_20160611_1202.py 0001_squashed_0004_auto_20160611_1202.py.patch
 ```
 
 ## Step 6: Migrate the reversion app
@@ -52,8 +58,10 @@ patch venv/lib/python3.12/site-packages/reversion/migrations/0001_squashed_0004_
 
 ## Step 7: Reverse the reversion migration patch
 
+### Make sure to update this to match the path to your specific virtual environment and python version
+
 ```
-patch -R venv/lib/python3.12/site-packages/reversion/migrations/0001_squashed_0004_auto_20160611_1202.py 0001_squashed_0004_auto_20160611_1202.py.patch
+patch -R /app/venv/lib/python3.15/site-packages/reversion/migrations/0001_squashed_0004_auto_20160611_1202.py 0001_squashed_0004_auto_20160611_1202.py.patch
 ```
 
 ## Step 8: Run the rest of the migrations
